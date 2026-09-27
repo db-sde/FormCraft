@@ -116,8 +116,13 @@ create policy "profiles: self read" on public.profiles
 create policy "profiles: self update" on public.profiles
   for update using (id = auth.uid());
 
+-- Includes owner_id = auth.uid() (not just is_workspace_member) so that
+-- `insert ... returning *` in create_workspace_with_owner() can see its
+-- own newly-created row: RLS requires RETURNING output to also satisfy
+-- SELECT policies, and the owner's workspace_members row doesn't exist
+-- yet at that point in the same transaction.
 create policy "workspaces: members can read" on public.workspaces
-  for select using (public.is_workspace_member(id));
+  for select using (owner_id = auth.uid() or public.is_workspace_member(id));
 
 create policy "workspaces: owner can update" on public.workspaces
   for update using (owner_id = auth.uid());
