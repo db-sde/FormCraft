@@ -3,6 +3,39 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Every integration test bypassed RLS, which is how a real RLS bug shipped
+
+Found while live-testing the accessibility/mobile-polish pass (not by
+code review): a signed-in visitor got a false 404 on every public form
+link at `/f/[slug]`. Root cause was `alter policy ... to anon` on the
+two SELECT policies backing that route — Postgres RLS applies a policy
+only to the exact role(s) it names, so a logged-in session (querying
+as `authenticated`, not `anon`) matched nothing and the page correctly
+called `notFound()` on a form that very much exists. Fixed in migration
+`00000000000011_public_form_read_for_authenticated.sql`
+(`to anon, authenticated`).
+
+The more important finding is *why* this shipped past a test suite
+with 100+ integration tests: every single one of them uses the
+service-role client, which bypasses RLS entirely by design (it's how
+route handlers run privileged work). That's the right client for
+testing domain logic, but it means RLS itself — arguably the single
+most security-critical layer in this app (see CLAUDE.md rule 4) — had
+zero direct test coverage. This is the same root-cause *class* as this
+session's earlier grants bugs (`authenticated`/`service_role` lacking
+table grants on new tables): a gap between "the service-role tests
+pass" and "a real user's session actually works," caught both times
+only by manually driving the app as a real user rather than by the
+automated suite. `tests/integration/public-form-access.test.ts` closes
+this specific gap by signing in through the anon-key client (the same
+one `createServerSupabaseClient()` constructs) and asserting on what a
+real, unrelated authenticated user can and can't read — not a general
+fix for the class of bug, but a concrete data point future work in
+this area should follow: prefer the anon/authenticated client over the
+service-role client whenever a test is really asking "does RLS let the
+right people in and keep the wrong people out," not "does the domain
+function work."
+
 ## 2026-09-28 — Google Sheets: built and verified everything except the OAuth client itself
 
 This environment has no real Google Cloud project, so the actual

@@ -177,6 +177,7 @@ export function FormRuntime({
         </div>
 
         <RuntimeQuestionInput
+          key={question.id}
           question={question}
           value={answers[question.id]}
           onChange={setAnswer}
@@ -184,7 +185,11 @@ export function FormRuntime({
           responseId={responseId}
         />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
 
         <div className="mt-2 flex items-center gap-3">
           {history.length > 0 && (
@@ -212,7 +217,14 @@ export function FormRuntime({
       </div>
 
       {currentIndex >= 0 && (
-        <div className="mx-auto h-1 w-full max-w-md overflow-hidden rounded-full bg-black/10">
+        <div
+          role="progressbar"
+          aria-label="Form progress"
+          aria-valuenow={currentIndex + 1}
+          aria-valuemin={1}
+          aria-valuemax={compiled.orderedQuestionIds.length}
+          className="mx-auto h-1 w-full max-w-md overflow-hidden rounded-full bg-black/10"
+        >
           <div
             className="h-full transition-all"
             style={{

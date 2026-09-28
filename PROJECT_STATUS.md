@@ -4,18 +4,16 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**GOOGLE SHEETS** — everything buildable without a real Google Cloud
-OAuth client is done and verified live: encrypted token storage,
-refresh, the sync/backoff/retry mechanics (verified end-to-end against
-a real local server standing in for Google's token + Sheets API
-endpoints, including a genuine token-refresh-then-append cycle), the
-connect/disconnect UI, and the OAuth authorize/callback routes — the
-authorize route was verified against the *real* Google endpoint
-(`accounts.google.com`) and correctly reached it, failing only at
-`invalid_client` because no real client is registered (see below).
-Phase 1 launch items are now **all implemented or explicitly, narrowly
-scoped by a real external dependency**. Next up: abuse/rate-limiting +
-accessibility + responsive polish.
+**ABUSE/RATE-LIMITING + ACCESSIBILITY** — login/signup/forgot-password
+are now rate-limited (previously only the public response endpoints
+were); the public runtime got a real WCAG fix (focus wasn't moving
+between consecutive same-type questions — see below) plus proper
+`role="alert"`/`role="progressbar"` semantics. Also fixed, found while
+live-testing this milestone: a real RLS bug where any *signed-in*
+visitor got a false 404 on every public form link (migration
+00000000000011, its own commit). Responsive/mobile polish for the
+dashboard is next, then the security/adversarial review pass, then
+E2E tests.
 
 ## Completed
 
@@ -221,6 +219,44 @@ accessibility + responsive polish.
       `Error 401: invalid_client`, which is exactly the expected
       boundary (no real client is registered) and confirms the entire
       flow is correct right up to that boundary.
+- [x] **Fixed a real bug found via live testing**: signed-in visitors
+      got a false 404 on every public form link — the RLS policies
+      backing `/f/[slug]` were scoped `to anon` only, so a logged-in
+      session (running as the `authenticated` Postgres role) matched no
+      SELECT policy at all. Migration
+      `00000000000011_public_form_read_for_authenticated.sql` fixes it;
+      `tests/integration/public-form-access.test.ts` is a new
+      RLS-respecting test (signs in as a real user via the anon-key
+      client, not the service-role client every other integration test
+      uses) that closes the coverage gap that let this ship — see
+      DECISIONS.md.
+- [x] **Rate limiting extended to auth** (`src/app/(auth)/actions.ts`):
+      login (10/10min, keyed IP+email so one shared IP can't lock out
+      every account behind it), signup (10/hour/IP), forgot-password
+      (5/hour/IP, silently no-ops into the same "check your email"
+      redirect when limited — a different response shape here would
+      leak account-enumeration signal). `src/lib/http/client-ip.ts`
+      adds the Server Action equivalent of the route handlers'
+      `getClientIp`. Verified live: scripted 12 submissions against a
+      running production build through the real login form and
+      `document.body.innerText` correctly ~flipped from "Incorrect
+      email or password" to "Too many attempts..." exactly once the
+      10-attempt threshold was crossed.
+- [x] **Runtime accessibility fixes** (`src/components/runtime/form-runtime.tsx`):
+      found and fixed a real bug where `RuntimeQuestionInput` had no
+      `key={question.id}`, so React reused the same DOM `<input>` across
+      two consecutive same-type questions (e.g. "First name" →
+      "Last name") — `autoFocus` never refired and focus never moved,
+      a real WCAG 2.4.3 (Focus Order) failure, not just a nice-to-have.
+      Also added `role="alert"` on the validation error message (was
+      silent to screen readers) and `role="progressbar"` +
+      `aria-valuenow`/`min`/`max`/label on the progress bar (was a
+      purely decorative div). Verified live: seeded a form with two
+      consecutive `short_text` questions, advanced past the first via
+      Enter, and confirmed `document.activeElement` was the fresh
+      `<input>` for "Last name", not the previous one.
+- [x] 119/119 unit tests + 19/19 integration tests, lint, typecheck,
+      and `next build` all green.
 
 ## Deliberately deferred (not started)
 
@@ -241,10 +277,10 @@ accessibility + responsive polish.
 
 ## In progress / next actions (in order)
 
-1. Abuse/rate-limiting polish (the in-memory limiter is single-instance
-   only — fine for now, documented upgrade path to a shared store),
-   accessibility pass, responsive polish for the public runtime and
-   dashboard on mobile.
+1. Responsive/mobile polish for the dashboard specifically (the public
+   runtime has been checked at mobile width — see above; the
+   dashboard/builder/responses UI hasn't been walked at mobile width
+   yet this pass).
 2. Security hardening + adversarial review pass (see spec's
    quality_gate list) — replay/duplicate-submit/stale-write behavior
    is already tested at the domain layer; this pass should specifically
@@ -260,8 +296,9 @@ accessibility + responsive polish.
 
 ## Known bugs
 
-None currently open. One was caught and fixed before it shipped this
-session (the webhook-secret-reload bug above).
+None currently open. Several were caught and fixed before/while
+shipping this session (the webhook-secret-reload bug and the
+signed-in-visitor-gets-404 RLS bug, both above).
 
 ## How to resume
 
@@ -274,6 +311,5 @@ session (the webhook-secret-reload bug above).
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
 test:integration`. If the `templates` table looks empty locally, run
 `npm run db:seed-templates` (idempotent — safe to re-run).
-5. Continue with the next unchecked action above — abuse/accessibility/
-   responsive polish, then the security/adversarial review pass, then
-   E2E tests.
+5. Continue with the next unchecked action above — dashboard mobile
+   polish, then the security/adversarial review pass, then E2E tests.
