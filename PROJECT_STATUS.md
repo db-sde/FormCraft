@@ -4,79 +4,113 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**EMAIL NOTIFICATIONS** — done and verified live against local
-Postgres/dev server. Next up: webhooks + Google Sheets integration,
-then analytics wiring.
+**WEBHOOKS** — done and verified live against local Postgres, including
+a real local HTTP receiver, a cryptographically-verified signature, a
+genuine failure/backoff/retry cycle, and cron-endpoint auth. Google
+Sheets integration is the one Phase 1 launch item still unimplemented
+(see below — deliberately deferred, not forgotten). Next up: analytics
+wiring, then templates.
 
 ## Completed
 
-- [x] Foundation through file uploads + response dashboard — auth,
-      workspaces, dashboard, full builder UI, preview, publishing, the
-      public runtime, partial responses, file uploads, response
-      dashboard + CSV export. See earlier milestones in git history
-      and `ARCHITECTURE.md`/`DECISIONS.md`.
-- [x] **Email notifications** (`src/domains/notifications`):
-  - `template.ts` `buildResponseCompletedEmail` — a pure, unit-tested
-    function producing subject/html/text. HTML-escapes the
-    creator-supplied form title before interpolating it (a real
-    XSS-in-email guard, not boilerplate — form titles are free text).
-    Links to the response detail page rather than embedding raw
-    answers in the email body.
-  - `queries.ts` — `notification_settings` read/write. No row = enabled
-    (opt-out model, not opt-in — see DECISIONS.md).
-  - `send.ts` `notifyFormOwnerOfCompletedResponse` — looks up the
-    form's workspace owner's email (three simple sequential queries
-    rather than a guessed PostgREST embed, since `workspaces`↔
-    `profiles` has more than one FK path), builds the email, sends via
-    Resend. Never throws — every failure mode (disabled, no API key,
-    no owner email, send failure) returns a typed result instead, so a
-    notification problem can never affect the respondent-facing
-    response (ARCHITECTURE.md's "integrations are async side effects"
-    principle, same as every other integration).
-  - Wired into `POST /api/responses/:id/complete` via Next.js's
-    `after()` — not a bare unawaited promise, which a serverless
-    runtime can kill the instant the response is flushed, silently
-    dropping the notification. `after()` is the documented mechanism
-    for exactly this "run after responding" case.
-  - Only fires on a genuine first-time completion, not on an idempotent
-    retry: `completeResponse`'s result now carries `formId` and
-    `alreadyCompleted`, and the route handler checks
-    `!alreadyCompleted` before scheduling the notification — otherwise
-    a retried `/complete` call (expected/normal per the idempotency
-    design) would double-email the creator.
-- [x] **Verified live**: completed a real response through the actual
-      `/complete` endpoint with `RESEND_API_KEY` unset (the realistic
-      local-dev state) and confirmed the request still returned 200
-      with the response correctly marked `completed` — the missing-API-
-      key path degrades gracefully exactly as designed, with no crash
-      and no effect on the response write. Confirmed via `psql` that no
-      `notification_settings` row is required for the default-enabled
-      path to be exercised (zero rows existed, and the send attempt
-      still proceeded past the `enabled` check to the API-key check).
-- [x] Strengthened the response-engine integration tests to assert the
-      new `formId`/`alreadyCompleted` fields directly (not just that
-      `ok` is `true`), including a real regression check that a retried
-      `/complete` call is flagged `alreadyCompleted: true` — exactly
-      the flag the route handler depends on to avoid double-notifying.
-- [x] 87/87 unit tests + 5/5 integration tests, lint, typecheck, and
+- [x] Foundation through email notifications — auth, workspaces,
+      dashboard, full builder UI, preview, publishing, the public
+      runtime, partial responses, file uploads, response dashboard +
+      CSV export, email notifications on completion. See earlier
+      milestones in git history and `ARCHITECTURE.md`/`DECISIONS.md`.
+- [x] **Webhooks** (`src/domains/webhooks`):
+  - `signing.ts` — HMAC-SHA256 over the exact serialized payload
+    string (signing must happen on the same bytes that are sent, never
+    a re-serialization), plus a constant-time `verifySignature` for
+    completeness. Unit-tested including a tamper-detection case (any
+    mutation to the payload invalidates the signature).
+  - `backoff.ts` — a genuinely bounded exponential schedule (1min →
+    5min → 30min → 2hr → 12hr, then `exhausted`, never retried
+    forever). Unit-tested for monotonic increase and exhaustion.
+  - `payload.ts` — the one function that builds the
+    `response.completed` event shape from docs/api.md, shared by the
+    real dispatch path and the test-delivery path so they can never
+    drift apart.
+  - `queries.ts`:
+    - `enqueueWebhookDeliveries` — inserts one `pending` row per
+      _enabled_ endpoint on the form; enqueueing is deliberately
+      separate from sending, so a slow/unreachable consumer can never
+      affect the respondent-facing response.
+    - `dispatchDueDeliveries` — the actual HTTP attempt (10s timeout,
+      signed, bounded batch of 20), updating status/attempt_count/
+      `next_attempt_at` per the backoff schedule, or `exhausted` once
+      the schedule runs out.
+    - `sendTestDelivery` — an immediate synthetic-payload send for the
+      creator's "Test" button, intentionally **not** written to the
+      delivery log (it's a connectivity check, not a real event).
+  - **First attempt is immediate** (scheduled via `after()` right in
+    `/api/responses/:id/complete`, same mechanism as email
+    notifications); a separate `POST /api/cron/webhooks/dispatch`,
+    gated by a `CRON_SECRET` bearer token (never a user session — see
+    DECISIONS.md), covers retries later. This app has no long-running
+    worker process, so that route needs an external scheduler (Vercel
+    Cron / `pg_cron` / anything `curl`-on-a-timer) wired up at deploy
+    time — documented in the route file and DECISIONS.md, not just
+    assumed.
+  - UI at `/forms/[id]/integrations`: add/enable-disable/delete
+    endpoints, a signing secret shown once at creation (with a copy
+    button), a "Test" button, and a per-endpoint delivery log (status
+    badges, attempt count, timestamps). Linked from the builder's top
+    bar next to "Responses".
+  - **Found and fixed a real bug before it shipped**: the "show the
+    signing secret once" UI called `window.location.reload()`
+    immediately after creating the endpoint, which would have thrown
+    away the secret before ever displaying it. Fixed by having the
+    create action return the full endpoint + secret and updating
+    client state directly instead of reloading.
+- [x] **Verified live end-to-end**, no mocks: started a local HTTP
+      receiver, added it as a real endpoint through the actual UI, hit
+      "Test" and confirmed the receiver got a correctly-shaped payload
+      with the right headers; **independently recomputed the HMAC
+      signature in Python from the secret shown in the UI and confirmed
+      it matched byte-for-byte** — the signing/verification contract is
+      real, not just internally self-consistent; completed two real
+      responses through the actual API and confirmed both were
+      delivered automatically and logged `succeeded` in the UI;
+      pointed the endpoint at a genuinely unreachable port, completed a
+      response, and confirmed the delivery was recorded `failed` with
+      `next_attempt_at` scheduled ~1 minute out (real backoff, not a
+      guess); confirmed `POST /api/cron/webhooks/dispatch` returns 401
+      with no/wrong bearer token and 200 with the right one; forced the
+      retry due and confirmed the cron endpoint picked it up and
+      incremented `attempt_count` to 2, still bounded, not exhausted.
+- [x] 96/96 unit tests + 5/5 integration tests, lint, typecheck, and
       `next build` all green.
+
+## Deliberately deferred (not started)
+
+- **Google Sheets integration** — the OAuth flow, token storage
+  (`sheets_connections`), and per-response row sync
+  (`sheets_sync_log`) are unimplemented. The spec allows shipping
+  webhooks as the sole launch integration when Sheets has a genuine
+  provider-qualification blocker; here it's more that OAuth
+  app registration/verification with Google is an external, non-code
+  dependency this environment can't complete, and building the token
+  page plumbing against credentials that don't exist yet would mean
+  shipping unverified, untestable code. Webhooks are complete and
+  verified; Sheets is the explicitly-tracked gap, not a silently
+  dropped requirement.
 
 ## In progress / next actions (in order)
 
-1. Webhooks (HMAC-signed, retry with backoff, delivery log UI) +
-   Google Sheets integration — same "async side effect after the
-   canonical write" principle as notifications, same `after()`
-   mechanism. `webhook_endpoints`/`webhook_deliveries`/
-   `sheets_connections`/`sheets_sync_log` tables already exist in the
-   schema, unused so far.
-2. PostHog analytics wiring (event instrumentation +
+1. PostHog analytics wiring (event instrumentation +
    `computeCompletionRate`, already implemented and tested, surfaced
    in the dashboard) — tag preview vs. real traffic (preview still
    makes zero network calls today, so there's nothing to mistag, but
    real `form_viewed`/`form_started`/`form_submitted` events need to
    start firing from the public runtime and its API routes).
-3. ~20-30 templates + template picker (`templates` table already
+2. ~20-30 templates + template picker (`templates` table already
    exists, unused so far).
+3. Google Sheets integration, to the extent possible without live
+   Google Cloud credentials — at minimum the domain-layer token
+   storage/refresh logic and the per-response sync function, with the
+   OAuth consent screen wiring documented as needing real credentials
+   at deploy time (same pattern as the webhook cron secret).
 4. Abuse/rate-limiting polish (the in-memory limiter is single-instance
    only — fine for now, documented upgrade path to a shared store),
    accessibility pass, responsive polish for the public runtime and
@@ -86,13 +120,15 @@ then analytics wiring.
    is already tested at the domain layer; this pass should specifically
    try to break the HTTP layer (forged response/upload ids across
    forms, oversized payloads, malformed answer shapes, XSS in
-   free-text answers rendered in the response dashboard).
+   free-text answers, SSRF via a webhook URL pointed at an internal
+   address — not currently blocked).
 6. E2E test suite (`docs/testing.md`), full validation run, final
    report.
 
 ## Known bugs
 
-None currently open.
+None currently open. One was caught and fixed before it shipped this
+session (the webhook-secret-reload bug above).
 
 ## How to resume
 
@@ -104,5 +140,5 @@ None currently open.
    restarted with a different project ref.
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
 test:integration`.
-5. Continue with the next unchecked action above — webhooks, then
-   Google Sheets.
+5. Continue with the next unchecked action above — analytics wiring,
+   then templates.

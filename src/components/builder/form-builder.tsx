@@ -322,6 +322,12 @@ export function FormBuilder({
         </div>
         <div className="flex items-center gap-3">
           <Link
+            href={`/forms/${formId}/integrations`}
+            className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
+          >
+            Integrations
+          </Link>
+          <Link
             href={`/forms/${formId}/responses`}
             className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
           >

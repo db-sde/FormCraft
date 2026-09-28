@@ -3,6 +3,27 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Webhook retry sweep needs an external scheduler
+
+There's no long-running worker process in this deployment model (a
+modular monolith on Next.js route handlers), so "bounded exponential
+retry" for webhook deliveries can't be a setInterval-style background
+loop. Split it in two: the first attempt happens immediately, inline
+in the `/complete` request's `after()` callback (covers the common
+case — most endpoints are just up); a separate
+`POST /api/cron/webhooks/dispatch`, protected by a `CRON_SECRET`
+bearer token (never a user session — it fans out real HTTP requests to
+creator-configured URLs, so an anonymous trigger would be a real abuse
+vector), picks up anything still due later. This requires an external
+scheduler (Vercel Cron, `pg_cron`, or any `curl`-on-a-timer) to be
+configured at deploy time — documented in the route's own comment and
+here rather than assumed. Verified locally by hand: pointed an
+endpoint at a genuinely unreachable port, confirmed the first attempt
+failed and was recorded with `next_attempt_at` ~1 minute out, forced
+it due, and confirmed a direct call to the cron endpoint picked it up
+and incremented the attempt count — the sweep does what it's supposed
+to, independent of whatever ends up triggering it in production.
+
 ## 2026-09-28 — Notifications: owner-only, opt-out, `after()` not fire-and-forget
 
 Three narrower-than-spec choices for Phase 1 email notifications:

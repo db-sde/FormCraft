@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
+import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
 import { checkRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
@@ -65,10 +66,24 @@ export async function POST(
       // next/server's after() keeps the serverless function alive for
       // this, unlike a bare unawaited promise, which can be killed
       // before it finishes once the response is flushed. The canonical
-      // write already succeeded above, so a notification failure
-      // (missing API key, Resend outage, ...) can never affect the
-      // response itself (see ARCHITECTURE.md).
-      after(() => notifyFormOwnerOfCompletedResponse(admin, result.formId, id));
+      // write already succeeded above, so a failure in any of these
+      // (missing API key, an unreachable webhook endpoint, ...) can
+      // never affect the response itself (see ARCHITECTURE.md).
+      after(async () => {
+        await notifyFormOwnerOfCompletedResponse(admin, result.formId, id);
+        await enqueueWebhookDeliveries(
+          admin,
+          result.formId,
+          id,
+          result.endingId || null,
+          parsed.data.answers,
+        );
+        // Attempt the just-enqueued (and any other due) deliveries
+        // immediately rather than waiting for the next scheduled
+        // sweep — see /api/cron/webhooks/dispatch for the sweep that
+        // covers retries after this.
+        await dispatchDueDeliveries(admin);
+      });
     }
 
     return NextResponse.json({ endingId: result.endingId });
