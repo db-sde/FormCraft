@@ -12,26 +12,41 @@ import { THEME_FONT_STACK, THEME_BUTTON_RADIUS } from "@/components/theme-styles
 /**
  * Conversational (one-question-at-a-time) respondent experience.
  * Shared by the builder's Preview dialog (fed the in-memory draft
- * schema) and the public runtime at /f/[slug] (fed the published
- * schema) — same component, same navigation/validation/logic engine,
- * so behavior can't drift between what a creator previews and what a
- * respondent actually sees (ARCHITECTURE.md).
+ * schema, no persistence) and the public runtime at /f/[slug] (fed
+ * the published schema, wired to the response-autosave/submission API
+ * by its caller via `onAnswerChange`/`onComplete`) — same component,
+ * same navigation/validation/logic engine, so behavior can't drift
+ * between what a creator previews and what a respondent actually sees
+ * (ARCHITECTURE.md).
  *
- * This does not persist anything — answer state is local to this
- * component. Wiring it to the response-autosave/submission API is a
- * separate milestone (see PROJECT_STATUS.md); `onComplete` is the
- * seam that milestone hooks into.
+ * This component itself never makes a network call — it just reports
+ * state changes through the two callback props and accepts initial
+ * state back in (for resuming a partial response after a refresh).
+ * Both are optional so the Preview dialog's fire-and-forget usage
+ * doesn't need to change.
  */
 export function FormRuntime({
   compiled,
+  initialAnswers,
+  initialQuestionId,
+  initialHistory,
+  onAnswerChange,
   onComplete,
 }: {
   compiled: CompiledFormV1;
+  initialAnswers?: AnswerMap;
+  initialQuestionId?: string;
+  initialHistory?: string[];
+  onAnswerChange?: (answers: AnswerMap, currentQuestionId: string) => void;
   onComplete?: (endingId: string, answers: AnswerMap) => void;
 }) {
-  const [currentId, setCurrentId] = useState(compiled.orderedQuestionIds[0]);
-  const [answers, setAnswers] = useState<AnswerMap>({});
-  const [history, setHistory] = useState<string[]>([]);
+  const [currentId, setCurrentId] = useState(
+    initialQuestionId && compiled.orderedQuestionIds.includes(initialQuestionId)
+      ? initialQuestionId
+      : compiled.orderedQuestionIds[0],
+  );
+  const [answers, setAnswers] = useState<AnswerMap>(initialAnswers ?? {});
+  const [history, setHistory] = useState<string[]>(initialHistory ?? []);
   const [ending, setEnding] = useState<EndingV1 | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,8 +56,10 @@ export function FormRuntime({
 
   function setAnswer(value: unknown) {
     if (!question) return;
-    setAnswers((a) => ({ ...a, [question.id]: value }));
+    const next = { ...answers, [question.id]: value };
+    setAnswers(next);
     setError(null);
+    onAnswerChange?.(next, question.id);
   }
 
   function goNext() {
@@ -64,6 +81,7 @@ export function FormRuntime({
     } else {
       setHistory((h) => [...h, question.id]);
       setCurrentId(next.questionId);
+      onAnswerChange?.(answers, next.questionId);
     }
   }
 
@@ -73,6 +91,7 @@ export function FormRuntime({
     setHistory((h) => h.slice(0, -1));
     setCurrentId(prev);
     setError(null);
+    onAnswerChange?.(answers, prev);
   }
 
   const containerStyle: React.CSSProperties = {

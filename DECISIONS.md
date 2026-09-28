@@ -3,6 +3,33 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — `service_role` also needs explicit grants
+
+Same root cause as the `authenticated`/`anon` grants bug from an
+earlier milestone, discovered the same way (live testing, not
+inspection): this Supabase version doesn't auto-grant table privileges
+to _any_ Data API role, including `service_role`. The public response
+API route handlers use the service-role admin client precisely because
+respondents never hold a session — but bypassing RLS (what
+`service_role` does) turned out to be a separate mechanism from having
+the underlying SQL privilege at all, and without it every admin-client
+query failed with "permission denied for table X". Migration 10 grants
+`service_role` full privileges on all current tables/sequences/
+functions, plus `alter default privileges` so the same bug can't recur
+silently when future migrations add tables.
+
+## 2026-09-28 — Resume doesn't restore Back-navigation history
+
+`PublicFormRuntime` persists `answers` and the current `lastQuestionId`
+to localStorage so a refresh resumes at the right question, but not
+the in-memory `history` stack `FormRuntime` uses for its Back button
+(that would require `FormRuntime` to report history changes through a
+new callback too, for a small UX benefit). Accepted as a Phase 1 gap:
+after a resume, Back is unavailable until the respondent navigates
+forward again in that session. Correctness (resuming at the right
+question, with the right answers, not double-submitting) is unaffected
+— this is purely a "how far back can you undo" limitation.
+
 ## 2026-09-28 — Builder route moved to its own route group
 
 `/forms/[id]` (the builder) started as a child of the `(dashboard)`
