@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { getPublicFormBySlug } from "@/domains/forms";
+import { recordAnalyticsEvent } from "@/domains/analytics";
+import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { PublicFormRuntime } from "./public-form-runtime";
 
 // The public respondent runtime: no auth, reads only the currently
@@ -20,6 +24,28 @@ export default async function PublicFormPage({
 
   const publicForm = await getPublicFormBySlug(supabase, slug);
   if (!publicForm) notFound();
+
+  // A view is counted on every render of this page, including a
+  // refresh mid-response — distinct from form_started, which only
+  // fires once per response row (see /api/responses/start). Analytics
+  // must never affect the page render, so both calls are best-effort.
+  after(async () => {
+    const admin = createAdminClient();
+    const distinctId = crypto.randomUUID();
+    try {
+      await recordAnalyticsEvent(admin, {
+        formId: publicForm.formId,
+        eventType: "form_viewed",
+      });
+    } catch {
+      // Swallow — see comment above.
+    }
+    await captureServerEvent({
+      distinctId,
+      event: "form_viewed",
+      properties: { formId: publicForm.formId },
+    });
+  });
 
   return (
     <div className="min-h-screen">

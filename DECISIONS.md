@@ -3,6 +3,40 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Analytics events fire server-side, never from client JS
+
+`form_viewed`/`form_started`/`form_submitted` could have been tracked
+with `posthog-js` in the browser, but that means the funnel is only as
+reliable as whichever respondents have JS enabled and no ad/tracker
+blocker — exactly the population most likely to differ systematically
+from the rest, which would make `computeCompletionRate` quietly wrong
+in a way nobody could detect from the number alone. Instead all three
+events fire from server code that was already going to run regardless
+of client JS: `form_viewed` from `/f/[slug]`'s server component
+(reached on every request, full stop), `form_started` from
+`/api/responses/start` (a response row is never created any other
+way), `form_submitted` from `/api/responses/[id]/complete` (same
+`after()` callback as the existing notification/webhook work). This
+also means `computeFunnelSummary`'s three counts are always internally
+consistent with each other and with the response rows themselves,
+since they're derived from the same server-side lifecycle instead of
+two independently-flaky signals (client beacon vs. server DB write)
+that could drift apart under packet loss, a slow client, or a
+respondent closing the tab early.
+
+One consequence: `recordAnalyticsEvent` (the Postgres write — the
+dashboard's source of truth) deliberately has no `"server-only"`
+import, unlike the rest of this codebase's side-effect modules
+(`notifications/send.ts`, `lib/analytics/posthog-server.ts`), because
+`"server-only"`'s marker throws on *any* import outside Next's
+`react-server` bundler condition — including a plain Vitest run — so a
+file that needs one would be unable to be integration-tested directly
+the way `webhooks/queries.ts` and `responses/queries.ts` already are.
+PostHog capture stays in its own `"server-only"`-marked, deliberately
+untested wrapper (`captureServerEvent`), called as a second, separate
+step at each of the three call sites rather than folded into
+`recordAnalyticsEvent` itself.
+
 ## 2026-09-28 — Webhook retry sweep needs an external scheduler
 
 There's no long-running worker process in this deployment model (a

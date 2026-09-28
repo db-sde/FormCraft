@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Download, Inbox } from "lucide-react";
 import { listResponses, getResponseCounts } from "@/domains/responses";
+import { listAnalyticsEventsForForm, computeFunnelSummary } from "@/domains/analytics";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,12 @@ export default async function ResponsesPage({
   if (!form) notFound();
 
   const page = Math.max(1, Number(pageParam) || 1);
-  const [responses, counts] = await Promise.all([
+  const [responses, counts, analyticsEvents] = await Promise.all([
     listResponses(supabase, formId, { page }),
     getResponseCounts(supabase, formId),
+    listAnalyticsEventsForForm(supabase, formId),
   ]);
+  const funnel = computeFunnelSummary(analyticsEvents);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -74,6 +77,37 @@ export default async function ResponsesPage({
             </a>
           </Button>
         )}
+      </div>
+
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
+          <CardContent className="py-4">
+            <p className="text-muted-foreground text-xs">Views</p>
+            <p className="text-xl font-semibold">{funnel.views}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <p className="text-muted-foreground text-xs">Starts</p>
+            <p className="text-xl font-semibold">{funnel.starts}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <p className="text-muted-foreground text-xs">Completions</p>
+            <p className="text-xl font-semibold">{funnel.completions}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-4">
+            <p className="text-muted-foreground text-xs">Completion rate</p>
+            <p className="text-xl font-semibold">
+              {funnel.completionRate === null
+                ? "—"
+                : `${funnel.completionRate.toFixed(0)}%`}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {responses.items.length === 0 ? (

@@ -4,12 +4,13 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**WEBHOOKS** — done and verified live against local Postgres, including
-a real local HTTP receiver, a cryptographically-verified signature, a
-genuine failure/backoff/retry cycle, and cron-endpoint auth. Google
-Sheets integration is the one Phase 1 launch item still unimplemented
-(see below — deliberately deferred, not forgotten). Next up: analytics
-wiring, then templates.
+**ANALYTICS** — done and verified live: `form_viewed`/`form_started`/
+`form_submitted` events now actually fire (previously only the pure
+`computeCompletionRate`/`computeFunnelSummary` math existed, with
+nothing feeding it), and the responses dashboard shows a real
+views/starts/completions/completion-rate funnel card. Google Sheets
+integration is the one Phase 1 launch item still unimplemented (see
+below — deliberately deferred, not forgotten). Next up: templates.
 
 ## Completed
 
@@ -79,8 +80,50 @@ wiring, then templates.
       with no/wrong bearer token and 200 with the right one; forced the
       retry due and confirmed the cron endpoint picked it up and
       incremented `attempt_count` to 2, still bounded, not exhausted.
-- [x] 96/96 unit tests + 5/5 integration tests, lint, typecheck, and
+- [x] 103/103 unit tests + 5/5 integration tests, lint, typecheck, and
       `next build` all green.
+- [x] **Analytics** (`src/domains/analytics`, `src/lib/analytics`):
+  - `events.ts` — `recordAnalyticsEvent`/`listAnalyticsEventsForForm`,
+    a thin query-layer pair (no `"server-only"`, unlike most of this
+    domain's siblings) so integration tests can call it directly with
+    a service-role client, same as the response-engine tests do.
+  - `posthog-server.ts` — a `"server-only"` best-effort wrapper around
+    `posthog-node` (`flushAt: 1`/`flushInterval: 0` so a single event
+    actually sends before the serverless function exits); a missing
+    `POSTHOG_SERVER_API_KEY` makes it a silent no-op rather than an
+    error, same pattern as Resend's `no_api_key` branch in
+    `notifications/send.ts`.
+  - Three call sites, chosen so the funnel counts respondent-server
+    truth, never client JS that could be blocked or never run:
+    `form_viewed` fires from `/f/[slug]`'s server component on every
+    render (including a resumed session's refresh — a view is a view);
+    `form_started` fires from `/api/responses/start`, which only ever
+    runs once per response row (a resumed session skips `/start`
+    entirely — see `PublicFormRuntime` — so this is exactly the "valid
+    start" `computeCompletionRate` expects, never inflated by
+    refreshes); `form_submitted` fires from
+    `/api/responses/[id]/complete` alongside the existing notification/
+    webhook `after()` work. The Postgres write (source of truth for
+    the dashboard) and the PostHog capture (best-effort, for open-
+    ended exploration) are separate calls at each site, and a failure
+    in the Postgres write is caught locally so it can never block the
+    notification/webhook side effects that run after it in the same
+    `after()` callback.
+  - Dashboard: `/forms/[id]/responses` now computes
+    `computeFunnelSummary` server-side from `listAnalyticsEventsForForm`
+    and renders a 4-card Views/Starts/Completions/Completion-rate row
+    above the response table.
+- [x] **Verified live**: seeded a real published form directly in
+      local Postgres, hit the actual `GET /f/[slug]`,
+      `POST /api/responses/start`, and `POST /api/responses/:id/
+      complete` endpoints, and confirmed all three `analytics_events`
+      rows landed with the right `event_type`/`session_id`/`metadata`;
+      confirmed the isPreview-tag-and-exclude behavior already proven
+      in unit tests also holds through a real DB round-trip (integration
+      test); logged into the actual dashboard in a real browser and
+      confirmed the funnel card rendered Views 1 / Starts 1 /
+      Completions 1 / Completion rate 100% — matching the seeded events
+      exactly, not a hardcoded or stale number.
 
 ## Deliberately deferred (not started)
 
@@ -98,31 +141,28 @@ wiring, then templates.
 
 ## In progress / next actions (in order)
 
-1. PostHog analytics wiring (event instrumentation +
-   `computeCompletionRate`, already implemented and tested, surfaced
-   in the dashboard) — tag preview vs. real traffic (preview still
-   makes zero network calls today, so there's nothing to mistag, but
-   real `form_viewed`/`form_started`/`form_submitted` events need to
-   start firing from the public runtime and its API routes).
-2. ~20-30 templates + template picker (`templates` table already
+1. ~20-30 templates + template picker (`templates` table already
    exists, unused so far).
-3. Google Sheets integration, to the extent possible without live
+2. Google Sheets integration, to the extent possible without live
    Google Cloud credentials — at minimum the domain-layer token
    storage/refresh logic and the per-response sync function, with the
    OAuth consent screen wiring documented as needing real credentials
    at deploy time (same pattern as the webhook cron secret).
-4. Abuse/rate-limiting polish (the in-memory limiter is single-instance
+3. Abuse/rate-limiting polish (the in-memory limiter is single-instance
    only — fine for now, documented upgrade path to a shared store),
    accessibility pass, responsive polish for the public runtime and
    dashboard on mobile.
-5. Security hardening + adversarial review pass (see spec's
+4. Security hardening + adversarial review pass (see spec's
    quality_gate list) — replay/duplicate-submit/stale-write behavior
    is already tested at the domain layer; this pass should specifically
    try to break the HTTP layer (forged response/upload ids across
    forms, oversized payloads, malformed answer shapes, XSS in
-   free-text answers, SSRF via a webhook URL pointed at an internal
-   address — not currently blocked).
-6. E2E test suite (`docs/testing.md`), full validation run, final
+   free-text answers). Webhook SSRF: literal-hostname/private-range
+   checks are now in place at both creation and dispatch time
+   (`isDisallowedWebhookHost`), but DNS-rebinding-time protection
+   (resolving and checking the actual IP immediately before each
+   connection) is still open — worth revisiting in this pass.
+5. E2E test suite (`docs/testing.md`), full validation run, final
    report.
 
 ## Known bugs
@@ -140,5 +180,4 @@ session (the webhook-secret-reload bug above).
    restarted with a different project ref.
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
 test:integration`.
-5. Continue with the next unchecked action above — analytics wiring,
-   then templates.
+5. Continue with the next unchecked action above — templates.

@@ -4,6 +4,8 @@ import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
 import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
+import { recordAnalyticsEvent } from "@/domains/analytics";
+import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { checkRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
@@ -70,6 +72,22 @@ export async function POST(
       // (missing API key, an unreachable webhook endpoint, ...) can
       // never affect the response itself (see ARCHITECTURE.md).
       after(async () => {
+        try {
+          await recordAnalyticsEvent(admin, {
+            formId: result.formId,
+            eventType: "form_submitted",
+            sessionId: id,
+            metadata: { endingId: result.endingId || null },
+          });
+        } catch {
+          // Analytics must never block the notification/webhook side
+          // effects that follow.
+        }
+        await captureServerEvent({
+          distinctId: id,
+          event: "form_submitted",
+          properties: { formId: result.formId, endingId: result.endingId || null },
+        });
         await notifyFormOwnerOfCompletedResponse(admin, result.formId, id);
         await enqueueWebhookDeliveries(
           admin,

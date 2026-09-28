@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { startResponse, FormNotAvailableError } from "@/domains/responses";
+import { recordAnalyticsEvent } from "@/domains/analytics";
+import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { checkRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../shared";
@@ -36,6 +38,27 @@ export async function POST(request: NextRequest) {
       utmMedium: parsed.data.utmMedium,
       utmCampaign: parsed.data.utmCampaign,
     });
+
+    // A response row only gets created here — never on a resumed
+    // session (see PublicFormRuntime) — so this is exactly the "valid
+    // start" count computeCompletionRate/computeFunnelSummary expect.
+    after(async () => {
+      try {
+        await recordAnalyticsEvent(admin, {
+          formId: parsed.data.formId,
+          eventType: "form_started",
+          sessionId: result.responseId,
+        });
+      } catch {
+        // Analytics must never affect the respondent-facing result.
+      }
+      await captureServerEvent({
+        distinctId: result.responseId,
+        event: "form_started",
+        properties: { formId: parsed.data.formId },
+      });
+    });
+
     return NextResponse.json({
       responseId: result.responseId,
       formVersionId: result.formVersionId,
