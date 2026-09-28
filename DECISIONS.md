@@ -3,6 +3,41 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Autosave/complete now filter answers against the real schema, not just Zod's shape check
+
+Adversarial testing (live curl against the running app, part of this
+session's security pass) found that `saveResponseAnswers` and
+`completeResponse` both wrote whatever `question_id` keys a client
+sent straight into the `answers` table, with zero check against the
+form's actual published schema. Zod's `z.record(z.string(),
+z.unknown())` on the request body validates *shape* (it's an object of
+string keys to arbitrary values) but says nothing about whether those
+keys are real — shape validation and schema validation are different
+questions, and only the first was being asked. This is a direct
+instance of CLAUDE.md rule 1 ("never trust client-supplied ...
+schema") — the client fully controls which keys appear in `answers`,
+and nothing about that object's shape rules out a forged key.
+
+Impact was contained (garbage keys are invisible to the creator — the
+dashboard/CSV export only look up known question ids from the schema,
+never iterate the raw `answers` table) but real: unbounded storage
+growth tied to the public, rate-limited-but-not-schema-bounded
+autosave endpoint (up to 120 requests/10min, each able to define
+arbitrarily many distinct garbage keys within the 200KB body cap).
+
+Fixed with one new function, `filterAnswersToKnownQuestions`
+(`src/domains/responses/queries.ts`), applied before every write in
+both functions — `completeResponse` already had the compiled schema
+in scope (no new query), `saveResponseAnswers` needed one extra
+indexed lookup (`form_versions` by the response's own
+`form_version_id`, already selected for free from the CAS update) to
+get it. Chose to silently drop unknown keys rather than reject the
+whole request: a legitimate respondent's request always consists
+entirely of real keys, so a mix only ever happens from a forged
+request, and there's no useful error to surface to an attacker anyway
+— silently ignoring is simpler than adding a new "some of your answer
+keys were invalid" error path nothing legitimate would ever trigger.
+
 ## 2026-09-28 — The builder's editing surface is desktop-oriented by design; respondent/dashboard pages are fully responsive
 
 The spec calls for "responsive design," which could be read as every

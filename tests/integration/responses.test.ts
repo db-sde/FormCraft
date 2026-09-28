@@ -271,4 +271,43 @@ describe("response engine (integration)", () => {
       .single();
     expect(row?.status).toBe("completed");
   });
+
+  it("drops answer keys for question ids that don't exist on this form's schema (adversarial: forged question id)", async () => {
+    const started = await startResponse(supabase, formId);
+
+    await saveResponseAnswers(supabase, started.responseId, 1, "q_name", {
+      q_name: "Ada Lovelace",
+      forged_question_id_from_another_form: "should never be stored",
+    });
+
+    const { data: rows } = await supabase
+      .from("answers")
+      .select("question_id")
+      .eq("response_id", started.responseId);
+    const storedQuestionIds = (rows ?? []).map((r) => r.question_id);
+    expect(storedQuestionIds).toContain("q_name");
+    expect(storedQuestionIds).not.toContain("forged_question_id_from_another_form");
+
+    const completed = await completeResponse(
+      supabase,
+      started.responseId,
+      2,
+      "q_name",
+      {
+        q_name: "Ada Lovelace",
+        q_notes: "hello",
+        another_forged_id: "also should never be stored",
+      },
+      crypto.randomUUID(),
+    );
+    expect(completed.ok).toBe(true);
+
+    const { data: finalRows } = await supabase
+      .from("answers")
+      .select("question_id")
+      .eq("response_id", started.responseId);
+    const finalQuestionIds = (finalRows ?? []).map((r) => r.question_id);
+    expect(finalQuestionIds.sort()).toEqual(["q_name", "q_notes"]);
+    expect(finalQuestionIds).not.toContain("another_forged_id");
+  });
 });

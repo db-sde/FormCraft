@@ -4,18 +4,20 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**RESPONSIVE/MOBILE POLISH** — walked every creator-facing page at
-375px width in a real browser (not just the public runtime, which was
-already checked in the abuse/accessibility pass). Found and fixed a
-real header-overflow bug on the dashboard (workspace name + email ran
-together into unreadable wrapped text) and on the builder's toolbar
-(action links overlapped the back button). Dashboard list, responses
-funnel + table, integrations, and the templates gallery all already
-reflowed cleanly at mobile width with no changes needed. The builder's
-3-pane editing surface itself (question list + center canvas + right
-panel) is scoped as desktop-oriented by design, same as comparable
-tools — see DECISIONS.md. Next: the security/adversarial review pass,
-then E2E tests.
+**SECURITY / ADVERSARIAL REVIEW** — ran the spec's quality_gate
+checklist live against the running app with curl and a real browser,
+not by reading the code: forged response/form/question ids, oversized
+payloads, malformed answer shapes, XSS in free-text answers, CSV
+formula injection, cross-form manipulation, cron-endpoint auth,
+rate-limit spot checks. Found and fixed one real gap: the autosave/
+complete endpoints accepted and persisted arbitrary attacker-chosen
+`question_id` keys that don't exist on the form's actual schema — a
+storage-abuse vector, and a violation of CLAUDE.md rule 1 ("never
+trust client-supplied schema"). Everything else held up: XSS is
+neutralized by React's default escaping, CSV formula injection was
+already mitigated, cross-form/forged-id requests correctly 404,
+oversized/malformed bodies are correctly rejected with 400, cron
+routes correctly require their bearer secret. Next: E2E tests.
 
 ## Completed
 
@@ -280,6 +282,58 @@ then E2E tests.
         gallery all already reflowed correctly with zero changes.
 - [x] Confirmed both fixes live in the browser at 375px width, not
       just by reading the CSS.
+- [x] **Security/adversarial review pass**, run live against the
+      actual running app (curl + a real browser), following the spec's
+      quality_gate checklist:
+      - Forged/cross-form ids: unknown response id, unknown form id,
+        SQL-injection-flavored `formId` string, an upload request
+        against a question id that doesn't belong to that form — all
+        correctly 404/400, no leak.
+      - Oversized payload (300KB body): correctly rejected 400 before
+        ever reaching Zod (the existing `MAX_BODY_BYTES` guard).
+      - Malformed answer shapes (array instead of object, string
+        instead of object, missing fields entirely, invalid JSON):
+        all correctly rejected 400, no 500s, no crashes.
+      - XSS in a free-text answer (`<script>alert(1)</script><img
+        src=x onerror=alert(2)>`): submitted through the real API,
+        confirmed live in a browser that the response detail page
+        renders it as inert text — no raw `<script>` tag in the DOM,
+        no alert fired (React's default JSX escaping holds; nothing
+        in this codebase bypasses it with `dangerouslySetInnerHTML`
+        for respondent-supplied text).
+      - CSV formula injection (`=cmd|'/C calc'!A0`): already mitigated
+        by `neutralizeFormulaInjection` in `@/domains/exports/csv.ts`
+        (a leading apostrophe is prepended to any cell starting with
+        `=`/`+`/`-`/`@`/tab/CR) — confirmed live via the actual
+        `/api/forms/[id]/export.csv` endpoint, not just by reading the
+        code.
+      - `POST /api/cron/webhooks/dispatch` and `/sheets/dispatch`:
+        confirmed 401 with no/wrong bearer token.
+      - Rate limiting: spot-checked the answers endpoint stays under
+        its limit for a normal few-request burst (doesn't false-
+        positive on legitimate traffic).
+      - **Found and fixed a real gap**: `saveResponseAnswers` and
+        `completeResponse` (`src/domains/responses/queries.ts`)
+        accepted and persisted *any* `question_id` key a client sent,
+        never checking it against the form's actual schema — a
+        forged/garbage key got written straight into the `answers`
+        table tied to a real `response_id`. Not a cross-tenant leak
+        (harmless data on the creator's own response — the dashboard/
+        CSV export only ever look up *known* question ids, so garbage
+        keys were invisible, just dead weight), but a real violation
+        of CLAUDE.md rule 1 ("never trust client-supplied schema") and
+        an unbounded storage-abuse vector (up to 120 requests/10min ×
+        arbitrary distinct keys per request, with no cap tied to the
+        form's actual question count). Fixed with
+        `filterAnswersToKnownQuestions`, applied before every write in
+        both functions. Verified live: sent a request with a forged
+        `question_id` through the real running API and confirmed via
+        direct Postgres query that only the legitimate answer landed
+        in the `answers` table.
+      - New regression test in `tests/integration/responses.test.ts`
+        covers this at both the autosave and complete call sites.
+- [x] 119/119 unit tests + 20/20 integration tests, lint, typecheck,
+      and `next build` all green.
 
 ## Deliberately deferred (not started)
 
@@ -308,28 +362,27 @@ then E2E tests.
   needs — the public respondent runtime, and the dashboard/responses/
   integrations/templates pages a creator might check on a phone — is
   fully responsive and verified.
+- **Webhook SSRF DNS-rebinding protection** — `isDisallowedWebhookHost`
+  checks the literal hostname/IP in the URL at both creation and
+  dispatch time, but doesn't resolve the hostname and check the actual
+  IP immediately before each connection, so a hostname that resolves
+  to a private address only at request time (DNS rebinding) isn't
+  caught. Noted during this pass; not fixed here since it needs a real
+  DNS-resolution step in the dispatch path, a more involved change
+  than the rest of this pass's fixes — worth its own focused pass.
 
 ## In progress / next actions (in order)
 
-1. Security hardening + adversarial review pass (see spec's
-   quality_gate list) — replay/duplicate-submit/stale-write behavior
-   is already tested at the domain layer; this pass should specifically
-   try to break the HTTP layer (forged response/upload ids across
-   forms, oversized payloads, malformed answer shapes, XSS in
-   free-text answers). Webhook SSRF: literal-hostname/private-range
-   checks are now in place at both creation and dispatch time
-   (`isDisallowedWebhookHost`), but DNS-rebinding-time protection
-   (resolving and checking the actual IP immediately before each
-   connection) is still open — worth revisiting in this pass.
-2. E2E test suite (`docs/testing.md`), full validation run, final
+1. E2E test suite (`docs/testing.md`), full validation run, final
    report.
 
 ## Known bugs
 
 None currently open. Several were caught and fixed before/while
 shipping this session (the webhook-secret-reload bug, the
-signed-in-visitor-gets-404 RLS bug, and the dashboard/builder mobile
-header overflow bugs, all above).
+signed-in-visitor-gets-404 RLS bug, the dashboard/builder mobile
+header overflow bugs, and the forged-question-id storage-abuse gap,
+all above).
 
 ## How to resume
 
@@ -342,5 +395,4 @@ header overflow bugs, all above).
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
 test:integration`. If the `templates` table looks empty locally, run
 `npm run db:seed-templates` (idempotent — safe to re-run).
-5. Continue with the next unchecked action above — the security/
-   adversarial review pass, then E2E tests.
+5. Continue with the next unchecked action above — the E2E test suite.

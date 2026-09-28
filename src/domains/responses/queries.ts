@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
+import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { walkForm, isAnswered, type AnswerMap } from "@/domains/logic";
 import type { ResponseStatus } from "./state-machine";
 
@@ -71,6 +72,27 @@ export async function startResponse(
   return { responseId: response.id, formVersionId: response.form_version_id };
 }
 
+/**
+ * The server is authoritative over what a response's schema actually
+ * is (CLAUDE.md rule 1) — a respondent's client only ever sends
+ * `{ [questionId]: value }`, and nothing stops a forged request from
+ * naming a questionId that was never part of this form's published
+ * schema. Silently dropping unknown keys here (rather than trusting
+ * the client's shape once it passes Zod) is what keeps `answers` from
+ * accumulating arbitrary attacker-chosen rows tied to a real
+ * response_id — a real, if modest, storage-abuse vector found via
+ * live adversarial testing, not by code review.
+ */
+function filterAnswersToKnownQuestions(
+  schema: FormSchemaV1,
+  answers: AnswerMap,
+): AnswerMap {
+  const knownIds = new Set(schema.questions.map((q) => q.id));
+  return Object.fromEntries(
+    Object.entries(answers).filter(([questionId]) => knownIds.has(questionId)),
+  );
+}
+
 async function upsertAnswers(
   admin: Client,
   responseId: string,
@@ -119,7 +141,7 @@ export async function saveResponseAnswers(
     .eq("id", responseId)
     .neq("status", "completed")
     .lt("client_revision", expectedRevision)
-    .select("status, client_revision")
+    .select("status, client_revision, form_version_id")
     .maybeSingle();
   if (error) throw error;
 
@@ -141,7 +163,15 @@ export async function saveResponseAnswers(
     throw new StaleResponseWriteError();
   }
 
-  await upsertAnswers(admin, responseId, answers);
+  const { data: versionRow, error: versionError } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("id", updated.form_version_id)
+    .single();
+  if (versionError) throw versionError;
+  const schema = parseFormSchema(versionRow.schema);
+
+  await upsertAnswers(admin, responseId, filterAnswersToKnownQuestions(schema, answers));
 
   return { status: updated.status, revision: updated.client_revision };
 }
@@ -195,13 +225,14 @@ export async function completeResponse(
     .single();
   if (versionError) throw versionError;
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
+  const knownAnswers = filterAnswersToKnownQuestions(compiled.schema, answers);
 
-  await upsertAnswers(admin, responseId, answers);
+  await upsertAnswers(admin, responseId, knownAnswers);
 
-  const walk = walkForm(compiled, answers);
+  const walk = walkForm(compiled, knownAnswers);
   const reached = new Set(walk.visitedQuestionIds);
   const missing = compiled.schema.questions.filter(
-    (q) => q.required && reached.has(q.id) && !isAnswered(answers[q.id]),
+    (q) => q.required && reached.has(q.id) && !isAnswered(knownAnswers[q.id]),
   );
   if (missing.length > 0) {
     return {
