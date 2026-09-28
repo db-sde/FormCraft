@@ -311,8 +311,8 @@ export function FormBuilder({
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
+        <div className="flex min-w-0 shrink items-center gap-3">
           <Button asChild variant="ghost" size="icon" aria-label="Back to dashboard">
             <Link href="/dashboard">
               <ArrowLeft />
@@ -320,7 +320,7 @@ export function FormBuilder({
           </Button>
           <span className="truncate font-medium">{formTitle}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3 overflow-x-auto [&>*]:shrink-0">
           <Link
             href={`/forms/${formId}/integrations`}
             className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"

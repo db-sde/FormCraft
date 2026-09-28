@@ -3,6 +3,36 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — The builder's editing surface is desktop-oriented by design; respondent/dashboard pages are fully responsive
+
+The spec calls for "responsive design," which could be read as every
+screen in the product working at any width. Walking the app at a real
+375px viewport this session found and fixed two genuine bugs (a
+dashboard header that ran text together illegibly, a builder toolbar
+that overlapped its own back button — both above), but it also
+surfaced a bigger, more deliberate question: the builder's 3-pane
+layout (question list + center canvas + a right settings panel, each
+needing real width to be usable — dragging questions, editing option
+lists, previewing theme colors) doesn't fit 375px without either
+hiding two of the three panes behind navigation or shrinking each pane
+to the point of being unusable for actual editing work.
+
+Chose not to redesign it into a mobile-first editing experience.
+Every comparable tool (Google Forms, Typeform, Notion, Figma) makes
+the identical split: the *creation* surface is desktop-oriented, while
+the *consumption*/*respondent* surface is mobile-first — because
+editing a multi-panel document is fundamentally a different task than
+filling one out, and forcing the former into a phone-sized viewport
+produces a worse tool without actually serving the "someone fills this
+out on their phone" need, which the public runtime already serves
+fully (verified separately at 375px, no changes needed). Applied the
+same reasoning to every other creator page (dashboard, responses,
+integrations, templates), which all needed to and do work at mobile
+width, since checking results or connecting a webhook doesn't need
+three panes of real estate the way question editing does. The dividing
+line is task-shaped, not "creator vs. respondent" — it's specifically
+the dense multi-panel editing canvas that's scoped out.
+
 ## 2026-09-28 — Every integration test bypassed RLS, which is how a real RLS bug shipped
 
 Found while live-testing the accessibility/mobile-polish pass (not by

@@ -4,16 +4,18 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**ABUSE/RATE-LIMITING + ACCESSIBILITY** — login/signup/forgot-password
-are now rate-limited (previously only the public response endpoints
-were); the public runtime got a real WCAG fix (focus wasn't moving
-between consecutive same-type questions — see below) plus proper
-`role="alert"`/`role="progressbar"` semantics. Also fixed, found while
-live-testing this milestone: a real RLS bug where any *signed-in*
-visitor got a false 404 on every public form link (migration
-00000000000011, its own commit). Responsive/mobile polish for the
-dashboard is next, then the security/adversarial review pass, then
-E2E tests.
+**RESPONSIVE/MOBILE POLISH** — walked every creator-facing page at
+375px width in a real browser (not just the public runtime, which was
+already checked in the abuse/accessibility pass). Found and fixed a
+real header-overflow bug on the dashboard (workspace name + email ran
+together into unreadable wrapped text) and on the builder's toolbar
+(action links overlapped the back button). Dashboard list, responses
+funnel + table, integrations, and the templates gallery all already
+reflowed cleanly at mobile width with no changes needed. The builder's
+3-pane editing surface itself (question list + center canvas + right
+panel) is scoped as desktop-oriented by design, same as comparable
+tools — see DECISIONS.md. Next: the security/adversarial review pass,
+then E2E tests.
 
 ## Completed
 
@@ -257,6 +259,27 @@ E2E tests.
       `<input>` for "Last name", not the previous one.
 - [x] 119/119 unit tests + 19/19 integration tests, lint, typecheck,
       and `next build` all green.
+- [x] **Responsive/mobile pass**: walked the dashboard, builder,
+      responses, integrations, and templates pages at a real 375px
+      mobile viewport in a browser (not just resized devtools — actual
+      layout, actual clicks). Found and fixed two real bugs:
+      - `src/app/(dashboard)/layout.tsx`'s header ran the workspace
+        name and user email together into unreadable, wrapped text at
+        narrow widths (`min-w-0`/`shrink-0` weren't set, so neither
+        text nor the flex row could resolve how to lay out). Fixed by
+        hiding the workspace name below `sm` and the email below `md`
+        (secondary chrome, not essential at a glance) while keeping
+        the logo and "Log out" always present and functional.
+      - `src/components/builder/form-builder.tsx`'s top toolbar (Integrations/
+        Responses/View live/Unpublish/Preview/Publish) had no overflow
+        handling and visually overlapped the back button at mobile
+        widths. Fixed with `overflow-x-auto` + `[&>*]:shrink-0` on that
+        group so it scrolls within its own bounds instead of breaking
+        the header layout.
+      - The responses funnel/table, integrations panels, and templates
+        gallery all already reflowed correctly with zero changes.
+- [x] Confirmed both fixes live in the browser at 375px width, not
+      just by reading the CSS.
 
 ## Deliberately deferred (not started)
 
@@ -274,14 +297,21 @@ E2E tests.
   create the OAuth client, set `GOOGLE_OAUTH_CLIENT_ID`/
   `GOOGLE_OAUTH_CLIENT_SECRET`/`GOOGLE_OAUTH_REDIRECT_URI` (see
   `.env.example`), and the feature is live with no code changes.
+- **The builder's 3-pane editing UI is not mobile-optimized** —
+  question list + center canvas + right settings panel is a genuinely
+  desktop-oriented layout (same scope decision comparable tools like
+  Google Forms' and Typeform's own builders make; only their
+  *respondent-facing* forms are mobile-first). It doesn't break or
+  overlap at mobile width, it scrolls horizontally like a dense
+  editing surface — a deliberate, documented scope line, not an
+  oversight (see DECISIONS.md). Every page a mobile visitor actually
+  needs — the public respondent runtime, and the dashboard/responses/
+  integrations/templates pages a creator might check on a phone — is
+  fully responsive and verified.
 
 ## In progress / next actions (in order)
 
-1. Responsive/mobile polish for the dashboard specifically (the public
-   runtime has been checked at mobile width — see above; the
-   dashboard/builder/responses UI hasn't been walked at mobile width
-   yet this pass).
-2. Security hardening + adversarial review pass (see spec's
+1. Security hardening + adversarial review pass (see spec's
    quality_gate list) — replay/duplicate-submit/stale-write behavior
    is already tested at the domain layer; this pass should specifically
    try to break the HTTP layer (forged response/upload ids across
@@ -291,14 +321,15 @@ E2E tests.
    (`isDisallowedWebhookHost`), but DNS-rebinding-time protection
    (resolving and checking the actual IP immediately before each
    connection) is still open — worth revisiting in this pass.
-3. E2E test suite (`docs/testing.md`), full validation run, final
+2. E2E test suite (`docs/testing.md`), full validation run, final
    report.
 
 ## Known bugs
 
 None currently open. Several were caught and fixed before/while
-shipping this session (the webhook-secret-reload bug and the
-signed-in-visitor-gets-404 RLS bug, both above).
+shipping this session (the webhook-secret-reload bug, the
+signed-in-visitor-gets-404 RLS bug, and the dashboard/builder mobile
+header overflow bugs, all above).
 
 ## How to resume
 
@@ -311,5 +342,5 @@ signed-in-visitor-gets-404 RLS bug, both above).
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
 test:integration`. If the `templates` table looks empty locally, run
 `npm run db:seed-templates` (idempotent — safe to re-run).
-5. Continue with the next unchecked action above — dashboard mobile
-   polish, then the security/adversarial review pass, then E2E tests.
+5. Continue with the next unchecked action above — the security/
+   adversarial review pass, then E2E tests.
