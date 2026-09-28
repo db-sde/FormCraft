@@ -4,9 +4,9 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**BUILDER UI** — core question CRUD/reorder/settings + autosave done
-and verified end-to-end against a real local Supabase instance. Next
-up: theming, logic builder, presentation modes, preview, publishing.
+**THEMING + LOGIC BUILDER** — done and verified end-to-end against a
+real local Supabase instance. Next up: presentation modes, preview,
+publishing.
 
 ## Completed
 
@@ -14,132 +14,108 @@ up: theming, logic builder, presentation modes, preview, publishing.
       shadcn/ui, Vitest/Testing Library/Playwright, ESLint/Prettier,
       CI workflow, governing docs (CLAUDE.md, ARCHITECTURE.md,
       DECISIONS.md, docs/\*).
-- [x] Canonical form schema (`src/domains/forms/schema`): versioned Zod
-      schema (all 16 Phase 1 question types + welcome/statement),
-      structural/semantic validation, publication compiler with
-      inescapable-loop (Tarjan SCC) and reachability checks.
-- [x] Shared logic engine (`src/domains/logic`): single
-      `evaluateNextStep`/`walkForm` used by both preview and the
-      public runtime (not built yet, but the engine is ready and
-      tested).
-- [x] Pure domain helpers: response state machine + revision-monotonic
-      guard (`src/domains/responses`), CSV export with formula-
-      injection guarding and a documented 10k-row bound
-      (`src/domains/exports`), completion-rate analytics that exclude
-      preview traffic (`src/domains/analytics`), question/option
-      factory + array reorder/duplicate/insert/remove helpers
-      (`src/domains/forms/builder`).
+- [x] Canonical form schema, shared logic engine (`evaluateNextStep`/
+      `walkForm`), pure domain helpers (response state machine, CSV
+      export, completion-rate analytics, form/question/ending/logic
+      builder helpers) — see `src/domains/*`.
 - [x] Local Supabase project running (Docker, `supabase start`).
-      Migrations 1–8 applied: profiles/workspaces/workspace_members
-      (with `is_workspace_member`/`workspace_role_for` RLS helpers),
-      forms/form_versions (draft-uniqueness + publish-immutability
-      triggers + a `revision` counter for autosave CAS), responses/
-      answers/uploads (status state-machine + revision-monotonic
-      triggers), integrations/analytics/templates, storage buckets
-      (private response-uploads, public theme-assets), atomic
-      `create_workspace_with_owner` RPC, and explicit Data-API grants
-      (this Supabase version does not auto-expose new tables — see
-      DECISIONS.md).
-- [x] Supabase client helpers: browser/server/admin clients,
-      session-refresh proxy (`src/proxy.ts` — Next 16 renamed
-      `middleware.ts`, see DECISIONS.md), generated
-      `database.types.ts`.
-- [x] Auth: signup (with email verification), login, logout, forgot/
-      reset password, typed error mapping, `requireUser()` as the real
-      server-side authorization boundary (proxy redirect is UX only).
-      Verified live end-to-end against local Postgres.
-- [x] Workspaces: `ensureDefaultWorkspace` auto-provisions a workspace + owner membership on first dashboard visit, via the atomic RPC.
-      Fixed a real RLS/`RETURNING` bug found during live testing — see
-      DECISIONS.md.
-- [x] Dashboard: empty state, form list (draft/published badge,
-      response count placeholder, last-updated), create-form action.
-- [x] **Builder UI** (`src/app/(builder)/forms/[id]`, moved out of the
-      `(dashboard)` route group so it gets its own full-screen chrome
-      instead of the dashboard header/nav — same URL, `/forms/[id]`,
-      unaffected since route groups don't change the URL):
-  - Three-pane layout: question list (left), editable question/ending
-    preview (center), type-specific settings (right), top bar with
-    save status + disabled Preview/Publish (tooltipped "Coming soon"
-    — those are separate upcoming milestones, not broken links).
-  - Question CRUD: add (dropdown of all 15 addable types with icons),
-    delete, duplicate, reorder. Reorder and all row actions are
-    **keyboard-reachable, not hover-only** — this was a real bug
-    found during live testing (buttons were `hidden group-hover:flex`,
-    which removes them from the tab order entirely; fixed to
-    `opacity-0` + `focus-within`/`group-focus-within` so Tab reaches
-    them). See DECISIONS.md.
-  - Type-specific settings editors for all 16 question types
-    (text length limits, number min/max, options editor for
-    select/multi-select/dropdown with add/remove, yes/no labels, date
-    range, rating scale, opinion scale range + labels, file upload
-    accepted types + max size, welcome/statement button label).
-  - Non-interactive live preview control per type
-    (`question-preview-control.tsx`) so the center pane is a real
-    WYSIWYG of what the respondent will see.
-  - Basic ending editor (title/description/button/redirect URL) —
-    multiple endings and jump-to-ending logic land with the logic
-    builder milestone.
-  - Autosave: debounced (800ms) `saveDraftAction` server action →
-    `saveDraftSchema` domain function, which re-validates
-    (structural + semantic, not full publish-compile) and does a
-    compare-and-set update (`where revision = :expected`) against the
-    new `form_versions.revision` column. In-flight-save mutex so rapid
-    edits don't race each other; a detected stale write (another tab)
-    surfaces "Edited elsewhere — reload to continue" and stops
-    autosaving until the page is reloaded, rather than silently
-    overwriting.
-  - **Verified live end-to-end**: created a question, edited its
-    label, saw "Saved" appear, confirmed the exact label and
-    incremented revision in Postgres via `psql`; added a
-    `single_select` question via the dropdown, edited its options;
-    reordered questions via the (keyboard-reachable) move-up button
-    and confirmed the new `order` values persisted correctly; checked
-    the browser console for errors (none).
-- [x] 50/50 unit tests, lint, typecheck, and `next build` all green.
+      Migrations 1–8 applied (identity/workspaces, forms/versions with
+      a `revision` CAS column, responses/answers/uploads, integrations/
+      analytics/templates, storage buckets, workspace-creation RPC,
+      explicit Data-API grants).
+- [x] Auth (signup/login/logout/forgot/reset), workspace
+      auto-provisioning, dashboard with create-form flow — all
+      verified live against local Postgres.
+- [x] **Builder UI** (`src/app/(builder)/forms/[id]`): question CRUD/
+      reorder (keyboard-accessible) with type-specific settings for
+      all 16 question types, non-interactive live preview control,
+      basic ending editor, debounced revision-guarded autosave.
+- [x] **Theming** (`src/domains/themes`, `theme-settings-panel.tsx`,
+      `theme-preview.tsx`):
+  - 6 built-in presets (Classic/Ocean/Forest/Sunset/Midnight/
+    Monochrome), applied atomically (color+font+button style
+    together) and cleared on any manual color override.
+  - Color fields (native swatch + hex text input, validated), font
+    family and button style selects, live-updating center-pane
+    preview mockup styled with the actual theme (colors, font stack,
+    button radius, background image).
+  - Logo + background image upload straight to the public
+    `theme-assets` Storage bucket (client-side type/size validation,
+    RLS-scoped path `<workspace_id>/<form_id>/<file>`), with a
+    remove button once uploaded.
+  - WCAG contrast-ratio check (`src/domains/themes/contrast.ts`,
+    unit-tested) surfaces an inline warning — not a hard block — when
+    the primary color would be hard to read as white button text, or
+    when text/background contrast is weak.
+  - **Verified live**: selected the "Ocean" preset, watched colors/
+    button shape update instantly in the preview, confirmed the exact
+    theme object persisted in Postgres via `psql`.
+- [x] **Logic builder** (`logic-editor.tsx`, `logic-value-control.tsx`):
+  - Rule list, "IF [question] [operator] [value] THEN [jump to
+    question/ending] [target]", rules evaluated top-to-bottom by the
+    same engine used elsewhere (no separate logic implementation).
+  - Operator choices narrow to what's meaningful for the source
+    question's type (`availableOperators` — e.g. no `contains` on a
+    text question, no `gt`/`lt` on a non-numeric one); this is a UX
+    narrowing, not a new validation rule (the schema's own semantic
+    validation is the actual enforcement).
+  - The value control adapts to the question type: a real option
+    picker for select/multi-select/dropdown (comparing by option id,
+    not free text), yes/no picker, number input for numeric types,
+    text input otherwise.
+  - Multiple endings: add/remove UI (`createEnding`/`removeEnding`/
+    `canDeleteEnding`) — an ending can't be deleted if it's the
+    default or the last one remaining, matching the schema's
+    "exactly one default, at least one ending" invariant.
+  - **Deleting a question or ending that a logic rule depends on
+    surfaces a confirmation dialog** ("N logic rule(s) reference this
+    and will also be deleted") instead of silently leaving a dangling
+    reference — the explicit Phase 1 requirement from
+    docs/form-schema.md. Cascade-deletes the affected rules only on
+    confirm.
+  - **Verified live end-to-end**: added a rule, changed its operator
+    to reveal the option-picker value control, selected an option,
+    confirmed the exact rule (including the option id, not a label)
+    persisted in Postgres; deleted the question that rule depended
+    on, confirmed the warning dialog listed "1 logic rule", confirmed
+    on delete that both the question AND the now-dangling rule were
+    removed together in the persisted schema.
+- [x] 65/65 unit tests, lint, typecheck, and `next build` all green.
 
 ## In progress / next actions (in order)
 
-1. Presentation modes (conversational P0, classic P1) sharing one data
-   model — this affects the _public runtime_, not the builder; the
-   builder's question list/settings already work for either mode.
-2. Theming UI wired to `ThemeV1` + live preview (currently the builder
-   center pane doesn't reflect theme colors/fonts yet).
-3. Logic builder UI wired to `LogicRuleV1` + the existing logic
-   engine, plus multi-ending support in the builder (add/remove
-   endings, not just edit the one that exists).
-4. Preview mode (desktop/mobile), isolated from production analytics —
+1. Presentation modes (conversational P0, classic P1) — affects the
+   _public runtime_ (not built yet), not the builder itself.
+2. Preview mode (desktop/mobile), isolated from production analytics —
    currently the Preview button is a disabled stub.
-5. Publishing pipeline: draft → `compileFormSchema` → new immutable
-   `form_versions` row (status=published), unpublish, republish —
-   currently the Publish button is a disabled stub.
-6. Public runtime (`src/app/f/[slug]`): server-authoritative render,
+3. Publishing pipeline: draft → `compileFormSchema` (already written
+   and tested — the inescapable-loop/reachability checks from the
+   schema milestone) → new immutable `form_versions` row
+   (status=published), unpublish, republish — currently the Publish
+   button is a disabled stub.
+4. Public runtime (`src/app/f/[slug]`): server-authoritative render,
    uses the same logic engine, no respondent auth.
-7. Partial response engine: `POST /api/responses/start`,
+5. Partial response engine: `POST /api/responses/start`,
    `PATCH /api/responses/:id/answers` (revision-guarded),
    `POST /api/responses/:id/complete` (idempotency-key guarded),
    resume on refresh.
-8. Response dashboard (table, detail view, delete) + CSV export route.
-9. Resend email notifications on completion.
-10. Webhooks (HMAC-signed, retry with backoff, delivery log UI) +
-    Google Sheets integration.
-11. PostHog analytics wiring (event instrumentation +
-    `computeCompletionRate` surfaced in the dashboard).
-12. ~20-30 templates + template picker.
-13. Abuse/rate-limiting on public endpoints, accessibility pass,
-    responsive polish (the builder itself is currently desktop-only
-    layout, per spec — "Builder can prioritize desktop/tablet").
-14. Security hardening + adversarial review pass (see spec's
+6. Response dashboard (table, detail view, delete) + CSV export route.
+7. Resend email notifications on completion.
+8. Webhooks (HMAC-signed, retry with backoff, delivery log UI) +
+   Google Sheets integration.
+9. PostHog analytics wiring (event instrumentation +
+   `computeCompletionRate` surfaced in the dashboard).
+10. ~20-30 templates + template picker.
+11. Abuse/rate-limiting on public endpoints, accessibility pass,
+    responsive polish (the builder itself is desktop-only, per spec).
+12. Security hardening + adversarial review pass (see spec's
     quality_gate list).
-15. Integration/E2E test suites (`docs/testing.md`), full validation
+13. Integration/E2E test suites (`docs/testing.md`), full validation
     run, final report.
 
 ## Known bugs
 
-None currently open. Two were found and fixed via live testing this
-session (kept as notes since they're non-obvious): the RLS/`RETURNING`
-interaction (see previous milestone's note, still in DECISIONS.md),
-and the hover-only row-action-buttons accessibility bug described
-above.
+None currently open.
 
 ## How to resume
 
@@ -150,5 +126,5 @@ above.
    keys — regenerate with `supabase status -o env` if it's ever
    restarted with a different project ref.
 4. Run `npm run lint && npm run typecheck && npm run test`.
-5. Continue with the next unchecked action above — presentation modes
-   / theming.
+5. Continue with the next unchecked action above — preview mode, then
+   publishing (the compiler it needs already exists and is tested).

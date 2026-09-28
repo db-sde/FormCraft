@@ -18,6 +18,8 @@ export default async function FormBuilderPage({
   return (
     <FormBuilder
       formTitle={draft.formTitle}
+      workspaceId={workspace.id}
+      formId={draft.formId}
       draftVersionId={draft.draftVersionId}
       initialRevision={draft.revision}
       initialSchema={draft.schema}

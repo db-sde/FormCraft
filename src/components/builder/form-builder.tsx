@@ -2,8 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import type { FormSchemaV1, QuestionV1, EndingV1 } from "@/domains/forms/schema/v1";
+import { ArrowLeft, Plus, X, Palette, GitBranch } from "lucide-react";
+import type {
+  FormSchemaV1,
+  QuestionV1,
+  EndingV1,
+  ThemeV1,
+  LogicRuleV1,
+} from "@/domains/forms/schema/v1";
 import type { QuestionType } from "@/domains/forms/schema/question-types";
 import {
   createQuestion,
@@ -11,6 +17,11 @@ import {
   removeQuestion,
   duplicateQuestion as duplicateQuestionAt,
   moveQuestion as moveQuestionAt,
+  createEnding,
+  canDeleteEnding,
+  removeEnding,
+  rulesReferencingQuestion,
+  rulesReferencingEnding,
 } from "@/domains/forms/builder";
 import type { SaveDraftResult } from "@/app/(builder)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
@@ -18,23 +29,45 @@ import { AddQuestionMenu } from "./add-question-menu";
 import { QuestionEditor } from "./question-editor";
 import { SettingsPanel } from "./settings-panel";
 import { EndingEditor, EndingSettingsPanel } from "./ending-editor";
+import { ThemePreview } from "./theme-preview";
+import { ThemeSettingsPanel } from "./theme-settings-panel";
+import { LogicEditor } from "./logic-editor";
 import { SaveStatus, type SaveState } from "./save-status";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { cn } from "cn";
 
-type Selection = { kind: "question"; id: string } | { kind: "ending"; id: string };
+type Selection =
+  | { kind: "question"; id: string }
+  | { kind: "ending"; id: string }
+  | { kind: "theme" }
+  | { kind: "logic" };
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
 export function FormBuilder({
   formTitle,
+  workspaceId,
+  formId,
   draftVersionId,
   initialRevision,
   initialSchema,
   onSave,
 }: {
   formTitle: string;
+  workspaceId: string;
+  formId: string;
   draftVersionId: string;
   initialRevision: number;
   initialSchema: FormSchemaV1;
@@ -50,6 +83,11 @@ export function FormBuilder({
     id: initialSchema.questions[0]?.id,
   });
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "question"; id: string; label: string; affectedRules: LogicRuleV1[] }
+    | { kind: "ending"; id: string; label: string; affectedRules: LogicRuleV1[] }
+    | null
+  >(null);
 
   const revisionRef = useRef(initialRevision);
   const savedSchemaRef = useRef(initialSchema);
@@ -110,6 +148,14 @@ export function FormBuilder({
     }));
   }
 
+  function updateTheme(next: ThemeV1) {
+    setSchema((s) => ({ ...s, theme: next }));
+  }
+
+  function updateLogic(next: LogicRuleV1[]) {
+    setSchema((s) => ({ ...s, logic: next }));
+  }
+
   function handleAdd(type: QuestionType) {
     const question = createQuestion(type, schema.questions.length);
     setSchema((s) => ({
@@ -119,18 +165,69 @@ export function FormBuilder({
     setSelection({ kind: "question", id: question.id });
   }
 
-  function handleDelete(id: string) {
-    setSchema((s) => {
-      const questions = removeQuestion(s.questions, id);
-      if (selection.kind === "question" && selection.id === id) {
-        setSelection(
-          questions.length > 0
-            ? { kind: "question", id: questions[0].id }
-            : { kind: "ending", id: s.endings[0].id },
-        );
-      }
-      return { ...s, questions };
-    });
+  function requestDeleteQuestion(id: string) {
+    const question = schema.questions.find((q) => q.id === id);
+    if (!question) return;
+    const affectedRules = rulesReferencingQuestion(schema.logic, id);
+    if (affectedRules.length > 0) {
+      setPendingDelete({ kind: "question", id, label: question.label, affectedRules });
+      return;
+    }
+    commitDeleteQuestion(id);
+  }
+
+  function commitDeleteQuestion(id: string) {
+    setSchema((s) => ({
+      ...s,
+      questions: removeQuestion(s.questions, id),
+      logic: s.logic.filter((r) => rulesReferencingQuestion([r], id).length === 0),
+    }));
+    if (selection.kind === "question" && selection.id === id) {
+      const remaining = removeQuestion(schema.questions, id);
+      setSelection(
+        remaining.length > 0
+          ? { kind: "question", id: remaining[0].id }
+          : { kind: "ending", id: schema.endings[0].id },
+      );
+    }
+  }
+
+  function requestDeleteEnding(id: string) {
+    if (!canDeleteEnding(schema.endings, id)) return;
+    const ending = schema.endings.find((e) => e.id === id);
+    if (!ending) return;
+    const affectedRules = rulesReferencingEnding(schema.logic, id);
+    if (affectedRules.length > 0) {
+      setPendingDelete({ kind: "ending", id, label: ending.title, affectedRules });
+      return;
+    }
+    commitDeleteEnding(id);
+  }
+
+  function commitDeleteEnding(id: string) {
+    setSchema((s) => ({
+      ...s,
+      endings: removeEnding(s.endings, id),
+      logic: s.logic.filter((r) => rulesReferencingEnding([r], id).length === 0),
+    }));
+    if (selection.kind === "ending" && selection.id === id) {
+      const remaining =
+        schema.endings.find((e) => e.isDefault && e.id !== id) ?? schema.endings[0];
+      setSelection({ kind: "ending", id: remaining.id });
+    }
+  }
+
+  function confirmPendingDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "question") commitDeleteQuestion(pendingDelete.id);
+    else commitDeleteEnding(pendingDelete.id);
+    setPendingDelete(null);
+  }
+
+  function handleAddEnding() {
+    const ending = createEnding(`Ending ${schema.endings.length + 1}`);
+    setSchema((s) => ({ ...s, endings: [...s.endings, ending] }));
+    setSelection({ kind: "ending", id: ending.id });
   }
 
   function handleDuplicate(id: string) {
@@ -206,7 +303,7 @@ export function FormBuilder({
               onSelect={(id) => setSelection({ kind: "question", id })}
               onMove={handleMove}
               onDuplicate={handleDuplicate}
-              onDelete={handleDelete}
+              onDelete={requestDeleteQuestion}
             />
           </div>
           <AddQuestionMenu onAdd={handleAdd} />
@@ -214,27 +311,88 @@ export function FormBuilder({
           <Separator />
 
           <div>
-            <p className="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">
-              Endings
-            </p>
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Endings
+              </p>
+              <button
+                type="button"
+                onClick={handleAddEnding}
+                aria-label="Add ending"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="size-3.5" />
+              </button>
+            </div>
             <ol className="flex flex-col gap-1">
               {schema.endings.map((ending) => (
-                <li key={ending.id}>
+                <li key={ending.id} className="group flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setSelection({ kind: "ending", id: ending.id })}
-                    className={
-                      "w-full truncate rounded-md border px-2 py-1.5 text-left text-sm " +
-                      (selection.kind === "ending" && selection.id === ending.id
+                    className={cn(
+                      "min-w-0 flex-1 truncate rounded-md border px-2 py-1.5 text-left text-sm",
+                      selection.kind === "ending" && selection.id === ending.id
                         ? "border-foreground/20 bg-accent"
-                        : "hover:bg-accent/50 border-transparent")
-                    }
+                        : "hover:bg-accent/50 border-transparent",
+                    )}
                   >
                     {ending.title || "Ending"}
+                    {ending.isDefault && (
+                      <span className="text-muted-foreground ml-1 text-xs">
+                        (default)
+                      </span>
+                    )}
                   </button>
+                  {canDeleteEnding(schema.endings, ending.id) && (
+                    <button
+                      type="button"
+                      onClick={() => requestDeleteEnding(ending.id)}
+                      aria-label={`Delete ending "${ending.title}"`}
+                      className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ol>
+          </div>
+
+          <Separator />
+
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => setSelection({ kind: "theme" })}
+              className={cn(
+                "flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm",
+                selection.kind === "theme"
+                  ? "border-foreground/20 bg-accent"
+                  : "hover:bg-accent/50 border-transparent",
+              )}
+            >
+              <Palette className="text-muted-foreground size-4" />
+              Theme
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelection({ kind: "logic" })}
+              className={cn(
+                "flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm",
+                selection.kind === "logic"
+                  ? "border-foreground/20 bg-accent"
+                  : "hover:bg-accent/50 border-transparent",
+              )}
+            >
+              <GitBranch className="text-muted-foreground size-4" />
+              Logic
+              {schema.logic.length > 0 && (
+                <span className="text-muted-foreground ml-auto text-xs">
+                  {schema.logic.length}
+                </span>
+              )}
+            </button>
           </div>
         </aside>
 
@@ -245,6 +403,20 @@ export function FormBuilder({
           {selectedEnding && (
             <EndingEditor ending={selectedEnding} onChange={updateEnding} />
           )}
+          {selection.kind === "theme" && (
+            <ThemePreview
+              theme={schema.theme}
+              formTitle={schema.meta.title || formTitle}
+            />
+          )}
+          {selection.kind === "logic" && (
+            <LogicEditor
+              questions={schema.questions}
+              endings={schema.endings}
+              logic={schema.logic}
+              onChange={updateLogic}
+            />
+          )}
         </main>
 
         <aside className="w-80 shrink-0 overflow-y-auto border-l p-4">
@@ -254,8 +426,38 @@ export function FormBuilder({
           {selectedEnding && (
             <EndingSettingsPanel ending={selectedEnding} onChange={updateEnding} />
           )}
+          {selection.kind === "theme" && (
+            <ThemeSettingsPanel
+              theme={schema.theme}
+              workspaceId={workspaceId}
+              formId={formId}
+              onChange={updateTheme}
+            />
+          )}
         </aside>
       </div>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete &quot;{pendingDelete?.label}&quot;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete?.affectedRules.length === 1
+                ? "1 logic rule references this and will also be deleted."
+                : `${pendingDelete?.affectedRules.length ?? 0} logic rules reference this and will also be deleted.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPendingDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

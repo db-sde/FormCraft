@@ -1,6 +1,12 @@
 import { nanoid } from "nanoid";
-import type { QuestionType } from "./schema/question-types";
-import type { QuestionV1, OptionV1 } from "./schema/v1";
+import type { QuestionType, LogicOperator } from "./schema/question-types";
+import type {
+  QuestionV1,
+  OptionV1,
+  EndingV1,
+  LogicRuleV1,
+  LogicActionV1,
+} from "./schema/v1";
 
 /** Short, URL-safe, collision-resistant — matches the `stableId` regex
  * in the schema (letters, numbers, -, _). */
@@ -147,4 +153,94 @@ export function reorderQuestions(
   const [moved] = next.splice(fromIndex, 1);
   next.splice(toIndex, 0, moved);
   return reindex(next);
+}
+
+// --- endings -------------------------------------------------------------
+
+export function createEnding(title = "Thank you!"): EndingV1 {
+  return { id: newId("end"), title, isDefault: false };
+}
+
+/** An ending can only be removed if it isn't the default and isn't the
+ * last remaining ending — the schema requires >=1 ending and exactly
+ * one marked default at all times (see schema/v1.ts, validateSemantics). */
+export function canDeleteEnding(endings: EndingV1[], id: string): boolean {
+  const ending = endings.find((e) => e.id === id);
+  if (!ending) return false;
+  return !ending.isDefault && endings.length > 1;
+}
+
+export function removeEnding(endings: EndingV1[], id: string): EndingV1[] {
+  if (!canDeleteEnding(endings, id)) return endings;
+  return endings.filter((e) => e.id !== id);
+}
+
+export function setDefaultEnding(endings: EndingV1[], id: string): EndingV1[] {
+  return endings.map((e) => ({ ...e, isDefault: e.id === id }));
+}
+
+// --- logic -----------------------------------------------------------------
+
+/** A sensible starting rule: "when this question is answered, jump to
+ * <defaultTarget>". The creator edits the operator/value/target from
+ * there — this just avoids handing them a rule with no action at all. */
+export function createLogicRule(
+  questionId: string,
+  defaultTarget: LogicActionV1,
+): LogicRuleV1 {
+  return {
+    id: newId("rule"),
+    questionId,
+    operator: "is_answered" satisfies LogicOperator,
+    action: defaultTarget,
+  };
+}
+
+export function removeLogicRule(logic: LogicRuleV1[], id: string): LogicRuleV1[] {
+  return logic.filter((r) => r.id !== id);
+}
+
+/** Rules that would become dangling if `questionId` were deleted: ones
+ * sourced from it, and ones that jump to it. Used to warn before a
+ * destructive delete rather than silently leaving a broken reference
+ * (spec requirement — see docs/form-schema.md). */
+export function rulesReferencingQuestion(
+  logic: LogicRuleV1[],
+  questionId: string,
+): LogicRuleV1[] {
+  return logic.filter(
+    (r) =>
+      r.questionId === questionId ||
+      (r.action.type === "jump_to_question" && r.action.questionId === questionId),
+  );
+}
+
+export function rulesReferencingEnding(
+  logic: LogicRuleV1[],
+  endingId: string,
+): LogicRuleV1[] {
+  return logic.filter(
+    (r) => r.action.type === "jump_to_ending" && r.action.endingId === endingId,
+  );
+}
+
+const OPTION_BEARING: QuestionType[] = ["single_select", "multi_select", "dropdown"];
+const NUMERIC_TYPES: QuestionType[] = ["number", "rating", "opinion_scale"];
+
+/** Operators offered for a given source question type. Narrower than
+ * what the schema technically accepts (validateSemantics only rejects
+ * "contains" on non-option types — gt/lt on a text question is
+ * structurally valid, just never useful), kept here rather than in the
+ * schema module since it's a builder UX concern, not a data-integrity
+ * rule. */
+export function availableOperators(type: QuestionType): LogicOperator[] {
+  const base: LogicOperator[] = [
+    "is_answered",
+    "is_not_answered",
+    "equals",
+    "not_equals",
+  ];
+  if (OPTION_BEARING.includes(type)) return [...base, "contains"];
+  if (NUMERIC_TYPES.includes(type)) return [...base, "gt", "lt"];
+  return base;
 }
