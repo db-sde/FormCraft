@@ -105,6 +105,7 @@ export type Database = {
           form_id: string;
           id: string;
           published_at: string | null;
+          revision: number;
           schema: Json;
           status: Database["public"]["Enums"]["form_version_status"];
           updated_at: string;
@@ -115,6 +116,7 @@ export type Database = {
           form_id: string;
           id?: string;
           published_at?: string | null;
+          revision?: number;
           schema: Json;
           status?: Database["public"]["Enums"]["form_version_status"];
           updated_at?: string;
@@ -125,6 +127,7 @@ export type Database = {
           form_id?: string;
           id?: string;
           published_at?: string | null;
+          revision?: number;
           schema?: Json;
           status?: Database["public"]["Enums"]["form_version_status"];
           updated_at?: string;

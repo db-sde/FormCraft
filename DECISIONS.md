@@ -3,6 +3,41 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Builder route moved to its own route group
+
+`/forms/[id]` (the builder) started as a child of the `(dashboard)`
+route group, so it inherited the dashboard's header/nav layout. The
+builder needs a full-screen, chrome-less layout (its own top bar with
+save status, question list sidebar, etc.), which a nested layout
+cannot opt out of in the App Router — a child route always wraps
+inside every ancestor layout. Moved the route to its own `(builder)`
+route group, a sibling of `(dashboard)`. Route groups don't affect the
+URL (`/forms/[id]` is unchanged), and the proxy's protected-route
+matching is path-based (`/forms`, `/dashboard` prefixes), so this was
+a pure file-organization change with no behavioral impact on auth or
+routing — confirmed by re-running the full build and the live browser
+test after the move.
+
+## 2026-09-28 — Row-action buttons must stay in the tab order
+
+The builder's question-list row actions (move up/down, duplicate,
+delete) were built with Tailwind's common `hidden group-hover:flex`
+pattern to only show them on hover. Testing the actual keyboard path
+(not just visually checking hover) showed this was a real
+accessibility bug, not just a style choice: `display: none` removes an
+element from the tab order entirely, so a keyboard-only user could
+never reach these controls at all — including the reorder buttons that
+are supposed to be **the** keyboard alternative to drag-and-drop
+required by the spec. An element that's `hidden` can't receive focus,
+so a `has-[:focus-visible]:flex` fallback intended to reveal it on
+focus never fires either (nothing can focus it to trigger that
+selector). Fixed by keeping the buttons always in the DOM/tab order
+and toggling `opacity-0` → `opacity-100` on hover _or_ focus-within
+instead of `display`. Verified via `read_page` (which lists the full
+accessibility tree regardless of visual state) that all row-action
+buttons are present with correct labels, and via a live click on a
+ref-addressed button that reordering actually works.
+
 ## 2026-09-27 — `proxy.ts` instead of `middleware.ts`
 
 Next 16 deprecated the `middleware.ts` file convention in favor of
@@ -31,7 +66,7 @@ against local Postgres, not by inspection.
 Postgres requires the row(s) produced by `INSERT ... RETURNING` to
 also satisfy the table's SELECT RLS policies — not just the INSERT
 `WITH CHECK`. The `create_workspace_with_owner` RPC inserts the
-workspace and returns it (`returning * into new_workspace`) *before*
+workspace and returns it (`returning * into new_workspace`) _before_
 inserting the corresponding `workspace_members` owner row in the same
 function, so at the moment of the RETURNING check,
 `is_workspace_member(id)` was still false and the whole insert failed
