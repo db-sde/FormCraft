@@ -3,6 +3,50 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Google Sheets: built and verified everything except the OAuth client itself
+
+This environment has no real Google Cloud project, so the actual
+`accounts.google.com` consent flow and the real `sheets.googleapis.com`
+API can't be exercised end-to-end here — the spec's "don't ship
+unverified code" bar could have meant leaving all of Sheets undone
+until deploy time. Rejected that as too conservative: everything on
+this app's side of the OAuth boundary — token encryption, the
+refresh/expiry logic, the sync-enqueue/dispatch/backoff engine, the
+connect/disconnect UI, and both OAuth routes — is ordinary code this
+environment absolutely can build and verify, and is exactly the part
+most likely to have real bugs (token expiry math, encryption
+round-tripping, retry scheduling). So `oauth.ts`'s
+`exchangeCodeForTokens`/`refreshAccessToken` and `append.ts`'s
+`appendRowToSheet` all take an optional endpoint/base-URL override,
+letting `tests/integration/sheets.test.ts` spin up a tiny local
+`node:http` server that stands in for both of Google's endpoints —
+the same "real local receiver, not a mock" rigor the webhooks
+milestone used, extended to a domain where the real counterpart isn't
+reachable at all. That test proves a genuine token-refresh-then-append
+cycle, not just that the code compiles.
+
+The one thing that *can't* be faked is Google's own `accounts.google.com`
+actually accepting a client id — so as a one-time manual check (not
+part of the automated suite, since it needs credentials this repo
+doesn't have and shouldn't), `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` were
+set to placeholder values and the "Connect Google Sheets" button was
+clicked in a real browser. It correctly reached the real Google
+endpoint with the right scope/state/params and failed only with
+`Error 401: invalid_client` — confirming the code is right up to
+exactly the boundary that requires a real registered OAuth client,
+which is documented in PROJECT_STATUS.md as the one remaining
+deploy-time step, not a code gap.
+
+Token encryption reuses AES-256-GCM keyed off `APP_SECRET` (already
+this app's one server-only secret) rather than introducing a second
+secret to manage. The sync retry/backoff engine
+(`dispatchDueSheetsSyncs`) deliberately imports
+`nextBackoffDelayMs`/`isExhausted` from `@/domains/webhooks/backoff`
+instead of re-implementing the same bounded schedule a second time —
+it's generic over "attempt count → delay," not actually
+webhook-specific, and Sheets syncs should back off exactly the same
+way webhook deliveries do.
+
 ## 2026-09-28 — Templates are seeded via a script that reuses the builder's own schema helpers, not hand-written JSON
 
 A template is just a `FormSchemaV1` sitting in the `templates` table,

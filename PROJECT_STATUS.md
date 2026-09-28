@@ -4,13 +4,18 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**TEMPLATES** — done and verified live: 24 ready-made form templates
-across 8 categories, a `/templates` picker gallery, and "Use this
-template" creates a real form whose first draft is the template's
-schema (not the blank starter). Google Sheets integration is the one
-Phase 1 launch item still unimplemented (see below — deliberately
-deferred, not forgotten). Next up: abuse/rate-limiting + accessibility
-+ responsive polish.
+**GOOGLE SHEETS** — everything buildable without a real Google Cloud
+OAuth client is done and verified live: encrypted token storage,
+refresh, the sync/backoff/retry mechanics (verified end-to-end against
+a real local server standing in for Google's token + Sheets API
+endpoints, including a genuine token-refresh-then-append cycle), the
+connect/disconnect UI, and the OAuth authorize/callback routes — the
+authorize route was verified against the *real* Google endpoint
+(`accounts.google.com`) and correctly reached it, failing only at
+`invalid_client` because no real client is registered (see below).
+Phase 1 launch items are now **all implemented or explicitly, narrowly
+scoped by a real external dependency**. Next up: abuse/rate-limiting +
+accessibility + responsive polish.
 
 ## Completed
 
@@ -158,33 +163,89 @@ deferred, not forgotten). Next up: abuse/rate-limiting + accessibility
       "Customer Satisfaction Survey (CSAT)" and all 4 of its questions
       (welcome + 3) plus its ending present — not the blank 2-question
       starter a normal "New form" produces.
+- [x] 119/119 unit tests + 16/16 integration tests, lint, typecheck,
+      and `next build` all green.
+- [x] **Google Sheets** (`src/domains/sheets`):
+  - `crypto.ts` — AES-256-GCM encrypt/decrypt for tokens at rest
+    (`sheets_connections.encrypted_tokens`), key derived from
+    `APP_SECRET`, fresh random IV + auth tag per encryption so
+    tampering with a stored row is detected on decrypt.
+  - `oauth.ts` — `buildAuthorizeUrl`/`exchangeCodeForTokens`/
+    `refreshAccessToken` against Google's real endpoints (both take an
+    optional endpoint override, specifically so they can be exercised
+    against a fake local server — see "Verified live" below).
+    `isGoogleOAuthConfigured()` lets routes/UI degrade to a clear
+    "not configured" state instead of a broken redirect when
+    `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REDIRECT_URI` aren't set.
+  - `row.ts`/`append.ts` — builds one Sheets row per completed
+    response using the *same* `formatAnswerValue`/`questionColumnLabel`
+    CSV export already uses (a form's Sheet and its CSV export can
+    never disagree about columns), then POSTs it via
+    `values.append` (`apiBase` overridable, same reason as above).
+  - `queries.ts` — connection CRUD (`saveConnection` upserts by
+    `form_id`, which is unique on the table, so reconnecting replaces
+    rather than duplicates) and `enqueueSheetsSync`/
+    `dispatchDueSheetsSyncs`, which deliberately reuse
+    `@/domains/webhooks/backoff`'s bounded schedule rather than
+    duplicating it — same shape as the webhooks retry sweep, down to
+    the `pending`/`failed`/`exhausted` status lifecycle.
+  - Routes: `/api/integrations/google/authorize` and `/callback`
+    (session-authenticated, re-verify workspace ownership of the form
+    id carried in OAuth `state` since `state` is attacker-visible —
+    see the route's own comment) and `POST /api/cron/sheets/dispatch`
+    (`CRON_SECRET`-gated, same pattern as the webhooks cron route).
+    The first sync attempt is immediate via `after()` in
+    `/api/responses/[id]/complete`, wrapped in its own try/catch so a
+    Sheets failure can never affect the notification/webhook work
+    that already succeeded before it.
+  - UI: the Sheets section on `/forms/[id]/integrations` — a "not
+    configured" alert when the server has no OAuth client, "Connect
+    Google Sheets" otherwise, then a spreadsheet-id field, an
+    enable/disable toggle, disconnect, and a sync log.
+- [x] **Verified live, to the actual limit of what's possible without
+      a real Google Cloud project**: a tiny local HTTP server stood in
+      for Google's token + Sheets API endpoints (`dispatchDueSheetsSyncs`
+      takes their base URLs as options for exactly this); ran a genuine
+      end-to-end cycle — an expired stored access token triggered a
+      real refresh call, the refreshed token was persisted back
+      encrypted, and the response's actual answer ("Ada Lovelace")
+      arrived in the fake server's received row; also verified a
+      failure is recorded `failed` with `next_attempt_at` scheduled
+      forward (bounded backoff, not exhausted on one miss) and that
+      stored tokens never contain the raw secret in plaintext.
+      Separately, with placeholder `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`
+      set, clicked "Connect Google Sheets" in a real browser and
+      confirmed it reached the **real** `accounts.google.com` consent
+      endpoint with the correct scope/state/`access_type=offline`/
+      `prompt=consent` params — Google itself returned
+      `Error 401: invalid_client`, which is exactly the expected
+      boundary (no real client is registered) and confirms the entire
+      flow is correct right up to that boundary.
 
 ## Deliberately deferred (not started)
 
-- **Google Sheets integration** — the OAuth flow, token storage
-  (`sheets_connections`), and per-response row sync
-  (`sheets_sync_log`) are unimplemented. The spec allows shipping
-  webhooks as the sole launch integration when Sheets has a genuine
-  provider-qualification blocker; here it's more that OAuth
-  app registration/verification with Google is an external, non-code
-  dependency this environment can't complete, and building the token
-  page plumbing against credentials that don't exist yet would mean
-  shipping unverified, untestable code. Webhooks are complete and
-  verified; Sheets is the explicitly-tracked gap, not a silently
-  dropped requirement.
+- **Registering a real Google Cloud OAuth client** — everything on the
+  code side of Google Sheets is implemented and verified (see above):
+  encrypted token storage/refresh, the sync/backoff/retry engine, the
+  connect/disconnect UI, and both OAuth routes, verified against a
+  real local fake-Google server plus one live hit against Google's
+  actual consent endpoint. The one remaining piece is registering an
+  actual OAuth client in a Google Cloud project (client id/secret,
+  configuring the consent screen, requesting the `spreadsheets` scope,
+  and — for a client used by real users rather than just this
+  workspace's owner — Google's app verification review), which is an
+  external, non-code action outside this environment. At deploy time:
+  create the OAuth client, set `GOOGLE_OAUTH_CLIENT_ID`/
+  `GOOGLE_OAUTH_CLIENT_SECRET`/`GOOGLE_OAUTH_REDIRECT_URI` (see
+  `.env.example`), and the feature is live with no code changes.
 
 ## In progress / next actions (in order)
 
-1. Google Sheets integration, to the extent possible without live
-   Google Cloud credentials — at minimum the domain-layer token
-   storage/refresh logic and the per-response sync function, with the
-   OAuth consent screen wiring documented as needing real credentials
-   at deploy time (same pattern as the webhook cron secret).
-2. Abuse/rate-limiting polish (the in-memory limiter is single-instance
+1. Abuse/rate-limiting polish (the in-memory limiter is single-instance
    only — fine for now, documented upgrade path to a shared store),
    accessibility pass, responsive polish for the public runtime and
    dashboard on mobile.
-3. Security hardening + adversarial review pass (see spec's
+2. Security hardening + adversarial review pass (see spec's
    quality_gate list) — replay/duplicate-submit/stale-write behavior
    is already tested at the domain layer; this pass should specifically
    try to break the HTTP layer (forged response/upload ids across
@@ -194,7 +255,7 @@ deferred, not forgotten). Next up: abuse/rate-limiting + accessibility
    (`isDisallowedWebhookHost`), but DNS-rebinding-time protection
    (resolving and checking the actual IP immediately before each
    connection) is still open — worth revisiting in this pass.
-4. E2E test suite (`docs/testing.md`), full validation run, final
+3. E2E test suite (`docs/testing.md`), full validation run, final
    report.
 
 ## Known bugs
@@ -213,6 +274,6 @@ session (the webhook-secret-reload bug above).
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
 test:integration`. If the `templates` table looks empty locally, run
 `npm run db:seed-templates` (idempotent — safe to re-run).
-5. Continue with the next unchecked action above — Google Sheets (to
-   the extent possible without live credentials), then abuse/
-   accessibility/responsive polish.
+5. Continue with the next unchecked action above — abuse/accessibility/
+   responsive polish, then the security/adversarial review pass, then
+   E2E tests.

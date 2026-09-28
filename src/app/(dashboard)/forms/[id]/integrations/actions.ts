@@ -8,6 +8,11 @@ import {
   sendTestDelivery,
   isDisallowedWebhookHost,
 } from "@/domains/webhooks";
+import {
+  setSpreadsheetId,
+  setConnectionEnabled,
+  disconnectForm,
+} from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 
 const MAX_URL_LENGTH = 2000;
@@ -80,4 +85,39 @@ export async function sendTestDeliveryAction(
   const { supabase } = await getCurrentWorkspace();
   const result = await sendTestDelivery(supabase, endpointId);
   return { ok: result.status === "succeeded", error: result.error };
+}
+
+const SPREADSHEET_ID_PATTERN = /^[a-zA-Z0-9_-]{20,80}$/;
+
+export async function setSpreadsheetIdAction(
+  formId: string,
+  spreadsheetId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const trimmed = spreadsheetId.trim();
+  if (!SPREADSHEET_ID_PATTERN.test(trimmed)) {
+    return {
+      ok: false,
+      message:
+        "That doesn't look like a spreadsheet ID — copy the long id from the sheet's URL, between /d/ and /edit.",
+    };
+  }
+  const { supabase } = await getCurrentWorkspace();
+  await setSpreadsheetId(supabase, formId, trimmed);
+  revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
+}
+
+export async function setSheetsEnabledAction(
+  formId: string,
+  enabled: boolean,
+): Promise<void> {
+  const { supabase } = await getCurrentWorkspace();
+  await setConnectionEnabled(supabase, formId, enabled);
+  revalidatePath(`/forms/${formId}/integrations`);
+}
+
+export async function disconnectSheetsAction(formId: string): Promise<void> {
+  const { supabase } = await getCurrentWorkspace();
+  await disconnectForm(supabase, formId);
+  revalidatePath(`/forms/${formId}/integrations`);
 }

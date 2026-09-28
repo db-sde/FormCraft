@@ -4,6 +4,7 @@ import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
 import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
+import { enqueueSheetsSync, dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { checkRateLimit } from "@/domains/abuse";
@@ -101,6 +102,15 @@ export async function POST(
         // sweep — see /api/cron/webhooks/dispatch for the sweep that
         // covers retries after this.
         await dispatchDueDeliveries(admin);
+
+        try {
+          const enqueued = await enqueueSheetsSync(admin, result.formId, id);
+          if (enqueued) await dispatchDueSheetsSyncs(admin);
+        } catch {
+          // Sheets sync is the least mature of these integrations —
+          // never let it take down the notification/webhook work above
+          // it, which already succeeded by this point.
+        }
       });
     }
 
