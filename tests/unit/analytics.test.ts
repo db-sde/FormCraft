@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeCompletionRate, computeFunnelSummary } from "@/domains/analytics/completion-rate";
+import {
+  computeCompletionRate,
+  computeFunnelSummary,
+} from "@/domains/analytics/completion-rate";
 
 describe("computeCompletionRate", () => {
   it("returns null when there are no valid starts", () => {

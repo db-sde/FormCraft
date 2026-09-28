@@ -35,6 +35,9 @@ export async function appendRowToSheet(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new SheetsApiError(`Sheets API append failed: HTTP ${res.status} ${text}`, res.status);
+    throw new SheetsApiError(
+      `Sheets API append failed: HTTP ${res.status} ${text}`,
+      res.status,
+    );
   }
 }

@@ -3,6 +3,60 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-29 — forms.slug had to become globally unique, not just per-workspace
+
+Writing the first real E2E test (Playwright, multiple workers running
+in parallel — the exact condition that surfaces this) found that
+`/f/[slug]` 500'd with `PGRST116: "multiple rows returned"` the moment
+two different workspaces each had a form titled "Untitled form" — the
+literal default title every new form starts with, so this isn't an
+edge case, it's close to the default outcome for two customers who
+haven't renamed their first form yet. Root cause: `forms.slug` was
+only unique _within_ a workspace (`unique(workspace_id, slug)`), but
+`getPublicFormBySlug` — the query backing the public respondent
+URL — looks a form up by slug alone, with no workspace in the URL to
+disambiguate. Nothing in the URL scheme ever promised global
+uniqueness, but the lookup query assumed it.
+
+Fixed by making `forms.slug` globally unique (migration
+00000000000012), matching `workspaces.slug`'s own design rather than
+inventing a second scheme (e.g. `/f/[workspaceSlug]/[formSlug]`, a
+bigger URL/UX change for no real benefit here).
+`createFormWithDraft` already retries with a `-1`/`-2`/... suffix on
+any "duplicate key" error — that logic was written with same-workspace
+collisions in mind, but works identically for cross-workspace ones
+once the constraint actually raises that error, so no app-code change
+was needed beyond the migration itself (which also normalizes any
+pre-existing cross-workspace duplicate slugs before adding the
+constraint, so it's safe to run against a database that already has
+one). This is the clearest illustration this session produced of why
+E2E tests matter as a distinct layer: every integration test uses a
+single workspace and would never see this; it only shows up under
+real concurrent multi-tenant usage, which is exactly what E2E-with-
+parallel-workers exercises and unit/integration tests structurally
+cannot.
+
+## 2026-09-29 — Auth-page-redirect middleware needs exact paths, not prefixes
+
+Also found by the first real E2E run: `/signup/check-email` (and
+`/forgot-password/check-email`) redirected straight to `/dashboard`
+for a just-signed-up user, so the "go check your inbox" instructions
+were never seen by the person who most needed them. Root cause:
+`updateSession` (`src/lib/supabase/middleware.ts`) redirects an
+already-authenticated visitor away from "auth pages" via
+`AUTH_PREFIXES.some(p => path.startsWith(p))` — `/signup` as a prefix
+also matches `/signup/check-email`. Whether this bites in production
+depends on the Supabase project's email-confirmation setting: with
+confirmations required (the normal production setting), `signUp()`
+returns no session and the bug is dormant; with autoconfirm on (this
+local dev environment's default, and possibly some deployments'), a
+session exists immediately and the check-email page becomes
+unreachable for the exact person it's for. Fixed by matching the four
+real auth-entry paths (`/login`, `/signup`, `/forgot-password`,
+`/reset-password`) exactly rather than as prefixes, so their own
+"check your email" sub-pages are excluded from the redirect-away rule
+without needing special-cased exceptions.
+
 ## 2026-09-28 — Autosave/complete now filter answers against the real schema, not just Zod's shape check
 
 Adversarial testing (live curl against the running app, part of this
@@ -10,7 +64,7 @@ session's security pass) found that `saveResponseAnswers` and
 `completeResponse` both wrote whatever `question_id` keys a client
 sent straight into the `answers` table, with zero check against the
 form's actual published schema. Zod's `z.record(z.string(),
-z.unknown())` on the request body validates *shape* (it's an object of
+z.unknown())` on the request body validates _shape_ (it's an object of
 string keys to arbitrary values) but says nothing about whether those
 keys are real — shape validation and schema validation are different
 questions, and only the first was being asked. This is a direct
@@ -54,8 +108,8 @@ to the point of being unusable for actual editing work.
 
 Chose not to redesign it into a mobile-first editing experience.
 Every comparable tool (Google Forms, Typeform, Notion, Figma) makes
-the identical split: the *creation* surface is desktop-oriented, while
-the *consumption*/*respondent* surface is mobile-first — because
+the identical split: the _creation_ surface is desktop-oriented, while
+the _consumption_/_respondent_ surface is mobile-first — because
 editing a multi-panel document is fundamentally a different task than
 filling one out, and forcing the former into a phone-sized viewport
 produces a worse tool without actually serving the "someone fills this
@@ -80,13 +134,13 @@ called `notFound()` on a form that very much exists. Fixed in migration
 `00000000000011_public_form_read_for_authenticated.sql`
 (`to anon, authenticated`).
 
-The more important finding is *why* this shipped past a test suite
+The more important finding is _why_ this shipped past a test suite
 with 100+ integration tests: every single one of them uses the
 service-role client, which bypasses RLS entirely by design (it's how
 route handlers run privileged work). That's the right client for
 testing domain logic, but it means RLS itself — arguably the single
 most security-critical layer in this app (see CLAUDE.md rule 4) — had
-zero direct test coverage. This is the same root-cause *class* as this
+zero direct test coverage. This is the same root-cause _class_ as this
 session's earlier grants bugs (`authenticated`/`service_role` lacking
 table grants on new tables): a gap between "the service-role tests
 pass" and "a real user's session actually works," caught both times
@@ -123,7 +177,7 @@ milestone used, extended to a domain where the real counterpart isn't
 reachable at all. That test proves a genuine token-refresh-then-append
 cycle, not just that the code compiles.
 
-The one thing that *can't* be faked is Google's own `accounts.google.com`
+The one thing that _can't_ be faked is Google's own `accounts.google.com`
 actually accepting a client id — so as a one-time manual check (not
 part of the automated suite, since it needs credentials this repo
 doesn't have and shouldn't), `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` were
@@ -165,9 +219,9 @@ click. `getTemplateById` re-parses on every read for the same reason
 the DB into something invalid).
 
 The seed script is idempotent (upserts by title) and lives outside the
-migrations directory on purpose: template *content* (copy, question
+migrations directory on purpose: template _content_ (copy, question
 choices) is product decisions that will keep changing, unlike schema
-*structure*, which migrations own. Re-running the script after editing
+_structure_, which migrations own. Re-running the script after editing
 a template in the script is the intended workflow, not a one-time
 bootstrap.
 
@@ -196,7 +250,7 @@ One consequence: `recordAnalyticsEvent` (the Postgres write — the
 dashboard's source of truth) deliberately has no `"server-only"`
 import, unlike the rest of this codebase's side-effect modules
 (`notifications/send.ts`, `lib/analytics/posthog-server.ts`), because
-`"server-only"`'s marker throws on *any* import outside Next's
+`"server-only"`'s marker throws on _any_ import outside Next's
 `react-server` bundler condition — including a plain Vitest run — so a
 file that needs one would be unable to be integration-tested directly
 the way `webhooks/queries.ts` and `responses/queries.ts` already are.

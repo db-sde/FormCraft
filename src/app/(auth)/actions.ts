@@ -14,7 +14,8 @@ import { getClientIpFromHeaders } from "@/lib/http/client-ip";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string> };
 
-const RATE_LIMITED_MESSAGE = "Too many attempts. Please wait a few minutes and try again.";
+const RATE_LIMITED_MESSAGE =
+  "Too many attempts. Please wait a few minutes and try again.";
 
 function firstFieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
   const out: Record<string, string> = {};

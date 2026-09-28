@@ -4,7 +4,16 @@ import type { Database } from "./database.types";
 import { supabaseEnv } from "./env";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/forms"];
-const AUTH_PREFIXES = ["/login", "/signup", "/forgot-password", "/reset-password"];
+// Exact paths, not prefixes: `/signup` and `/forgot-password` each have
+// a "check your email" sub-page (`/signup/check-email`,
+// `/forgot-password/check-email`) that must stay reachable even for an
+// already-authenticated visitor (e.g. local/dev Supabase configs that
+// auto-confirm on signUp() establish a session immediately, so the
+// very user this page is instructing would otherwise never see it — a
+// real bug caught by an E2E test, not a hypothetical). A prefix match
+// here would swallow those sub-paths into the redirect-away-from-auth
+// rule below, which is meant only for the entry forms themselves.
+const AUTH_PAGES = ["/login", "/signup", "/forgot-password", "/reset-password"];
 
 /** Refreshes the Supabase session cookie on every request and redirects
  * unauthenticated users away from protected routes. This is a UX
@@ -34,7 +43,7 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
-  const isAuthPage = AUTH_PREFIXES.some((p) => path.startsWith(p));
+  const isAuthPage = AUTH_PAGES.includes(path);
 
   if (isProtected && !data.user) {
     const redirectUrl = new URL("/login", request.url);

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { getPublicFormBySlug } from "@/domains/forms";
+import { getPublicFormBySlug, createFormWithDraft } from "@/domains/forms";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 
 /**
@@ -76,9 +76,12 @@ describe("public form access (real RLS, not bypassed)", () => {
 
   beforeAll(async () => {
     const ownerEmail = `public-access-owner-${testRunId}@example.com`;
-    const { data: ownerData, error: ownerError } = await supabaseAdmin.auth.admin.createUser(
-      { email: ownerEmail, password: crypto.randomUUID(), email_confirm: true },
-    );
+    const { data: ownerData, error: ownerError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email: ownerEmail,
+        password: crypto.randomUUID(),
+        email_confirm: true,
+      });
     if (ownerError) throw ownerError;
     ownerUserId = ownerData.user.id;
 
@@ -154,7 +157,8 @@ describe("public form access (real RLS, not bypassed)", () => {
   });
 
   afterAll(async () => {
-    if (workspaceId) await supabaseAdmin.from("workspaces").delete().eq("id", workspaceId);
+    if (workspaceId)
+      await supabaseAdmin.from("workspaces").delete().eq("id", workspaceId);
     if (ownerUserId) await supabaseAdmin.auth.admin.deleteUser(ownerUserId);
     if (unrelatedUserId) await supabaseAdmin.auth.admin.deleteUser(unrelatedUserId);
   });
@@ -181,17 +185,109 @@ describe("public form access (real RLS, not bypassed)", () => {
 
   it("neither an anonymous nor a signed-in stranger can read a draft-only (unpublished) form", async () => {
     const anon = anonClient();
-    expect(
-      await getPublicFormBySlug(anon, `draft-only-form-${testRunId}`),
-    ).toBeNull();
+    expect(await getPublicFormBySlug(anon, `draft-only-form-${testRunId}`)).toBeNull();
 
     const visitor = anonClient();
     await visitor.auth.signInWithPassword({
       email: unrelatedUserEmail,
       password: unrelatedUserPassword,
     });
-    expect(
-      await getPublicFormBySlug(visitor, `draft-only-form-${testRunId}`),
-    ).toBeNull();
+    expect(await getPublicFormBySlug(visitor, `draft-only-form-${testRunId}`)).toBeNull();
+  });
+});
+
+/**
+ * Regression test for a real bug found via a real E2E test run (two
+ * Playwright workers in parallel, each creating a form titled
+ * "Untitled form" — the literal default every new form starts with):
+ * `forms.slug` was only unique *within* a workspace
+ * (unique(workspace_id, slug)), but getPublicFormBySlug looks up a
+ * form by slug alone with no workspace to disambiguate — so two
+ * different workspaces both leaving a form as "Untitled form" (highly
+ * likely, not a contrived edge case) made the public URL lookup match
+ * more than one row and 500 with PGRST116 ("multiple rows returned").
+ * Fixed in migration 00000000000012 by making `forms.slug` globally
+ * unique, matching `workspaces.slug`'s own design — see DECISIONS.md.
+ */
+describe("forms.slug is globally unique (not just per-workspace)", () => {
+  const supabaseAdmin = admin();
+  let userId: string;
+  let workspaceAId: string;
+  let workspaceBId: string;
+  const testRunId = crypto.randomUUID().slice(0, 8);
+
+  beforeAll(async () => {
+    const email = `slug-uniqueness-${testRunId}@example.com`;
+    const { data: userData, error: userError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: crypto.randomUUID(),
+        email_confirm: true,
+      });
+    if (userError) throw userError;
+    userId = userData.user.id;
+
+    const { data: workspaceA, error: workspaceAError } = await supabaseAdmin
+      .from("workspaces")
+      .insert({ name: "Slug Test A", slug: `slug-test-a-${testRunId}`, owner_id: userId })
+      .select("id")
+      .single();
+    if (workspaceAError) throw workspaceAError;
+    workspaceAId = workspaceA.id;
+
+    const { data: workspaceB, error: workspaceBError } = await supabaseAdmin
+      .from("workspaces")
+      .insert({ name: "Slug Test B", slug: `slug-test-b-${testRunId}`, owner_id: userId })
+      .select("id")
+      .single();
+    if (workspaceBError) throw workspaceBError;
+    workspaceBId = workspaceB.id;
+
+    await supabaseAdmin.from("workspace_members").insert([
+      { workspace_id: workspaceAId, user_id: userId, role: "owner" },
+      { workspace_id: workspaceBId, user_id: userId, role: "owner" },
+    ]);
+  });
+
+  afterAll(async () => {
+    if (workspaceAId)
+      await supabaseAdmin.from("workspaces").delete().eq("id", workspaceAId);
+    if (workspaceBId)
+      await supabaseAdmin.from("workspaces").delete().eq("id", workspaceBId);
+    if (userId) await supabaseAdmin.auth.admin.deleteUser(userId);
+  });
+
+  it("createFormWithDraft in a second workspace auto-suffixes the slug instead of colliding", async () => {
+    const first = await createFormWithDraft(
+      supabaseAdmin,
+      workspaceAId,
+      userId,
+      "Untitled form",
+    );
+    const second = await createFormWithDraft(
+      supabaseAdmin,
+      workspaceBId,
+      userId,
+      "Untitled form",
+    );
+    expect(second.id).not.toBe(first.id);
+
+    const { data: forms } = await supabaseAdmin
+      .from("forms")
+      .select("id, slug")
+      .in("id", [first.id, second.id]);
+    const slugs = (forms ?? []).map((f) => f.slug);
+    expect(new Set(slugs).size).toBe(2);
+
+    // And the public lookup for each slug now resolves unambiguously
+    // to exactly the right form.
+    for (const form of forms ?? []) {
+      const resolved = await getPublicFormBySlug(supabaseAdmin, form.slug);
+      // Neither form is published, so this just proves the query
+      // itself doesn't throw PGRST116 for "multiple rows" — the bug
+      // this migration fixes would throw before ever reaching the
+      // "not published" null-return path.
+      expect(resolved).toBeNull();
+    }
   });
 });

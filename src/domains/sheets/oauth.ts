@@ -15,8 +15,8 @@ const DEFAULT_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 export function isGoogleOAuthConfigured(): boolean {
   return Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID &&
-      process.env.GOOGLE_OAUTH_CLIENT_SECRET &&
-      process.env.GOOGLE_OAUTH_REDIRECT_URI,
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET &&
+    process.env.GOOGLE_OAUTH_REDIRECT_URI,
   );
 }
 
@@ -25,11 +25,16 @@ export function isGoogleOAuthConfigured(): boolean {
  * /api/integrations/google/authorize — since the callback re-checks
  * workspace ownership via RLS anyway, a forged state can at most name
  * a form the attacker's own session has no access to). */
-export function buildAuthorizeUrl(state: string, authEndpoint = DEFAULT_AUTH_ENDPOINT): string {
+export function buildAuthorizeUrl(
+  state: string,
+  authEndpoint = DEFAULT_AUTH_ENDPOINT,
+): string {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
   if (!clientId || !redirectUri) {
-    throw new Error("Google OAuth is not configured (GOOGLE_OAUTH_CLIENT_ID/REDIRECT_URI)");
+    throw new Error(
+      "Google OAuth is not configured (GOOGLE_OAUTH_CLIENT_ID/REDIRECT_URI)",
+    );
   }
 
   const url = new URL(authEndpoint);
@@ -124,10 +129,15 @@ export async function refreshAccessToken(
 
   const body = (await res.json()) as GoogleTokenResponse;
   if (!res.ok) {
-    throw new Error(body.error_description || body.error || "failed to refresh access token");
+    throw new Error(
+      body.error_description || body.error || "failed to refresh access token",
+    );
   }
 
-  return { accessToken: body.access_token, expiresAt: Date.now() + body.expires_in * 1000 };
+  return {
+    accessToken: body.access_token,
+    expiresAt: Date.now() + body.expires_in * 1000,
+  };
 }
 
 /** True once fewer than 2 minutes of the access token's lifetime

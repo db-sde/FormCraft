@@ -8,11 +8,7 @@ import {
   sendTestDelivery,
   isDisallowedWebhookHost,
 } from "@/domains/webhooks";
-import {
-  setSpreadsheetId,
-  setConnectionEnabled,
-  disconnectForm,
-} from "@/domains/sheets";
+import { setSpreadsheetId, setConnectionEnabled, disconnectForm } from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 
 const MAX_URL_LENGTH = 2000;

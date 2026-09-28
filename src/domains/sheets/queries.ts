@@ -85,7 +85,10 @@ export async function setConnectionEnabled(
 }
 
 export async function disconnectForm(supabase: Client, formId: string): Promise<void> {
-  const { error } = await supabase.from("sheets_connections").delete().eq("form_id", formId);
+  const { error } = await supabase
+    .from("sheets_connections")
+    .delete()
+    .eq("form_id", formId);
   if (error) throw error;
 }
 
@@ -146,11 +149,19 @@ export async function enqueueSheetsSync(
   return inserted.id;
 }
 
-export type SyncAttemptResult = { status: "succeeded" | "failed" | "exhausted"; error?: string };
+export type SyncAttemptResult = {
+  status: "succeeded" | "failed" | "exhausted";
+  error?: string;
+};
 
 async function attemptSync(
   admin: Client,
-  connection: { id: string; encrypted_tokens: Json; spreadsheet_id: string | null; form_id: string },
+  connection: {
+    id: string;
+    encrypted_tokens: Json;
+    spreadsheet_id: string | null;
+    form_id: string;
+  },
   responseId: string,
   options?: { tokenEndpoint?: string; sheetsApiBase?: string },
 ): Promise<SyncAttemptResult> {
@@ -158,11 +169,20 @@ async function attemptSync(
     return { status: "failed", error: "no spreadsheet configured" };
   }
 
-  let tokens = decryptJson<OAuthTokens>(connection.encrypted_tokens as unknown as EncryptedPayload);
+  let tokens = decryptJson<OAuthTokens>(
+    connection.encrypted_tokens as unknown as EncryptedPayload,
+  );
 
   if (needsRefresh(tokens.expiresAt)) {
-    const refreshed = await refreshAccessToken(tokens.refreshToken, options?.tokenEndpoint);
-    tokens = { ...tokens, accessToken: refreshed.accessToken, expiresAt: refreshed.expiresAt };
+    const refreshed = await refreshAccessToken(
+      tokens.refreshToken,
+      options?.tokenEndpoint,
+    );
+    tokens = {
+      ...tokens,
+      accessToken: refreshed.accessToken,
+      expiresAt: refreshed.expiresAt,
+    };
     const { error: tokenUpdateError } = await admin
       .from("sheets_connections")
       .update({ encrypted_tokens: encryptJson(tokens) as unknown as Json })
@@ -192,10 +212,18 @@ async function attemptSync(
   );
 
   try {
-    await appendRowToSheet(tokens.accessToken, connection.spreadsheet_id, row.values, options?.sheetsApiBase);
+    await appendRowToSheet(
+      tokens.accessToken,
+      connection.spreadsheet_id,
+      row.values,
+      options?.sheetsApiBase,
+    );
     return { status: "succeeded" };
   } catch (error) {
-    return { status: "failed", error: error instanceof Error ? error.message : "sync failed" };
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "sync failed",
+    };
   }
 }
 

@@ -110,7 +110,8 @@ describe("sheets integration (real Postgres + a fake local Google server)", () =
     // override (it still needs a client id/secret to put in the
     // request body) — fine to set dummy values here since the fake
     // server below doesn't validate them.
-    process.env.GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || "test-client-id";
+    process.env.GOOGLE_OAUTH_CLIENT_ID =
+      process.env.GOOGLE_OAUTH_CLIENT_ID || "test-client-id";
     process.env.GOOGLE_OAUTH_CLIENT_SECRET =
       process.env.GOOGLE_OAUTH_CLIENT_SECRET || "test-client-secret";
 
@@ -125,7 +126,11 @@ describe("sheets integration (real Postgres + a fake local Google server)", () =
 
     const { data: workspace, error: workspaceError } = await supabase
       .from("workspaces")
-      .insert({ name: "Sheets Test Workspace", slug: `stw-${testRunId}`, owner_id: userId })
+      .insert({
+        name: "Sheets Test Workspace",
+        slug: `stw-${testRunId}`,
+        owner_id: userId,
+      })
       .select("id")
       .single();
     if (workspaceError) throw workspaceError;

@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { listWebhookEndpoints, listDeliveries } from "@/domains/webhooks";
-import { getConnectionForForm, listSyncLog, isGoogleOAuthConfigured } from "@/domains/sheets";
+import {
+  getConnectionForForm,
+  listSyncLog,
+  isGoogleOAuthConfigured,
+} from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { WebhooksPanel } from "@/components/integrations/webhooks-panel";
 import { SheetsPanel } from "@/components/integrations/sheets-panel";
@@ -55,9 +59,7 @@ export default async function IntegrationsPage({
         initialDeliveries={deliveriesByEndpoint}
       />
 
-      <h1 className="mt-10 mb-2 text-2xl font-semibold tracking-tight">
-        Google Sheets
-      </h1>
+      <h1 className="mt-10 mb-2 text-2xl font-semibold tracking-tight">Google Sheets</h1>
       <SheetsPanel
         formId={formId}
         configured={isGoogleOAuthConfigured()}

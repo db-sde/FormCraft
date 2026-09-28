@@ -4,7 +4,13 @@ import { listTemplates } from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createFormAction, createFormFromTemplateAction } from "../actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export default async function TemplatesPage() {
   const { supabase } = await getCurrentWorkspace();
@@ -38,9 +44,7 @@ export default async function TemplatesPage() {
 
       {categories.map((category) => (
         <section key={category} className="mb-10">
-          <h2 className="mb-3 text-sm font-medium tracking-wide uppercase">
-            {category}
-          </h2>
+          <h2 className="mb-3 text-sm font-medium tracking-wide uppercase">{category}</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {templates
               .filter((tpl) => tpl.category === category)

@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
   const oauthError = params.get("error");
 
   if (!formId) {
-    return NextResponse.json({ error: { code: "invalid_body", message: "Missing state." } }, { status: 400 });
+    return NextResponse.json(
+      { error: { code: "invalid_body", message: "Missing state." } },
+      { status: 400 },
+    );
   }
 
   const redirectTo = request.nextUrl.clone();
@@ -39,7 +42,10 @@ export async function GET(request: NextRequest) {
     .is("deleted_at", null)
     .maybeSingle();
   if (!form) {
-    return NextResponse.json({ error: { code: "not_found", message: "Form not found." } }, { status: 404 });
+    return NextResponse.json(
+      { error: { code: "not_found", message: "Form not found." } },
+      { status: 404 },
+    );
   }
 
   try {

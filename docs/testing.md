@@ -36,24 +36,54 @@ Requires `supabase start` locally (documented in `README.md`). Run:
 
 ## E2E (Playwright) — `tests/e2e`
 
-Critical journeys, one spec file per journey group:
+Critical journeys, one spec file per journey group. Status as of this
+writing:
 
-1. Signup → email verification handling → login
-2. Dashboard empty state → create form
-3. Add/edit/reorder/delete questions, keyboard reorder alternative
-4. Configure validation, configure logic, configure multiple endings
-5. Theme the form; preview desktop + mobile
-6. Publish → open public URL → complete form (happy path)
-7. Partial response: start, autosave, refresh, resume, finish
-8. Duplicate submit protection (retry the complete call)
-9. Response dashboard: table, detail view, delete with confirmation
-10. CSV export
-11. Notification email triggered (asserted via test inbox/mock)
-12. Webhook delivery (asserted against a local test receiver)
-13. Analytics numbers update, preview traffic excluded
+1. Signup → email verification handling → login — **done**
+   (`auth.spec.ts`; signup only through the "check your email" step,
+   not actual inbox confirmation — see file comment)
+2. Dashboard empty state → create form — **done** (`form-builder.spec.ts`)
+3. Add/edit/reorder/delete questions, keyboard reorder alternative —
+   **partial** (`form-builder.spec.ts` covers add/edit/delete; keyboard
+   reorder not yet covered)
+4. Configure validation, configure logic, configure multiple endings —
+   not yet covered
+5. Theme the form; preview desktop + mobile — not yet covered
+6. Publish → open public URL → complete form (happy path) — **done**
+   (`publish-and-respond.spec.ts`, a genuinely separate browser
+   context for the respondent side)
+7. Partial response: start, autosave, refresh, resume, finish —
+   **done** (`partial-response-resume.spec.ts`)
+8. Duplicate submit protection (retry the complete call) — **done**
+   (`duplicate-submit.spec.ts`, driven at the HTTP layer — see file
+   comment for why)
+9. Response dashboard: table, detail view, delete with confirmation —
+   not yet covered as a dedicated spec (exercised incidentally by
+   `publish-and-respond.spec.ts`'s final assertion)
+10. CSV export — not yet covered
+11. Notification email triggered (asserted via test inbox/mock) — not
+    yet covered (local Supabase's Inbucket/Mailpit could back this)
+12. Webhook delivery (asserted against a local test receiver) — not
+    yet covered
+13. Analytics numbers update, preview traffic excluded — not yet
+    covered
 14. Template → independent editable copy, original template untouched
+    — **done** (`templates.spec.ts`)
+
+`tests/e2e/helpers.ts` creates real, already-confirmed users via the
+GoTrue admin API (never a hand-crafted `auth.users` row — see its own
+comment for why that silently breaks login) and cleans up every
+workspace it creates before deleting the user (`workspaces.owner_id`
+is `on delete restrict`, deliberately). Found and fixed two real bugs
+while writing and running this suite for the first time — see
+DECISIONS.md: the `/signup/check-email` and
+`/forgot-password/check-email` pages were unreachable for an
+already-authenticated visitor (a middleware prefix-match bug), and
+`forms.slug` was only unique per-workspace while the public runtime
+looks a form up by slug alone (fixed in migration 00000000000012).
 
 Run: `npm run e2e` (headless), `npm run e2e:ui` for the Playwright UI.
+Requires `supabase start` running locally (same as integration tests).
 
 ## Security tests
 
@@ -75,7 +105,20 @@ truncating silently. (Recorded here and in `DECISIONS.md` once picked
 
 ## CI gate
 
-`.github/workflows/ci.yml` runs, on every PR: install → lint →
-typecheck → unit tests → build. Integration/E2E run against a local
-Supabase/Playwright service in CI once the DB layer exists (added in
-that milestone, not at bootstrap).
+`.github/workflows/ci.yml` has two jobs, on every PR:
+
+- `build-and-test`: install → lint → typecheck → format check → unit
+  tests → build.
+- `integration-and-e2e`: install → `supabase start` (via
+  `supabase/setup-cli`, applying every migration) → export its
+  connection details into the app's actual env var names (the CLI's
+  own names don't match — see the workflow's inline comment) →
+  integration tests → Playwright browser install → the full E2E suite
+  (Playwright's own `webServer` builds and starts the app). On
+  failure, uploads the Playwright HTML report as a build artifact.
+
+The `integration-and-e2e` job's individual pieces (the CLI's env
+export/override-name mapping, `npm run test:integration`, the full E2E
+suite) were each verified locally; the job has not yet been observed
+running inside an actual GitHub Actions runner, since this environment
+has no way to trigger one — worth confirming on the first real PR.

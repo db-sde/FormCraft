@@ -40,7 +40,9 @@ export function SheetsPanel({
   connection: SheetsConnection | null;
   initialSyncLog: SyncLogEntry[];
 }) {
-  const [spreadsheetId, setSpreadsheetIdInput] = useState(connection?.spreadsheetId ?? "");
+  const [spreadsheetId, setSpreadsheetIdInput] = useState(
+    connection?.spreadsheetId ?? "",
+  );
   const [enabled, setEnabled] = useState(connection?.enabled ?? true);
   const [pending, startTransition] = useTransition();
 
@@ -103,7 +105,11 @@ export function SheetsPanel({
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Connected</CardTitle>
           <div className="flex items-center gap-2">
-            <Switch checked={enabled} onCheckedChange={handleToggle} aria-label="Enabled" />
+            <Switch
+              checked={enabled}
+              onCheckedChange={handleToggle}
+              aria-label="Enabled"
+            />
             <Button
               type="button"
               variant="ghost"

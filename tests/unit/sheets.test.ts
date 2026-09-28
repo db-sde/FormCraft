@@ -15,7 +15,8 @@ beforeEach(() => {
   process.env.APP_SECRET = "test-secret-do-not-use-in-prod";
   process.env.GOOGLE_OAUTH_CLIENT_ID = "test-client-id";
   process.env.GOOGLE_OAUTH_CLIENT_SECRET = "test-client-secret";
-  process.env.GOOGLE_OAUTH_REDIRECT_URI = "http://localhost:3000/api/integrations/google/callback";
+  process.env.GOOGLE_OAUTH_REDIRECT_URI =
+    "http://localhost:3000/api/integrations/google/callback";
 });
 
 afterEach(() => {
@@ -25,7 +26,11 @@ afterEach(() => {
 
 describe("encryptJson / decryptJson", () => {
   it("round-trips a token payload exactly", () => {
-    const tokens = { accessToken: "at_123", refreshToken: "rt_456", expiresAt: 1234567890 };
+    const tokens = {
+      accessToken: "at_123",
+      refreshToken: "rt_456",
+      expiresAt: 1234567890,
+    };
     const encrypted = encryptJson(tokens);
     expect(decryptJson(encrypted)).toEqual(tokens);
   });
@@ -40,7 +45,10 @@ describe("encryptJson / decryptJson", () => {
 
   it("fails to decrypt if the ciphertext was tampered with", () => {
     const encrypted = encryptJson({ secret: "value" });
-    const tampered = { ...encrypted, ciphertext: Buffer.from("tampered").toString("base64") };
+    const tampered = {
+      ...encrypted,
+      ciphertext: Buffer.from("tampered").toString("base64"),
+    };
     expect(() => decryptJson(tampered)).toThrow();
   });
 
@@ -96,15 +104,16 @@ describe("exchangeCodeForTokens / refreshAccessToken (against a fake token endpo
   it("parses a successful token exchange response", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            access_token: "at_abc",
-            refresh_token: "rt_xyz",
-            expires_in: 3600,
-          }),
-          { status: 200 },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              access_token: "at_abc",
+              refresh_token: "rt_xyz",
+              expires_in: 3600,
+            }),
+            { status: 200 },
+          ),
       ),
     );
 
@@ -117,41 +126,44 @@ describe("exchangeCodeForTokens / refreshAccessToken (against a fake token endpo
   it("throws with Google's error description when the exchange fails", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({ error: "invalid_grant", error_description: "Bad code" }),
-          { status: 400 },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: "invalid_grant", error_description: "Bad code" }),
+            { status: 400 },
+          ),
       ),
     );
 
-    await expect(exchangeCodeForTokens("bad-code", "https://fake.test/token")).rejects.toThrow(
-      "Bad code",
-    );
+    await expect(
+      exchangeCodeForTokens("bad-code", "https://fake.test/token"),
+    ).rejects.toThrow("Bad code");
   });
 
   it("throws if Google omits a refresh token", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ access_token: "at_abc", expires_in: 3600 }), {
-          status: 200,
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ access_token: "at_abc", expires_in: 3600 }), {
+            status: 200,
+          }),
       ),
     );
 
-    await expect(exchangeCodeForTokens("code", "https://fake.test/token")).rejects.toThrow(
-      /refresh token/,
-    );
+    await expect(
+      exchangeCodeForTokens("code", "https://fake.test/token"),
+    ).rejects.toThrow(/refresh token/);
   });
 
   it("refreshes an access token, keeping the same refresh token client-side", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ access_token: "at_new", expires_in: 3600 }), {
-          status: 200,
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ access_token: "at_new", expires_in: 3600 }), {
+            status: 200,
+          }),
       ),
     );
 
@@ -163,7 +175,9 @@ describe("exchangeCodeForTokens / refreshAccessToken (against a fake token endpo
 
 describe("appendRowToSheet (against a fake Sheets API base)", () => {
   it("posts the row and succeeds on a 200", async () => {
-    const fetchMock: typeof fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    const fetchMock: typeof fetch = vi.fn(
+      async () => new Response("{}", { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await appendRowToSheet("at_abc", "sheet_123", ["a", "b"], "https://fake.test");

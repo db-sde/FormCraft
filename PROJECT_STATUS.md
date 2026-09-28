@@ -1,23 +1,26 @@
 # Project Status
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 ## Current milestone
 
-**SECURITY / ADVERSARIAL REVIEW** — ran the spec's quality_gate
-checklist live against the running app with curl and a real browser,
-not by reading the code: forged response/form/question ids, oversized
-payloads, malformed answer shapes, XSS in free-text answers, CSV
-formula injection, cross-form manipulation, cron-endpoint auth,
-rate-limit spot checks. Found and fixed one real gap: the autosave/
-complete endpoints accepted and persisted arbitrary attacker-chosen
-`question_id` keys that don't exist on the form's actual schema — a
-storage-abuse vector, and a violation of CLAUDE.md rule 1 ("never
-trust client-supplied schema"). Everything else held up: XSS is
-neutralized by React's default escaping, CSV formula injection was
-already mitigated, cross-form/forged-id requests correctly 404,
-oversized/malformed bodies are correctly rejected with 400, cron
-routes correctly require their bearer secret. Next: E2E tests.
+**E2E TESTS** — the first real Playwright suite (`tests/e2e`), and
+writing/running it for the first time immediately found two more real
+bugs the entire rest of the test suite had missed: `forms.slug` was
+only unique per-workspace while the public runtime looks a form up by
+slug alone (two workspaces each leaving a form as "Untitled form" —
+the literal default title — broke the public URL for both, migration
+00000000000012), and the `/signup/check-email` /
+`/forgot-password/check-email` pages were unreachable for an
+already-authenticated visitor because of a prefix-match bug in the
+auth-redirect middleware. 6 of the 14 documented journeys have
+automated coverage now (see `docs/testing.md` for the per-journey
+status); the rest are an explicitly tracked, not silently dropped, gap.
+CI now has a second job that starts real local Supabase and runs
+integration + E2E on every PR — see `.github/workflows/ci.yml`.
+Also fixed `npm run format:check`, which every prior milestone this
+session had been failing without anyone (including this one, until
+now) noticing, since it's part of CI but wasn't being run locally.
 
 ## Completed
 
@@ -123,7 +126,7 @@ routes correctly require their bearer secret. Next: E2E tests.
 - [x] **Verified live**: seeded a real published form directly in
       local Postgres, hit the actual `GET /f/[slug]`,
       `POST /api/responses/start`, and `POST /api/responses/:id/
-      complete` endpoints, and confirmed all three `analytics_events`
+complete` endpoints, and confirmed all three `analytics_events`
       rows landed with the right `event_type`/`session_id`/`metadata`;
       confirmed the isPreview-tag-and-exclude behavior already proven
       in unit tests also holds through a real DB round-trip (integration
@@ -180,7 +183,7 @@ routes correctly require their bearer secret. Next: E2E tests.
     "not configured" state instead of a broken redirect when
     `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REDIRECT_URI` aren't set.
   - `row.ts`/`append.ts` — builds one Sheets row per completed
-    response using the *same* `formatAnswerValue`/`questionColumnLabel`
+    response using the _same_ `formatAnswerValue`/`questionColumnLabel`
     CSV export already uses (a form's Sheet and its CSV export can
     never disagree about columns), then POSTs it via
     `values.append` (`apiBase` overridable, same reason as above).
@@ -264,76 +267,127 @@ routes correctly require their bearer secret. Next: E2E tests.
 - [x] **Responsive/mobile pass**: walked the dashboard, builder,
       responses, integrations, and templates pages at a real 375px
       mobile viewport in a browser (not just resized devtools — actual
-      layout, actual clicks). Found and fixed two real bugs:
-      - `src/app/(dashboard)/layout.tsx`'s header ran the workspace
-        name and user email together into unreadable, wrapped text at
-        narrow widths (`min-w-0`/`shrink-0` weren't set, so neither
-        text nor the flex row could resolve how to lay out). Fixed by
-        hiding the workspace name below `sm` and the email below `md`
-        (secondary chrome, not essential at a glance) while keeping
-        the logo and "Log out" always present and functional.
-      - `src/components/builder/form-builder.tsx`'s top toolbar (Integrations/
-        Responses/View live/Unpublish/Preview/Publish) had no overflow
-        handling and visually overlapped the back button at mobile
-        widths. Fixed with `overflow-x-auto` + `[&>*]:shrink-0` on that
-        group so it scrolls within its own bounds instead of breaking
-        the header layout.
-      - The responses funnel/table, integrations panels, and templates
-        gallery all already reflowed correctly with zero changes.
+      layout, actual clicks). Found and fixed two real bugs. First,
+      `src/app/(dashboard)/layout.tsx`'s header ran the workspace name
+      and user email together into unreadable, wrapped text at narrow
+      widths (`min-w-0`/`shrink-0` weren't set, so neither the text nor
+      the flex row could resolve how to lay out); fixed by hiding the
+      workspace name below `sm` and the email below `md` (secondary
+      chrome, not essential at a glance) while keeping the logo and
+      "Log out" always present. Second,
+      `src/components/builder/form-builder.tsx`'s top toolbar
+      (Integrations/Responses/View live/Unpublish/Preview/Publish) had
+      no overflow handling and visually overlapped the back button at
+      mobile widths; fixed with `overflow-x-auto` + `[&>*]:shrink-0` on
+      that group so it scrolls within its own bounds instead of
+      breaking the header layout. The responses funnel/table,
+      integrations panels, and templates gallery all already reflowed
+      correctly with zero changes.
 - [x] Confirmed both fixes live in the browser at 375px width, not
       just by reading the CSS.
 - [x] **Security/adversarial review pass**, run live against the
       actual running app (curl + a real browser), following the spec's
-      quality_gate checklist:
-      - Forged/cross-form ids: unknown response id, unknown form id,
-        SQL-injection-flavored `formId` string, an upload request
-        against a question id that doesn't belong to that form — all
-        correctly 404/400, no leak.
-      - Oversized payload (300KB body): correctly rejected 400 before
-        ever reaching Zod (the existing `MAX_BODY_BYTES` guard).
-      - Malformed answer shapes (array instead of object, string
-        instead of object, missing fields entirely, invalid JSON):
-        all correctly rejected 400, no 500s, no crashes.
-      - XSS in a free-text answer (`<script>alert(1)</script><img
-        src=x onerror=alert(2)>`): submitted through the real API,
-        confirmed live in a browser that the response detail page
-        renders it as inert text — no raw `<script>` tag in the DOM,
-        no alert fired (React's default JSX escaping holds; nothing
-        in this codebase bypasses it with `dangerouslySetInnerHTML`
-        for respondent-supplied text).
-      - CSV formula injection (`=cmd|'/C calc'!A0`): already mitigated
-        by `neutralizeFormulaInjection` in `@/domains/exports/csv.ts`
-        (a leading apostrophe is prepended to any cell starting with
-        `=`/`+`/`-`/`@`/tab/CR) — confirmed live via the actual
-        `/api/forms/[id]/export.csv` endpoint, not just by reading the
-        code.
-      - `POST /api/cron/webhooks/dispatch` and `/sheets/dispatch`:
-        confirmed 401 with no/wrong bearer token.
-      - Rate limiting: spot-checked the answers endpoint stays under
-        its limit for a normal few-request burst (doesn't false-
-        positive on legitimate traffic).
-      - **Found and fixed a real gap**: `saveResponseAnswers` and
-        `completeResponse` (`src/domains/responses/queries.ts`)
-        accepted and persisted *any* `question_id` key a client sent,
-        never checking it against the form's actual schema — a
-        forged/garbage key got written straight into the `answers`
-        table tied to a real `response_id`. Not a cross-tenant leak
-        (harmless data on the creator's own response — the dashboard/
-        CSV export only ever look up *known* question ids, so garbage
-        keys were invisible, just dead weight), but a real violation
-        of CLAUDE.md rule 1 ("never trust client-supplied schema") and
-        an unbounded storage-abuse vector (up to 120 requests/10min ×
-        arbitrary distinct keys per request, with no cap tied to the
-        form's actual question count). Fixed with
-        `filterAnswersToKnownQuestions`, applied before every write in
-        both functions. Verified live: sent a request with a forged
-        `question_id` through the real running API and confirmed via
-        direct Postgres query that only the legitimate answer landed
-        in the `answers` table.
-      - New regression test in `tests/integration/responses.test.ts`
-        covers this at both the autosave and complete call sites.
+      quality_gate checklist. All of the following held up under live
+      testing: forged/cross-form ids (unknown response id, unknown form
+      id, a SQL-injection-flavored `formId` string, an upload request
+      against a question id that doesn't belong to that form) correctly
+      404/400 with no leak; an oversized 300KB payload correctly 400s
+      before ever reaching Zod (`MAX_BODY_BYTES`); malformed answer
+      shapes (array/string instead of object, missing fields, invalid
+      JSON) correctly 400 with no 500s; an XSS payload submitted as a
+      free-text answer renders as inert text on the response detail
+      page (confirmed live — no raw script tag reaches the DOM, no
+      alert fires; React's default escaping holds, nothing in this
+      codebase bypasses it with `dangerouslySetInnerHTML` for
+      respondent-supplied text); CSV formula injection was already
+      mitigated by `neutralizeFormulaInjection` (confirmed live via the
+      real export endpoint); the cron routes correctly 401 with
+      no/wrong bearer token; the rate limiter doesn't false-positive on
+      a normal few-request burst.
+- [x] **Found and fixed a real gap**: `saveResponseAnswers` and
+      `completeResponse` (`src/domains/responses/queries.ts`) accepted
+      and persisted any `question_id` key a client sent, never checking
+      it against the form's actual schema — a forged key got written
+      straight into the `answers` table tied to a real `response_id`.
+      Not a cross-tenant leak (the dashboard/CSV export only ever look
+      up known question ids, so garbage keys were invisible, just dead
+      weight) but a real violation of CLAUDE.md rule 1 and an unbounded
+      storage-abuse vector (up to 120 requests/10min times arbitrary
+      distinct keys per request). Fixed with
+      `filterAnswersToKnownQuestions`, applied before every write in
+      both functions; verified live against the real running API,
+      confirming via a direct Postgres query that only the legitimate
+      answer landed. New regression test in
+      `tests/integration/responses.test.ts` covers both call sites.
 - [x] 119/119 unit tests + 20/20 integration tests, lint, typecheck,
       and `next build` all green.
+- [x] **E2E tests** (`tests/e2e`, Playwright):
+  - `helpers.ts` — creates real, already-confirmed users via the
+    GoTrue admin API (never a hand-crafted `auth.users` row — a real
+    bug hit earlier this session, see DECISIONS.md), and cleans up
+    every workspace a test creates before deleting the user
+    (`workspaces.owner_id` is `on delete restrict`, deliberately, so
+    cleanup order matters).
+  - `auth.spec.ts` — signup reaches the check-email step; login with
+    valid/invalid credentials; logout.
+  - `form-builder.spec.ts` — dashboard empty state creates a form;
+    add/edit/delete a question with autosave confirmed via reload.
+  - `publish-and-respond.spec.ts` — publish, then complete the form in
+    a genuinely separate browser context (no shared cookies) acting as
+    an anonymous respondent, then confirm it shows in the creator's
+    response dashboard.
+  - `partial-response-resume.spec.ts` — a mid-form reload resumes from
+    the same in-progress answer.
+  - `duplicate-submit.spec.ts` — retries the real `/complete` HTTP call
+    with the same idempotency key and asserts no duplicate.
+  - `templates.spec.ts` — using a template twice proves the template
+    itself is a read-only reference (editing the first copy never
+    shows up in the second).
+  - 6 of the 14 documented journeys (`docs/testing.md`) have coverage;
+    the rest (question validation/logic/endings config, theming,
+    response-dashboard-as-its-own-spec, CSV export, notification
+    email, webhook delivery, analytics) are an explicitly tracked gap,
+    not a silent one.
+  - **Found two more real bugs**, both on the very first run of a
+    genuinely new kind of test this codebase didn't have before:
+    - `forms.slug` was only unique per-workspace
+      (`unique(workspace_id, slug)`), but the public runtime looks a
+      form up by slug alone — two different workspaces each leaving a
+      form titled "Untitled form" (the literal default every new form
+      starts with) broke the public URL for both with a
+      `PGRST116: "multiple rows returned"` 500. Fixed in migration
+      `00000000000012_forms_slug_globally_unique.sql` (global
+      uniqueness, normalizing pre-existing duplicates first) —
+      `createFormWithDraft`'s existing duplicate-key retry logic
+      handles the rest with no app-code change needed.
+    - `updateSession` (`src/lib/supabase/middleware.ts`) redirected an
+      authenticated visitor away from "auth pages" using
+      `path.startsWith(prefix)`, so `/signup` as a prefix also matched
+      `/signup/check-email` — a just-signed-up, already-session'd user
+      (this local dev environment auto-confirms) got bounced straight
+      to `/dashboard` and never saw the "check your email"
+      instructions meant for them. Fixed by matching the four real
+      auth-entry paths exactly instead of as prefixes.
+  - New integration regression test for the slug fix
+    (`tests/integration/public-form-access.test.ts`, cross-workspace
+    collision + auto-suffix + no-PGRST116 assertions).
+  - CI: `.github/workflows/ci.yml` gained a second job
+    (`integration-and-e2e`) that installs the Supabase CLI, runs
+    `supabase start` (applying every migration), maps its connection
+    details into this app's actual env var names, then runs
+    integration tests and the full E2E suite. Verified every piece of
+    this locally (the CLI commands, the env-var mapping, the test
+    runs themselves); the workflow file itself hasn't been observed
+    running inside an actual GitHub Actions runner, since this
+    environment has no way to trigger one.
+  - Also fixed `npm run format:check` (Prettier), which every prior
+    milestone this session had been silently failing — it's listed in
+    CI's first job but nothing local had been running it. Reformatted
+    the whole repo once; should stay clean going forward since it's
+    now actually gating something.
+- [x] 119/119 unit tests + 21/21 integration tests + 9/9 E2E tests
+      (chromium), lint, typecheck, format check, and `next build` all
+      green.
 
 ## Deliberately deferred (not started)
 
@@ -355,7 +409,7 @@ routes correctly require their bearer secret. Next: E2E tests.
   question list + center canvas + right settings panel is a genuinely
   desktop-oriented layout (same scope decision comparable tools like
   Google Forms' and Typeform's own builders make; only their
-  *respondent-facing* forms are mobile-first). It doesn't break or
+  _respondent-facing_ forms are mobile-first). It doesn't break or
   overlap at mobile width, it scrolls horizontally like a dense
   editing surface — a deliberate, documented scope line, not an
   oversight (see DECISIONS.md). Every page a mobile visitor actually
@@ -371,18 +425,38 @@ routes correctly require their bearer secret. Next: E2E tests.
   DNS-resolution step in the dispatch path, a more involved change
   than the rest of this pass's fixes — worth its own focused pass.
 
+- **Remaining 8 of 14 documented E2E journeys** — question validation/
+  logic/multiple-endings configuration, theming + preview, a dedicated
+  response-dashboard spec (table/detail/delete), CSV export,
+  notification email (local Supabase's Inbucket/Mailpit could back
+  this), webhook delivery (against a local test receiver, same
+  approach the webhooks milestone verified with manually), analytics
+  numbers. Explicitly tracked in `docs/testing.md`'s per-journey
+  status table, not silently dropped.
+- **CI's new `integration-and-e2e` job hasn't run inside an actual
+  GitHub Actions runner** — every individual piece (the Supabase CLI
+  commands, the env-var override-name mapping, `npm run
+test:integration`, the full E2E suite) was verified locally against
+  the real local Supabase stack; this environment has no way to
+  trigger an actual Actions run. Worth confirming on the first real PR.
+
 ## In progress / next actions (in order)
 
-1. E2E test suite (`docs/testing.md`), full validation run, final
-   report.
+1. The remaining E2E journeys listed above, as time allows — not
+   blocking, since the highest-risk flows (auth, builder CRUD,
+   publish→respond, partial-response resume, duplicate-submit,
+   templates) already have coverage.
+2. Confirm the new CI job actually passes on a real GitHub Actions run
+   the first time this branch/PR goes through it.
 
 ## Known bugs
 
 None currently open. Several were caught and fixed before/while
 shipping this session (the webhook-secret-reload bug, the
 signed-in-visitor-gets-404 RLS bug, the dashboard/builder mobile
-header overflow bugs, and the forged-question-id storage-abuse gap,
-all above).
+header overflow bugs, the forged-question-id storage-abuse gap, the
+cross-workspace forms.slug collision, and the auth-redirect middleware
+prefix-match bug, all above).
 
 ## How to resume
 
@@ -392,7 +466,10 @@ all above).
    project root; requires Docker). `.env.local` already has the local
    keys — regenerate with `supabase status -o env` if it's ever
    restarted with a different project ref.
-4. Run `npm run lint && npm run typecheck && npm run test && npm run
-test:integration`. If the `templates` table looks empty locally, run
-`npm run db:seed-templates` (idempotent — safe to re-run).
-5. Continue with the next unchecked action above — the E2E test suite.
+4. Run `npm run lint && npm run typecheck && npm run format:check &&
+npm run test && npm run test:integration`. If the `templates` table
+   looks empty locally, run `npm run db:seed-templates` (idempotent —
+   safe to re-run). For E2E: `npx playwright install chromium` once,
+   then `npm run e2e`.
+5. Continue with the next unchecked action above — the remaining E2E
+   journeys, then confirm the new CI job on a real PR.
