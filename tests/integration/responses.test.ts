@@ -149,7 +149,11 @@ describe("response engine (integration)", () => {
       crypto.randomUUID(),
     );
     expect(completed.ok).toBe(true);
-    if (completed.ok) expect(completed.endingId).toBe("end_default");
+    if (completed.ok) {
+      expect(completed.endingId).toBe("end_default");
+      expect(completed.formId).toBe(formId);
+      expect(completed.alreadyCompleted).toBe(false);
+    }
 
     const { data: row } = await supabase
       .from("responses")
@@ -218,6 +222,7 @@ describe("response engine (integration)", () => {
       key,
     );
     expect(first.ok).toBe(true);
+    if (first.ok) expect(first.alreadyCompleted).toBe(false);
 
     const retry = await completeResponse(
       supabase,
@@ -228,7 +233,13 @@ describe("response engine (integration)", () => {
       key,
     );
     expect(retry.ok).toBe(true);
-    if (first.ok && retry.ok) expect(retry.endingId).toBe(first.endingId);
+    if (first.ok && retry.ok) {
+      expect(retry.endingId).toBe(first.endingId);
+      // The route handler uses this flag to skip sending a second
+      // notification email for what is, respondent-side, just a retry
+      // of the same submission.
+      expect(retry.alreadyCompleted).toBe(true);
+    }
   });
 
   it("never regresses a completed response back to partial via a late autosave", async () => {

@@ -147,7 +147,7 @@ export async function saveResponseAnswers(
 }
 
 export type CompleteResult =
-  | { ok: true; endingId: string }
+  | { ok: true; endingId: string; formId: string; alreadyCompleted: boolean }
   | { ok: false; code: "missing_required"; missingQuestionIds: string[] };
 
 /**
@@ -173,14 +173,19 @@ export async function completeResponse(
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
-    .select("status, form_version_id, ending_id")
+    .select("status, form_id, form_version_id, ending_id")
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
   if (!response) throw new ResponseNotFoundError();
 
   if (response.status === "completed") {
-    return { ok: true, endingId: response.ending_id ?? "" };
+    return {
+      ok: true,
+      endingId: response.ending_id ?? "",
+      formId: response.form_id,
+      alreadyCompleted: true,
+    };
   }
 
   const { data: versionRow, error: versionError } = await admin
@@ -233,8 +238,18 @@ export async function completeResponse(
       .eq("id", responseId)
       .single();
     if (racedError) throw racedError;
-    return { ok: true, endingId: raced.ending_id ?? walk.endingId };
+    return {
+      ok: true,
+      endingId: raced.ending_id ?? walk.endingId,
+      formId: response.form_id,
+      alreadyCompleted: true,
+    };
   }
 
-  return { ok: true, endingId: walk.endingId };
+  return {
+    ok: true,
+    endingId: walk.endingId,
+    formId: response.form_id,
+    alreadyCompleted: false,
+  };
 }

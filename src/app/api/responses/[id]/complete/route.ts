@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
+import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
 import { checkRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
@@ -57,6 +58,17 @@ export async function POST(
         },
         { status: 400 },
       );
+    }
+
+    if (!result.alreadyCompleted) {
+      // Runs after the response has been sent to the respondent —
+      // next/server's after() keeps the serverless function alive for
+      // this, unlike a bare unawaited promise, which can be killed
+      // before it finishes once the response is flushed. The canonical
+      // write already succeeded above, so a notification failure
+      // (missing API key, Resend outage, ...) can never affect the
+      // response itself (see ARCHITECTURE.md).
+      after(() => notifyFormOwnerOfCompletedResponse(admin, result.formId, id));
     }
 
     return NextResponse.json({ endingId: result.endingId });

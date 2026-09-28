@@ -3,6 +3,24 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Notifications: owner-only, opt-out, `after()` not fire-and-forget
+
+Three narrower-than-spec choices for Phase 1 email notifications:
+owner-only (not every workspace member — simplest useful default,
+revisit if multi-member workspaces become real); opt-out via
+`notification_settings` (no row = enabled) rather than opt-in, since a
+creator who just published a form almost certainly wants to know when
+it gets filled out; and the send is scheduled with Next.js's `after()`
+rather than a bare unawaited promise. The latter isn't stylistic — a
+plain `void someAsyncCall()` in a route handler can be killed by the
+serverless runtime the instant the response is flushed, silently
+dropping the notification. `after()` is the documented way to keep the
+function alive for exactly this "do it after responding" case. Either
+way, a notification failure is swallowed internally
+(`notifyFormOwnerOfCompletedResponse` never throws) — it must not be
+able to affect the respondent-facing result, matching how every other
+integration is treated (ARCHITECTURE.md).
+
 ## 2026-09-28 — CSV export column set comes from the latest form_version
 
 `buildResponsesCsv` needs one stable set of columns across potentially
