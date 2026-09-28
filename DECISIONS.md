@@ -3,6 +3,19 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — CSV export column set comes from the latest form_version
+
+`buildResponsesCsv` needs one stable set of columns across potentially
+many responses that were each submitted against a different historical
+`form_version` (a form can be edited and republished many times).
+Chose the most-recently-created version's questions as the reference
+column set — the closest available proxy for "current" — while still
+resolving each response's own cells against _that response's own_
+schema (matched by stable question id), so option labels stay correct
+even if a question's options changed after that response was
+submitted, and a question added later is simply blank for older
+responses rather than misattributed to the wrong one.
+
 ## 2026-09-28 — `service_role` also needs explicit grants
 
 Same root cause as the `authenticated`/`anon` grants bug from an

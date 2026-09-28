@@ -213,6 +213,7 @@ export function PublicFormRuntime({
       initialHistory={session.history}
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}
+      responseId={session.responseId}
     />
   );
 }

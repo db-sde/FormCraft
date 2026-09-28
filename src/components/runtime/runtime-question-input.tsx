@@ -22,11 +22,17 @@ export function RuntimeQuestionInput({
   value,
   onChange,
   primaryColor,
+  responseId,
 }: {
   question: QuestionV1;
   value: unknown;
   onChange: (value: unknown) => void;
   primaryColor: string;
+  /** Only present in the real public runtime, never the builder's
+   * Preview dialog — file_upload uses this to know whether it can
+   * actually upload (Preview just tracks a filename locally, keeping
+   * its no-network-calls guarantee). */
+  responseId?: string;
 }) {
   switch (question.type) {
     case "welcome_screen":
@@ -281,37 +287,94 @@ export function RuntimeQuestionInput({
     }
 
     case "file_upload":
-      return <FileUploadInput question={question} value={value} onChange={onChange} />;
+      return (
+        <FileUploadInput
+          question={question}
+          value={value}
+          onChange={onChange}
+          responseId={responseId}
+        />
+      );
   }
 }
 
 function FileUploadInput({
+  question,
   value,
   onChange,
+  responseId,
 }: {
   question: Extract<QuestionV1, { type: "file_upload" }>;
   value: unknown;
   onChange: (value: unknown) => void;
+  responseId?: string;
 }) {
   const [fileName, setFileName] = useState<string | null>(
     typeof value === "string" ? value : null,
   );
+  const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setFileName(file.name);
+
+    if (!responseId) {
+      // Preview mode: no network calls at all (see FormRuntime's
+      // module doc) — just reflect the filename locally so required-
+      // field validation and the visual state behave sensibly.
+      onChange(file.name);
+      return;
+    }
+
+    setStatus("uploading");
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const res = await fetch(`/api/responses/${responseId}/uploads/${question.id}`, {
+        method: "POST",
+        body,
+      });
+      if (!res.ok) {
+        setStatus("error");
+        onChange(undefined);
+        return;
+      }
+      const data = (await res.json()) as { uploadId: string };
+      setStatus("idle");
+      // The answer value is the upload reference id, never the raw
+      // file or a public URL — see docs/api.md.
+      onChange(data.uploadId);
+    } catch {
+      setStatus("error");
+      onChange(undefined);
+    }
+  }
 
   return (
-    <label className="border-input hover:bg-accent/50 flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-sm">
-      <span>{fileName ? fileName : "Click to choose a file"}</span>
-      <input
-        type="file"
-        className="sr-only"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          setFileName(file?.name ?? null);
-          // Actual upload/persistence lands with the response-submission
-          // milestone — this records the filename locally so the
-          // required-field check and review screen behave correctly.
-          onChange(file?.name);
-        }}
-      />
-    </label>
+    <div className="space-y-1.5">
+      <label className="border-input hover:bg-accent/50 flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-sm">
+        <span>
+          {status === "uploading"
+            ? "Uploading…"
+            : fileName
+              ? fileName
+              : "Click to choose a file"}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          Up to {question.settings.maxSizeMb}MB
+        </span>
+        <input
+          type="file"
+          className="sr-only"
+          disabled={status === "uploading"}
+          onChange={(e) => void handleFile(e.target.files?.[0])}
+        />
+      </label>
+      {status === "error" && (
+        <p className="text-sm text-red-600">
+          Upload failed — please try a different file.
+        </p>
+      )}
+    </div>
   );
 }

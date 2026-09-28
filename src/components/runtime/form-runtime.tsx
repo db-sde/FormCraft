@@ -32,11 +32,15 @@ export function FormRuntime({
   initialHistory,
   onAnswerChange,
   onComplete,
+  responseId,
 }: {
   compiled: CompiledFormV1;
   initialAnswers?: AnswerMap;
   initialQuestionId?: string;
   initialHistory?: string[];
+  /** Only present in the real public runtime — see
+   * runtime-question-input.tsx's FileUploadInput for why. */
+  responseId?: string;
   onAnswerChange?: (answers: AnswerMap, currentQuestionId: string) => void;
   onComplete?: (endingId: string, answers: AnswerMap) => void;
 }) {
@@ -177,6 +181,7 @@ export function FormRuntime({
           value={answers[question.id]}
           onChange={setAnswer}
           primaryColor={theme.primaryColor}
+          responseId={responseId}
         />
 
         {error && <p className="text-sm text-red-600">{error}</p>}

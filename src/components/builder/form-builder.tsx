@@ -321,6 +321,13 @@ export function FormBuilder({
           <span className="truncate font-medium">{formTitle}</span>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href={`/forms/${formId}/responses`}
+            className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
+          >
+            Responses
+          </Link>
+          <Separator orientation="vertical" className="h-5" />
           <SaveStatus state={saveState} />
           {saveState === "stale" && (
             <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
