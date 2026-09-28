@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { slugify } from "@/domains/workspaces";
 import { parseFormSchema, validateSemantics } from "./schema/validate";
+import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
 import type { FormSchemaV1 } from "./schema/v1";
 
 type Client = SupabaseClient<Database>;
@@ -208,4 +209,136 @@ export async function saveDraftSchema(
   if (!data) throw new StaleDraftError();
 
   return { revision: data.revision };
+}
+
+export type PublishInfo = {
+  slug: string;
+  isPublished: boolean;
+  publishedAt: string | null;
+  publishedVersionNumber: number | null;
+};
+
+export async function getPublishInfo(
+  supabase: Client,
+  formId: string,
+): Promise<PublishInfo | null> {
+  const { data: form, error: formError } = await supabase
+    .from("forms")
+    .select("slug")
+    .eq("id", formId)
+    .maybeSingle();
+  if (formError) throw formError;
+  if (!form) return null;
+
+  const { data: published, error: publishedError } = await supabase
+    .from("form_versions")
+    .select("published_at, version_number")
+    .eq("form_id", formId)
+    .eq("status", "published")
+    .maybeSingle();
+  if (publishedError) throw publishedError;
+
+  return {
+    slug: form.slug,
+    isPublished: Boolean(published),
+    publishedAt: published?.published_at ?? null,
+    publishedVersionNumber: published?.version_number ?? null,
+  };
+}
+
+/**
+ * Publishing pipeline: load the draft, run it through the full
+ * validation chain (structural → semantic → publication compile — the
+ * last stage is the strict one, checking reachability and inescapable
+ * loops per docs/form-schema.md), then archive the current published
+ * version and insert the new one atomically via the
+ * publish_form_version RPC. The draft row is never touched — publish
+ * only ever reads it.
+ */
+export type PublishResult = {
+  compiled: CompiledFormV1;
+  versionNumber: number;
+  publishedAt: string;
+};
+
+export async function publishForm(
+  supabase: Client,
+  formId: string,
+): Promise<PublishResult> {
+  const { data: draft, error: draftError } = await supabase
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .eq("status", "draft")
+    .single();
+  if (draftError) throw draftError;
+
+  const parsed = parseFormSchema(draft.schema);
+  validateSemantics(parsed);
+  const compiled = compileFormSchema(parsed);
+
+  const { data, error } = await supabase.rpc("publish_form_version", {
+    target_form_id: formId,
+    compiled_schema: toJson(compiled.schema),
+  });
+  if (error) throw error;
+  if (!data) throw new Error("publish_form_version returned no row");
+
+  return {
+    compiled,
+    versionNumber: data.version_number,
+    publishedAt: data.published_at!,
+  };
+}
+
+/** Unpublish = archive the currently published version, no
+ * replacement. The public runtime treats an unpublished form as
+ * unavailable (no `published` row to read) rather than deleting
+ * anything. */
+export async function unpublishForm(supabase: Client, formId: string): Promise<void> {
+  const { error } = await supabase
+    .from("form_versions")
+    .update({ status: "archived" })
+    .eq("form_id", formId)
+    .eq("status", "published");
+  if (error) throw error;
+}
+
+export type PublicForm = {
+  formId: string;
+  formVersionId: string;
+  compiled: CompiledFormV1;
+};
+
+/**
+ * What the public respondent runtime reads — the currently published
+ * version for a slug, resolved via the anon-readable RLS policies
+ * (see migration 2), never via a workspace-scoped query. Returns null
+ * for a slug with no form, or a form with no published version (both
+ * render the same "not available" state — see ARCHITECTURE.md).
+ */
+export async function getPublicFormBySlug(
+  supabase: Client,
+  slug: string,
+): Promise<PublicForm | null> {
+  const { data: form, error: formError } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("slug", slug)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (formError) throw formError;
+  if (!form) return null;
+
+  const { data: version, error: versionError } = await supabase
+    .from("form_versions")
+    .select("id, schema")
+    .eq("form_id", form.id)
+    .eq("status", "published")
+    .maybeSingle();
+  if (versionError) throw versionError;
+  if (!version) return null;
+
+  const compiled = compileFormSchema(parseFormSchema(version.schema));
+  return { formId: form.id, formVersionId: version.id, compiled };
 }

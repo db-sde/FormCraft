@@ -23,7 +23,8 @@ import {
   rulesReferencingQuestion,
   rulesReferencingEnding,
 } from "@/domains/forms/builder";
-import type { SaveDraftResult } from "@/app/(builder)/forms/[id]/actions";
+import { toast } from "sonner";
+import type { SaveDraftResult, PublishResult } from "@/app/(builder)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
 import { AddQuestionMenu } from "./add-question-menu";
 import { QuestionEditor } from "./question-editor";
@@ -32,6 +33,7 @@ import { EndingEditor, EndingSettingsPanel } from "./ending-editor";
 import { ThemePreview } from "./theme-preview";
 import { ThemeSettingsPanel } from "./theme-settings-panel";
 import { LogicEditor } from "./logic-editor";
+import { PreviewDialog } from "./preview-dialog";
 import { SaveStatus, type SaveState } from "./save-status";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -56,28 +58,47 @@ type Selection =
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
+export type PublishInfo = {
+  isPublished: boolean;
+  publishedAt: string | null;
+  publishedVersionNumber: number | null;
+};
+
 export function FormBuilder({
   formTitle,
   workspaceId,
   formId,
+  slug,
+  appUrl,
   draftVersionId,
   initialRevision,
   initialSchema,
+  initialPublishInfo,
   onSave,
+  onPublish,
+  onUnpublish,
 }: {
   formTitle: string;
   workspaceId: string;
   formId: string;
+  slug: string;
+  appUrl: string;
   draftVersionId: string;
   initialRevision: number;
   initialSchema: FormSchemaV1;
+  initialPublishInfo: PublishInfo;
   onSave: (
     draftVersionId: string,
     expectedRevision: number,
     schema: FormSchemaV1,
   ) => Promise<SaveDraftResult>;
+  onPublish: (formId: string) => Promise<PublishResult>;
+  onUnpublish: (formId: string) => Promise<{ ok: true } | { ok: false; message: string }>;
 }) {
   const [schema, setSchema] = useState(initialSchema);
+  const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
+  const [publishing, setPublishing] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [selection, setSelection] = useState<Selection>({
     kind: "question",
     id: initialSchema.questions[0]?.id,
@@ -244,6 +265,41 @@ export function FormBuilder({
     setSchema((s) => ({ ...s, questions: moveQuestionAt(s.questions, id, direction) }));
   }
 
+  const liveUrl = `${appUrl}/f/${slug}`;
+
+  async function handlePublish() {
+    setPublishing(true);
+    const result = await onPublish(formId);
+    setPublishing(false);
+
+    if (result.ok) {
+      setPublishInfo({
+        isPublished: true,
+        publishedAt: new Date().toISOString(),
+        publishedVersionNumber: result.publishedVersionNumber,
+      });
+      toast.success(publishInfo.isPublished ? "Republished" : "Published", {
+        description: "Your form is live.",
+        action: { label: "View live", onClick: () => window.open(liveUrl, "_blank") },
+      });
+    } else {
+      toast.error("Couldn't publish", { description: result.message });
+    }
+  }
+
+  async function handleUnpublish() {
+    setPublishing(true);
+    const result = await onUnpublish(formId);
+    setPublishing(false);
+
+    if (result.ok) {
+      setPublishInfo((p) => ({ ...p, isPublished: false }));
+      toast("Unpublished", { description: "Your form is no longer live." });
+    } else {
+      toast.error("Couldn't unpublish", { description: result.message });
+    }
+  }
+
   const selectedQuestion =
     selection.kind === "question"
       ? schema.questions.find((q) => q.id === selection.id)
@@ -272,24 +328,45 @@ export function FormBuilder({
             </Button>
           )}
           <Separator orientation="vertical" className="h-5" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="outline" disabled>
-                Preview
+          {publishInfo.isPublished && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href={liveUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-muted-foreground text-sm underline"
+                  >
+                    View live
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>{liveUrl}</TooltipContent>
+              </Tooltip>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={publishing}
+                onClick={handleUnpublish}
+              >
+                Unpublish
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>Coming soon</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" disabled>
-                Publish
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Coming soon</TooltipContent>
-          </Tooltip>
+            </>
+          )}
+          <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
+            Preview
+          </Button>
+          <Button size="sm" disabled={publishing} onClick={handlePublish}>
+            {publishing
+              ? "Publishing…"
+              : publishInfo.isPublished
+                ? "Republish"
+                : "Publish"}
+          </Button>
         </div>
       </header>
+
+      <PreviewDialog schema={schema} open={previewOpen} onOpenChange={setPreviewOpen} />
 
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-r p-3">

@@ -4,113 +4,120 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**THEMING + LOGIC BUILDER** — done and verified end-to-end against a
-real local Supabase instance. Next up: presentation modes, preview,
-publishing.
+**PREVIEW + PUBLISHING** — done and verified end-to-end against a real
+local Supabase instance, including a genuine unauthenticated public
+page. Next up: partial-response engine (autosave/resume/submit), then
+the response dashboard.
 
 ## Completed
 
-- [x] Foundation: Next.js 16 (App Router, TS strict, Tailwind v4),
-      shadcn/ui, Vitest/Testing Library/Playwright, ESLint/Prettier,
-      CI workflow, governing docs (CLAUDE.md, ARCHITECTURE.md,
-      DECISIONS.md, docs/\*).
-- [x] Canonical form schema, shared logic engine (`evaluateNextStep`/
-      `walkForm`), pure domain helpers (response state machine, CSV
-      export, completion-rate analytics, form/question/ending/logic
-      builder helpers) — see `src/domains/*`.
-- [x] Local Supabase project running (Docker, `supabase start`).
-      Migrations 1–8 applied (identity/workspaces, forms/versions with
-      a `revision` CAS column, responses/answers/uploads, integrations/
-      analytics/templates, storage buckets, workspace-creation RPC,
-      explicit Data-API grants).
-- [x] Auth (signup/login/logout/forgot/reset), workspace
-      auto-provisioning, dashboard with create-form flow — all
-      verified live against local Postgres.
-- [x] **Builder UI** (`src/app/(builder)/forms/[id]`): question CRUD/
-      reorder (keyboard-accessible) with type-specific settings for
-      all 16 question types, non-interactive live preview control,
-      basic ending editor, debounced revision-guarded autosave.
-- [x] **Theming** (`src/domains/themes`, `theme-settings-panel.tsx`,
-      `theme-preview.tsx`):
-  - 6 built-in presets (Classic/Ocean/Forest/Sunset/Midnight/
-    Monochrome), applied atomically (color+font+button style
-    together) and cleared on any manual color override.
-  - Color fields (native swatch + hex text input, validated), font
-    family and button style selects, live-updating center-pane
-    preview mockup styled with the actual theme (colors, font stack,
-    button radius, background image).
-  - Logo + background image upload straight to the public
-    `theme-assets` Storage bucket (client-side type/size validation,
-    RLS-scoped path `<workspace_id>/<form_id>/<file>`), with a
-    remove button once uploaded.
-  - WCAG contrast-ratio check (`src/domains/themes/contrast.ts`,
-    unit-tested) surfaces an inline warning — not a hard block — when
-    the primary color would be hard to read as white button text, or
-    when text/background contrast is weak.
-  - **Verified live**: selected the "Ocean" preset, watched colors/
-    button shape update instantly in the preview, confirmed the exact
-    theme object persisted in Postgres via `psql`.
-- [x] **Logic builder** (`logic-editor.tsx`, `logic-value-control.tsx`):
-  - Rule list, "IF [question] [operator] [value] THEN [jump to
-    question/ending] [target]", rules evaluated top-to-bottom by the
-    same engine used elsewhere (no separate logic implementation).
-  - Operator choices narrow to what's meaningful for the source
-    question's type (`availableOperators` — e.g. no `contains` on a
-    text question, no `gt`/`lt` on a non-numeric one); this is a UX
-    narrowing, not a new validation rule (the schema's own semantic
-    validation is the actual enforcement).
-  - The value control adapts to the question type: a real option
-    picker for select/multi-select/dropdown (comparing by option id,
-    not free text), yes/no picker, number input for numeric types,
-    text input otherwise.
-  - Multiple endings: add/remove UI (`createEnding`/`removeEnding`/
-    `canDeleteEnding`) — an ending can't be deleted if it's the
-    default or the last one remaining, matching the schema's
-    "exactly one default, at least one ending" invariant.
-  - **Deleting a question or ending that a logic rule depends on
-    surfaces a confirmation dialog** ("N logic rule(s) reference this
-    and will also be deleted") instead of silently leaving a dangling
-    reference — the explicit Phase 1 requirement from
-    docs/form-schema.md. Cascade-deletes the affected rules only on
-    confirm.
-  - **Verified live end-to-end**: added a rule, changed its operator
-    to reveal the option-picker value control, selected an option,
-    confirmed the exact rule (including the option id, not a label)
-    persisted in Postgres; deleted the question that rule depended
-    on, confirmed the warning dialog listed "1 logic rule", confirmed
-    on delete that both the question AND the now-dangling rule were
-    removed together in the persisted schema.
+- [x] Foundation, canonical form schema, shared logic engine, pure
+      domain helpers — see `src/domains/*` and earlier milestones.
+- [x] Local Supabase running (Docker). Migrations 1–9 applied,
+      including `publish_form_version` (atomic archive-then-insert RPC,
+      row-locked to serialize concurrent publishes of the same form).
+- [x] Auth, workspaces, dashboard, full builder UI (question CRUD,
+      theming, logic) — all verified live against local Postgres.
+- [x] **Shared interactive runtime** (`src/components/runtime`):
+  - `runtime-question-input.tsx` — real, working inputs for all 16
+    question types (distinct from the builder's disabled preview
+    mockup), including an "Other" free-text option for select types.
+  - `form-runtime.tsx` — the conversational (one-question-at-a-time)
+    walker: required-field validation, Back/Next, Enter-to-advance
+    (except in a textarea), a progress bar, ending screen with
+    optional redirect, all driven by the exact same
+    `evaluateNextStep`/`isAnswered` functions from `src/domains/logic`
+    used elsewhere — so branching can't behave differently in preview
+    vs. the real public form. Purely client-side/local state; no
+    network calls, so it's inherently isolated from production
+    analytics (nothing to filter — there's nothing sent).
+  - This one component is now used by **both** the builder's Preview
+    dialog (fed the in-memory draft, including unsaved edits) and the
+    public runtime (fed the published version) — deliberately, so
+    "what the creator previewed" and "what a respondent sees" can't
+    drift apart.
+- [x] **Preview** (`preview-dialog.tsx`): compiles the current draft
+      client-side on open (full structural + semantic validation, not
+      just a raw render) and shows a friendly "Can't preview yet: ..."
+      message instead of crashing if the in-progress draft isn't
+      publish-valid at that moment. Desktop/mobile width toggle.
+- [x] **Publishing** (`domains/forms/queries.ts` `publishForm`/
+      `unpublishForm`, `publish_form_version` RPC):
+  - Publish re-validates the draft through the full pipeline
+    (structural → semantic → the publication compiler from the schema
+    milestone — reachability + inescapable-loop checks) before
+    touching the database, and surfaces the specific validation error
+    if it fails rather than a generic failure.
+  - Archives the previous published version and inserts a new
+    immutable one atomically; the draft row is never touched by
+    publish, matching the versioning architecture (draft stays
+    editable, published is immutable, "republish" is just calling
+    publish again).
+  - Unpublish archives the current published row with no replacement;
+    the public runtime treats "no published row" as not-found (404),
+    never as an error page.
+  - Builder top bar wired: Publish/Republish button, Unpublish + "View
+    live" links appear once published, toast notifications (success
+    with a "View live" action, or the specific validation error) via
+    sonner.
+- [x] **Public runtime** (`src/app/f/[slug]`): a genuinely new,
+      unauthenticated route — not a stub. Resolves the slug via
+      anon-readable RLS (no service-role bypass needed), 404s for a
+      missing or unpublished form, renders the real `FormRuntime`.
+      Response persistence (autosave/submit) is intentionally not
+      wired yet — that's the next milestone — so filling out the
+      public form today walks through validation/branching/the ending
+      screen correctly but doesn't save a response row.
+- [x] **Verified live end-to-end**, unauthenticated, against local
+      Postgres:
+  - Preview dialog: welcome screen → typed an answer → pressed Enter
+    → required-field validation exercised → reached the default
+    ending, all inside the builder without any network writes.
+  - Publish: draft stayed at version 1 untouched; a new `published`
+    version 2 was created; confirmed via `psql`.
+  - Opened `/f/<slug>` in the browser with no session: real published
+    content rendered, required-field validation blocked an empty
+    submit with the correct message, console had no errors.
+  - Unpublish: version 2 flipped from `published` to `archived` (kept,
+    not deleted); confirmed `/f/<slug>` now returns a real 404.
 - [x] 65/65 unit tests, lint, typecheck, and `next build` all green.
 
 ## In progress / next actions (in order)
 
-1. Presentation modes (conversational P0, classic P1) — affects the
-   _public runtime_ (not built yet), not the builder itself.
-2. Preview mode (desktop/mobile), isolated from production analytics —
-   currently the Preview button is a disabled stub.
-3. Publishing pipeline: draft → `compileFormSchema` (already written
-   and tested — the inescapable-loop/reachability checks from the
-   schema milestone) → new immutable `form_versions` row
-   (status=published), unpublish, republish — currently the Publish
-   button is a disabled stub.
-4. Public runtime (`src/app/f/[slug]`): server-authoritative render,
-   uses the same logic engine, no respondent auth.
-5. Partial response engine: `POST /api/responses/start`,
-   `PATCH /api/responses/:id/answers` (revision-guarded),
-   `POST /api/responses/:id/complete` (idempotency-key guarded),
-   resume on refresh.
-6. Response dashboard (table, detail view, delete) + CSV export route.
-7. Resend email notifications on completion.
-8. Webhooks (HMAC-signed, retry with backoff, delivery log UI) +
+1. **Partial response engine**: `responses`/`answers` tables already
+   exist with the state-machine + revision triggers from an earlier
+   migration — this milestone wires them up. `POST
+/api/responses/start` (creates `in_progress`), debounced
+   `PATCH /api/responses/:id/answers` (revision-guarded, moves to
+   `partial`), `POST /api/responses/:id/complete`
+   (idempotency-key guarded, moves to `completed`, records
+   `ending_id`). Wire `FormRuntime`'s existing `onComplete` seam (and
+   add an `onAnswerChange` seam) to these instead of leaving answers
+   purely local. Resume-on-refresh via a response id in the URL/
+   localStorage.
+2. File upload wiring for `file_upload` questions (currently captures
+   a filename locally only — no actual upload to the private
+   `response-uploads` bucket yet).
+3. Response dashboard (table, detail view, delete) + CSV export route
+   (`src/domains/exports/csv.ts` already exists and is tested — this
+   wires it to a real query + route handler).
+4. Resend email notifications on completion.
+5. Webhooks (HMAC-signed, retry with backoff, delivery log UI) +
    Google Sheets integration.
-9. PostHog analytics wiring (event instrumentation +
-   `computeCompletionRate` surfaced in the dashboard).
-10. ~20-30 templates + template picker.
-11. Abuse/rate-limiting on public endpoints, accessibility pass,
-    responsive polish (the builder itself is desktop-only, per spec).
-12. Security hardening + adversarial review pass (see spec's
-    quality_gate list).
-13. Integration/E2E test suites (`docs/testing.md`), full validation
+6. PostHog analytics wiring (event instrumentation +
+   `computeCompletionRate`, already implemented and tested, surfaced
+   in the dashboard) — including tagging preview traffic so it's
+   excluded, now that there's a real preview path to tag.
+7. ~20-30 templates + template picker.
+8. Abuse/rate-limiting on public endpoints (the `/api/responses/*`
+   endpoints from item 1 are exactly what need it), accessibility
+   pass, responsive polish for the public runtime on mobile (it's
+   already reasonably responsive since it's a single centered column,
+   but hasn't been explicitly tested at phone width).
+9. Security hardening + adversarial review pass (see spec's
+   quality_gate list) — once responses exist, this includes replay/
+   duplicate-submit/stale-write testing against the real endpoints.
+10. Integration/E2E test suites (`docs/testing.md`), full validation
     run, final report.
 
 ## Known bugs
@@ -126,5 +133,8 @@ None currently open.
    keys — regenerate with `supabase status -o env` if it's ever
    restarted with a different project ref.
 4. Run `npm run lint && npm run typecheck && npm run test`.
-5. Continue with the next unchecked action above — preview mode, then
-   publishing (the compiler it needs already exists and is tested).
+5. Continue with the next unchecked action above — the partial
+   response engine. `FormRuntime`'s `onComplete` prop
+   (`src/components/runtime/form-runtime.tsx`) is the integration
+   point; an `onAnswerChange` prop for debounced autosave will need to
+   be added alongside it.

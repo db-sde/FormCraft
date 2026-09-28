@@ -1,21 +1,9 @@
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
-
-const FONT_STACK: Record<ThemeV1["fontFamily"], string> = {
-  inter: "var(--font-geist-sans), sans-serif",
-  system: "system-ui, sans-serif",
-  georgia: "Georgia, serif",
-  mono: "var(--font-geist-mono), monospace",
-};
-
-const BUTTON_RADIUS: Record<ThemeV1["buttonStyle"], string> = {
-  rounded: "8px",
-  square: "2px",
-  pill: "999px",
-};
+import { THEME_FONT_STACK, THEME_BUTTON_RADIUS } from "@/components/theme-styles";
 
 /** Renders a small mock "welcome screen" styled with the current
  * theme, so the creator sees a live effect of every change without
- * needing the full public runtime (built separately). */
+ * needing the full public runtime. */
 export function ThemePreview({
   theme,
   formTitle,
@@ -29,7 +17,7 @@ export function ThemePreview({
       style={{
         backgroundColor: theme.backgroundColor,
         color: theme.textColor ?? undefined,
-        fontFamily: FONT_STACK[theme.fontFamily],
+        fontFamily: THEME_FONT_STACK[theme.fontFamily],
         backgroundImage: theme.backgroundImageUrl
           ? `url(${theme.backgroundImageUrl})`
           : undefined,
@@ -49,7 +37,7 @@ export function ThemePreview({
         className="pointer-events-none px-5 py-2 text-sm font-medium text-white"
         style={{
           backgroundColor: theme.primaryColor,
-          borderRadius: BUTTON_RADIUS[theme.buttonStyle],
+          borderRadius: THEME_BUTTON_RADIUS[theme.buttonStyle],
         }}
       >
         Start

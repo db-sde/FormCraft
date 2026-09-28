@@ -699,6 +699,26 @@ export type Database = {
         Args: { target_workspace_id: string };
         Returns: boolean;
       };
+      publish_form_version: {
+        Args: { compiled_schema: Json; target_form_id: string };
+        Returns: {
+          created_at: string;
+          form_id: string;
+          id: string;
+          published_at: string | null;
+          revision: number;
+          schema: Json;
+          status: Database["public"]["Enums"]["form_version_status"];
+          updated_at: string;
+          version_number: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "form_versions";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       workspace_role_for: {
         Args: { target_workspace_id: string };
         Returns: Database["public"]["Enums"]["workspace_role"];

@@ -68,7 +68,7 @@ function evaluateCondition(rule: LogicRuleV1, answerValue: unknown): boolean {
   }
 }
 
-function isAnswered(value: unknown): boolean {
+export function isAnswered(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
