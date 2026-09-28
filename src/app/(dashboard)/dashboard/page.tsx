@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FilePlus2 } from "lucide-react";
+import { FilePlus2, LayoutTemplate } from "lucide-react";
 import { listFormsForWorkspace } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createFormAction } from "../actions";
@@ -22,12 +22,20 @@ export default async function DashboardPage() {
               : `${forms.length} form${forms.length === 1 ? "" : "s"} in ${workspace.name}`}
           </p>
         </div>
-        <form action={createFormAction}>
-          <Button type="submit">
-            <FilePlus2 />
-            New form
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/templates">
+              <LayoutTemplate />
+              Browse templates
+            </Link>
           </Button>
-        </form>
+          <form action={createFormAction}>
+            <Button type="submit">
+              <FilePlus2 />
+              New form
+            </Button>
+          </form>
+        </div>
       </div>
 
       {forms.length === 0 ? (
@@ -38,11 +46,14 @@ export default async function DashboardPage() {
             <p className="text-muted-foreground max-w-sm text-sm">
               Forms you create will show up here. Start from scratch or pick a template.
             </p>
-            <form action={createFormAction}>
-              <Button type="submit" className="mt-2">
-                Create your first form
+            <div className="mt-2 flex items-center gap-2">
+              <form action={createFormAction}>
+                <Button type="submit">Start from scratch</Button>
+              </form>
+              <Button asChild variant="outline">
+                <Link href="/templates">Browse templates</Link>
               </Button>
-            </form>
+            </div>
           </CardContent>
         </Card>
       ) : (

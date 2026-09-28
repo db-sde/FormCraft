@@ -4,13 +4,13 @@ Last updated: 2026-09-28
 
 ## Current milestone
 
-**ANALYTICS** — done and verified live: `form_viewed`/`form_started`/
-`form_submitted` events now actually fire (previously only the pure
-`computeCompletionRate`/`computeFunnelSummary` math existed, with
-nothing feeding it), and the responses dashboard shows a real
-views/starts/completions/completion-rate funnel card. Google Sheets
-integration is the one Phase 1 launch item still unimplemented (see
-below — deliberately deferred, not forgotten). Next up: templates.
+**TEMPLATES** — done and verified live: 24 ready-made form templates
+across 8 categories, a `/templates` picker gallery, and "Use this
+template" creates a real form whose first draft is the template's
+schema (not the blank starter). Google Sheets integration is the one
+Phase 1 launch item still unimplemented (see below — deliberately
+deferred, not forgotten). Next up: abuse/rate-limiting + accessibility
++ responsive polish.
 
 ## Completed
 
@@ -124,6 +124,40 @@ below — deliberately deferred, not forgotten). Next up: templates.
       confirmed the funnel card rendered Views 1 / Starts 1 /
       Completions 1 / Completion rate 100% — matching the seeded events
       exactly, not a hardcoded or stale number.
+- [x] 103/103 unit tests + 11/11 integration tests, lint, typecheck,
+      and `next build` all green.
+- [x] **Templates** (`src/domains/templates`, `scripts/seed-templates.ts`):
+  - `queries.ts` — `listTemplates` (id/title/category/description for
+    the gallery) and `getTemplateById` (includes the schema, re-parsed
+    through `parseFormSchema` on read so a hand-edited DB row can never
+    hand the builder something invalid).
+  - `scripts/seed-templates.ts` (`npm run db:seed-templates`) builds 24
+    templates across 8 categories (Feedback, Surveys, Lead Generation,
+    HR & Recruiting, Events, Education, E-commerce, Marketing) using
+    the same `createQuestion`/`createOption`/`createEnding` helpers the
+    builder UI itself uses, then runs every one through the real
+    `parseFormSchema`/`validateSemantics` pipeline before writing —
+    a template that failed validation would fail here, not silently
+    ship. Idempotent (upserts by title), so it's safe to re-run after
+    editing a template.
+  - `createFormWithDraft` (`src/domains/forms/queries.ts`) now takes an
+    optional `initialSchema`, so a template-created form reuses the
+    exact same slug-allocation/insert logic as a blank one — a
+    template is just a form whose first draft didn't start blank.
+  - UI: `/templates` — a gallery grouped by category, "Use this
+    template" per card (a bound server action, `createFormFromTemplateAction`),
+    plus "Start from scratch" at the top. Linked from the dashboard's
+    header and its empty state (which already said "pick a template"
+    with nothing behind it before this).
+- [x] **Verified live**: ran the seed script against local Postgres —
+      all 24 schemas passed real validation and were inserted; loaded
+      `/templates` in a real logged-in browser session and saw all 24
+      cards grouped into their 8 categories; clicked "Use this
+      template" on the CSAT template and confirmed it redirected into
+      the actual builder at `/forms/[id]` with the form titled
+      "Customer Satisfaction Survey (CSAT)" and all 4 of its questions
+      (welcome + 3) plus its ending present — not the blank 2-question
+      starter a normal "New form" produces.
 
 ## Deliberately deferred (not started)
 
@@ -141,18 +175,16 @@ below — deliberately deferred, not forgotten). Next up: templates.
 
 ## In progress / next actions (in order)
 
-1. ~20-30 templates + template picker (`templates` table already
-   exists, unused so far).
-2. Google Sheets integration, to the extent possible without live
+1. Google Sheets integration, to the extent possible without live
    Google Cloud credentials — at minimum the domain-layer token
    storage/refresh logic and the per-response sync function, with the
    OAuth consent screen wiring documented as needing real credentials
    at deploy time (same pattern as the webhook cron secret).
-3. Abuse/rate-limiting polish (the in-memory limiter is single-instance
+2. Abuse/rate-limiting polish (the in-memory limiter is single-instance
    only — fine for now, documented upgrade path to a shared store),
    accessibility pass, responsive polish for the public runtime and
    dashboard on mobile.
-4. Security hardening + adversarial review pass (see spec's
+3. Security hardening + adversarial review pass (see spec's
    quality_gate list) — replay/duplicate-submit/stale-write behavior
    is already tested at the domain layer; this pass should specifically
    try to break the HTTP layer (forged response/upload ids across
@@ -162,7 +194,7 @@ below — deliberately deferred, not forgotten). Next up: templates.
    (`isDisallowedWebhookHost`), but DNS-rebinding-time protection
    (resolving and checking the actual IP immediately before each
    connection) is still open — worth revisiting in this pass.
-5. E2E test suite (`docs/testing.md`), full validation run, final
+4. E2E test suite (`docs/testing.md`), full validation run, final
    report.
 
 ## Known bugs
@@ -179,5 +211,8 @@ session (the webhook-secret-reload bug above).
    keys — regenerate with `supabase status -o env` if it's ever
    restarted with a different project ref.
 4. Run `npm run lint && npm run typecheck && npm run test && npm run
-test:integration`.
-5. Continue with the next unchecked action above — templates.
+test:integration`. If the `templates` table looks empty locally, run
+`npm run db:seed-templates` (idempotent — safe to re-run).
+5. Continue with the next unchecked action above — Google Sheets (to
+   the extent possible without live credentials), then abuse/
+   accessibility/responsive polish.

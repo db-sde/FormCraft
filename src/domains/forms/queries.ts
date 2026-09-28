@@ -88,11 +88,19 @@ export async function listFormsForWorkspace(
   }));
 }
 
+/**
+ * Creates a form + its initial draft version. `initialSchema` defaults
+ * to the blank starter schema; passing a template's schema instead
+ * (see @/domains/templates) reuses this exact same slug-allocation and
+ * insert logic rather than duplicating it — a template-created form is
+ * just a form whose first draft didn't start blank.
+ */
 export async function createFormWithDraft(
   supabase: Client,
   workspaceId: string,
   userId: string,
   title: string,
+  initialSchema?: FormSchemaV1,
 ): Promise<{ id: string }> {
   const baseSlug = slugify(title);
 
@@ -113,7 +121,7 @@ export async function createFormWithDraft(
       form_id: form.id,
       status: "draft",
       version_number: 1,
-      schema: toJson(starterFormSchema(title)),
+      schema: toJson(initialSchema ?? starterFormSchema(title)),
     });
     if (versionError) throw versionError;
 

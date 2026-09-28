@@ -3,6 +3,32 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-28 — Templates are seeded via a script that reuses the builder's own schema helpers, not hand-written JSON
+
+A template is just a `FormSchemaV1` sitting in the `templates` table,
+and the tempting shortcut was to hand-write 24 JSON blobs directly in
+a SQL migration. Rejected that: hand-written JSON has no type checking
+and no relationship to the real validation pipeline, so a typo in a
+settings field (e.g. `rating.scale` outside the `5 | 10` union) would
+only surface the first time a creator tried to load that template in
+the builder — exactly the kind of "shipped unverified" the spec's
+quality bar rules out. Instead `scripts/seed-templates.ts` builds each
+template with the same `createQuestion`/`createOption`/`createEnding`
+helpers `src/domains/forms/builder.ts` already exports for the builder
+UI itself, then runs every one through the real
+`parseFormSchema`/`validateSemantics` pipeline before writing anything
+— a broken template fails the seed script, not a creator's first
+click. `getTemplateById` re-parses on every read for the same reason
+(belt-and-braces against a template ever being hand-edited directly in
+the DB into something invalid).
+
+The seed script is idempotent (upserts by title) and lives outside the
+migrations directory on purpose: template *content* (copy, question
+choices) is product decisions that will keep changing, unlike schema
+*structure*, which migrations own. Re-running the script after editing
+a template in the script is the intended workflow, not a one-time
+bootstrap.
+
 ## 2026-09-28 — Analytics events fire server-side, never from client JS
 
 `form_viewed`/`form_started`/`form_submitted` could have been tracked
