@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { logOutAction } from "../(auth)/actions";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 
 export default async function DashboardLayout({
@@ -25,9 +25,9 @@ export default async function DashboardLayout({
             {workspace.name} · {user.email}
           </span>
           <form action={logOutAction}>
-            <Button type="submit" variant="ghost" size="sm">
+            <SubmitButton variant="ghost" size="sm">
               Log out
-            </Button>
+            </SubmitButton>
           </form>
         </div>
       </header>

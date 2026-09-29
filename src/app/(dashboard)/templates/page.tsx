@@ -3,7 +3,7 @@ import { ArrowLeft, FilePlus2 } from "lucide-react";
 import { listTemplates } from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createFormAction, createFormFromTemplateAction } from "../actions";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import {
   Card,
   CardContent,
@@ -35,10 +35,9 @@ export default async function TemplatesPage() {
           </p>
         </div>
         <form action={createFormAction}>
-          <Button type="submit" variant="outline">
-            <FilePlus2 />
+          <SubmitButton variant="outline" icon={<FilePlus2 />} pendingLabel="Creating…">
             Start from scratch
-          </Button>
+          </SubmitButton>
         </form>
       </div>
 
@@ -61,9 +60,13 @@ export default async function TemplatesPage() {
                       action={createFormFromTemplateAction.bind(null, template.id)}
                       className="w-full"
                     >
-                      <Button type="submit" className="w-full" variant="secondary">
+                      <SubmitButton
+                        className="w-full"
+                        variant="secondary"
+                        pendingLabel="Creating form…"
+                      >
                         Use this template
-                      </Button>
+                      </SubmitButton>
                     </form>
                   </CardFooter>
                 </Card>

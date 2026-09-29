@@ -4,6 +4,7 @@ import { listFormsForWorkspace } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createFormAction } from "../actions";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FormCard } from "@/components/dashboard/form-card";
 
@@ -34,10 +35,9 @@ export default async function DashboardPage() {
               </Link>
             </Button>
             <form action={createFormAction}>
-              <Button type="submit">
-                <FilePlus2 />
+              <SubmitButton icon={<FilePlus2 />} pendingLabel="Creating…">
                 New form
-              </Button>
+              </SubmitButton>
             </form>
           </div>
         )}
@@ -53,7 +53,7 @@ export default async function DashboardPage() {
             </p>
             <div className="mt-2 flex items-center gap-2">
               <form action={createFormAction}>
-                <Button type="submit">Start from scratch</Button>
+                <SubmitButton pendingLabel="Creating…">Start from scratch</SubmitButton>
               </form>
               <Button asChild variant="outline">
                 <Link href="/templates">Browse templates</Link>
