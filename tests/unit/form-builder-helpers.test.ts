@@ -7,6 +7,7 @@ import {
   duplicateQuestion,
   moveQuestion,
   reorderQuestions,
+  canDeleteQuestion,
 } from "@/domains/forms/builder";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 
@@ -125,5 +126,49 @@ describe("reorderQuestions", () => {
   it("is a no-op for out-of-range indices", () => {
     const questions = threeQuestions();
     expect(reorderQuestions(questions, 0, 99)).toBe(questions);
+  });
+});
+
+describe("welcome screen pinning", () => {
+  function withWelcome(): QuestionV1[] {
+    return insertQuestion(threeQuestions(), createQuestion("welcome_screen", 0), 0);
+  }
+
+  it("always inserts a welcome screen first, and at most once", () => {
+    const questions = insertQuestion(
+      threeQuestions(),
+      createQuestion("welcome_screen", 0),
+      2,
+    );
+    expect(questions[0].type).toBe("welcome_screen");
+    expect(questions.map((q) => q.order)).toEqual([0, 1, 2, 3]);
+    expect(insertQuestion(questions, createQuestion("welcome_screen", 0), 0)).toBe(
+      questions,
+    );
+  });
+
+  it("never places a regular question above the welcome screen", () => {
+    const result = insertQuestion(withWelcome(), createQuestion("date", 0), 0);
+    expect(result[0].type).toBe("welcome_screen");
+    expect(result[1].type).toBe("date");
+  });
+
+  it("can't move the welcome screen, or move anything above it", () => {
+    const questions = withWelcome();
+    expect(moveQuestion(questions, questions[0].id, "down")).toBe(questions);
+    expect(moveQuestion(questions, questions[1].id, "up")).toBe(questions);
+    expect(reorderQuestions(questions, 2, 0)).toBe(questions);
+    expect(reorderQuestions(questions, 0, 2)).toBe(questions);
+  });
+
+  it("doesn't duplicate the welcome screen", () => {
+    const questions = withWelcome();
+    expect(duplicateQuestion(questions, questions[0].id)).toBe(questions);
+  });
+
+  it("allows deleting anything except the last remaining question", () => {
+    const questions = withWelcome();
+    expect(canDeleteQuestion(questions, questions[0].id)).toBe(true);
+    expect(canDeleteQuestion([questions[1]], questions[1].id)).toBe(false);
   });
 });

@@ -47,12 +47,26 @@ export async function buildResponseRowForSheet(
 
   const endingTitle = schema?.endings.find((e) => e.id === endingId)?.title ?? "";
 
+  // File answers store an upload id; show the respondent's file name.
+  const uploadNames = new Map<string, string>();
+  if (referenceQuestions.some((q) => q.type === "file_upload")) {
+    const { data: uploads } = await supabase
+      .from("uploads")
+      .select("id, original_filename")
+      .eq("response_id", responseId);
+    for (const upload of uploads ?? []) {
+      uploadNames.set(upload.id, upload.original_filename);
+    }
+  }
+
   return {
     header: ["Submitted at", "Ending", ...referenceQuestions.map(questionColumnLabel)],
     values: [
       response?.completed_at ?? new Date().toISOString(),
       endingTitle,
-      ...referenceQuestions.map((q) => formatAnswerValue(q, answers[q.id])),
+      ...referenceQuestions.map((q) =>
+        formatAnswerValue(q, answers[q.id], { uploadNames }),
+      ),
     ],
   };
 }

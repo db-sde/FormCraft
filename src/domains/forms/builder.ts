@@ -95,14 +95,37 @@ function reindex(questions: QuestionV1[]): QuestionV1[] {
   return questions.map((q, i) => ({ ...q, order: i }));
 }
 
+/** A welcome screen is only meaningful as the very first step, so it
+ * is pinned there: it can't be moved or duplicated, and nothing can be
+ * placed above it. */
+export function isWelcomeScreen(question: QuestionV1 | undefined): boolean {
+  return question?.type === "welcome_screen";
+}
+
+/** Lowest index a regular question may occupy. */
+function firstMovableIndex(questions: QuestionV1[]): number {
+  return isWelcomeScreen(questions[0]) ? 1 : 0;
+}
+
 export function insertQuestion(
   questions: QuestionV1[],
   question: QuestionV1,
   atIndex: number,
 ): QuestionV1[] {
+  if (isWelcomeScreen(question)) {
+    // At most one, always first.
+    if (questions.some(isWelcomeScreen)) return questions;
+    return reindex([question, ...questions]);
+  }
   const next = [...questions];
-  next.splice(atIndex, 0, question);
+  next.splice(Math.max(atIndex, firstMovableIndex(questions)), 0, question);
   return reindex(next);
+}
+
+/** Whether `id` may be deleted — a form always keeps at least one
+ * question (the schema requires it). */
+export function canDeleteQuestion(questions: QuestionV1[], id: string): boolean {
+  return questions.length > 1 && questions.some((q) => q.id === id);
 }
 
 export function removeQuestion(questions: QuestionV1[], id: string): QuestionV1[] {
@@ -111,7 +134,7 @@ export function removeQuestion(questions: QuestionV1[], id: string): QuestionV1[
 
 export function duplicateQuestion(questions: QuestionV1[], id: string): QuestionV1[] {
   const index = questions.findIndex((q) => q.id === id);
-  if (index === -1) return questions;
+  if (index === -1 || isWelcomeScreen(questions[index])) return questions;
   const copy: QuestionV1 = {
     ...questions[index],
     id: newId("q"),
@@ -128,7 +151,10 @@ export function moveQuestion(
   const index = questions.findIndex((q) => q.id === id);
   if (index === -1) return questions;
   const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (targetIndex < 0 || targetIndex >= questions.length) return questions;
+  const min = firstMovableIndex(questions);
+  if (index < min || targetIndex < min || targetIndex >= questions.length) {
+    return questions;
+  }
 
   const next = [...questions];
   [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
@@ -140,10 +166,11 @@ export function reorderQuestions(
   fromIndex: number,
   toIndex: number,
 ): QuestionV1[] {
+  const min = firstMovableIndex(questions);
   if (
     fromIndex === toIndex ||
-    fromIndex < 0 ||
-    toIndex < 0 ||
+    fromIndex < min ||
+    toIndex < min ||
     fromIndex >= questions.length ||
     toIndex >= questions.length
   ) {

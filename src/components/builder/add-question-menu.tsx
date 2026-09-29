@@ -11,7 +11,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function AddQuestionMenu({ onAdd }: { onAdd: (type: QuestionType) => void }) {
+export function AddQuestionMenu({
+  onAdd,
+  canAddWelcome,
+}: {
+  onAdd: (type: QuestionType) => void;
+  /** Offer "Welcome screen" (added at the top) when the form has none. */
+  canAddWelcome: boolean;
+}) {
+  const types: QuestionType[] = canAddWelcome
+    ? ["welcome_screen", ...ADDABLE_QUESTION_TYPES]
+    : ADDABLE_QUESTION_TYPES;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -20,7 +30,7 @@ export function AddQuestionMenu({ onAdd }: { onAdd: (type: QuestionType) => void
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        {ADDABLE_QUESTION_TYPES.map((type) => {
+        {types.map((type) => {
           const meta = QUESTION_TYPE_META[type];
           const Icon = meta.icon;
           return (

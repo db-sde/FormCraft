@@ -27,6 +27,7 @@ import {
   createQuestion,
   insertQuestion,
   removeQuestion,
+  canDeleteQuestion,
   duplicateQuestion as duplicateQuestionAt,
   moveQuestion as moveQuestionAt,
   createEnding,
@@ -256,7 +257,7 @@ export function FormBuilder({
 
   function requestDeleteQuestion(id: string) {
     const question = schema.questions.find((q) => q.id === id);
-    if (!question) return;
+    if (!question || !canDeleteQuestion(schema.questions, id)) return;
     const affectedRules = rulesReferencingQuestion(schema.logic, id);
     if (affectedRules.length > 0) {
       setPendingDelete({ kind: "question", id, label: question.label, affectedRules });
@@ -322,6 +323,7 @@ export function FormBuilder({
   function handleDuplicate(id: string) {
     setSchema((s) => {
       const questions = duplicateQuestionAt(s.questions, id);
+      if (questions === s.questions) return s; // e.g. the pinned welcome screen
       const original = s.questions.findIndex((q) => q.id === id);
       const copy = questions[original + 1];
       if (copy) setSelection({ kind: "question", id: copy.id });
@@ -595,7 +597,10 @@ export function FormBuilder({
               onDelete={requestDeleteQuestion}
             />
           </div>
-          <AddQuestionMenu onAdd={handleAdd} />
+          <AddQuestionMenu
+            onAdd={handleAdd}
+            canAddWelcome={!schema.questions.some((q) => q.type === "welcome_screen")}
+          />
 
           <Separator />
 

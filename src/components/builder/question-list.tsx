@@ -21,12 +21,16 @@ export function QuestionList({
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const hasWelcome = questions[0]?.type === "welcome_screen";
+
   return (
     <ol className="flex flex-col gap-1" aria-label="Questions">
       {questions.map((question, index) => {
         const meta = QUESTION_TYPE_META[question.type];
         const Icon = meta.icon;
         const selected = question.id === selectedId;
+        // The welcome screen is pinned first — see isWelcomeScreen.
+        const pinned = question.type === "welcome_screen";
 
         return (
           <li key={question.id}>
@@ -55,39 +59,43 @@ export function QuestionList({
                   display:none, so keyboard users can Tab to these
                   without needing to hover first. */}
               <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-within:opacity-100">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  disabled={index === 0}
-                  aria-label={`Move "${question.label}" up`}
-                  onClick={() => onMove(question.id, "up")}
-                >
-                  <ChevronUp className="size-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  disabled={index === questions.length - 1}
-                  aria-label={`Move "${question.label}" down`}
-                  onClick={() => onMove(question.id, "down")}
-                >
-                  <ChevronDown className="size-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  aria-label={`Duplicate "${question.label}"`}
-                  onClick={() => onDuplicate(question.id)}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
-                {question.type !== "welcome_screen" && (
+                {!pinned && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      disabled={index === 0 || (index === 1 && hasWelcome)}
+                      aria-label={`Move "${question.label}" up`}
+                      onClick={() => onMove(question.id, "up")}
+                    >
+                      <ChevronUp className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      disabled={index === questions.length - 1}
+                      aria-label={`Move "${question.label}" down`}
+                      onClick={() => onMove(question.id, "down")}
+                    >
+                      <ChevronDown className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      aria-label={`Duplicate "${question.label}"`}
+                      onClick={() => onDuplicate(question.id)}
+                    >
+                      <Copy className="size-3.5" />
+                    </Button>
+                  </>
+                )}
+                {questions.length > 1 && (
                   <Button
                     type="button"
                     variant="ghost"
