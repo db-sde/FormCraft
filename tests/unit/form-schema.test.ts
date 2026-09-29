@@ -155,6 +155,31 @@ describe("compileFormSchema", () => {
   });
 });
 
+describe("creator-supplied URLs", () => {
+  it("rejects non-web schemes for ending redirects and theme images", () => {
+    for (const url of [
+      "javascript:alert(1)",
+      "data:text/html,hi",
+      "ftp://example.com/x",
+    ]) {
+      const withRedirect = baseSchema();
+      withRedirect.endings[0].redirectUrl = url;
+      expect(() => parseFormSchema(withRedirect), url).toThrow(FormSchemaError);
+
+      const withLogo = baseSchema();
+      withLogo.theme = { logoUrl: url };
+      expect(() => parseFormSchema(withLogo), url).toThrow(FormSchemaError);
+    }
+  });
+
+  it("accepts http(s) URLs", () => {
+    const schema = baseSchema();
+    schema.endings[0].redirectUrl = "https://example.com/thanks?x=1";
+    schema.theme = { backgroundImageUrl: "http://example.com/bg.png" };
+    expect(() => parseFormSchema(schema)).not.toThrow();
+  });
+});
+
 describe("describeSchemaProblem", () => {
   it("returns null for a valid schema", () => {
     expect(describeSchemaProblem(baseSchema())).toBeNull();

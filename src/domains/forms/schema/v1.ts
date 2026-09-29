@@ -27,6 +27,15 @@ const safeText = (max: number) =>
 
 const optionalSafeText = (max: number) => safeText(max).optional();
 
+// Creator-supplied links rendered to respondents (ending redirect, logo,
+// background image). z.url() alone accepts any scheme — including
+// javascript: and data: — so restrict to plain web URLs.
+const webUrl = z
+  .string()
+  .max(2000)
+  .url()
+  .refine((v) => /^https?:\/\//i.test(v), "must start with http:// or https://");
+
 export const OptionV1 = z.object({
   id: stableId,
   label: safeText(500),
@@ -202,7 +211,7 @@ export const EndingV1 = z.object({
   title: safeText(200),
   description: optionalSafeText(2000),
   buttonLabel: optionalSafeText(100),
-  redirectUrl: z.string().url().max(2000).optional(),
+  redirectUrl: webUrl.optional(),
   isDefault: z.boolean().default(false),
 });
 export type EndingV1 = z.infer<typeof EndingV1>;
@@ -224,8 +233,8 @@ export const ThemeV1 = z.object({
     .optional(),
   fontFamily: z.enum(["inter", "system", "georgia", "mono"]).default("inter"),
   buttonStyle: z.enum(["rounded", "square", "pill"]).default("rounded"),
-  logoUrl: z.string().url().max(2000).optional(),
-  backgroundImageUrl: z.string().url().max(2000).optional(),
+  logoUrl: webUrl.optional(),
+  backgroundImageUrl: webUrl.optional(),
   preset: z.string().max(50).optional(),
 });
 export type ThemeV1 = z.infer<typeof ThemeV1>;
