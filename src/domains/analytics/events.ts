@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import type { AnalyticsEventLite } from "./completion-rate";
+import type { AnalyticsEventLite, FunnelSummary } from "./completion-rate";
 
 type Client = SupabaseClient<Database>;
 
@@ -45,7 +45,43 @@ export async function recordAnalyticsEvent(
   if (error) throw error;
 }
 
-/** Read path for the dashboard's funnel/completion-rate widgets. */
+/**
+ * Read path for the dashboard's funnel/completion-rate widgets. Counts
+ * in the database rather than fetching rows: PostgREST caps a select at
+ * max_rows (1000), so counting fetched rows silently undercounted any
+ * form past a thousand events. Preview traffic is excluded at the
+ * source, same as computeFunnelSummary.
+ */
+export async function getFunnelSummaryForForm(
+  supabase: Client,
+  formId: string,
+): Promise<FunnelSummary> {
+  const count = async (eventType: AnalyticsEventType) => {
+    const { count, error } = await supabase
+      .from("analytics_events")
+      .select("id", { count: "exact", head: true })
+      .eq("form_id", formId)
+      .eq("event_type", eventType)
+      .eq("is_preview", false);
+    if (error) throw error;
+    return count ?? 0;
+  };
+
+  const [views, starts, completions] = await Promise.all([
+    count("form_viewed"),
+    count("form_started"),
+    count("form_submitted"),
+  ]);
+  return {
+    views,
+    starts,
+    completions,
+    completionRate: starts === 0 ? null : (completions / starts) * 100,
+  };
+}
+
+/** Raw event rows — for tests and debugging; the dashboard uses
+ * getFunnelSummaryForForm, which isn't subject to the row cap. */
 export async function listAnalyticsEventsForForm(
   supabase: Client,
   formId: string,

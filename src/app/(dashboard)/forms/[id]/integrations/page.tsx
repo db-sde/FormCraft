@@ -9,6 +9,7 @@ import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { WebhooksPanel } from "@/components/integrations/webhooks-panel";
 import { SheetsPanel } from "@/components/integrations/sheets-panel";
 import { FormTabs } from "@/components/forms/form-tabs";
+import { FormPageHeading } from "@/components/forms/form-page-heading";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Outcomes the Google OAuth routes redirect back here with.
@@ -54,9 +55,7 @@ export default async function IntegrationsPage({
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
-          {form.title}
-        </h1>
+        <FormPageHeading title={form.title} />
         <FormTabs formId={formId} active="integrations" />
       </div>
 

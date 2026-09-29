@@ -12,6 +12,10 @@ import {
 type Client = SupabaseClient<Database>;
 
 const PAGE_SIZE = 25;
+/** Rows per request — must not exceed PostgREST's max_rows (1000). */
+const FETCH_PAGE = 1000;
+/** Response ids per `.in()` filter, keeping request URLs short. */
+const ID_BATCH = 100;
 
 export type ResponseListItem = {
   id: string;
@@ -358,35 +362,77 @@ export async function buildResponsesCsv(
       )
     : [];
 
-  const { data: responses, error: responsesError } = await supabase
-    .from("responses")
-    .select("id, completed_at, ending_id, form_version_id")
-    .eq("form_id", formId)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: true })
-    .limit(MAX_SYNCHRONOUS_EXPORT_ROWS + 1);
-  if (responsesError) throw responsesError;
-
-  if ((responses ?? []).length > MAX_SYNCHRONOUS_EXPORT_ROWS) {
-    throw new ExportTooLargeError(responses!.length);
+  // PostgREST caps every request at max_rows (1000 by default, locally
+  // and on hosted Supabase), so a single select would silently truncate
+  // larger exports — page explicitly instead.
+  const responses: {
+    id: string;
+    completed_at: string | null;
+    ending_id: string | null;
+    form_version_id: string;
+  }[] = [];
+  for (let from = 0; ; from += FETCH_PAGE) {
+    const { data, error } = await supabase
+      .from("responses")
+      .select("id, completed_at, ending_id, form_version_id")
+      .eq("form_id", formId)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + FETCH_PAGE - 1);
+    if (error) throw error;
+    responses.push(...data);
+    if (responses.length > MAX_SYNCHRONOUS_EXPORT_ROWS) {
+      throw new ExportTooLargeError(responses.length);
+    }
+    if (data.length < FETCH_PAGE) break;
   }
 
   const schemaCache = new Map<string, FormSchemaV1>();
-  const rows: Record<string, unknown>[] = [];
+  const answersByResponse = new Map<string, Map<string, unknown>>();
+  const uploadNames = new Map<string, string>();
 
-  for (const response of responses ?? []) {
+  // Batched by response id (not one query per response), and each batch
+  // is itself paged since a batch can hold more than max_rows answers.
+  for (let i = 0; i < responses.length; i += ID_BATCH) {
+    const ids = responses.slice(i, i + ID_BATCH).map((r) => r.id);
+    for (let from = 0; ; from += FETCH_PAGE) {
+      const { data, error } = await supabase
+        .from("answers")
+        .select("response_id, question_id, value")
+        .in("response_id", ids)
+        .order("response_id")
+        .order("question_id")
+        .range(from, from + FETCH_PAGE - 1);
+      if (error) throw error;
+      for (const answer of data) {
+        let byQuestion = answersByResponse.get(answer.response_id);
+        if (!byQuestion) {
+          byQuestion = new Map();
+          answersByResponse.set(answer.response_id, byQuestion);
+        }
+        byQuestion.set(answer.question_id, answer.value);
+      }
+      if (data.length < FETCH_PAGE) break;
+    }
+
+    const { data: uploads, error: uploadsError } = await supabase
+      .from("uploads")
+      .select("id, original_filename")
+      .in("response_id", ids)
+      .limit(FETCH_PAGE);
+    if (uploadsError) throw uploadsError;
+    for (const upload of uploads) uploadNames.set(upload.id, upload.original_filename);
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  for (const response of responses) {
     const schema = await getSchemaForVersion(
       supabase,
       response.form_version_id,
       schemaCache,
     );
-    const { data: answerRows } = await supabase
-      .from("answers")
-      .select("question_id, value")
-      .eq("response_id", response.id);
-    const answersByQuestion = new Map(
-      (answerRows ?? []).map((a) => [a.question_id, a.value]),
-    );
+    const answersByQuestion = answersByResponse.get(response.id);
 
     const row: Record<string, unknown> = {
       "Submitted at": response.completed_at,
@@ -398,7 +444,8 @@ export async function buildResponsesCsv(
         schema?.questions.find((q) => q.id === refQuestion.id) ?? refQuestion;
       row[questionColumnLabel(refQuestion)] = formatAnswerValue(
         ownQuestion,
-        answersByQuestion.get(refQuestion.id),
+        answersByQuestion?.get(refQuestion.id),
+        { uploadNames },
       );
     }
 

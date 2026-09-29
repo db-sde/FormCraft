@@ -4,6 +4,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import {
   recordAnalyticsEvent,
   listAnalyticsEventsForForm,
+  getFunnelSummaryForForm,
   computeFunnelSummary,
 } from "@/domains/analytics";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
@@ -140,6 +141,9 @@ describe("analytics events (integration)", () => {
     expect(funnel.starts).toBe(1);
     expect(funnel.completions).toBe(1);
     expect(funnel.completionRate).toBe(100);
+
+    // The dashboard's DB-counted path must agree with the pure one.
+    expect(await getFunnelSummaryForForm(supabase, formId)).toEqual(funnel);
   });
 
   it("excludes preview-tagged events from the funnel even though they're still recorded", async () => {
@@ -159,5 +163,6 @@ describe("analytics events (integration)", () => {
     const funnelBefore = computeFunnelSummary(events.filter((e) => !e.isPreview));
     const funnelIncludingPreview = computeFunnelSummary(events);
     expect(funnelIncludingPreview).toEqual(funnelBefore);
+    expect(await getFunnelSummaryForForm(supabase, formId)).toEqual(funnelBefore);
   });
 });

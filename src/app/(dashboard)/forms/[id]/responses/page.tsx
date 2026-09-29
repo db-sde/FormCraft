@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { Download, Inbox } from "lucide-react";
 import { listResponses, getResponseCounts } from "@/domains/responses";
 import { getPublishInfo } from "@/domains/forms";
-import { listAnalyticsEventsForForm, computeFunnelSummary } from "@/domains/analytics";
+import { getFunnelSummaryForForm } from "@/domains/analytics";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { FormTabs } from "@/components/forms/form-tabs";
+import { FormPageHeading } from "@/components/forms/form-page-heading";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,21 +64,18 @@ export default async function ResponsesPage({
   if (!form) notFound();
 
   const page = Math.max(1, Number(pageParam) || 1);
-  const [responses, counts, analyticsEvents, publishInfo] = await Promise.all([
+  const [responses, counts, funnel, publishInfo] = await Promise.all([
     listResponses(supabase, formId, { page }),
     getResponseCounts(supabase, formId),
-    listAnalyticsEventsForForm(supabase, formId),
+    getFunnelSummaryForForm(supabase, formId),
     getPublishInfo(supabase, formId),
   ]);
-  const funnel = computeFunnelSummary(analyticsEvents);
   const inProgress = counts.partial + counts.inProgress;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
-          {form.title}
-        </h1>
+        <FormPageHeading title={form.title} />
         <FormTabs formId={formId} active="responses" />
       </div>
 

@@ -10,7 +10,14 @@ import type { QuestionV1 } from "@/domains/forms/schema/v1";
  * places (CSV export's "stable multi-choice representation"
  * requirement).
  */
-export function formatAnswerValue(question: QuestionV1, value: unknown): string {
+export function formatAnswerValue(
+  question: QuestionV1,
+  value: unknown,
+  context: {
+    /** Upload id → the respondent's original file name. */
+    uploadNames?: ReadonlyMap<string, string>;
+  } = {},
+): string {
   if (value === undefined || value === null) return "";
 
   switch (question.type) {
@@ -46,7 +53,8 @@ export function formatAnswerValue(question: QuestionV1, value: unknown): string 
         : question.settings.noLabel || "No";
 
     case "file_upload":
-      return typeof value === "string" ? `[uploaded file: ${value}]` : "";
+      if (typeof value !== "string") return "";
+      return context.uploadNames?.get(value) ?? "Uploaded file";
 
     case "number":
     case "rating":
