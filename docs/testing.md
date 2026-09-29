@@ -69,6 +69,13 @@ writing:
     covered
 14. Template → independent editable copy, original template untouched
     — **done** (`templates.spec.ts`)
+15. Forgot password → emailed link → set new password → log in with it
+    — **done** (`password-reset.spec.ts`, following the real link from
+    local Supabase's mail catcher; also covers the invalid-link notice)
+
+CSV export past PostgREST's 1000-row cap is covered at the
+integration level (`tests/integration/csv-export.test.ts`) rather than
+E2E, since it needs 1000+ seeded responses.
 
 `tests/e2e/helpers.ts` creates real, already-confirmed users via the
 GoTrue admin API (never a hand-crafted `auth.users` row — see its own
