@@ -11,6 +11,7 @@ import {
 import { checkRateLimit } from "@/domains/abuse";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getClientIpFromHeaders } from "@/lib/http/client-ip";
+import { safeNextPath } from "@/lib/http/safe-next-path";
 
 export type ActionResult = {
   error?: string;
@@ -36,14 +37,6 @@ function echo(formData: FormData, keys: string[]): Record<string, string> {
 /** Where to go after login. Only same-site relative paths are allowed —
  * never "//evil.com" or an absolute URL, or `?next=` becomes an open
  * redirect for phishing. */
-function safeNextPath(raw: FormDataEntryValue | null): string {
-  if (typeof raw !== "string") return "/dashboard";
-  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) {
-    return "/dashboard";
-  }
-  return raw;
-}
-
 function firstFieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
   const out: Record<string, string> = {};
   for (const issue of issues) {
@@ -80,7 +73,7 @@ export async function signUpAction(
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.fullName },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/login`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/dashboard`,
     },
   });
 
@@ -153,7 +146,7 @@ export async function requestPasswordResetAction(
   // Intentionally ignore the result shape beyond errors: never reveal
   // whether an email is registered (avoid account enumeration).
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/reset-password`,
   });
 
   redirect("/forgot-password/check-email");

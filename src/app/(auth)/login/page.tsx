@@ -24,6 +24,23 @@ function NextField() {
   return next ? <input type="hidden" name="next" value={next} /> : null;
 }
 
+const NOTICES: Record<string, string> = {
+  confirm_failed:
+    "We couldn't sign you in from that link — if you just confirmed your email, log in below.",
+  link_invalid:
+    "That password reset link has expired or was already used. Request a new one below.",
+};
+
+/** Explains where an emailed auth link left the user (see /auth/confirm). */
+function LinkNotice() {
+  const notice = NOTICES[useSearchParams().get("notice") ?? ""];
+  return notice ? (
+    <p role="status" className="bg-muted text-foreground rounded-md px-3 py-2 text-sm">
+      {notice}
+    </p>
+  ) : null;
+}
+
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(logInAction, initialState);
 
@@ -36,6 +53,7 @@ export default function LoginPage() {
       <CardContent>
         <form action={formAction} className="space-y-4">
           <Suspense>
+            <LinkNotice />
             <NextField />
           </Suspense>
           <div className="space-y-2">

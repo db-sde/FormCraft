@@ -13,7 +13,11 @@ const PROTECTED_PREFIXES = ["/dashboard", "/forms"];
 // real bug caught by an E2E test, not a hypothetical). A prefix match
 // here would swallow those sub-paths into the redirect-away-from-auth
 // rule below, which is meant only for the entry forms themselves.
-const AUTH_PAGES = ["/login", "/signup", "/forgot-password", "/reset-password"];
+//
+// /reset-password is deliberately absent: the recovery link signs the
+// user in first (see /auth/confirm), so redirecting signed-in users
+// away from it would make resetting a password impossible.
+const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
 
 /** Refreshes the Supabase session cookie on every request and redirects
  * unauthenticated users away from protected routes. This is a UX
