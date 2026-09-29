@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
-import { walkForm, isAnswered, type AnswerMap } from "@/domains/logic";
+import { walkForm, validateAnswer, hasAnswer, type AnswerMap } from "@/domains/logic";
 import type { ResponseStatus } from "./state-machine";
 
 type Client = SupabaseClient<Database>;
@@ -178,7 +178,13 @@ export async function saveResponseAnswers(
 
 export type CompleteResult =
   | { ok: true; endingId: string; formId: string; alreadyCompleted: boolean }
-  | { ok: false; code: "missing_required"; missingQuestionIds: string[] };
+  | {
+      ok: false;
+      code: "missing_required" | "invalid_answer";
+      /** Every question that failed, required or otherwise — in form order. */
+      missingQuestionIds: string[];
+      errors: { questionId: string; message: string }[];
+    };
 
 /**
  * Final submission. Idempotent: if the response is already completed
@@ -231,14 +237,25 @@ export async function completeResponse(
 
   const walk = walkForm(compiled, knownAnswers);
   const reached = new Set(walk.visitedQuestionIds);
-  const missing = compiled.schema.questions.filter(
-    (q) => q.required && reached.has(q.id) && !isAnswered(knownAnswers[q.id]),
-  );
-  if (missing.length > 0) {
+  // Only questions on the path actually taken are validated: an answer
+  // left behind on a branch the respondent later logic-jumped away
+  // from is irrelevant to this submission.
+  const errors = compiled.schema.questions
+    .filter((q) => reached.has(q.id))
+    .flatMap((q) => {
+      const result = validateAnswer(q, knownAnswers[q.id]);
+      return result.ok ? [] : [{ questionId: q.id, message: result.message }];
+    });
+  if (errors.length > 0) {
+    const onlyMissing = errors.every((e) => {
+      const q = compiled.schema.questions.find((x) => x.id === e.questionId);
+      return q !== undefined && !hasAnswer(q, knownAnswers[q.id]);
+    });
     return {
       ok: false,
-      code: "missing_required",
-      missingQuestionIds: missing.map((q) => q.id),
+      code: onlyMissing ? "missing_required" : "invalid_answer",
+      missingQuestionIds: errors.map((e) => e.questionId),
+      errors,
     };
   }
 

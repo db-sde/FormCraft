@@ -69,9 +69,11 @@ export async function listFormsForWorkspace(
 ): Promise<FormListItem[]> {
   const { data, error } = await supabase
     .from("forms")
-    .select("id, title, slug, updated_at, form_versions(status)")
+    .select("id, title, slug, updated_at, form_versions(status), responses(count)")
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
+    // Filters the embedded rows being counted, not the forms themselves.
+    .eq("responses.status", "completed")
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -82,9 +84,7 @@ export async function listFormsForWorkspace(
     slug: form.slug,
     updatedAt: form.updated_at,
     hasPublishedVersion: (form.form_versions ?? []).some((v) => v.status === "published"),
-    // Response counts are fetched separately once the response
-    // dashboard is built, to keep this query cheap for the list view.
-    responseCount: 0,
+    responseCount: form.responses?.[0]?.count ?? 0,
   }));
 }
 

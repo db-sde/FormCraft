@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { AnswerMap } from "@/domains/logic";
-import { FormRuntime } from "@/components/runtime/form-runtime";
+import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
+import { Button } from "@/components/ui/button";
 
 type StoredResponse = {
   responseId: string;
@@ -45,6 +47,26 @@ function clearStored(formId: string) {
   }
 }
 
+async function startSession(formId: string, firstQuestionId: string) {
+  const res = await fetch("/api/responses/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ formId }),
+  });
+  if (!res.ok) throw new Error(`start failed: ${res.status}`);
+  const data = (await res.json()) as { responseId: string };
+  const fresh: StoredResponse = {
+    responseId: data.responseId,
+    idempotencyKey: crypto.randomUUID(),
+    revision: 0,
+    answers: {},
+    lastQuestionId: firstQuestionId,
+    history: [],
+  };
+  writeStored(formId, fresh);
+  return fresh;
+}
+
 const AUTOSAVE_DEBOUNCE_MS = 600;
 
 /**
@@ -70,66 +92,50 @@ export function PublicFormRuntime({
   compiled: CompiledFormV1;
 }) {
   const [session, setSession] = useState<StoredResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const sessionRef = useRef<StoredResponse | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Guards against calling /start twice for the same mount — React 18
-  // Strict Mode runs effects twice in dev, and without this a fresh
-  // (no-localStorage-yet) load would create two response rows for one
-  // page view. Persists across the double-invocation because refs
-  // survive StrictMode's mount→cleanup→remount of the same instance.
-  const startInFlightRef = useRef(false);
+  // One /start request per attempt, shared by every effect run. React
+  // Strict Mode mounts → cleans up → remounts in dev: the first run's
+  // result must still reach whichever run is current, or the page
+  // stays blank forever (a real bug: an earlier "skip if in flight"
+  // guard dropped the result on the floor). Refs survive that remount.
+  const startPromiseRef = useRef<Promise<StoredResponse> | null>(null);
+
+  const theme = compiled.schema.theme;
+  const firstQuestionId = compiled.orderedQuestionIds[0] ?? "";
 
   useEffect(() => {
     let cancelled = false;
 
-    async function init() {
+    if (!startPromiseRef.current) {
       const existing = readStored(formId);
-      if (existing) {
-        if (!cancelled) {
-          sessionRef.current = existing;
-          setSession(existing);
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (startInFlightRef.current) return;
-      startInFlightRef.current = true;
-
-      try {
-        const res = await fetch("/api/responses/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ formId }),
-        });
-        if (!res.ok) throw new Error("failed to start response");
-        const data = (await res.json()) as { responseId: string };
-
-        const fresh: StoredResponse = {
-          responseId: data.responseId,
-          idempotencyKey: crypto.randomUUID(),
-          revision: 0,
-          answers: {},
-          lastQuestionId: compiled.orderedQuestionIds[0] ?? "",
-          history: [],
-        };
-        writeStored(formId, fresh);
-        if (!cancelled) {
-          sessionRef.current = fresh;
-          setSession(fresh);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      startPromiseRef.current = existing
+        ? Promise.resolve(existing)
+        : startSession(formId, firstQuestionId);
     }
+    startPromiseRef.current.then(
+      (fresh) => {
+        if (cancelled) return;
+        sessionRef.current = fresh;
+        setSession(fresh);
+      },
+      () => {
+        if (!cancelled) setLoadFailed(true);
+      },
+    );
 
-    void init();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formId]);
+  }, [formId, firstQuestionId, attempt]);
+
+  function retryStart() {
+    startPromiseRef.current = null;
+    setLoadFailed(false);
+    setAttempt((a) => a + 1);
+  }
 
   function handleAnswerChange(answers: AnswerMap, currentQuestionId: string) {
     const current = sessionRef.current;
@@ -170,7 +176,8 @@ export function PublicFormRuntime({
       }
       if (!res.ok) return;
 
-      const updated = { ...toSave, revision: nextRevision };
+      const latest = sessionRef.current ?? toSave;
+      const updated = { ...latest, revision: nextRevision };
       sessionRef.current = updated;
       writeStored(formId, updated);
     } catch {
@@ -179,30 +186,90 @@ export function PublicFormRuntime({
     }
   }
 
-  async function handleComplete(_endingId: string, answers: AnswerMap) {
+  async function handleComplete(answers: AnswerMap): Promise<CompleteOutcome> {
     const current = sessionRef.current;
-    if (!current) return;
-
+    if (!current) {
+      return { ok: false, message: "Your session expired. Please refresh the page." };
+    }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
     try {
-      await fetch(`/api/responses/${current.responseId}/complete`, {
+      const res = await fetch(`/api/responses/${current.responseId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientRevision: current.revision + 1,
           lastQuestionId: current.lastQuestionId,
           answers,
+          // Same key on every retry: a submit whose response was lost
+          // in transit is recognised server-side, never duplicated.
           idempotencyKey: current.idempotencyKey,
         }),
       });
-    } finally {
-      clearStored(formId);
+
+      if (res.ok) {
+        const data = (await res.json()) as { endingId: string };
+        // Only now is the response durably complete — clearing earlier
+        // would lose the respondent's answers if the submit failed.
+        clearStored(formId);
+        return { ok: true, endingId: data.endingId };
+      }
+
+      const body = (await res.json().catch(() => null)) as {
+        error?: { message?: string; errors?: { questionId: string; message: string }[] };
+      } | null;
+      if (res.status === 429) {
+        return {
+          ok: false,
+          message: "Too many attempts. Please wait a moment and try again.",
+        };
+      }
+      return {
+        ok: false,
+        message:
+          body?.error?.message ?? "We couldn't submit your answers. Please try again.",
+        errors: body?.error?.errors,
+      };
+    } catch {
+      return {
+        ok: false,
+        message: "Couldn't reach the server — check your connection and try again.",
+      };
     }
   }
 
-  if (loading || !session) {
-    return <div className="min-h-[420px]" />;
+  const shellStyle: React.CSSProperties = {
+    backgroundColor: theme.backgroundColor,
+    color: theme.textColor ?? undefined,
+  };
+
+  if (loadFailed) {
+    return (
+      <div
+        className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        style={shellStyle}
+      >
+        <p className="text-lg font-medium">This form couldn&apos;t be loaded.</p>
+        <p className="max-w-sm text-sm opacity-70">
+          It may have just been unpublished, or your connection dropped.
+        </p>
+        <Button type="button" variant="outline" onClick={retryStart}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div
+        className="flex min-h-dvh items-center justify-center"
+        style={shellStyle}
+        aria-busy="true"
+      >
+        <Loader2 className="size-6 animate-spin opacity-50" aria-label="Loading form" />
+      </div>
+    );
   }
 
   return (
@@ -214,6 +281,7 @@ export function PublicFormRuntime({
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}
       responseId={session.responseId}
+      className="min-h-dvh"
     />
   );
 }

@@ -56,8 +56,12 @@ export async function POST(
         {
           error: {
             code: result.code,
-            message: "Please answer all required questions before submitting.",
+            message:
+              result.code === "missing_required"
+                ? "Please answer all required questions before submitting."
+                : "Some answers need fixing before you can submit.",
             missingQuestionIds: result.missingQuestionIds,
+            errors: result.errors,
           },
         },
         { status: 400 },
