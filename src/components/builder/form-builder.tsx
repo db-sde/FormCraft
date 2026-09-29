@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, X, Palette, GitBranch } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  Palette,
+  GitBranch,
+  Link2,
+  ExternalLink,
+  Eye,
+} from "lucide-react";
 import type {
   FormSchemaV1,
   QuestionV1,
@@ -35,6 +44,8 @@ import { ThemeSettingsPanel } from "./theme-settings-panel";
 import { LogicEditor } from "./logic-editor";
 import { PreviewDialog } from "./preview-dialog";
 import { SaveStatus, type SaveState } from "./save-status";
+import { FormTitleInput } from "./form-title-input";
+import { FormTabs } from "@/components/forms/form-tabs";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -77,6 +88,7 @@ export function FormBuilder({
   onSave,
   onPublish,
   onUnpublish,
+  onRename,
 }: {
   formTitle: string;
   workspaceId: string;
@@ -94,6 +106,10 @@ export function FormBuilder({
   ) => Promise<SaveDraftResult>;
   onPublish: (formId: string) => Promise<PublishResult>;
   onUnpublish: (formId: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+  onRename: (
+    formId: string,
+    title: string,
+  ) => Promise<{ ok: true; title: string } | { ok: false; message: string }>;
 }) {
   const [schema, setSchema] = useState(initialSchema);
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
@@ -267,6 +283,18 @@ export function FormBuilder({
 
   const liveUrl = `${appUrl}/f/${slug}`;
 
+  async function copyLiveLink() {
+    // appUrl may be unset in some environments — fall back to the
+    // origin the creator is actually on so the copied link is absolute.
+    const absolute = appUrl ? liveUrl : `${window.location.origin}/f/${slug}`;
+    try {
+      await navigator.clipboard.writeText(absolute);
+      toast.success("Link copied", { description: absolute });
+    } catch {
+      toast.error("Couldn't copy the link", { description: absolute });
+    }
+  }
+
   async function handlePublish() {
     setPublishing(true);
     const result = await onPublish(formId);
@@ -311,48 +339,57 @@ export function FormBuilder({
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
-        <div className="flex min-w-0 shrink items-center gap-3">
+      <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b px-3">
+        <div className="flex min-w-0 items-center gap-1">
           <Button asChild variant="ghost" size="icon" aria-label="Back to dashboard">
             <Link href="/dashboard">
               <ArrowLeft />
             </Link>
           </Button>
-          <span className="truncate font-medium">{formTitle}</span>
+          <FormTitleInput
+            title={formTitle}
+            onRename={(title) => onRename(formId, title)}
+            onTitleChange={(title) =>
+              setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
+            }
+          />
+          <div className="hidden shrink-0 items-center gap-2 lg:flex">
+            <SaveStatus state={saveState} />
+            {saveState === "stale" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.location.reload()}
+              >
+                Reload
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex min-w-0 items-center gap-3 overflow-x-auto [&>*]:shrink-0">
-          <Link
-            href={`/forms/${formId}/integrations`}
-            className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
-          >
-            Integrations
-          </Link>
-          <Link
-            href={`/forms/${formId}/responses`}
-            className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
-          >
-            Responses
-          </Link>
-          <Separator orientation="vertical" className="h-5" />
-          <SaveStatus state={saveState} />
-          {saveState === "stale" && (
-            <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
-              Reload
-            </Button>
-          )}
-          <Separator orientation="vertical" className="h-5" />
+
+        <FormTabs formId={formId} active="build" />
+
+        <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto [&>*]:shrink-0">
           {publishInfo.isPublished && (
             <>
+              <span className="hidden items-center gap-1.5 text-xs font-medium text-emerald-600 xl:flex">
+                <span className="size-1.5 rounded-full bg-emerald-500" /> Live
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => void copyLiveLink()}>
+                <Link2 /> <span className="hidden xl:inline">Copy link</span>
+              </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <a
-                    href={liveUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-muted-foreground text-sm underline"
+                  <Button
+                    asChild
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Open live form"
                   >
-                    View live
-                  </a>
+                    <a href={liveUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink />
+                    </a>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>{liveUrl}</TooltipContent>
               </Tooltip>
@@ -367,7 +404,7 @@ export function FormBuilder({
             </>
           )}
           <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
-            Preview
+            <Eye /> Preview
           </Button>
           <Button size="sm" disabled={publishing} onClick={handlePublish}>
             {publishing

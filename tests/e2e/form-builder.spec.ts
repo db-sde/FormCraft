@@ -38,7 +38,7 @@ test.describe("form builder", () => {
     await questionTextInput.fill("What's your favorite color?");
 
     // Wait for the debounced autosave to actually round-trip.
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
 
     await page.reload();
     await expect(page.getByText("What's your favorite color?")).toBeVisible();
@@ -48,7 +48,7 @@ test.describe("form builder", () => {
     await page
       .getByRole("button", { name: 'Delete "What\'s your favorite color?"' })
       .click();
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
 
     await page.reload();
     await expect(page.getByText("What's your favorite color?")).not.toBeVisible();

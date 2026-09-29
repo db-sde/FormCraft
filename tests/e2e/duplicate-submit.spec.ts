@@ -31,7 +31,7 @@ test.describe("duplicate submit protection", () => {
     const formId = page.url().split("/forms/")[1];
 
     await page.getByRole("button", { name: "Publish" }).click();
-    await expect(page.getByRole("link", { name: "View live" })).toBeVisible({
+    await expect(page.getByRole("link", { name: "Open live form" })).toBeVisible({
       timeout: 10000,
     });
 

@@ -44,6 +44,9 @@ export function QuestionList({
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 aria-current={selected}
               >
+                <span className="text-muted-foreground w-4 shrink-0 text-right text-xs tabular-nums">
+                  {index + 1}
+                </span>
                 <Icon className="text-muted-foreground size-4 shrink-0" />
                 <span className="truncate">{question.label || meta.label}</span>
               </button>

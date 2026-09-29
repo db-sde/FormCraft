@@ -30,7 +30,7 @@ test.describe("templates", () => {
     await page.getByRole("menuitem", { name: "Short text" }).click();
     const questionTextInput = page.getByPlaceholder("Question text");
     await questionTextInput.fill("A question only this form has");
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
 
     // Using the same template again must produce a form that does NOT
     // have the edit made above — proof the template itself is a

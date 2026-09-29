@@ -13,11 +13,11 @@ test.describe("partial response resume", () => {
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
 
     await page.getByRole("button", { name: "Publish" }).click();
-    await expect(page.getByRole("link", { name: "View live" })).toBeVisible({
+    await expect(page.getByRole("link", { name: "Open live form" })).toBeVisible({
       timeout: 10000,
     });
     liveLink = (await page
-      .getByRole("link", { name: "View live" })
+      .getByRole("link", { name: "Open live form" })
       .getAttribute("href"))!;
   });
 

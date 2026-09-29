@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { customAlphabet } from "nanoid";
 import { slugify } from "./validation";
 
 type Client = SupabaseClient<Database>;
+
+const slugSuffix = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 6);
 
 export type WorkspaceSummary = {
   id: string;
@@ -11,7 +14,10 @@ export type WorkspaceSummary = {
   role: "owner" | "editor";
 };
 
-/** Returns the user's workspaces, ordered by most recently created.
+/** Returns the user's workspaces, oldest membership first — so the
+ * first entry (what the app treats as "current") is the user's own
+ * default workspace and stays put, rather than silently switching to
+ * whichever workspace they were most recently added to.
  * Relies on RLS (`is_workspace_member`) to scope results — never pass
  * a userId filter here, the session's own identity is the boundary. */
 export async function listWorkspacesForCurrentUser(
@@ -20,7 +26,7 @@ export async function listWorkspacesForCurrentUser(
   const { data, error } = await supabase
     .from("workspace_members")
     .select("role, workspaces(id, name, slug)")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
 
@@ -40,9 +46,11 @@ export async function listWorkspacesForCurrentUser(
 }
 
 /** Ensures the current user has at least one workspace, creating a
- * default one (named after them) on first login if not. Slug conflicts
- * are retried with a numeric suffix since uniqueness can't be safely
- * pre-checked under concurrent requests. */
+ * default one (named after them) on first login if not. Workspace
+ * slugs are globally unique, so each gets a random suffix — counting up
+ * "-1", "-2"… would stop working after the fifth user sharing a name
+ * (or the fifth with no name at all). Retries only cover the rare
+ * random collision. */
 export async function ensureDefaultWorkspace(
   supabase: Client,
   fullName: string | null,
@@ -51,10 +59,10 @@ export async function ensureDefaultWorkspace(
   if (existing.length > 0) return existing[0];
 
   const baseName = fullName ? `${fullName}'s Workspace` : "My Workspace";
-  const baseSlug = slugify(fullName ?? "my-workspace");
+  const baseSlug = slugify(fullName ?? "").slice(0, 40) || "workspace";
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
+    const slug = `${baseSlug}-${slugSuffix()}`;
     const { data, error } = await supabase.rpc("create_workspace_with_owner", {
       workspace_name: baseName,
       workspace_slug: slug,

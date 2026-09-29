@@ -19,6 +19,8 @@ export type ResponseListItem = {
   startedAt: string;
   completedAt: string | null;
   endingTitle: string | null;
+  /** Formatted answers for `previewColumns`, keyed by question id. */
+  preview: Record<string, string>;
 };
 
 export type ResponseListPage = {
@@ -26,7 +28,29 @@ export type ResponseListPage = {
   totalCount: number;
   page: number;
   pageCount: number;
+  previewColumns: { questionId: string; label: string }[];
 };
+
+const PREVIEW_COLUMN_COUNT = 3;
+
+function isAnswerable(q: QuestionV1): boolean {
+  return q.type !== "welcome_screen" && q.type !== "statement";
+}
+
+async function getLatestSchema(
+  supabase: Client,
+  formId: string,
+): Promise<FormSchemaV1 | null> {
+  const { data, error } = await supabase
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? parseFormSchema(data.schema) : null;
+}
 
 /**
  * Creator-facing response list — always scoped by the caller's own
@@ -50,40 +74,72 @@ export async function listResponses(
     .select("id, status, started_at, completed_at, ending_id, form_version_id", {
       count: "exact",
     })
-    .eq("form_id", formId)
-    .order("started_at", { ascending: false })
-    .range(from, to);
+    .eq("form_id", formId);
 
-  if (!options.includeIncomplete) {
-    query = query.eq("status", "completed");
+  // Completed submissions read newest-submitted first; a response
+  // started last week but submitted a minute ago belongs at the top.
+  query = options.includeIncomplete
+    ? query.order("started_at", { ascending: false })
+    : query.eq("status", "completed").order("completed_at", { ascending: false });
+
+  const { data, error, count } = await query.range(from, to);
+  if (error) throw error;
+  const rows = data ?? [];
+
+  // Same column rule as CSV export: the latest version's questions.
+  const latest = await getLatestSchema(supabase, formId);
+  const previewQuestions = (latest?.questions ?? [])
+    .filter(isAnswerable)
+    .slice(0, PREVIEW_COLUMN_COUNT);
+
+  const answersByResponse = new Map<string, Map<string, unknown>>();
+  if (rows.length > 0 && previewQuestions.length > 0) {
+    const { data: answerRows, error: answersError } = await supabase
+      .from("answers")
+      .select("response_id, question_id, value")
+      .in(
+        "response_id",
+        rows.map((r) => r.id),
+      )
+      .in(
+        "question_id",
+        previewQuestions.map((q) => q.id),
+      );
+    if (answersError) throw answersError;
+    for (const a of answerRows ?? []) {
+      const forResponse = answersByResponse.get(a.response_id) ?? new Map();
+      forResponse.set(a.question_id, a.value);
+      answersByResponse.set(a.response_id, forResponse);
+    }
   }
 
-  const { data, error, count } = await query;
-  if (error) throw error;
-
-  // Ending titles come from each response's own form_version (not
-  // necessarily the current one) — resolved per row, cached per
+  // Ending titles and answer formatting come from each response's own
+  // form_version (not necessarily the current one) — cached per
   // form_version_id so a page of same-version responses only parses
   // that schema once.
   const items: ResponseListItem[] = [];
   const schemaCache = new Map<string, FormSchemaV1>();
 
-  for (const row of data ?? []) {
-    let endingTitle: string | null = null;
-    if (row.ending_id) {
-      const schema = await getSchemaForVersion(
-        supabase,
-        row.form_version_id,
-        schemaCache,
-      );
-      endingTitle = schema?.endings.find((e) => e.id === row.ending_id)?.title ?? null;
+  for (const row of rows) {
+    const schema = await getSchemaForVersion(supabase, row.form_version_id, schemaCache);
+    const endingTitle = row.ending_id
+      ? (schema?.endings.find((e) => e.id === row.ending_id)?.title ?? null)
+      : null;
+
+    const answers = answersByResponse.get(row.id);
+    const preview: Record<string, string> = {};
+    for (const ref of previewQuestions) {
+      const own = schema?.questions.find((q) => q.id === ref.id) ?? ref;
+      preview[ref.id] = formatAnswerValue(own, answers?.get(ref.id));
     }
+
     items.push({
       id: row.id,
       status: row.status,
       startedAt: row.started_at,
       completedAt: row.completed_at,
       endingTitle,
+      preview,
     });
   }
 
@@ -92,6 +148,10 @@ export async function listResponses(
     totalCount: count ?? 0,
     page,
     pageCount: Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE)),
+    previewColumns: previewQuestions.map((q) => ({
+      questionId: q.id,
+      label: questionColumnLabel(q),
+    })),
   };
 }
 

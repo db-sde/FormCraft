@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import { getDraftForEdit, getPublishInfo } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { FormBuilder } from "@/components/builder/form-builder";
-import { saveDraftAction, publishAction, unpublishAction } from "./actions";
+import {
+  saveDraftAction,
+  publishAction,
+  unpublishAction,
+  renameFormAction,
+} from "./actions";
 
 export default async function FormBuilderPage({
   params,
@@ -35,6 +40,7 @@ export default async function FormBuilderPage({
       onSave={saveDraftAction}
       onPublish={publishAction}
       onUnpublish={unpublishAction}
+      onRename={renameFormAction}
     />
   );
 }

@@ -28,11 +28,11 @@ test.describe("publish and respond", () => {
     // The starter schema already has one required short_text question
     // ("What's your name?") after the welcome screen — publish as-is.
     await page.getByRole("button", { name: "Publish" }).click();
-    await expect(page.getByRole("link", { name: "View live" })).toBeVisible({
+    await expect(page.getByRole("link", { name: "Open live form" })).toBeVisible({
       timeout: 10000,
     });
     const liveLink = await page
-      .getByRole("link", { name: "View live" })
+      .getByRole("link", { name: "Open live form" })
       .getAttribute("href");
     expect(liveLink).toBeTruthy();
 

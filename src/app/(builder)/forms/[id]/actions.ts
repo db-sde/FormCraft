@@ -5,11 +5,35 @@ import {
   saveDraftSchema,
   publishForm,
   unpublishForm,
+  renameForm,
   StaleDraftError,
   FormSchemaError,
+  MAX_FORM_TITLE_LENGTH,
 } from "@/domains/forms";
 import type { FormSchemaV1 } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+
+export async function renameFormAction(
+  formId: string,
+  title: string,
+): Promise<{ ok: true; title: string } | { ok: false; message: string }> {
+  const trimmed = title.trim();
+  if (!trimmed) return { ok: false, message: "Give your form a name." };
+  if (trimmed.length > MAX_FORM_TITLE_LENGTH) {
+    return {
+      ok: false,
+      message: `Keep the name under ${MAX_FORM_TITLE_LENGTH} characters.`,
+    };
+  }
+  const { supabase, workspace } = await getCurrentWorkspace();
+  try {
+    await renameForm(supabase, formId, workspace.id, trimmed);
+    revalidatePath("/dashboard");
+    return { ok: true, title: trimmed };
+  } catch {
+    return { ok: false, message: "Couldn't rename the form. Please try again." };
+  }
+}
 
 export type SaveDraftResult =
   | { ok: true; revision: number }

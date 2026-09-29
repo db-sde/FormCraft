@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { listWebhookEndpoints, listDeliveries } from "@/domains/webhooks";
 import {
@@ -9,13 +8,26 @@ import {
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { WebhooksPanel } from "@/components/integrations/webhooks-panel";
 import { SheetsPanel } from "@/components/integrations/sheets-panel";
+import { FormTabs } from "@/components/forms/form-tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Outcomes the Google OAuth routes redirect back here with.
+const SHEETS_ERRORS: Record<string, string> = {
+  not_configured: "Google Sheets isn't set up on this deployment yet.",
+  declined: "Google Sheets wasn't connected — access was declined.",
+  exchange_failed: "Google Sheets couldn't be connected. Please try again.",
+};
 
 export default async function IntegrationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ sheets_error?: string; sheets_connected?: string }>;
 }) {
   const { id: formId } = await params;
+  const { sheets_error: sheetsError, sheets_connected: sheetsConnected } =
+    await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
 
   const { data: form } = await supabase
@@ -40,32 +52,49 @@ export default async function IntegrationsPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10">
-      <div className="mb-2 flex items-center gap-2 text-sm">
-        <Link
-          href={`/forms/${formId}`}
-          className="text-muted-foreground hover:text-foreground"
-        >
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
           {form.title}
-        </Link>
-        <span className="text-muted-foreground">/</span>
-        <span>Integrations</span>
+        </h1>
+        <FormTabs formId={formId} active="integrations" />
       </div>
 
-      <h1 className="mb-2 text-2xl font-semibold tracking-tight">Webhooks</h1>
-      <WebhooksPanel
-        formId={formId}
-        initialEndpoints={endpoints}
-        initialDeliveries={deliveriesByEndpoint}
-      />
+      <div className="mx-auto max-w-2xl">
+        {sheetsConnected && (
+          <Alert className="mb-6">
+            <AlertDescription>Google Sheets connected.</AlertDescription>
+          </Alert>
+        )}
+        {sheetsError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertDescription>
+              {SHEETS_ERRORS[sheetsError] ?? "Google Sheets couldn't be connected."}
+            </AlertDescription>
+          </Alert>
+        )}
 
-      <h1 className="mt-10 mb-2 text-2xl font-semibold tracking-tight">Google Sheets</h1>
-      <SheetsPanel
-        formId={formId}
-        configured={isGoogleOAuthConfigured()}
-        connection={sheetsConnection}
-        initialSyncLog={sheetsSyncLog}
-      />
+        <h2 className="mb-1 text-xl font-semibold tracking-tight">Webhooks</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Send every completed response to your own server as a signed JSON request.
+        </p>
+        <WebhooksPanel
+          formId={formId}
+          initialEndpoints={endpoints}
+          initialDeliveries={deliveriesByEndpoint}
+        />
+
+        <h2 className="mt-12 mb-1 text-xl font-semibold tracking-tight">Google Sheets</h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Add a row to a spreadsheet each time someone completes this form.
+        </p>
+        <SheetsPanel
+          formId={formId}
+          configured={isGoogleOAuthConfigured()}
+          connection={sheetsConnection}
+          initialSyncLog={sheetsSyncLog}
+        />
+      </div>
     </div>
   );
 }

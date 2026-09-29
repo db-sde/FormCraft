@@ -1,11 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
+import { customAlphabet } from "nanoid";
 import { slugify } from "@/domains/workspaces";
 import { parseFormSchema, validateSemantics } from "./schema/validate";
 import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
 import type { FormSchemaV1 } from "./schema/v1";
 
 type Client = SupabaseClient<Database>;
+
+/** 6 chars of [a-z0-9] ≈ 2.2 billion combinations per title prefix. */
+const slugSuffix = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 6);
 
 /** form_versions.schema is validated end-to-end by FormSchemaV1 before
  * it's ever written (see docs/form-schema.md); this cast is only about
@@ -102,10 +106,16 @@ export async function createFormWithDraft(
   title: string,
   initialSchema?: FormSchemaV1,
 ): Promise<{ id: string }> {
-  const baseSlug = slugify(title);
+  // Slugs are globally unique (the public URL is /f/<slug> with no
+  // workspace in it), so a readable prefix alone can't work: counting
+  // up "untitled-form", "-1", "-2"… collides across every customer who
+  // ever leaves a form untitled and ran out after five. A random
+  // suffix makes collisions vanishingly rare; the loop only covers
+  // that rare case.
+  const baseSlug = slugify(title).slice(0, 48) || "form";
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
+    const slug = `${baseSlug}-${slugSuffix()}`;
     const { data: form, error: formError } = await supabase
       .from("forms")
       .insert({ workspace_id: workspaceId, title, slug, created_by: userId })
@@ -309,6 +319,71 @@ export async function unpublishForm(supabase: Client, formId: string): Promise<v
     .update({ status: "archived" })
     .eq("form_id", formId)
     .eq("status", "published");
+  if (error) throw error;
+}
+
+export const MAX_FORM_TITLE_LENGTH = 200;
+
+/** Renames the form as creators see it on the dashboard. The slug (and
+ * so any shared public link) deliberately never changes on rename. */
+export async function renameForm(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+  title: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ title })
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+/** Copies a form's current *draft* into a brand-new, unpublished form.
+ * Responses, integrations, and publish state are never copied. */
+export async function duplicateForm(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+  userId: string,
+): Promise<{ id: string } | null> {
+  const draft = await getDraftForEdit(supabase, formId, workspaceId);
+  if (!draft) return null;
+  const title = `${draft.formTitle} (copy)`.slice(0, MAX_FORM_TITLE_LENGTH);
+  return createFormWithDraft(supabase, workspaceId, userId, title, {
+    ...draft.schema,
+    meta: { ...draft.schema.meta, title },
+  });
+}
+
+/**
+ * Soft delete: takes the form offline first (archiving its published
+ * version, so the public link stops accepting responses immediately),
+ * then hides it from the workspace. Responses are kept — deleted_at is
+ * a tombstone, not a purge.
+ */
+export async function softDeleteForm(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+): Promise<void> {
+  const { data: form, error: formError } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (formError) throw formError;
+  if (!form) return;
+
+  await unpublishForm(supabase, formId);
+  const { error } = await supabase
+    .from("forms")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", formId);
   if (error) throw error;
 }
 

@@ -46,6 +46,18 @@ export async function startResponse(
   formId: string,
   attribution: StartAttribution = {},
 ): Promise<{ responseId: string; formVersionId: string }> {
+  // This runs with the admin client (no RLS), so the "form isn't
+  // deleted" rule the public read policies enforce has to be checked
+  // explicitly here too.
+  const { data: form, error: formError } = await admin
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (formError) throw formError;
+  if (!form) throw new FormNotAvailableError();
+
   const { data: version, error: versionError } = await admin
     .from("form_versions")
     .select("id")
