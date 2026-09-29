@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LocalTime } from "@/components/local-time";
 
 function PageLink({
   href,
@@ -174,9 +175,7 @@ export default async function ResponsesPage({
                         href={`/forms/${formId}/responses/${item.id}`}
                         className="after:absolute after:inset-0 after:content-['']"
                       >
-                        {item.completedAt
-                          ? new Date(item.completedAt).toLocaleString()
-                          : "—"}
+                        {item.completedAt ? <LocalTime iso={item.completedAt} /> : "—"}
                       </Link>
                     </TableCell>
                     {responses.previewColumns.map((col) => (

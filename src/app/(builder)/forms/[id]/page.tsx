@@ -36,6 +36,7 @@ export default async function FormBuilderPage({
         isPublished: publishInfo?.isPublished ?? false,
         publishedAt: publishInfo?.publishedAt ?? null,
         publishedVersionNumber: publishInfo?.publishedVersionNumber ?? null,
+        hasUnpublishedChanges: publishInfo?.hasUnpublishedChanges ?? false,
       }}
       onSave={saveDraftAction}
       onPublish={publishAction}

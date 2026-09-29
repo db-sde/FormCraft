@@ -62,7 +62,7 @@ const NumberSettings = z
   })
   .refine(
     (v) => v.min === undefined || v.max === undefined || v.min <= v.max,
-    "min must be <= max",
+    "min can't be greater than max",
   );
 
 const SingleSelectSettings = z.object({
@@ -82,7 +82,7 @@ const MultiSelectSettings = z
       v.minSelections === undefined ||
       v.maxSelections === undefined ||
       v.minSelections <= v.maxSelections,
-    "minSelections must be <= maxSelections",
+    "min selections can't be greater than max selections",
   );
 
 const DropdownSettings = z.object({
@@ -110,7 +110,7 @@ const OpinionScaleSettings = z
     leftLabel: optionalSafeText(100),
     rightLabel: optionalSafeText(100),
   })
-  .refine((v) => v.min < v.max, "min must be < max");
+  .refine((v) => v.min < v.max, "min must be less than max");
 
 const FileUploadSettings = z.object({
   acceptedMimeTypes: z.array(z.string()).min(1),

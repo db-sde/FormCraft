@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { LocalTime } from "@/components/local-time";
 
 const STATUS_VARIANT: Record<
   SyncLogEntry["status"],
@@ -148,7 +149,7 @@ export function SheetsPanel({
             {initialSyncLog.slice(0, 5).map((entry) => (
               <div key={entry.id} className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">
-                  {new Date(entry.createdAt).toLocaleString()}
+                  <LocalTime iso={entry.createdAt} />
                 </span>
                 <div className="flex items-center gap-2">
                   {entry.attemptCount > 1 && (

@@ -38,19 +38,20 @@ export function SettingsPanel({
   return (
     <div className="space-y-5">
       {question.type !== "welcome_screen" && question.type !== "statement" && (
-        <div className="flex items-center justify-between">
-          <Label htmlFor="required-toggle" className="text-sm font-medium">
-            Required
-          </Label>
-          <Switch
-            id="required-toggle"
-            checked={question.required}
-            onCheckedChange={(required) => onChange({ ...question, required })}
-          />
-        </div>
+        <>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="required-toggle" className="text-sm font-medium">
+              Required
+            </Label>
+            <Switch
+              id="required-toggle"
+              checked={question.required}
+              onCheckedChange={(required) => onChange({ ...question, required })}
+            />
+          </div>
+          <Separator />
+        </>
       )}
-
-      <Separator />
 
       {question.type === "welcome_screen" && (
         <Field label="Button label">
@@ -184,38 +185,69 @@ export function SettingsPanel({
       )}
 
       {question.type === "number" && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Min">
-            <Input
-              type="number"
-              value={question.settings.min ?? ""}
-              onChange={(e) =>
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Min">
+              <Input
+                type="number"
+                value={question.settings.min ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...question,
+                    settings: {
+                      ...question.settings,
+                      min: e.target.value === "" ? undefined : Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Max">
+              <Input
+                type="number"
+                value={question.settings.max ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...question,
+                    settings: {
+                      ...question.settings,
+                      max: e.target.value === "" ? undefined : Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </Field>
+          </div>
+          <Field label="Decimal places">
+            <Select
+              value={
+                question.settings.decimals === undefined
+                  ? "any"
+                  : String(question.settings.decimals)
+              }
+              onValueChange={(value) =>
                 onChange({
                   ...question,
                   settings: {
                     ...question.settings,
-                    min: e.target.value === "" ? undefined : Number(e.target.value),
+                    decimals: value === "any" ? undefined : Number(value),
                   },
                 })
               }
-            />
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any</SelectItem>
+                <SelectItem value="0">Whole numbers only</SelectItem>
+                <SelectItem value="1">Up to 1</SelectItem>
+                <SelectItem value="2">Up to 2</SelectItem>
+                <SelectItem value="3">Up to 3</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
-          <Field label="Max">
-            <Input
-              type="number"
-              value={question.settings.max ?? ""}
-              onChange={(e) =>
-                onChange({
-                  ...question,
-                  settings: {
-                    ...question.settings,
-                    max: e.target.value === "" ? undefined : Number(e.target.value),
-                  },
-                })
-              }
-            />
-          </Field>
-        </div>
+        </>
       )}
 
       {question.type === "single_select" && (
@@ -494,8 +526,8 @@ export function SettingsPanel({
 
       {(question.type === "email" || question.type === "url") && (
         <p className="text-muted-foreground text-xs">
-          Answers are validated automatically as a{" "}
-          {question.type === "email" ? "email address" : "URL"}.
+          Answers are validated automatically as{" "}
+          {question.type === "email" ? "an email address" : "a URL"}.
         </p>
       )}
     </div>

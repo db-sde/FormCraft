@@ -12,10 +12,37 @@ import { checkRateLimit } from "@/domains/abuse";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getClientIpFromHeaders } from "@/lib/http/client-ip";
 
-export type ActionResult = { error?: string; fieldErrors?: Record<string, string> };
+export type ActionResult = {
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  /** Non-secret values echoed back so the form can refill them — React
+   * resets uncontrolled fields after a form action, which would
+   * otherwise wipe the email someone typed on every failed attempt. */
+  values?: Record<string, string>;
+};
 
 const RATE_LIMITED_MESSAGE =
   "Too many attempts. Please wait a few minutes and try again.";
+
+function echo(formData: FormData, keys: string[]): Record<string, string> {
+  return Object.fromEntries(
+    keys.map((k) => [
+      k,
+      typeof formData.get(k) === "string" ? String(formData.get(k)) : "",
+    ]),
+  );
+}
+
+/** Where to go after login. Only same-site relative paths are allowed —
+ * never "//evil.com" or an absolute URL, or `?next=` becomes an open
+ * redirect for phishing. */
+function safeNextPath(raw: FormDataEntryValue | null): string {
+  if (typeof raw !== "string") return "/dashboard";
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) {
+    return "/dashboard";
+  }
+  return raw;
+}
 
 function firstFieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
   const out: Record<string, string> = {};
@@ -35,15 +62,16 @@ export async function signUpAction(
     email: formData.get("email"),
     password: formData.get("password"),
   });
+  const values = echo(formData, ["fullName", "email"]);
   if (!parsed.success) {
-    return { fieldErrors: firstFieldErrors(parsed.error.issues) };
+    return { fieldErrors: firstFieldErrors(parsed.error.issues), values };
   }
 
   const ip = await getClientIpFromHeaders();
   // Per-IP, not per-email — an attacker enumerating emails shouldn't
   // get a fresh budget for every address they try.
   if (!checkRateLimit(`signup:${ip}`, 10, 60 * 60 * 1000).allowed) {
-    return { error: RATE_LIMITED_MESSAGE };
+    return { error: RATE_LIMITED_MESSAGE, values };
   }
 
   const supabase = await createServerSupabaseClient();
@@ -57,7 +85,7 @@ export async function signUpAction(
   });
 
   if (error) {
-    return { error: mapAuthError(error.message).message };
+    return { error: mapAuthError(error.message).message, values };
   }
 
   redirect("/signup/check-email");
@@ -71,8 +99,9 @@ export async function logInAction(
     email: formData.get("email"),
     password: formData.get("password"),
   });
+  const values = echo(formData, ["email", "next"]);
   if (!parsed.success) {
-    return { fieldErrors: firstFieldErrors(parsed.error.issues) };
+    return { fieldErrors: firstFieldErrors(parsed.error.issues), values };
   }
 
   const ip = await getClientIpFromHeaders();
@@ -82,17 +111,19 @@ export async function logInAction(
   // someone else's login.
   const rateLimitKey = `login:${ip}:${parsed.data.email.toLowerCase()}`;
   if (!checkRateLimit(rateLimitKey, 10, 10 * 60 * 1000).allowed) {
-    return { error: RATE_LIMITED_MESSAGE };
+    return { error: RATE_LIMITED_MESSAGE, values };
   }
 
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    return { error: mapAuthError(error.message).message };
+    return { error: mapAuthError(error.message).message, values };
   }
 
-  redirect("/dashboard");
+  // Back to the page that sent them to login (the middleware passes it
+  // as ?next=), not always the dashboard.
+  redirect(safeNextPath(formData.get("next")));
 }
 
 export async function logOutAction(): Promise<void> {

@@ -103,6 +103,12 @@ export function RuntimeQuestionInput({
         <Input
           autoFocus
           type="number"
+          inputMode={question.settings.decimals === 0 ? "numeric" : "decimal"}
+          step={
+            question.settings.decimals === undefined
+              ? "any"
+              : 10 ** -question.settings.decimals
+          }
           value={typeof value === "number" ? value : ""}
           min={question.settings.min}
           max={question.settings.max}

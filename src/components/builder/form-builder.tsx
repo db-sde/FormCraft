@@ -11,6 +11,9 @@ import {
   Link2,
   ExternalLink,
   Eye,
+  EyeOff,
+  MoreHorizontal,
+  CircleAlert,
 } from "lucide-react";
 import type {
   FormSchemaV1,
@@ -32,6 +35,10 @@ import {
   rulesReferencingQuestion,
   rulesReferencingEnding,
 } from "@/domains/forms/builder";
+import {
+  describeSchemaProblem,
+  type SchemaProblem,
+} from "@/domains/forms/schema/validate";
 import { toast } from "sonner";
 import type { SaveDraftResult, PublishResult } from "@/app/(builder)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
@@ -47,8 +54,15 @@ import { SaveStatus, type SaveState } from "./save-status";
 import { FormTitleInput } from "./form-title-input";
 import { FormTabs } from "@/components/forms/form-tabs";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -68,11 +82,13 @@ type Selection =
   | { kind: "logic" };
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
+const SAVE_RETRY_MS = 5000;
 
 export type PublishInfo = {
   isPublished: boolean;
   publishedAt: string | null;
   publishedVersionNumber: number | null;
+  hasUnpublishedChanges: boolean;
 };
 
 export function FormBuilder({
@@ -132,6 +148,10 @@ export function FormBuilder({
   const isSavingRef = useRef(false);
   const needsResaveRef = useRef(false);
   const staleRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [saveProblem, setSaveProblem] = useState<SchemaProblem | null>(null);
+
+  useEffect(() => () => clearTimeout(retryTimerRef.current), []);
 
   latestSchemaRef.current = schema;
 
@@ -141,20 +161,52 @@ export function FormBuilder({
       needsResaveRef.current = true;
       return;
     }
+    clearTimeout(retryTimerRef.current);
+
+    // An invalid draft (e.g. min > max) would only bounce off the server
+    // with a structural error, so explain it here and wait for the next
+    // edit instead of sending it.
+    const problem = describeSchemaProblem(schemaToSave);
+    if (problem) {
+      setSaveProblem(problem);
+      setSaveState("invalid");
+      return;
+    }
+    setSaveProblem(null);
+
     isSavingRef.current = true;
     setSaveState("saving");
 
-    const result = await onSave(draftVersionId, revisionRef.current, schemaToSave);
+    let result: SaveDraftResult;
+    try {
+      result = await onSave(draftVersionId, revisionRef.current, schemaToSave);
+    } catch {
+      // Network failure / server action crash — treated as transient.
+      result = { ok: false, code: "unknown", message: "Failed to save." };
+    }
 
     if (result.ok) {
       revisionRef.current = result.revision;
       savedSchemaRef.current = schemaToSave;
       setSaveState("saved");
+      setPublishInfo((p) => (p.isPublished ? { ...p, hasUnpublishedChanges: true } : p));
     } else if (result.code === "stale") {
       staleRef.current = true;
       setSaveState("stale");
+    } else if (result.code === "invalid") {
+      // The client check passed but the server disagreed — retrying the
+      // same content can't help, so wait for the next edit.
+      setSaveProblem({
+        message: "Some settings are invalid. Check your recent changes.",
+      });
+      setSaveState("invalid");
     } else {
       setSaveState("error");
+      retryTimerRef.current = setTimeout(() => {
+        if (latestSchemaRef.current !== savedSchemaRef.current) {
+          void performSave(latestSchemaRef.current);
+        }
+      }, SAVE_RETRY_MS);
     }
 
     isSavingRef.current = false;
@@ -295,8 +347,30 @@ export function FormBuilder({
     }
   }
 
+  /** Publish reads the draft from the database, so any edit still
+   * sitting in the autosave debounce (or mid-save) must land first —
+   * otherwise "edit, then quickly Publish" publishes without the edit. */
+  async function flushPendingSave(): Promise<boolean> {
+    for (let i = 0; i < 100 && isSavingRef.current; i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (latestSchemaRef.current !== savedSchemaRef.current) {
+      await performSave(latestSchemaRef.current);
+    }
+    return !staleRef.current && latestSchemaRef.current === savedSchemaRef.current;
+  }
+
   async function handlePublish() {
     setPublishing(true);
+    if (!(await flushPendingSave())) {
+      setPublishing(false);
+      toast.error("Couldn't publish", {
+        description:
+          describeSchemaProblem(latestSchemaRef.current)?.message ??
+          "Your latest changes haven't saved yet. Please try again in a moment.",
+      });
+      return;
+    }
     const result = await onPublish(formId);
     setPublishing(false);
 
@@ -305,6 +379,7 @@ export function FormBuilder({
         isPublished: true,
         publishedAt: new Date().toISOString(),
         publishedVersionNumber: result.publishedVersionNumber,
+        hasUnpublishedChanges: false,
       });
       toast.success(publishInfo.isPublished ? "Republished" : "Published", {
         description: "Your form is live.",
@@ -337,6 +412,25 @@ export function FormBuilder({
       ? schema.endings.find((e) => e.id === selection.id)
       : undefined;
 
+  // Only the part after "Question 3: " — the alert already sits beside it.
+  const selectedProblem =
+    saveState === "invalid" &&
+    saveProblem &&
+    ((selectedQuestion && saveProblem.questionId === selectedQuestion.id) ||
+      (selectedEnding && saveProblem.endingId === selectedEnding.id))
+      ? saveProblem.message
+          .replace(/^[^:]+:\s*/, "")
+          .replace(/^./, (c) => c.toUpperCase())
+      : null;
+
+  function showProblem() {
+    if (saveProblem?.questionId) {
+      setSelection({ kind: "question", id: saveProblem.questionId });
+    } else if (saveProblem?.endingId) {
+      setSelection({ kind: "ending", id: saveProblem.endingId });
+    }
+  }
+
   return (
     <div className="flex h-screen flex-col">
       <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b px-3">
@@ -354,7 +448,11 @@ export function FormBuilder({
             }
           />
           <div className="hidden shrink-0 items-center gap-2 lg:flex">
-            <SaveStatus state={saveState} />
+            <SaveStatus
+              state={saveState}
+              problem={saveProblem?.message}
+              onProblemClick={showProblem}
+            />
             {saveState === "stale" && (
               <Button
                 size="sm"
@@ -372,12 +470,51 @@ export function FormBuilder({
         <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto [&>*]:shrink-0">
           {publishInfo.isPublished && (
             <>
-              <span className="hidden items-center gap-1.5 text-xs font-medium text-emerald-600 xl:flex">
-                <span className="size-1.5 rounded-full bg-emerald-500" /> Live
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => void copyLiveLink()}>
-                <Link2 /> <span className="hidden xl:inline">Copy link</span>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-medium",
+                      publishInfo.hasUnpublishedChanges
+                        ? "text-amber-600"
+                        : "text-emerald-600",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "size-2 rounded-full",
+                        publishInfo.hasUnpublishedChanges
+                          ? "bg-amber-500"
+                          : "bg-emerald-500",
+                      )}
+                    />
+                    <span className="hidden 2xl:inline">
+                      {publishInfo.hasUnpublishedChanges ? "Unpublished changes" : "Live"}
+                    </span>
+                    <span className="sr-only 2xl:hidden">
+                      {publishInfo.hasUnpublishedChanges ? "Unpublished changes" : "Live"}
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {publishInfo.hasUnpublishedChanges
+                    ? "Respondents still see the last published version. Publish to update it."
+                    : "Respondents see exactly what you're editing."}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Copy link"
+                    onClick={() => void copyLiveLink()}
+                  >
+                    <Link2 />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy link</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -393,26 +530,51 @@ export function FormBuilder({
                 </TooltipTrigger>
                 <TooltipContent>{liveUrl}</TooltipContent>
               </Tooltip>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={publishing}
-                onClick={handleUnpublish}
-              >
-                Unpublish
-              </Button>
             </>
           )}
           <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
             <Eye /> Preview
           </Button>
-          <Button size="sm" disabled={publishing} onClick={handlePublish}>
+          <Button
+            size="sm"
+            variant={
+              publishInfo.isPublished && !publishInfo.hasUnpublishedChanges
+                ? "outline"
+                : "default"
+            }
+            disabled={publishing}
+            onClick={handlePublish}
+          >
             {publishing
               ? "Publishing…"
-              : publishInfo.isPublished
-                ? "Republish"
-                : "Publish"}
+              : !publishInfo.isPublished
+                ? "Publish"
+                : publishInfo.hasUnpublishedChanges
+                  ? "Publish changes"
+                  : "Republish"}
           </Button>
+          {publishInfo.isPublished && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="More publishing options"
+                >
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={publishing}
+                  onSelect={() => void handleUnpublish()}
+                >
+                  <EyeOff /> Unpublish
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </header>
 
@@ -546,7 +708,20 @@ export function FormBuilder({
           )}
         </main>
 
-        <aside className="w-80 shrink-0 overflow-y-auto border-l p-4">
+        <aside
+          className={cn(
+            "w-80 shrink-0 overflow-y-auto border-l p-4",
+            // The logic editor has no side settings; give it the room.
+            selection.kind === "logic" && "hidden",
+          )}
+        >
+          {selectedProblem && (
+            <Alert variant="destructive" className="mb-4">
+              <CircleAlert />
+              <AlertTitle>Not saved</AlertTitle>
+              <AlertDescription>{selectedProblem}</AlertDescription>
+            </Alert>
+          )}
           {selectedQuestion && (
             <SettingsPanel question={selectedQuestion} onChange={updateQuestion} />
           )}

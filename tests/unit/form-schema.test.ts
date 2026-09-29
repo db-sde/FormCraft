@@ -4,6 +4,7 @@ import {
   validateSemantics,
   compileFormSchema,
   FormSchemaError,
+  describeSchemaProblem,
   FormSchemaV1 as FormSchemaV1Zod,
 } from "@/domains/forms/schema";
 import { z } from "zod";
@@ -151,5 +152,53 @@ describe("compileFormSchema", () => {
       action: { type: "jump_to_ending", endingId: "end1" },
     });
     expect(() => compileFormSchema(parseFormSchema(schema))).not.toThrow();
+  });
+});
+
+describe("describeSchemaProblem", () => {
+  it("returns null for a valid schema", () => {
+    expect(describeSchemaProblem(baseSchema())).toBeNull();
+  });
+
+  it("points at the question by its displayed position, not array index", () => {
+    const schema = baseSchema();
+    // Array order differs from display order: q2 is shown first.
+    schema.questions[0].order = 1;
+    schema.questions[1].order = 0;
+    schema.questions[0] = {
+      id: "q1",
+      type: "number",
+      order: 1,
+      label: "Age",
+      settings: { min: 10, max: 5 },
+    };
+    expect(describeSchemaProblem(schema)).toEqual({
+      message: "Question 2: min can't be greater than max",
+      questionId: "q1",
+    });
+  });
+
+  it("uses friendly wording for field-level problems", () => {
+    const schema = baseSchema();
+    schema.endings[0].redirectUrl = "example.com";
+    expect(describeSchemaProblem(schema)).toEqual({
+      message:
+        "Ending “Thanks!”: redirect URL must be a full address like https://example.com",
+      endingId: "end1",
+    });
+  });
+
+  it("reports dangling logic without exposing internal ids", () => {
+    const schema = baseSchema();
+    schema.logic = [
+      {
+        id: "r1",
+        questionId: "q1",
+        operator: "equals",
+        value: "x",
+        action: { type: "jump_to_question", questionId: "gone" },
+      },
+    ];
+    expect(describeSchemaProblem(schema)?.message).toMatch(/^Logic:/);
   });
 });

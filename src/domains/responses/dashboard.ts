@@ -155,6 +155,40 @@ export async function listResponses(
   };
 }
 
+/** The completed responses immediately newer/older than the given one,
+ * in the same order the response list uses — for prev/next on the
+ * detail page. */
+export async function getAdjacentResponseIds(
+  supabase: Client,
+  formId: string,
+  completedAt: string,
+): Promise<{ newerId: string | null; olderId: string | null }> {
+  const base = () =>
+    supabase
+      .from("responses")
+      .select("id")
+      .eq("form_id", formId)
+      .eq("status", "completed");
+
+  const [newer, older] = await Promise.all([
+    base()
+      .gt("completed_at", completedAt)
+      .order("completed_at", { ascending: true })
+      .limit(1),
+    base()
+      .lt("completed_at", completedAt)
+      .order("completed_at", { ascending: false })
+      .limit(1),
+  ]);
+  if (newer.error) throw newer.error;
+  if (older.error) throw older.error;
+
+  return {
+    newerId: newer.data?.[0]?.id ?? null,
+    olderId: older.data?.[0]?.id ?? null,
+  };
+}
+
 async function getSchemaForVersion(
   supabase: Client,
   formVersionId: string,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { getPublicFormBySlug } from "@/domains/forms";
@@ -7,6 +8,12 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PublicFormRuntime } from "./public-form-runtime";
+
+/** One lookup per request, shared by the page and its metadata. */
+const loadPublicForm = cache(async (slug: string) => {
+  const supabase = await createServerSupabaseClient();
+  return getPublicFormBySlug(supabase, slug);
+});
 
 // The public respondent runtime: no auth, reads only the currently
 // published version (never the mutable draft — see ARCHITECTURE.md).
@@ -20,9 +27,7 @@ export default async function PublicFormPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const supabase = await createServerSupabaseClient();
-
-  const publicForm = await getPublicFormBySlug(supabase, slug);
+  const publicForm = await loadPublicForm(slug);
   if (!publicForm) notFound();
 
   // A view is counted on every render of this page, including a
@@ -60,8 +65,10 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createServerSupabaseClient();
-  const publicForm = await getPublicFormBySlug(supabase, slug);
+  const publicForm = await loadPublicForm(slug);
+  if (!publicForm) return { title: "Form unavailable", robots: { index: false } };
 
-  return { title: publicForm?.compiled.schema.meta.title ?? "Form" };
+  const { title, description } = publicForm.compiled.schema.meta;
+  // Shared form links get a real preview card in chat apps/social.
+  return { title, description, openGraph: { title, description } };
 }

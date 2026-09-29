@@ -234,6 +234,8 @@ export type PublishInfo = {
   isPublished: boolean;
   publishedAt: string | null;
   publishedVersionNumber: number | null;
+  /** The draft has edits respondents can't see until the next publish. */
+  hasUnpublishedChanges: boolean;
 };
 
 export async function getPublishInfo(
@@ -248,20 +250,36 @@ export async function getPublishInfo(
   if (formError) throw formError;
   if (!form) return null;
 
-  const { data: published, error: publishedError } = await supabase
+  const { data: versions, error: versionsError } = await supabase
     .from("form_versions")
-    .select("published_at, version_number")
+    .select("status, schema, published_at, version_number")
     .eq("form_id", formId)
-    .eq("status", "published")
-    .maybeSingle();
-  if (publishedError) throw publishedError;
+    .in("status", ["published", "draft"]);
+  if (versionsError) throw versionsError;
+
+  const published = versions?.find((v) => v.status === "published");
+  const draft = versions?.find((v) => v.status === "draft");
 
   return {
     slug: form.slug,
     isPublished: Boolean(published),
     publishedAt: published?.published_at ?? null,
     publishedVersionNumber: published?.version_number ?? null,
+    hasUnpublishedChanges:
+      published !== undefined &&
+      draft !== undefined &&
+      !sameSchema(published.schema, draft.schema),
   };
+}
+
+/** Compares through parseFormSchema so storage details (jsonb key
+ * order, defaults filled in vs. omitted) can't register as a change. */
+function sameSchema(a: Json, b: Json): boolean {
+  try {
+    return JSON.stringify(parseFormSchema(a)) === JSON.stringify(parseFormSchema(b));
+  } catch {
+    return false;
+  }
 }
 
 /**

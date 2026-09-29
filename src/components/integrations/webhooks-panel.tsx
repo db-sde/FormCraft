@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { LocalTime } from "@/components/local-time";
 
 const STATUS_VARIANT: Record<
   DeliveryLogEntry["status"],
@@ -189,7 +190,7 @@ export function WebhooksPanel({
                         className="flex items-center justify-between text-xs"
                       >
                         <span className="text-muted-foreground">
-                          {new Date(delivery.createdAt).toLocaleString()}
+                          <LocalTime iso={delivery.createdAt} />
                         </span>
                         <div className="flex items-center gap-2">
                           {delivery.attemptCount > 1 && (

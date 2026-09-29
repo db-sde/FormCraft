@@ -59,19 +59,26 @@ export async function createConfirmedUser(prefix: string) {
 export async function deleteUser(userId: string) {
   const admin = adminClient();
 
-  const { data: workspaces, error: listError } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("owner_id", userId);
-  if (listError) throw listError;
+  // The test's page can still have a request in flight (e.g. a dashboard
+  // render that lazily creates the default workspace) which recreates a
+  // workspace after we deleted them — so re-sweep and retry a few times.
+  for (let attempt = 1; ; attempt += 1) {
+    const { data: workspaces, error: listError } = await admin
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", userId);
+    if (listError) throw listError;
 
-  for (const workspace of workspaces ?? []) {
-    const { error } = await admin.from("workspaces").delete().eq("id", workspace.id);
-    if (error) throw error;
+    for (const workspace of workspaces ?? []) {
+      const { error } = await admin.from("workspaces").delete().eq("id", workspace.id);
+      if (error) throw error;
+    }
+
+    const { error } = await admin.auth.admin.deleteUser(userId);
+    if (!error) return;
+    if (attempt >= 3) throw error;
+    await new Promise((r) => setTimeout(r, 500));
   }
-
-  const { error } = await admin.auth.admin.deleteUser(userId);
-  if (error) throw error;
 }
 
 export async function loginViaUI(page: Page, email: string, password: string) {

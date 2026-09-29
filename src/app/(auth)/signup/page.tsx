@@ -29,14 +29,27 @@ export default function SignupPage() {
         <form action={formAction} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full name</Label>
-            <Input id="fullName" name="fullName" autoComplete="name" required />
+            <Input
+              id="fullName"
+              name="fullName"
+              autoComplete="name"
+              defaultValue={state.values?.fullName}
+              required
+            />
             {state.fieldErrors?.fullName && (
               <p className="text-destructive text-sm">{state.fieldErrors.fullName}</p>
             )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              defaultValue={state.values?.email}
+              required
+            />
             {state.fieldErrors?.email && (
               <p className="text-destructive text-sm">{state.fieldErrors.email}</p>
             )}
@@ -48,10 +61,16 @@ export default function SignupPage() {
               name="password"
               type="password"
               autoComplete="new-password"
+              minLength={8}
+              aria-describedby="password-hint"
               required
             />
-            {state.fieldErrors?.password && (
+            {state.fieldErrors?.password ? (
               <p className="text-destructive text-sm">{state.fieldErrors.password}</p>
+            ) : (
+              <p id="password-hint" className="text-muted-foreground text-xs">
+                At least 8 characters.
+              </p>
             )}
           </div>
           {state.error && <p className="text-destructive text-sm">{state.error}</p>}

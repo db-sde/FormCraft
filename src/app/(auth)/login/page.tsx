@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { logInAction, type ActionResult } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,13 @@ import {
 
 const initialState: ActionResult = {};
 
+/** ?next= comes from the middleware when it bounced an unauthenticated
+ * visitor off a protected page; it's validated server-side. */
+function NextField() {
+  const next = useSearchParams().get("next");
+  return next ? <input type="hidden" name="next" value={next} /> : null;
+}
+
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(logInAction, initialState);
 
@@ -27,9 +35,19 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-4">
+          <Suspense>
+            <NextField />
+          </Suspense>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              defaultValue={state.values?.email}
+              required
+            />
             {state.fieldErrors?.email && (
               <p className="text-destructive text-sm">{state.fieldErrors.email}</p>
             )}

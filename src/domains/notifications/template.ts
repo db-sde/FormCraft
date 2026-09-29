@@ -28,7 +28,13 @@ export function buildResponseCompletedEmail(
   input: ResponseCompletedEmailInput,
 ): EmailContent {
   const formTitle = escapeHtml(input.formTitle || "Untitled form");
-  const submitted = new Date(input.submittedAt).toLocaleString();
+  // Sent from the server, which doesn't know the recipient's timezone —
+  // label the zone explicitly rather than implying local time.
+  const submitted = `${new Date(input.submittedAt).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  })} UTC`;
 
   const subject = `New response: ${input.formTitle || "Untitled form"}`;
 

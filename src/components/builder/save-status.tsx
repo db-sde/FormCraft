@@ -1,8 +1,19 @@
-import { Loader2, Check, AlertTriangle, RotateCcw } from "lucide-react";
+import { Loader2, Check, AlertTriangle, RotateCcw, CircleAlert } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export type SaveState = "idle" | "saving" | "saved" | "error" | "stale";
+export type SaveState = "idle" | "saving" | "saved" | "error" | "stale" | "invalid";
 
-export function SaveStatus({ state }: { state: SaveState }) {
+export function SaveStatus({
+  state,
+  problem,
+  onProblemClick,
+}: {
+  state: SaveState;
+  /** Why the draft can't be saved, when state is "invalid". */
+  problem?: string | null;
+  /** Jumps to the item the problem belongs to. */
+  onProblemClick?: () => void;
+}) {
   switch (state) {
     case "saving":
       return (
@@ -21,6 +32,23 @@ export function SaveStatus({ state }: { state: SaveState }) {
         <span className="text-destructive flex items-center gap-1.5 text-sm">
           <AlertTriangle className="size-3.5" /> Couldn&apos;t save — retrying
         </span>
+      );
+    case "invalid":
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              role="status"
+              onClick={onProblemClick}
+              className="text-destructive flex items-center gap-1.5 text-sm hover:underline"
+            >
+              <CircleAlert className="size-3.5" /> Not saved
+              <span className="sr-only">: {problem}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{problem}</TooltipContent>
+        </Tooltip>
       );
     case "stale":
       return (
