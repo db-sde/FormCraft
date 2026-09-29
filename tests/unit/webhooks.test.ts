@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   signPayload,
   signatureHeaderValue,
@@ -10,7 +10,10 @@ import {
   MAX_DELIVERY_ATTEMPTS,
 } from "@/domains/webhooks/backoff";
 import { buildWebhookPayload, serializeWebhookPayload } from "@/domains/webhooks/payload";
-import { isDisallowedWebhookHost } from "@/domains/webhooks/url-safety";
+import {
+  isDisallowedWebhookHost,
+  resolvesToDisallowedAddress,
+} from "@/domains/webhooks/url-safety";
 
 describe("signPayload / verifySignature", () => {
   it("produces a deterministic signature for the same secret and payload", () => {
@@ -98,10 +101,56 @@ describe("isDisallowedWebhookHost", () => {
     expect(isDisallowedWebhookHost("api.mycompany.io")).toBe(false);
   });
 
-  it("allows localhost/loopback (needed for local development)", () => {
+  it("allows localhost/loopback outside production (local development)", () => {
     expect(isDisallowedWebhookHost("localhost")).toBe(false);
     expect(isDisallowedWebhookHost("127.0.0.1")).toBe(false);
-    expect(isDisallowedWebhookHost("::1")).toBe(false);
+    expect(isDisallowedWebhookHost("[::1]")).toBe(false);
+  });
+
+  it("blocks loopback in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(isDisallowedWebhookHost("localhost")).toBe(true);
+      expect(isDisallowedWebhookHost("127.0.0.1")).toBe(true);
+      expect(isDisallowedWebhookHost("127.1.2.3")).toBe(true);
+      expect(isDisallowedWebhookHost("[::1]")).toBe(true);
+      expect(isDisallowedWebhookHost("[::ffff:7f00:1]")).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("blocks private and metadata addresses hidden in IPv6 forms", () => {
+    // What `new URL(...).hostname` actually yields for these.
+    for (const url of [
+      "http://[::ffff:169.254.169.254]/",
+      "http://[::ffff:10.0.0.1]/",
+      "http://[64:ff9b::a9fe:a9fe]/",
+      "http://[fd00::1]/",
+      "http://[fe80::1]/",
+      "http://[::]/",
+    ]) {
+      expect(isDisallowedWebhookHost(new URL(url).hostname), url).toBe(true);
+    }
+    expect(isDisallowedWebhookHost(new URL("http://[2606:4700::1111]/").hostname)).toBe(
+      false,
+    );
+  });
+
+  it("blocks alternate IPv4 spellings once URL-normalized", () => {
+    for (const url of [
+      "http://2852039166/",
+      "http://0xa9.0xfe.0xa9.0xfe/",
+      "http://0/",
+    ]) {
+      expect(isDisallowedWebhookHost(new URL(url).hostname), url).toBe(true);
+    }
+  });
+
+  it("blocks other reserved IPv4 ranges", () => {
+    expect(isDisallowedWebhookHost("100.64.0.1")).toBe(true);
+    expect(isDisallowedWebhookHost("224.0.0.1")).toBe(true);
+    expect(isDisallowedWebhookHost("8.8.8.8")).toBe(false);
   });
 
   it("blocks the cloud metadata / link-local address", () => {
@@ -127,5 +176,25 @@ describe("isDisallowedWebhookHost", () => {
 
   it("blocks 0.0.0.0", () => {
     expect(isDisallowedWebhookHost("0.0.0.0")).toBe(true);
+  });
+});
+
+describe("resolvesToDisallowedAddress", () => {
+  it("rejects a hostname that resolves to loopback in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(await resolvesToDisallowedAddress("localhost")).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("judges IP literals without a DNS lookup", async () => {
+    expect(await resolvesToDisallowedAddress("10.1.2.3")).toBe(true);
+    expect(await resolvesToDisallowedAddress("8.8.8.8")).toBe(false);
+  });
+
+  it("leaves unresolvable names to fail at delivery", async () => {
+    expect(await resolvesToDisallowedAddress("no-such-host.invalid")).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ import {
 } from "./payload";
 import { signatureHeaderValue } from "./signing";
 import { nextBackoffDelayMs, isExhausted } from "./backoff";
-import { isDisallowedWebhookHost } from "./url-safety";
+import { isDisallowedWebhookHost, resolvesToDisallowedAddress } from "./url-safety";
 
 type Client = SupabaseClient<Database>;
 
@@ -181,7 +181,10 @@ async function attemptDelivery(
   } catch {
     return { status: "failed", error: "invalid URL" };
   }
-  if (isDisallowedWebhookHost(parsedUrl.hostname)) {
+  if (
+    isDisallowedWebhookHost(parsedUrl.hostname) ||
+    (await resolvesToDisallowedAddress(parsedUrl.hostname))
+  ) {
     return { status: "failed", error: "endpoint host not allowed" };
   }
 
@@ -198,10 +201,19 @@ async function attemptDelivery(
       },
       body,
       signal: controller.signal,
+      // Never follow redirects: a public URL could otherwise bounce the
+      // request to an internal address (see url-safety.ts).
+      redirect: "manual",
     });
     clearTimeout(timeout);
 
     if (res.ok) return { status: "succeeded" };
+    if (res.status >= 300 && res.status < 400) {
+      return {
+        status: "failed",
+        error: `HTTP ${res.status} redirect — webhooks don't follow redirects; use the final URL`,
+      };
+    }
     return { status: "failed", error: `HTTP ${res.status}` };
   } catch (error) {
     return {

@@ -7,6 +7,7 @@ import {
   deleteWebhookEndpoint,
   sendTestDelivery,
   isDisallowedWebhookHost,
+  resolvesToDisallowedAddress,
 } from "@/domains/webhooks";
 import { setSpreadsheetId, setConnectionEnabled, disconnectForm } from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
@@ -30,14 +31,21 @@ export async function createWebhookEndpointAction(
   } catch {
     return { ok: false, message: "Enter a valid URL." };
   }
-  if (
-    parsed.protocol !== "https:" &&
-    !(parsed.protocol === "http:" && parsed.hostname === "localhost")
-  ) {
+  const localDevHttp =
+    process.env.NODE_ENV !== "production" &&
+    parsed.protocol === "http:" &&
+    parsed.hostname === "localhost";
+  if (parsed.protocol !== "https:" && !localDevHttp) {
     return { ok: false, message: "Webhook URLs must use HTTPS." };
   }
-  if (isDisallowedWebhookHost(parsed.hostname)) {
-    return { ok: false, message: "This host isn't allowed for webhook URLs." };
+  if (
+    isDisallowedWebhookHost(parsed.hostname) ||
+    (await resolvesToDisallowedAddress(parsed.hostname))
+  ) {
+    return {
+      ok: false,
+      message: "Webhook URLs must point to a public address, not a private network.",
+    };
   }
 
   const { supabase } = await getCurrentWorkspace();

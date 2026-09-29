@@ -17,6 +17,16 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LocalTime } from "@/components/local-time";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const STATUS_VARIANT: Record<
   DeliveryLogEntry["status"],
@@ -45,10 +55,11 @@ export function WebhooksPanel({
     secret: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [pendingDelete, setPendingDelete] = useState<WebhookEndpoint | null>(null);
 
   function handleAdd() {
     startTransition(async () => {
-      const result = await createWebhookEndpointAction(formId, url);
+      const result = await createWebhookEndpointAction(formId, url.trim());
       if (result.ok) {
         setUrl("");
         setEndpoints((eps) => [
@@ -70,16 +81,33 @@ export function WebhooksPanel({
   }
 
   function handleToggle(endpointId: string, enabled: boolean) {
-    setEndpoints((eps) => eps.map((e) => (e.id === endpointId ? { ...e, enabled } : e)));
+    const setEnabled = (value: boolean) =>
+      setEndpoints((eps) =>
+        eps.map((e) => (e.id === endpointId ? { ...e, enabled: value } : e)),
+      );
+    setEnabled(enabled);
     startTransition(async () => {
-      await setWebhookEnabledAction(formId, endpointId, enabled);
+      try {
+        await setWebhookEnabledAction(formId, endpointId, enabled);
+      } catch {
+        setEnabled(!enabled);
+        toast.error("Couldn't update the webhook. Please try again.");
+      }
     });
   }
 
-  function handleDelete(endpointId: string) {
-    setEndpoints((eps) => eps.filter((e) => e.id !== endpointId));
+  function handleDelete(endpoint: WebhookEndpoint) {
+    setPendingDelete(null);
+    setEndpoints((eps) => eps.filter((e) => e.id !== endpoint.id));
+    setRevealedSecret((r) => (r?.endpointId === endpoint.id ? null : r));
     startTransition(async () => {
-      await deleteWebhookEndpointAction(formId, endpointId);
+      try {
+        await deleteWebhookEndpointAction(formId, endpoint.id);
+        toast("Webhook deleted");
+      } catch {
+        setEndpoints((eps) => [...eps, endpoint]);
+        toast.error("Couldn't delete the webhook. Please try again.");
+      }
     });
   }
 
@@ -125,15 +153,26 @@ export function WebhooksPanel({
         <CardHeader>
           <CardTitle className="text-base">Add endpoint</CardTitle>
         </CardHeader>
-        <CardContent className="flex gap-2">
-          <Input
-            placeholder="https://example.com/webhook"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-          <Button type="button" onClick={handleAdd} disabled={pending || !url}>
-            Add
-          </Button>
+        <CardContent>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (url.trim()) handleAdd();
+            }}
+          >
+            <Input
+              type="url"
+              inputMode="url"
+              aria-label="Webhook URL"
+              placeholder="https://example.com/webhook"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <Button type="submit" disabled={pending || !url.trim()}>
+              Add
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
@@ -172,7 +211,7 @@ export function WebhooksPanel({
                     variant="ghost"
                     size="icon-sm"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(endpoint.id)}
+                    onClick={() => setPendingDelete(endpoint)}
                     aria-label="Delete webhook"
                   >
                     <Trash2 className="size-3.5" />
@@ -211,6 +250,32 @@ export function WebhooksPanel({
           ))}
         </div>
       )}
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this webhook?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Completed responses will stop being sent to{" "}
+              <span className="font-mono break-all">{pendingDelete?.url}</span>. Its
+              signing secret can&apos;t be recovered — adding the URL again creates a new
+              one.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => pendingDelete && handleDelete(pendingDelete)}
+            >
+              Delete webhook
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
