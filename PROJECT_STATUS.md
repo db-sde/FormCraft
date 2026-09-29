@@ -1,26 +1,33 @@
 # Project Status
 
-Last updated: 2026-09-29
+Last updated: 2026-09-30
 
 ## Current milestone
 
-**E2E TESTS** — the first real Playwright suite (`tests/e2e`), and
-writing/running it for the first time immediately found two more real
-bugs the entire rest of the test suite had missed: `forms.slug` was
-only unique per-workspace while the public runtime looks a form up by
-slug alone (two workspaces each leaving a form as "Untitled form" —
-the literal default title — broke the public URL for both, migration
-00000000000012), and the `/signup/check-email` /
-`/forgot-password/check-email` pages were unreachable for an
-already-authenticated visitor because of a prefix-match bug in the
-auth-redirect middleware. 6 of the 14 documented journeys have
-automated coverage now (see `docs/testing.md` for the per-journey
-status); the rest are an explicitly tracked, not silently dropped, gap.
-CI now has a second job that starts real local Supabase and runs
-integration + E2E on every PR — see `.github/workflows/ci.yml`.
-Also fixed `npm run format:check`, which every prior milestone this
-session had been failing without anyone (including this one, until
-now) noticing, since it's part of CI but wasn't being run locally.
+**FULL-APP AUDIT** (2026-09-30) — a walkthrough of every area (builder,
+runtime, dashboard, responses, integrations, auth) as a creator and a
+respondent, fixing what it found in verified, committed batches. The
+larger finds:
+
+- **Password reset never worked** — the emailed link's redirect wasn't
+  allowed, `/reset-password` bounced signed-in users, and the browser
+  Supabase client couldn't read its env (also breaking image upload).
+  New `/auth/confirm` route + E2E test through the real email link.
+- **Exports and funnel stats silently capped at 1000 rows** (PostgREST
+  `max_rows`): CSV export now pages; funnel counts in the database.
+- **Webhook SSRF gaps**: redirects followed, loopback allowed in
+  production, bracketed IPv6 / IPv4-mapped addresses unchecked, no DNS
+  check. All closed.
+- `javascript:`/`data:` URLs accepted for ending redirects/theme images.
+- Invalid drafts showed "retrying" forever; a thrown save killed
+  autosave for the session. Now explained inline and retried properly.
+- Respondent runtime: server-side answer validation, Other option,
+  auto-advance, keyboard handling, Strict-Mode blank first load.
+- Dashboard: real response counts, "Edited" time never updated on
+  autosave (migration 13), rename/duplicate/delete, nav + breadcrumbs,
+  timestamps in the viewer's timezone, double-click created two forms.
+- Unique-slug exhaustion, welcome screen rules, error/404/loading
+  pages, README rewritten from the create-next-app boilerplate.
 
 ## Completed
 
@@ -451,7 +458,11 @@ test:integration`, the full E2E suite) was verified locally against
 
 ## Known bugs
 
-None currently open. Several were caught and fixed before/while
+None currently open. The 2026-09-30 audit's fixes are summarized under
+"Current milestone" above (details in each commit message).
+Not bugs, but known limits: WebKit/mobile-safari E2E needs
+`npx playwright install webkit` locally; webhook DNS-rebinding
+protection is deferred (see DECISIONS.md). Several were caught and fixed before/while
 shipping this session (the webhook-secret-reload bug, the
 signed-in-visitor-gets-404 RLS bug, the dashboard/builder mobile
 header overflow bugs, the forged-question-id storage-abuse gap, the

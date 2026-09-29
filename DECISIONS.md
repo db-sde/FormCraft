@@ -3,6 +3,42 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-30 — Welcome screen is optional and pinned first
+
+The builder refused to delete the welcome screen yet allowed
+duplicating it and moving it mid-form. Chosen rule: at most one, always
+at index 0 (not movable, not duplicable, nothing moves above it), but
+deletable — and re-addable from "Add question", which inserts it at the
+top. Enforced in `src/domains/forms/builder.ts` so the UI can't drift.
+A form must keep at least one question (schema minimum), so the last
+remaining question can't be deleted.
+
+## 2026-09-30 — Webhook loopback only outside production
+
+Loopback webhook URLs (`localhost`, 127/8, `::1`) had been allowed
+everywhere "for local development", which in production lets a
+creator aim server-side requests at the app host itself. They're now
+allowed only when `NODE_ENV !== "production"`; plain `http:` likewise
+only for `localhost` in development. Deliveries never follow
+redirects, and hostnames are DNS-resolved and rejected if any address
+is private. DNS rebinding between check and connect remains possible;
+closing it needs connection-level IP pinning — deferred.
+
+## 2026-09-30 — Creator-supplied URLs must be http(s)
+
+Ending redirect, logo and background image URLs were `z.string().url()`,
+which accepts `javascript:`/`data:`. Restricted to `http(s)://` in the
+schema (the server's authoritative check) rather than relying on React
+neutralising `javascript:` hrefs.
+
+## 2026-09-30 — Emailed auth links go through /auth/confirm
+
+All Supabase email links (signup confirmation, password recovery)
+redirect to `/auth/confirm?next=…`, a route handler that completes the
+PKCE code or token-hash exchange server-side and continues to a
+same-origin `next`. Deployments must list `<origin>/auth/confirm` in
+Supabase's allowed redirect URLs (README → Deploying).
+
 ## 2026-09-29 — forms.slug had to become globally unique, not just per-workspace
 
 Writing the first real E2E test (Playwright, multiple workers running
