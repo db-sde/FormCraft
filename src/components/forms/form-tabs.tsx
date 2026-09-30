@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Hammer, Inbox, Plug, Send } from "lucide-react";
+import { Hammer, Inbox, Plug, Send, Settings } from "lucide-react";
 import { cn } from "cn";
 
-export type FormTab = "build" | "share" | "responses" | "integrations";
+export type FormTab = "build" | "share" | "responses" | "integrations" | "settings";
 
 const TABS: {
   id: FormTab;
@@ -24,10 +24,16 @@ const TABS: {
     icon: Plug,
     href: (id) => `/forms/${id}/integrations`,
   },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings,
+    href: (id) => `/forms/${id}/settings`,
+  },
 ];
 
-/** The four things you do with a form, in the order you do them —
- * identical on every form page. */
+/** Everything you do with a form, in the order you do it — identical
+ * on every form page. */
 export function FormTabs({
   formId,
   active,

@@ -58,6 +58,7 @@ export default async function PublicFormPage({
         formId={publicForm.formId}
         formVersionId={publicForm.formVersionId}
         compiled={publicForm.compiled}
+        savesProgress={publicForm.savePartialResponses}
       />
     </div>
   );

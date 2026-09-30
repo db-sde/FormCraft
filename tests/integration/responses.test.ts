@@ -6,6 +6,7 @@ import {
   saveResponseAnswers,
   completeResponse,
   StaleResponseWriteError,
+  purgeExpiredUnfinishedResponses,
 } from "@/domains/responses";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 
@@ -354,5 +355,64 @@ describe("response engine (integration)", () => {
     // Only the idle session counts (earlier tests may add others at
     // different questions, but none idle at q_notes besides this one).
     expect(notes?.stopped).toBe(1);
+  });
+
+  it("stores nothing before submit when the form doesn't save unfinished answers", async () => {
+    await supabase
+      .from("forms")
+      .update({ save_partial_responses: false })
+      .eq("id", formId);
+    try {
+      const { responseId } = await startResponse(supabase, formId);
+      const result = await saveResponseAnswers(supabase, responseId, 1, "q_name", {
+        q_name: "Private",
+      });
+      expect(result.status).toBe("in_progress");
+      const { data: answers } = await supabase
+        .from("answers")
+        .select("question_id")
+        .eq("response_id", responseId);
+      expect(answers).toEqual([]);
+    } finally {
+      await supabase
+        .from("forms")
+        .update({ save_partial_responses: true })
+        .eq("id", formId);
+    }
+  });
+
+  it("retention deletes only unfinished responses past the form's period", async () => {
+    const old = new Date(Date.now() - 40 * 86_400_000).toISOString();
+    const stale = await startResponse(supabase, formId);
+    await saveResponseAnswers(supabase, stale.responseId, 1, "q_name", { q_name: "Old" });
+    const done = await startResponse(supabase, formId);
+    await completeResponse(
+      supabase,
+      done.responseId,
+      1,
+      "q_notes",
+      { q_name: "Done" },
+      crypto.randomUUID(),
+    );
+    await supabase
+      .from("responses")
+      .update({ last_active_at: old })
+      .in("id", [stale.responseId, done.responseId]);
+
+    await supabase.from("forms").update({ partial_retention_days: 30 }).eq("id", formId);
+    try {
+      const { deleted } = await purgeExpiredUnfinishedResponses(supabase);
+      expect(deleted).toBeGreaterThanOrEqual(1);
+      const { data } = await supabase
+        .from("responses")
+        .select("id")
+        .in("id", [stale.responseId, done.responseId]);
+      expect(data?.map((r) => r.id)).toEqual([done.responseId]);
+    } finally {
+      await supabase
+        .from("forms")
+        .update({ partial_retention_days: null })
+        .eq("id", formId);
+    }
   });
 });

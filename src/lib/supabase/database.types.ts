@@ -150,6 +150,8 @@ export type Database = {
           deleted_at: string | null;
           description: string | null;
           id: string;
+          partial_retention_days: number | null;
+          save_partial_responses: boolean;
           slug: string;
           title: string;
           updated_at: string;
@@ -161,6 +163,8 @@ export type Database = {
           deleted_at?: string | null;
           description?: string | null;
           id?: string;
+          partial_retention_days?: number | null;
+          save_partial_responses?: boolean;
           slug: string;
           title: string;
           updated_at?: string;
@@ -172,6 +176,8 @@ export type Database = {
           deleted_at?: string | null;
           description?: string | null;
           id?: string;
+          partial_retention_days?: number | null;
+          save_partial_responses?: boolean;
           slug?: string;
           title?: string;
           updated_at?: string;

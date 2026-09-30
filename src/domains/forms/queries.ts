@@ -438,7 +438,57 @@ export type PublicForm = {
   formId: string;
   formVersionId: string;
   compiled: CompiledFormV1;
+  /** Creator setting: autosave answers from respondents who don't finish. */
+  savePartialResponses: boolean;
 };
+
+export type FormSettings = {
+  title: string;
+  slug: string;
+  savePartialResponses: boolean;
+  /** Days after last activity before unfinished responses are deleted; null = keep. */
+  partialRetentionDays: number | null;
+};
+
+export async function getFormSettings(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+): Promise<FormSettings | null> {
+  const { data, error } = await supabase
+    .from("forms")
+    .select("title, slug, save_partial_responses, partial_retention_days")
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data
+    ? {
+        title: data.title,
+        slug: data.slug,
+        savePartialResponses: data.save_partial_responses,
+        partialRetentionDays: data.partial_retention_days,
+      }
+    : null;
+}
+
+export async function updatePartialResponseSettings(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+  settings: { savePartialResponses: boolean; partialRetentionDays: number | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({
+      save_partial_responses: settings.savePartialResponses,
+      partial_retention_days: settings.partialRetentionDays,
+    })
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId);
+  if (error) throw error;
+}
 
 /**
  * What the public respondent runtime reads — the currently published
@@ -453,7 +503,7 @@ export async function getPublicFormBySlug(
 ): Promise<PublicForm | null> {
   const { data: form, error: formError } = await supabase
     .from("forms")
-    .select("id")
+    .select("id, save_partial_responses")
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
@@ -470,5 +520,36 @@ export async function getPublicFormBySlug(
   if (!version) return null;
 
   const compiled = compileFormSchema(parseFormSchema(version.schema));
-  return { formId: form.id, formVersionId: version.id, compiled };
+  return {
+    formId: form.id,
+    formVersionId: version.id,
+    compiled,
+    savePartialResponses: form.save_partial_responses,
+  };
+}
+
+export class SlugTakenError extends Error {
+  constructor() {
+    super("slug already in use");
+    this.name = "SlugTakenError";
+  }
+}
+
+/** Changes a form's public link. Slugs are globally unique (the public
+ * URL has no workspace in it), so a collision is reported, not retried. */
+export async function updateFormSlug(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+  slug: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ slug })
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId);
+  if (error) {
+    if (error.code === "23505") throw new SlugTakenError();
+    throw error;
+  }
 }

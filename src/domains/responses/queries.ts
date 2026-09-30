@@ -163,7 +163,7 @@ export async function saveResponseAnswers(
   // nothing in it).
   const { data: current, error: currentError } = await admin
     .from("responses")
-    .select("status, client_revision, form_version_id")
+    .select("status, client_revision, form_version_id, forms(save_partial_responses)")
     .eq("id", responseId)
     .maybeSingle();
   if (currentError) throw currentError;
@@ -173,6 +173,13 @@ export async function saveResponseAnswers(
     // is a benign race (e.g. a debounced save that was in flight when
     // Enter completed the form) — accept it as a no-op.
     return { status: "completed", revision: current.client_revision };
+  }
+
+  if (current.forms?.save_partial_responses === false) {
+    // The creator opted out of keeping unfinished answers (enforced
+    // here, not just by the runtime not sending them): nothing is
+    // stored until the final submit.
+    return { status: current.status, revision: current.client_revision };
   }
 
   const { data: versionRow, error: versionError } = await admin
