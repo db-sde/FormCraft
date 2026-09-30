@@ -54,7 +54,11 @@ export default async function PublicFormPage({
 
   return (
     <div className="min-h-screen">
-      <PublicFormRuntime formId={publicForm.formId} compiled={publicForm.compiled} />
+      <PublicFormRuntime
+        formId={publicForm.formId}
+        formVersionId={publicForm.formVersionId}
+        compiled={publicForm.compiled}
+      />
     </div>
   );
 }

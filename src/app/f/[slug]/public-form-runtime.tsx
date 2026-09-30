@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 
 type StoredResponse = {
   responseId: string;
+  /** The published version this response is bound to — a republish
+   * starts a fresh response rather than mixing two schemas. */
+  formVersionId?: string;
   idempotencyKey: string;
+  /** Last revision this browser *claimed* for a write (sent or about to
+   * be sent), not the last one acknowledged. Claiming before sending is
+   * what makes overlapping saves impossible to collide. */
   revision: number;
   answers: AnswerMap;
   lastQuestionId: string;
@@ -54,9 +60,10 @@ async function startSession(formId: string, firstQuestionId: string) {
     body: JSON.stringify({ formId }),
   });
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
-  const data = (await res.json()) as { responseId: string };
+  const data = (await res.json()) as { responseId: string; formVersionId: string };
   const fresh: StoredResponse = {
     responseId: data.responseId,
+    formVersionId: data.formVersionId,
     idempotencyKey: crypto.randomUUID(),
     revision: 0,
     answers: {},
@@ -76,19 +83,26 @@ const AUTOSAVE_DEBOUNCE_MS = 600;
  * that component stays a pure, network-free renderer usable by the
  * builder's Preview dialog too (see form-runtime.tsx).
  *
- * Resume: a response id + its last-known answers/position are cached
- * in localStorage per form. A refresh in the same browser picks up
- * exactly where the respondent left off instead of starting over. A
- * stale write (409 — e.g. the same response was advanced from another
- * tab/device) is treated as unrecoverable for this session: the cached
- * state is cleared and the page reloads into a fresh response, rather
- * than risking silently clobbering newer server state.
+ * Resume: a response id + its answers, position and back-history are
+ * cached in localStorage per form, so a refresh picks up exactly where
+ * the respondent left off.
+ *
+ * Autosave is single-flight: at most one save request is in the air,
+ * and each claims a fresh revision before it's sent. (It used to reuse
+ * the last *acknowledged* revision, so two overlapping saves carried the
+ * same number, the server rejected one as stale, and the client's
+ * response to that — wipe the session and reload — restarted the form
+ * from question one a moment after the respondent answered.) A genuine
+ * conflict now resyncs to the server's revision and saves again; the
+ * respondent's progress is never thrown away.
  */
 export function PublicFormRuntime({
   formId,
+  formVersionId,
   compiled,
 }: {
   formId: string;
+  formVersionId: string;
   compiled: CompiledFormV1;
 }) {
   const [session, setSession] = useState<StoredResponse | null>(null);
@@ -96,6 +110,10 @@ export function PublicFormRuntime({
   const [attempt, setAttempt] = useState(0);
   const sessionRef = useRef<StoredResponse | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The in-flight save (if any), and whether newer changes arrived
+  // while it was running and need their own save afterwards.
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const dirtyRef = useRef(false);
   // One /start request per attempt, shared by every effect run. React
   // Strict Mode mounts → cleans up → remounts in dev: the first run's
   // result must still reach whichever run is current, or the page
@@ -111,8 +129,14 @@ export function PublicFormRuntime({
 
     if (!startPromiseRef.current) {
       const existing = readStored(formId);
-      startPromiseRef.current = existing
-        ? Promise.resolve(existing)
+      // A response started against an older published version can't be
+      // continued on the new one — its question ids may not exist.
+      const resumable =
+        existing &&
+        (existing.formVersionId === undefined ||
+          existing.formVersionId === formVersionId);
+      startPromiseRef.current = resumable
+        ? Promise.resolve({ ...existing, history: existing.history ?? [] })
         : startSession(formId, firstQuestionId);
     }
     startPromiseRef.current.then(
@@ -129,7 +153,7 @@ export function PublicFormRuntime({
     return () => {
       cancelled = true;
     };
-  }, [formId, firstQuestionId, attempt]);
+  }, [formId, formVersionId, firstQuestionId, attempt]);
 
   function retryStart() {
     startPromiseRef.current = null;
@@ -137,68 +161,108 @@ export function PublicFormRuntime({
     setAttempt((a) => a + 1);
   }
 
-  function handleAnswerChange(answers: AnswerMap, currentQuestionId: string) {
+  function updateSession(patch: Partial<StoredResponse>) {
     const current = sessionRef.current;
-    if (!current) return;
-
-    const updated: StoredResponse = {
-      ...current,
-      answers,
-      lastQuestionId: currentQuestionId,
-    };
+    if (!current) return null;
+    const updated = { ...current, ...patch };
     sessionRef.current = updated;
     writeStored(formId, updated);
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => void persist(updated), AUTOSAVE_DEBOUNCE_MS);
+    return updated;
   }
 
-  async function persist(toSave: StoredResponse) {
-    const nextRevision = toSave.revision + 1;
+  function handleAnswerChange(
+    answers: AnswerMap,
+    currentQuestionId: string,
+    history: string[],
+  ) {
+    if (!updateSession({ answers, lastQuestionId: currentQuestionId, history })) return;
+    dirtyRef.current = true;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => void flushSaves(), AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  /** Saves until nothing is dirty, one request at a time. */
+  function flushSaves(): Promise<void> {
+    if (inFlightRef.current) return inFlightRef.current;
+    const run = (async () => {
+      while (dirtyRef.current) {
+        dirtyRef.current = false;
+        await saveLatest();
+      }
+    })().finally(() => {
+      inFlightRef.current = null;
+    });
+    inFlightRef.current = run;
+    return run;
+  }
+
+  async function saveLatest(retriesLeft = 2): Promise<void> {
+    const current = sessionRef.current;
+    if (!current) return;
+    // Claim the revision before sending so no other request reuses it.
+    const claimed = updateSession({ revision: current.revision + 1 });
+    if (!claimed) return;
+
     try {
-      const res = await fetch(`/api/responses/${toSave.responseId}/answers`, {
+      const res = await fetch(`/api/responses/${claimed.responseId}/answers`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientRevision: nextRevision,
-          lastQuestionId: toSave.lastQuestionId,
-          answers: toSave.answers,
+          clientRevision: claimed.revision,
+          lastQuestionId: claimed.lastQuestionId,
+          answers: claimed.answers,
         }),
       });
 
-      if (res.status === 409) {
-        // Stale relative to the server — this browser's cached state
-        // can no longer be trusted to continue from. Drop it and start
-        // over rather than risk overwriting newer server-side state.
-        clearStored(formId);
-        window.location.reload();
+      if (res.status === 409 && retriesLeft > 0) {
+        // The server already holds a newer revision (e.g. this response
+        // is open in another tab). Jump past it and save again — these
+        // are the respondent's own answers either way.
+        const body = (await res.json().catch(() => null)) as {
+          currentRevision?: number;
+        } | null;
+        const serverRevision = body?.currentRevision ?? claimed.revision;
+        updateSession({
+          revision: Math.max(sessionRef.current?.revision ?? 0, serverRevision),
+        });
+        await saveLatest(retriesLeft - 1);
         return;
       }
-      if (!res.ok) return;
-
-      const latest = sessionRef.current ?? toSave;
-      const updated = { ...latest, revision: nextRevision };
-      sessionRef.current = updated;
-      writeStored(formId, updated);
+      if (res.status === 404) {
+        // The response itself is gone — nothing to continue.
+        clearStored(formId);
+        return;
+      }
+      if (!res.ok) dirtyRef.current = true; // retried on the next change / submit
     } catch {
-      // Network hiccup — the next debounced save (or the final
-      // complete call) will retry with the same/newer revision.
+      // Network hiccup — keep it dirty so the next save/submit carries it.
+      dirtyRef.current = true;
     }
   }
 
   async function handleComplete(answers: AnswerMap): Promise<CompleteOutcome> {
-    const current = sessionRef.current;
-    if (!current) {
+    if (!sessionRef.current) {
       return { ok: false, message: "Your session expired. Please refresh the page." };
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    // Let any in-flight autosave land first; the submit carries every
+    // answer itself, so pending (unsent) changes don't need their own save.
+    dirtyRef.current = false;
+    await inFlightRef.current?.catch(() => undefined);
+    const current = updateSession({
+      answers,
+      revision: (sessionRef.current?.revision ?? 0) + 1,
+    });
+    if (!current) {
+      return { ok: false, message: "Your session expired. Please refresh the page." };
+    }
 
     try {
       const res = await fetch(`/api/responses/${current.responseId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientRevision: current.revision + 1,
+          clientRevision: current.revision,
           lastQuestionId: current.lastQuestionId,
           answers,
           // Same key on every retry: a submit whose response was lost

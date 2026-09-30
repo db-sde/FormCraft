@@ -15,7 +15,11 @@ export class ResponseNotFoundError extends Error {
 }
 
 export class StaleResponseWriteError extends Error {
-  constructor() {
+  constructor(
+    /** The revision the server already holds, so the client can resync
+     * to it instead of abandoning the respondent's session. */
+    public readonly currentRevision: number,
+  ) {
     super("a newer answer for this response was already saved");
     this.name = "StaleResponseWriteError";
   }
@@ -172,7 +176,7 @@ export async function saveResponseAnswers(
       // erroring, since nothing about it is actually wrong.
       return { status: "completed", revision: current.client_revision };
     }
-    throw new StaleResponseWriteError();
+    throw new StaleResponseWriteError(current.client_revision);
   }
 
   const { data: versionRow, error: versionError } = await admin
@@ -221,7 +225,7 @@ export async function completeResponse(
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
-    .select("status, form_id, form_version_id, ending_id")
+    .select("status, form_id, form_version_id, ending_id, client_revision")
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
@@ -275,7 +279,10 @@ export async function completeResponse(
     .from("responses")
     .update({
       status: "completed",
-      client_revision: expectedRevision,
+      // Never move the revision backwards (a DB trigger rejects that):
+      // submitting is final, so a client whose revision lags an earlier
+      // autosave must still be able to finish.
+      client_revision: Math.max(expectedRevision, response.client_revision + 1),
       last_question_id: lastQuestionId,
       last_active_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),

@@ -3,7 +3,8 @@ config({ path: ".env.local" });
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
+import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 
 /**
  * Creates a real, already-email-confirmed user via the GoTrue admin
@@ -87,4 +88,61 @@ export async function loginViaUI(page: Page, email: string, password: string) {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
   await page.waitForURL("**/dashboard");
+}
+
+/**
+ * Creates and publishes a form straight through the database, for specs
+ * about the respondent side that shouldn't depend on builder UI. Makes
+ * the user's workspace too if they haven't logged in yet.
+ */
+export async function createPublishedForm(
+  user: { userId: string },
+  schema: FormSchemaV1,
+): Promise<{ formId: string; liveLink: string }> {
+  const admin = adminClient();
+  const unique = crypto.randomUUID().slice(0, 8);
+
+  let { data: workspace } = await admin
+    .from("workspaces")
+    .select("id")
+    .eq("owner_id", user.userId)
+    .limit(1)
+    .maybeSingle();
+  if (!workspace) {
+    const { data, error } = await admin
+      .from("workspaces")
+      .insert({ name: "E2E workspace", slug: `e2e-${unique}`, owner_id: user.userId })
+      .select("id")
+      .single();
+    if (error) throw error;
+    workspace = data;
+    await admin
+      .from("workspace_members")
+      .insert({ workspace_id: workspace.id, user_id: user.userId, role: "owner" });
+  }
+
+  const slug = `e2e-form-${unique}`;
+  const { data: form, error: formError } = await admin
+    .from("forms")
+    .insert({
+      workspace_id: workspace.id,
+      title: schema.meta.title,
+      slug,
+      created_by: user.userId,
+    })
+    .select("id")
+    .single();
+  if (formError) throw formError;
+
+  const json = schema as unknown as Json;
+  await admin
+    .from("form_versions")
+    .insert({ form_id: form.id, status: "draft", version_number: 1, schema: json });
+  const { error: publishError } = await admin.rpc("publish_form_version", {
+    target_form_id: form.id,
+    compiled_schema: json,
+  });
+  if (publishError) throw publishError;
+
+  return { formId: form.id, liveLink: `/f/${slug}` };
 }

@@ -67,7 +67,11 @@ export function FormRuntime({
   /** Only present in the real public runtime — see
    * runtime-question-input.tsx's FileUploadInput for why. */
   responseId?: string;
-  onAnswerChange?: (answers: AnswerMap, currentQuestionId: string) => void;
+  onAnswerChange?: (
+    answers: AnswerMap,
+    currentQuestionId: string,
+    history: string[],
+  ) => void;
   onComplete?: (answers: AnswerMap) => Promise<CompleteOutcome>;
   /** Layout for the outer container — e.g. `min-h-dvh` on the public
    * page so the theme background covers the whole viewport. */
@@ -140,9 +144,10 @@ export function FormRuntime({
       void finish(currentAnswers, next.endingId);
     } else {
       setError(null);
-      setHistory((h) => [...h, question.id]);
+      const nextHistory = [...history, question.id];
+      setHistory(nextHistory);
       setCurrentId(next.questionId);
-      onAnswerChange?.(currentAnswers, next.questionId);
+      onAnswerChange?.(currentAnswers, next.questionId, nextHistory);
     }
   }
 
@@ -151,7 +156,7 @@ export function FormRuntime({
     const next = { ...answers, [question.id]: value };
     setAnswers(next);
     setError(null);
-    onAnswerChange?.(next, question.id);
+    onAnswerChange?.(next, question.id, history);
 
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     const isTypingOther = typeof value === "string" && value.startsWith(OTHER_PREFIX);
@@ -167,10 +172,11 @@ export function FormRuntime({
     if (history.length === 0 || submitting) return;
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     const prev = history[history.length - 1];
-    setHistory((h) => h.slice(0, -1));
+    const prevHistory = history.slice(0, -1);
+    setHistory(prevHistory);
     setCurrentId(prev);
     setError(null);
-    onAnswerChange?.(answers, prev);
+    onAnswerChange?.(answers, prev, prevHistory);
   }
 
   // Latest goNext for the document-level listener below, which is

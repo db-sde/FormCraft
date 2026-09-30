@@ -53,10 +53,15 @@ export async function PATCH(
       return apiError("not_found", "Response not found.", 404);
     }
     if (error instanceof StaleResponseWriteError) {
-      return apiError(
-        "stale",
-        "A newer answer was already saved for this response.",
-        409,
+      return NextResponse.json(
+        {
+          error: {
+            code: "stale",
+            message: "A newer answer was already saved for this response.",
+          },
+          currentRevision: error.currentRevision,
+        },
+        { status: 409 },
       );
     }
     return apiError("unknown", "Something went wrong. Please try again.", 500);
