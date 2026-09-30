@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import { createConfirmedUser, deleteUser, loginViaUI, logOutViaUI } from "./helpers";
 
 /**
  * The whole emailed-link journey, through local Supabase's mail catcher
@@ -46,10 +46,9 @@ test.describe("password reset", () => {
       await page.getByRole("button", { name: "Save new password" }).click();
       await page.waitForURL("**/dashboard");
 
-      await page.getByRole("button", { name: "Log out" }).click();
-      await page.waitForURL("**/login");
+      await logOutViaUI(page);
       await loginViaUI(page, user.email, newPassword);
-      await expect(page.getByRole("heading", { name: "Forms" })).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
     } finally {
       await deleteUser(user.userId);
     }

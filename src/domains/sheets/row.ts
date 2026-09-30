@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { AnswerMap } from "@/domains/logic";
-import { formatAnswerValue, questionColumnLabel } from "@/domains/responses/format";
+import { answerCells, questionColumnLabels } from "@/domains/responses/format";
 
 type Client = SupabaseClient<Database>;
 
@@ -60,12 +60,16 @@ export async function buildResponseRowForSheet(
   }
 
   return {
-    header: ["Submitted at", "Ending", ...referenceQuestions.map(questionColumnLabel)],
+    header: [
+      "Submitted at",
+      "Ending",
+      ...referenceQuestions.flatMap(questionColumnLabels),
+    ],
     values: [
       response?.completed_at ?? new Date().toISOString(),
       endingTitle,
-      ...referenceQuestions.map((q) =>
-        formatAnswerValue(q, answers[q.id], { uploadNames }),
+      ...referenceQuestions.flatMap((q) =>
+        answerCells(q, q, answers[q.id], { uploadNames }),
       ),
     ],
   };

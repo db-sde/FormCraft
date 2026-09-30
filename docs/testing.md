@@ -73,6 +73,14 @@ writing:
     — **done** (`password-reset.spec.ts`, following the real link from
     local Supabase's mail catcher; also covers the invalid-link notice)
 
+16. Lead capture: a respondent who fills the contact step and leaves
+    before the last question appears under Leads ("Didn't finish") and
+    Responses → Incomplete — **done** (`lead-capture.spec.ts`; the
+    completed path is in `publish-and-respond.spec.ts`)
+17. Autosave under slow network never restarts the form — **done**
+    (`autosave-race.spec.ts`; the old code fails it with an emptied
+    field)
+
 CSV export past PostgREST's 1000-row cap is covered at the
 integration level (`tests/integration/csv-export.test.ts`) rather than
 E2E, since it needs 1000+ seeded responses.

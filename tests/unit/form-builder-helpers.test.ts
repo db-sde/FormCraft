@@ -8,6 +8,7 @@ import {
   moveQuestion,
   reorderQuestions,
   canDeleteQuestion,
+  insertLeadCapture,
 } from "@/domains/forms/builder";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 
@@ -170,5 +171,29 @@ describe("welcome screen pinning", () => {
     const questions = withWelcome();
     expect(canDeleteQuestion(questions, questions[0].id)).toBe(true);
     expect(canDeleteQuestion([questions[1]], questions[1].id)).toBe(false);
+  });
+});
+
+describe("insertLeadCapture", () => {
+  it("goes right before the last question", () => {
+    const questions = insertQuestion(
+      threeQuestions(),
+      createQuestion("welcome_screen", 0),
+      0,
+    );
+    const { questions: result, id } = insertLeadCapture(questions);
+    expect(result.map((q) => q.type)).toEqual([
+      "welcome_screen",
+      "short_text",
+      "email",
+      "contact_info",
+      "number",
+    ]);
+    expect(result[3].id).toBe(id);
+  });
+
+  it("goes after a lone welcome screen, never above it", () => {
+    const { questions } = insertLeadCapture([createQuestion("welcome_screen", 0)]);
+    expect(questions.map((q) => q.type)).toEqual(["welcome_screen", "contact_info"]);
   });
 });

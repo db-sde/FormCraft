@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
-import { formatAnswerValue, questionColumnLabel } from "./format";
+import {
+  answerCells,
+  formatAnswerValue,
+  questionColumnLabel,
+  questionColumnLabels,
+} from "./format";
+import { hasAnswer } from "@/domains/logic/validate-answer";
 import {
   toCsv,
   ExportTooLargeError,
@@ -17,14 +23,21 @@ const FETCH_PAGE = 1000;
 /** Response ids per `.in()` filter, keeping request URLs short. */
 const ID_BATCH = 100;
 
+export type ResponseView = "completed" | "incomplete";
+
 export type ResponseListItem = {
   id: string;
   status: "in_progress" | "partial" | "completed";
   startedAt: string;
   completedAt: string | null;
+  lastActiveAt: string;
   endingTitle: string | null;
   /** Formatted answers for `previewColumns`, keyed by question id. */
   preview: Record<string, string>;
+  /** How far the respondent got: answered questions / answerable ones. */
+  progress: { answered: number; total: number };
+  /** Where an unfinished respondent stopped. */
+  lastQuestionLabel: string | null;
 };
 
 export type ResponseListPage = {
@@ -56,35 +69,48 @@ async function getLatestSchema(
   return data ? parseFormSchema(data.schema) : null;
 }
 
+/** Columns shown in the list: the lead (contact) block first when the
+ * form has one — it's what identifies a respondent — then the first
+ * other answerable questions. */
+function pickPreviewQuestions(schema: FormSchemaV1 | null): QuestionV1[] {
+  const answerable = (schema?.questions ?? []).filter(isAnswerable);
+  const contact = answerable.filter((q) => q.type === "contact_info");
+  const rest = answerable.filter((q) => q.type !== "contact_info");
+  return [...contact, ...rest].slice(0, PREVIEW_COLUMN_COUNT);
+}
+
 /**
  * Creator-facing response list — always scoped by the caller's own
  * session (RLS via `responses: members can read via form`), never the
- * admin client. Defaults to completed responses only, matching the
- * dashboard's job of showing submissions rather than every abandoned
- * session; `includeIncomplete` opts into seeing partial/in_progress
- * ones too. Bounded pagination — never an unbounded fetch (spec).
+ * admin client. Bounded pagination — never an unbounded fetch (spec).
+ *
+ * - "completed": submitted responses, newest submission first.
+ * - "incomplete": respondents who answered at least one question but
+ *   never submitted (status partial), most recently active first. A
+ *   visitor who opened the form and answered nothing (in_progress) isn't
+ *   listed — there's nothing to show — but is counted in Starts.
  */
 export async function listResponses(
   supabase: Client,
   formId: string,
-  options: { page?: number; includeIncomplete?: boolean } = {},
+  options: { page?: number; view?: ResponseView } = {},
 ): Promise<ResponseListPage> {
   const page = Math.max(1, options.page ?? 1);
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
+  const view = options.view ?? "completed";
 
   let query = supabase
     .from("responses")
-    .select("id, status, started_at, completed_at, ending_id, form_version_id", {
-      count: "exact",
-    })
+    .select(
+      "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id",
+      { count: "exact" },
+    )
     .eq("form_id", formId);
-
-  // Completed submissions read newest-submitted first; a response
-  // started last week but submitted a minute ago belongs at the top.
-  query = options.includeIncomplete
-    ? query.order("started_at", { ascending: false })
-    : query.eq("status", "completed").order("completed_at", { ascending: false });
+  query =
+    view === "completed"
+      ? query.eq("status", "completed").order("completed_at", { ascending: false })
+      : query.eq("status", "partial").order("last_active_at", { ascending: false });
 
   const { data, error, count } = await query.range(from, to);
   if (error) throw error;
@@ -92,12 +118,12 @@ export async function listResponses(
 
   // Same column rule as CSV export: the latest version's questions.
   const latest = await getLatestSchema(supabase, formId);
-  const previewQuestions = (latest?.questions ?? [])
-    .filter(isAnswerable)
-    .slice(0, PREVIEW_COLUMN_COUNT);
+  const previewQuestions = pickPreviewQuestions(latest);
 
+  // Every answer for this page (not just preview columns) — progress
+  // needs the full count. At most 25 responses, so well under max_rows.
   const answersByResponse = new Map<string, Map<string, unknown>>();
-  if (rows.length > 0 && previewQuestions.length > 0) {
+  if (rows.length > 0) {
     const { data: answerRows, error: answersError } = await supabase
       .from("answers")
       .select("response_id, question_id, value")
@@ -105,10 +131,7 @@ export async function listResponses(
         "response_id",
         rows.map((r) => r.id),
       )
-      .in(
-        "question_id",
-        previewQuestions.map((q) => q.id),
-      );
+      .limit(FETCH_PAGE);
     if (answersError) throw answersError;
     for (const a of answerRows ?? []) {
       const forResponse = answersByResponse.get(a.response_id) ?? new Map();
@@ -137,13 +160,20 @@ export async function listResponses(
       preview[ref.id] = formatAnswerValue(own, answers?.get(ref.id));
     }
 
+    const ownAnswerable = (schema?.questions ?? []).filter(isAnswerable);
+    const answered = ownAnswerable.filter((q) => hasAnswer(q, answers?.get(q.id))).length;
+    const lastQuestion = schema?.questions.find((q) => q.id === row.last_question_id);
+
     items.push({
       id: row.id,
       status: row.status,
       startedAt: row.started_at,
       completedAt: row.completed_at,
+      lastActiveAt: row.last_active_at,
       endingTitle,
       preview,
+      progress: { answered, total: ownAnswerable.length },
+      lastQuestionLabel: lastQuestion ? questionColumnLabel(lastQuestion) : null,
     });
   }
 
@@ -154,35 +184,33 @@ export async function listResponses(
     pageCount: Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE)),
     previewColumns: previewQuestions.map((q) => ({
       questionId: q.id,
-      label: questionColumnLabel(q),
+      label: q.type === "contact_info" ? "Contact" : questionColumnLabel(q),
     })),
   };
 }
 
-/** The completed responses immediately newer/older than the given one,
- * in the same order the response list uses — for prev/next on the
- * detail page. */
+/** The responses immediately newer/older than the given one, in the
+ * same order its list uses — for prev/next on the detail page. */
 export async function getAdjacentResponseIds(
   supabase: Client,
   formId: string,
-  completedAt: string,
+  current: { status: string; completedAt: string | null; lastActiveAt: string },
 ): Promise<{ newerId: string | null; olderId: string | null }> {
+  const completed = current.status === "completed";
+  const column = completed ? "completed_at" : "last_active_at";
+  const at = completed ? current.completedAt : current.lastActiveAt;
+  if (!at) return { newerId: null, olderId: null };
+
   const base = () =>
     supabase
       .from("responses")
       .select("id")
       .eq("form_id", formId)
-      .eq("status", "completed");
+      .eq("status", completed ? "completed" : "partial");
 
   const [newer, older] = await Promise.all([
-    base()
-      .gt("completed_at", completedAt)
-      .order("completed_at", { ascending: true })
-      .limit(1),
-    base()
-      .lt("completed_at", completedAt)
-      .order("completed_at", { ascending: false })
-      .limit(1),
+    base().gt(column, at).order(column, { ascending: true }).limit(1),
+    base().lt(column, at).order(column, { ascending: false }).limit(1),
   ]);
   if (newer.error) throw newer.error;
   if (older.error) throw older.error;
@@ -221,6 +249,8 @@ export type ResponseDetail = {
   completedAt: string | null;
   lastActiveAt: string;
   endingTitle: string | null;
+  /** Label of the question an unfinished respondent stopped on. */
+  lastQuestionLabel: string | null;
   referrer: string | null;
   utmSource: string | null;
   utmMedium: string | null;
@@ -229,6 +259,8 @@ export type ResponseDetail = {
     questionId: string;
     label: string;
     formatted: string;
+    /** The raw stored answer (e.g. a contact block's field object). */
+    value: unknown;
     question: QuestionV1;
   }[];
 };
@@ -240,7 +272,7 @@ export async function getResponseDetail(
   const { data: response, error } = await supabase
     .from("responses")
     .select(
-      "id, form_id, status, started_at, completed_at, last_active_at, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign",
+      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -271,6 +303,7 @@ export async function getResponseDetail(
       questionId: q.id,
       label: questionColumnLabel(q),
       formatted: formatAnswerValue(q, answersByQuestion.get(q.id)),
+      value: answersByQuestion.get(q.id),
       question: q,
     }));
 
@@ -282,6 +315,10 @@ export async function getResponseDetail(
     completedAt: response.completed_at,
     lastActiveAt: response.last_active_at,
     endingTitle: schema.endings.find((e) => e.id === response.ending_id)?.title ?? null,
+    lastQuestionLabel: (() => {
+      const q = schema.questions.find((x) => x.id === response.last_question_id);
+      return q ? questionColumnLabel(q) : null;
+    })(),
     referrer: response.referrer,
     utmSource: response.utm_source,
     utmMedium: response.utm_medium,
@@ -346,6 +383,7 @@ export async function getResponseCounts(
 export async function buildResponsesCsv(
   supabase: Client,
   formId: string,
+  view: ResponseView = "completed",
 ): Promise<string> {
   const { data: latestVersion, error: latestVersionError } = await supabase
     .from("form_versions")
@@ -368,16 +406,19 @@ export async function buildResponsesCsv(
   const responses: {
     id: string;
     completed_at: string | null;
+    last_active_at: string;
     ending_id: string | null;
     form_version_id: string;
   }[] = [];
   for (let from = 0; ; from += FETCH_PAGE) {
     const { data, error } = await supabase
       .from("responses")
-      .select("id, completed_at, ending_id, form_version_id")
+      .select("id, completed_at, last_active_at, ending_id, form_version_id")
       .eq("form_id", formId)
-      .eq("status", "completed")
-      .order("completed_at", { ascending: true })
+      .eq("status", view === "completed" ? "completed" : "partial")
+      .order(view === "completed" ? "completed_at" : "last_active_at", {
+        ascending: true,
+      })
       .order("id", { ascending: true })
       .range(from, from + FETCH_PAGE - 1);
     if (error) throw error;
@@ -434,28 +475,33 @@ export async function buildResponsesCsv(
     );
     const answersByQuestion = answersByResponse.get(response.id);
 
-    const row: Record<string, unknown> = {
-      "Submitted at": response.completed_at,
-      Ending: schema?.endings.find((e) => e.id === response.ending_id)?.title ?? "",
-    };
+    const row: Record<string, unknown> =
+      view === "completed"
+        ? {
+            "Submitted at": response.completed_at,
+            Ending: schema?.endings.find((e) => e.id === response.ending_id)?.title ?? "",
+          }
+        : { "Last active": response.last_active_at };
 
     for (const refQuestion of referenceQuestions) {
       const ownQuestion =
         schema?.questions.find((q) => q.id === refQuestion.id) ?? refQuestion;
-      row[questionColumnLabel(refQuestion)] = formatAnswerValue(
+      const labels = questionColumnLabels(refQuestion);
+      const cells = answerCells(
+        refQuestion,
         ownQuestion,
         answersByQuestion?.get(refQuestion.id),
         { uploadNames },
       );
+      labels.forEach((label, i) => (row[label] = cells[i]));
     }
 
     rows.push(row);
   }
 
   const columns = [
-    "Submitted at",
-    "Ending",
-    ...referenceQuestions.map(questionColumnLabel),
+    ...(view === "completed" ? ["Submitted at", "Ending"] : ["Last active"]),
+    ...referenceQuestions.flatMap(questionColumnLabels),
   ];
   return toCsv(columns, rows);
 }

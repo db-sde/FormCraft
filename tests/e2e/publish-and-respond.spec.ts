@@ -1,5 +1,10 @@
-import { test, expect, type Browser } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import { test, expect, type Browser, type Page } from "@playwright/test";
+import {
+  createConfirmedUser,
+  deleteUser,
+  loginViaUI,
+  publishFromBuilder,
+} from "./helpers";
 
 test.describe("publish and respond", () => {
   let user: Awaited<ReturnType<typeof createConfirmedUser>>;
@@ -13,46 +18,46 @@ test.describe("publish and respond", () => {
     await deleteUser(user.userId);
   });
 
-  test("publish a form, complete it anonymously in a fresh browser context, see it in the creator's response dashboard", async ({
+  test("publish the starter form, complete it anonymously (lead included), see the response and the lead", async ({
     page,
     browser,
   }: {
-    page: import("@playwright/test").Page;
+    page: Page;
     browser: Browser;
   }) => {
     await page.getByRole("button", { name: "Start from scratch" }).click();
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
-    const formUrl = page.url();
-    const formId = formUrl.split("/forms/")[1];
+    const formId = page.url().split("/forms/")[1];
 
-    // The starter schema already has one required short_text question
-    // ("What's your name?") after the welcome screen — publish as-is.
-    await page.getByRole("button", { name: "Publish" }).click();
-    await expect(page.getByRole("link", { name: "Open live form" })).toBeVisible({
-      timeout: 10000,
-    });
-    const liveLink = await page
-      .getByRole("link", { name: "Open live form" })
-      .getAttribute("href");
-    expect(liveLink).toBeTruthy();
+    // The starter form: welcome → question → contact info (lead
+    // capture) → optional last question. Publish it as-is.
+    const liveLink = await publishFromBuilder(page);
 
-    // A genuinely separate browser context — no cookies shared with the
-    // creator's session — to act as an anonymous respondent.
+    // A separate browser context — no cookies shared with the creator.
     const respondentContext = await browser.newContext();
-    const respondentPage = await respondentContext.newPage();
-    await respondentPage.goto(liveLink!);
+    const r = await respondentContext.newPage();
+    await r.goto(liveLink);
 
-    await expect(respondentPage.getByRole("button", { name: /Start/ })).toBeVisible();
-    await respondentPage.getByRole("button", { name: /Start/ }).click();
+    await r.getByRole("button", { name: /Start/ }).click();
+    await r.getByRole("textbox").fill("I need a quote for 20 seats.");
+    await r.keyboard.press("Enter");
 
-    await respondentPage.getByRole("textbox").fill("Ada Lovelace");
-    await respondentPage.keyboard.press("Enter");
+    await r.getByLabel("Name").fill("Ada Lovelace");
+    await r.getByLabel("Email").fill("ada@example.com");
+    await r.getByRole("button", { name: "OK" }).click();
 
-    await expect(respondentPage.getByText("Thank you!")).toBeVisible({ timeout: 10000 });
+    await expect(r.getByText("Anything else we should know?")).toBeVisible();
+    await r.getByRole("button", { name: "Submit" }).click();
+    await expect(r.getByText("Thank you!")).toBeVisible({ timeout: 10000 });
     await respondentContext.close();
 
-    // Back in the creator's session: the response shows up.
+    // Back as the creator: one completed response, and the lead.
     await page.goto(`/forms/${formId}/responses`);
-    await expect(page.getByText("1 response")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("link", { name: /Completed\s*1/ })).toBeVisible({
+      timeout: 10000,
+    });
+    await page.goto("/leads");
+    await expect(page.getByRole("cell", { name: "Ada Lovelace" })).toBeVisible();
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible();
   });
 });

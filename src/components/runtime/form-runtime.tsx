@@ -13,7 +13,11 @@ import {
 import { RuntimeQuestionInput } from "./runtime-question-input";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-import { THEME_FONT_STACK, THEME_BUTTON_RADIUS } from "@/components/theme-styles";
+import {
+  THEME_FONT_STACK,
+  THEME_BUTTON_RADIUS,
+  themeTokenOverrides,
+} from "@/components/theme-styles";
 
 export type CompleteOutcome =
   | { ok: true; endingId: string }
@@ -193,6 +197,11 @@ export function FormRuntime({
     // question's input unmounts.
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key !== "Enter" || e.isComposing) return;
+      // A field that handles Enter itself (e.g. the contact block moving
+      // to its next input) marks the event handled. stopPropagation
+      // can't express that here: React's own listeners live on the
+      // document too, alongside this one.
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       const container = containerRef.current;
       if (!target || !container) return;
@@ -229,6 +238,7 @@ export function FormRuntime({
   );
 
   const containerStyle: React.CSSProperties = {
+    ...(themeTokenOverrides(theme) as React.CSSProperties),
     backgroundColor: theme.backgroundColor,
     color: theme.textColor ?? undefined,
     fontFamily: THEME_FONT_STACK[theme.fontFamily],
@@ -307,12 +317,14 @@ export function FormRuntime({
         <div>
           <h2 className="text-xl font-semibold sm:text-2xl">
             {question.label}
-            {question.required && !entry && (
+            {question.required && !entry && question.type !== "contact_info" && (
               <span aria-hidden className="ml-1" style={{ color: theme.primaryColor }}>
                 *
               </span>
             )}
-            {question.required && !entry && <span className="sr-only"> (required)</span>}
+            {question.required && !entry && question.type !== "contact_info" && (
+              <span className="sr-only"> (required)</span>
+            )}
           </h2>
           {question.description && (
             <p className="mt-1.5 text-sm opacity-70 sm:text-base">

@@ -11,10 +11,14 @@ import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
  * theirs or doesn't exist.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: formId } = await params;
+  const view =
+    new URL(request.url).searchParams.get("view") === "incomplete"
+      ? "incomplete"
+      : "completed";
   const { supabase, workspace } = await getCurrentWorkspace();
 
   const { data: form } = await supabase
@@ -32,8 +36,9 @@ export async function GET(
   }
 
   try {
-    const csv = await buildResponsesCsv(supabase, formId);
-    const filename = `${form.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase() || "form"}-responses.csv`;
+    const csv = await buildResponsesCsv(supabase, formId, view);
+    const base = form.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase() || "form";
+    const filename = `${base}-${view === "completed" ? "responses" : "incomplete"}.csv`;
 
     return new NextResponse(csv, {
       headers: {

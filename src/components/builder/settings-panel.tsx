@@ -13,6 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "cn";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  CONTACT_FIELDS,
+  CONTACT_FIELD_LABELS,
+  type ContactField,
+} from "@/domains/forms/schema/question-types";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -37,21 +44,23 @@ export function SettingsPanel({
 }) {
   return (
     <div className="space-y-5">
-      {question.type !== "welcome_screen" && question.type !== "statement" && (
-        <>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="required-toggle" className="text-sm font-medium">
-              Required
-            </Label>
-            <Switch
-              id="required-toggle"
-              checked={question.required}
-              onCheckedChange={(required) => onChange({ ...question, required })}
-            />
-          </div>
-          <Separator />
-        </>
-      )}
+      {question.type !== "welcome_screen" &&
+        question.type !== "statement" &&
+        question.type !== "contact_info" && (
+          <>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="required-toggle" className="text-sm font-medium">
+                Required
+              </Label>
+              <Switch
+                id="required-toggle"
+                checked={question.required}
+                onCheckedChange={(required) => onChange({ ...question, required })}
+              />
+            </div>
+            <Separator />
+          </>
+        )}
 
       {question.type === "welcome_screen" && (
         <Field label="Button label">
@@ -163,6 +172,10 @@ export function SettingsPanel({
             />
           </Field>
         </>
+      )}
+
+      {question.type === "contact_info" && (
+        <ContactInfoSettings question={question} onChange={onChange} />
       )}
 
       {question.type === "phone" && (
@@ -530,6 +543,89 @@ export function SettingsPanel({
           {question.type === "email" ? "an email address" : "a URL"}.
         </p>
       )}
+    </div>
+  );
+}
+
+type ContactQuestion = Extract<QuestionV1, { type: "contact_info" }>;
+
+/** Which contact fields to ask for, and which are required. At least
+ * one field stays on; turning a field off also drops its "required". */
+function ContactInfoSettings({
+  question,
+  onChange,
+}: {
+  question: ContactQuestion;
+  onChange: (next: QuestionV1) => void;
+}) {
+  const { fields, requiredFields } = question.settings;
+
+  function update(nextFields: ContactField[], nextRequired: ContactField[]) {
+    // Keep the canonical field order regardless of click order.
+    const ordered = CONTACT_FIELDS.filter((f) => nextFields.includes(f));
+    const required = ordered.filter((f) => nextRequired.includes(f));
+    onChange({
+      ...question,
+      required: required.length > 0,
+      settings: { fields: ordered, requiredFields: required },
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-sm font-medium">Lead details to collect</p>
+        <p className="text-muted-foreground text-xs">
+          Saved as soon as the respondent moves on — you keep the lead even if they
+          don&apos;t finish the form.
+        </p>
+      </div>
+      <div className="divide-y rounded-md border">
+        {CONTACT_FIELDS.map((field) => {
+          const shown = fields.includes(field);
+          const isOnlyField = shown && fields.length === 1;
+          return (
+            <div
+              key={field}
+              className="flex items-center justify-between gap-3 px-3 py-2"
+            >
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={shown}
+                  disabled={isOnlyField}
+                  onCheckedChange={(checked) =>
+                    update(
+                      checked ? [...fields, field] : fields.filter((f) => f !== field),
+                      requiredFields.filter((f) => f !== field || checked),
+                    )
+                  }
+                />
+                {CONTACT_FIELD_LABELS[field]}
+              </label>
+              <label
+                className={cn(
+                  "text-muted-foreground flex items-center gap-2 text-xs",
+                  !shown && "opacity-40",
+                )}
+              >
+                Required
+                <Switch
+                  disabled={!shown}
+                  checked={requiredFields.includes(field)}
+                  onCheckedChange={(checked) =>
+                    update(
+                      fields,
+                      checked
+                        ? [...requiredFields, field]
+                        : requiredFields.filter((f) => f !== field),
+                    )
+                  }
+                />
+              </label>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

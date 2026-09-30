@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { customAlphabet } from "nanoid";
+import { customAlphabet, nanoid } from "nanoid";
 import { slugify } from "@/domains/workspaces";
 import { parseFormSchema, validateSemantics } from "./schema/validate";
 import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
@@ -26,7 +26,10 @@ export type FormListItem = {
   slug: string;
   updatedAt: string;
   hasPublishedVersion: boolean;
+  /** Submitted responses. */
   responseCount: number;
+  /** Respondents who answered something but never submitted. */
+  incompleteCount: number;
 };
 
 /** A minimal but valid draft schema for a brand-new form: a welcome
@@ -55,11 +58,33 @@ export function starterFormSchema(title: string): FormSchemaV1 {
         settings: { buttonLabel: "Start" },
       },
       {
-        id: "q_first",
-        type: "short_text",
+        id: `q_${nanoid(10)}`,
+        type: "long_text",
         order: 1,
-        label: "What's your name?",
+        label: "What can we help you with?",
         required: true,
+        settings: {},
+      },
+      // Lead capture sits before the last question: once the respondent
+      // moves past it their details are saved, even if they never finish.
+      {
+        id: `q_${nanoid(10)}`,
+        type: "contact_info",
+        order: 2,
+        label: "Where can we reach you?",
+        description: "We'll only use this to get back to you.",
+        required: true,
+        settings: {
+          fields: ["name", "email", "phone"],
+          requiredFields: ["name", "email"],
+        },
+      },
+      {
+        id: `q_${nanoid(10)}`,
+        type: "long_text",
+        order: 3,
+        label: "Anything else we should know?",
+        required: false,
         settings: {},
       },
     ],
@@ -73,11 +98,14 @@ export async function listFormsForWorkspace(
 ): Promise<FormListItem[]> {
   const { data, error } = await supabase
     .from("forms")
-    .select("id, title, slug, updated_at, form_versions(status), responses(count)")
+    .select(
+      "id, title, slug, updated_at, form_versions(status), completed:responses(count), incomplete:responses(count)",
+    )
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
-    // Filters the embedded rows being counted, not the forms themselves.
-    .eq("responses.status", "completed")
+    // These filter the embedded rows being counted, not the forms.
+    .eq("completed.status", "completed")
+    .eq("incomplete.status", "partial")
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -88,7 +116,8 @@ export async function listFormsForWorkspace(
     slug: form.slug,
     updatedAt: form.updated_at,
     hasPublishedVersion: (form.form_versions ?? []).some((v) => v.status === "published"),
-    responseCount: form.responses?.[0]?.count ?? 0,
+    responseCount: form.completed?.[0]?.count ?? 0,
+    incompleteCount: form.incomplete?.[0]?.count ?? 0,
   }));
 }
 

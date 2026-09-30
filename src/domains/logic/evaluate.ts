@@ -72,6 +72,10 @@ export function isAnswered(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") {
+    // Contact info: answered once any of its fields has text.
+    return Object.values(value).some((v) => typeof v === "string" && v.trim() !== "");
+  }
   return true;
 }
 

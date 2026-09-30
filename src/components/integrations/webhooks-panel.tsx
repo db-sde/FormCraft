@@ -9,7 +9,7 @@ import {
   setWebhookEnabledAction,
   deleteWebhookEndpointAction,
   sendTestDeliveryAction,
-} from "@/app/(dashboard)/forms/[id]/integrations/actions";
+} from "@/app/(form)/forms/[id]/integrations/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

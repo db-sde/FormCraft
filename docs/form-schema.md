@@ -60,8 +60,17 @@ LogicRuleV1 = {
 
 `QuestionType` (Phase 1, exhaustive):
 `welcome_screen`, `short_text`, `long_text`, `email`, `phone`, `url`,
-`number`, `single_select`, `multi_select`, `dropdown`, `yes_no`,
-`date`, `rating`, `opinion_scale`, `file_upload`, `statement`.
+`contact_info`, `number`, `single_select`, `multi_select`, `dropdown`,
+`yes_no`, `date`, `rating`, `opinion_scale`, `file_upload`, `statement`.
+
+`contact_info` is lead capture: one step asking for several contact
+details. Settings: `fields` (subset of `name`, `email`, `phone`,
+`company`, at least one) and `requiredFields` (must be a subset of
+`fields`). Its answer is an object `{ name?, email?, phone?, company? }`
+holding only the configured fields; required-ness and email/phone
+formats are validated per field. Exports (CSV, Sheets) give each field
+its own column. Added to v1 additively — older schemas never contain
+it, so no migration of stored data is needed.
 (`ending` is modeled separately via `endings[]`, not as a question
 type, since a form can have multiple endings reachable by logic.)
 

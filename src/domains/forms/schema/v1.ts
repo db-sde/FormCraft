@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { LOGIC_OPERATORS, OPTION_BEARING_QUESTION_TYPES } from "./question-types";
+import {
+  CONTACT_FIELDS,
+  LOGIC_OPERATORS,
+  OPTION_BEARING_QUESTION_TYPES,
+} from "./question-types";
 
 /**
  * Canonical Phase 1 form schema, version 1. This is the single typed
@@ -62,6 +66,19 @@ const LongTextSettings = z.object({
 const EmailSettings = z.object({});
 const PhoneSettings = z.object({ defaultCountry: z.string().length(2).optional() });
 const UrlSettings = z.object({});
+
+// Lead capture: one step asking for several contact details at once.
+// Saved like any other answer as soon as the respondent moves on, so
+// the lead is kept even if they never reach the end of the form.
+const ContactInfoSettings = z
+  .object({
+    fields: z.array(z.enum(CONTACT_FIELDS)).min(1).max(CONTACT_FIELDS.length),
+    requiredFields: z.array(z.enum(CONTACT_FIELDS)).default([]),
+  })
+  .refine(
+    (v) => v.requiredFields.every((f) => v.fields.includes(f)),
+    "a required contact field must also be shown",
+  );
 
 const NumberSettings = z
   .object({
@@ -159,6 +176,11 @@ export const QuestionV1 = z.discriminatedUnion("type", [
   z.object({ ...baseQuestionFields, type: z.literal("email"), settings: EmailSettings }),
   z.object({ ...baseQuestionFields, type: z.literal("phone"), settings: PhoneSettings }),
   z.object({ ...baseQuestionFields, type: z.literal("url"), settings: UrlSettings }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("contact_info"),
+    settings: ContactInfoSettings,
+  }),
   z.object({
     ...baseQuestionFields,
     type: z.literal("number"),

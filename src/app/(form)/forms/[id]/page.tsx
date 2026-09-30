@@ -11,10 +11,13 @@ import {
 
 export default async function FormBuilderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ leadCapture?: string }>;
 }) {
   const { id } = await params;
+  const { leadCapture } = await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
 
   const draft = await getDraftForEdit(supabase, id, workspace.id);
@@ -24,6 +27,7 @@ export default async function FormBuilderPage({
 
   return (
     <FormBuilder
+      addLeadCaptureOnOpen={leadCapture === "1"}
       formTitle={draft.formTitle}
       workspaceId={workspace.id}
       formId={draft.formId}

@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   Upload,
   FileText,
+  Contact,
   type LucideIcon,
 } from "lucide-react";
 import { QUESTION_TYPES, type QuestionType } from "@/domains/forms/schema/question-types";
@@ -29,6 +30,7 @@ export const QUESTION_TYPE_META: Record<
   email: { label: "Email", icon: Mail, group: "answer" },
   phone: { label: "Phone", icon: Phone, group: "answer" },
   url: { label: "Website URL", icon: LinkIcon, group: "answer" },
+  contact_info: { label: "Contact info (lead)", icon: Contact, group: "answer" },
   number: { label: "Number", icon: Hash, group: "answer" },
   single_select: { label: "Multiple choice", icon: CircleDot, group: "answer" },
   multi_select: { label: "Checkboxes", icon: CheckSquare, group: "answer" },

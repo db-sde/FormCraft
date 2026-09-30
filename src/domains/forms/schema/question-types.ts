@@ -5,6 +5,7 @@ export const QUESTION_TYPES = [
   "email",
   "phone",
   "url",
+  "contact_info",
   "number",
   "single_select",
   "multi_select",
@@ -18,6 +19,18 @@ export const QUESTION_TYPES = [
 ] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];
+
+/** The sub-fields a Contact info (lead capture) block can ask for. Its
+ * answer is stored as `{ name?, email?, phone?, company? }`. */
+export const CONTACT_FIELDS = ["name", "email", "phone", "company"] as const;
+export type ContactField = (typeof CONTACT_FIELDS)[number];
+
+export const CONTACT_FIELD_LABELS: Record<ContactField, string> = {
+  name: "Name",
+  email: "Email",
+  phone: "Phone",
+  company: "Company",
+};
 
 /** Question types that render an answerable input (vs. purely informational). */
 export const ANSWERABLE_QUESTION_TYPES = QUESTION_TYPES.filter(

@@ -4,6 +4,25 @@ Last updated: 2026-09-30
 
 ## Current milestone
 
+**LEAD CAPTURE + REDESIGN** (2026-09-30):
+
+- Fixed published forms restarting from question one mid-fill (an
+  autosave revision race; regression test `autosave-race.spec.ts`).
+- Lead capture: `contact_info` question type, in every new form before
+  the last question, "Add lead capture" anywhere; workspace **Leads**
+  page with CSV export. Details are kept even when people don't finish.
+- Responses split into **Completed / Incomplete** (who stopped where,
+  progress, their answers so far); CSV export per view.
+- App redesign: sidebar shell (Forms, Leads, Templates, account menu,
+  mobile drawer), shared form header with Build · Share · Responses ·
+  Integrations, new Share page (link, social, embed code), dashboard
+  with stats and a getting-started checklist, WYSIWYG themed builder
+  canvas, first-publish dialog, new landing and auth pages.
+- Security: the signed-in app can't be framed (clickjacking); only
+  published forms allow embedding.
+
+### Previous milestone
+
 **FULL-APP AUDIT** (2026-09-30) — a walkthrough of every area (builder,
 runtime, dashboard, responses, integrations, auth) as a creator and a
 respondent, fixing what it found in verified, committed batches. The

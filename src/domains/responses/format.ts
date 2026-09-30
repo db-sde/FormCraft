@@ -1,4 +1,11 @@
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
+import { CONTACT_FIELD_LABELS } from "@/domains/forms/schema/question-types";
+
+function contactRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 /**
  * Turns a raw stored answer value (JSON — an option id, a boolean, a
@@ -52,6 +59,14 @@ export function formatAnswerValue(
         ? question.settings.yesLabel || "Yes"
         : question.settings.noLabel || "No";
 
+    case "contact_info": {
+      const record = contactRecord(value);
+      return question.settings.fields
+        .map((field) => record[field])
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+        .join(" · ");
+    }
+
     case "file_upload":
       if (typeof value !== "string") return "";
       return context.uploadNames?.get(value) ?? "Uploaded file";
@@ -77,4 +92,35 @@ export function formatAnswerValue(
  * label never produces an unlabeled column. */
 export function questionColumnLabel(question: QuestionV1): string {
   return question.label.trim() || question.id;
+}
+
+/** Export columns for a question (CSV, Google Sheets). Most questions
+ * are one column; a Contact info block gets one per field so a lead's
+ * name, email and phone land in their own spreadsheet columns. */
+export function questionColumnLabels(question: QuestionV1): string[] {
+  if (question.type === "contact_info") {
+    return question.settings.fields.map(
+      (field) => `${questionColumnLabel(question)} (${CONTACT_FIELD_LABELS[field]})`,
+    );
+  }
+  return [questionColumnLabel(question)];
+}
+
+/** Cells matching questionColumnLabels(`columnsFrom`) — `columnsFrom`
+ * fixes the column layout (the latest version's question), while
+ * `question` is the version the response actually answered. */
+export function answerCells(
+  columnsFrom: QuestionV1,
+  question: QuestionV1,
+  value: unknown,
+  context: { uploadNames?: ReadonlyMap<string, string> } = {},
+): string[] {
+  if (columnsFrom.type === "contact_info") {
+    const record = contactRecord(value);
+    return columnsFrom.settings.fields.map((field) => {
+      const v = record[field];
+      return typeof v === "string" ? v : "";
+    });
+  }
+  return [formatAnswerValue(question, value, context)];
 }

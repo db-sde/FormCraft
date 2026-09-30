@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import { createConfirmedUser, deleteUser, loginViaUI, logOutViaUI } from "./helpers";
 
 test.describe("auth", () => {
   test("signup form submits and shows the check-your-email step", async ({ page }) => {
@@ -20,10 +20,9 @@ test.describe("auth", () => {
     const user = await createConfirmedUser("e2e-login");
     try {
       await loginViaUI(page, user.email, user.password);
-      await expect(page.getByRole("heading", { name: "Forms" })).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
 
-      await page.getByRole("button", { name: "Log out" }).click();
-      await page.waitForURL("**/login");
+      await logOutViaUI(page);
       await expect(page.getByLabel("Email")).toBeVisible();
     } finally {
       await deleteUser(user.userId);

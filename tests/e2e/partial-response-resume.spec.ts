@@ -1,5 +1,10 @@
 import { test, expect, type Browser } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import {
+  createConfirmedUser,
+  deleteUser,
+  loginViaUI,
+  publishFromBuilder,
+} from "./helpers";
 
 test.describe("partial response resume", () => {
   let user: Awaited<ReturnType<typeof createConfirmedUser>>;
@@ -12,13 +17,7 @@ test.describe("partial response resume", () => {
     await page.getByRole("button", { name: "Start from scratch" }).click();
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
 
-    await page.getByRole("button", { name: "Publish" }).click();
-    await expect(page.getByRole("link", { name: "Open live form" })).toBeVisible({
-      timeout: 10000,
-    });
-    liveLink = (await page
-      .getByRole("link", { name: "Open live form" })
-      .getAttribute("href"))!;
+    liveLink = await publishFromBuilder(page);
   });
 
   test.afterEach(async () => {

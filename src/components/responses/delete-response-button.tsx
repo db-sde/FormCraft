@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteResponseAction } from "@/app/(dashboard)/forms/[id]/responses/actions";
+import { deleteResponseAction } from "@/app/(form)/forms/[id]/responses/actions";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,

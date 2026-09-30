@@ -3,6 +3,39 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-30 — Lead capture is a question type, placed before the last question
+
+Requested directly by the user (it overrides the Phase 1 scope rule for
+this feature): capture a respondent's contact details _before_ the
+final question, so the lead is kept even if they never submit.
+
+- Modelled as a `contact_info` question type rather than a form-level
+  toggle: it reuses autosave (the answer is persisted the moment the
+  respondent moves past the step), validation, logic (`is answered`),
+  response views and exports with no parallel pipeline.
+- New blank forms include it (welcome → open question → contact info →
+  optional last question). Any form gets it via "Add lead capture",
+  which inserts it just before the last question.
+- A "lead" is any response with non-empty contact details, finished or
+  not. The workspace Leads page lists them across forms.
+- Fields: name, email, phone, company — each toggleable and requirable.
+  Consent text / CRM sync are deliberately not included.
+
+## 2026-09-30 — "Incomplete" means answered something but didn't submit
+
+The Responses page splits into Completed and Incomplete. Incomplete is
+status `partial` (at least one saved answer). A visitor who opened the
+form and answered nothing (`in_progress`) isn't listed — there's
+nothing to show — but still counts as a Start in the funnel.
+
+## 2026-09-30 — App navigation structure
+
+Workspace pages (Forms, Leads, Templates) share a sidebar shell. Pages
+inside a form (Build, Share, Responses, Integrations) share a top bar
+with those four tabs and no sidebar, so the builder keeps full width.
+Brand colour is a single token set in `globals.css`; published forms
+never inherit it (their own theme re-points the tokens).
+
 ## 2026-09-30 — Welcome screen is optional and pinned first
 
 The builder refused to delete the welcome screen yet allowed

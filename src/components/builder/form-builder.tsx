@@ -3,17 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Plus,
   X,
   Palette,
   GitBranch,
-  Link2,
-  ExternalLink,
   Eye,
   EyeOff,
   MoreHorizontal,
   CircleAlert,
+  Contact,
+  Loader2,
+  RefreshCw,
+  Rocket,
+  Send,
 } from "lucide-react";
 import type {
   FormSchemaV1,
@@ -35,13 +37,15 @@ import {
   removeEnding,
   rulesReferencingQuestion,
   rulesReferencingEnding,
+  hasLeadCapture,
+  insertLeadCapture,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
   type SchemaProblem,
 } from "@/domains/forms/schema/validate";
 import { toast } from "sonner";
-import type { SaveDraftResult, PublishResult } from "@/app/(builder)/forms/[id]/actions";
+import type { SaveDraftResult, PublishResult } from "@/app/(form)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
 import { AddQuestionMenu } from "./add-question-menu";
 import { QuestionEditor } from "./question-editor";
@@ -53,7 +57,17 @@ import { LogicEditor } from "./logic-editor";
 import { PreviewDialog } from "./preview-dialog";
 import { SaveStatus, type SaveState } from "./save-status";
 import { FormTitleInput } from "./form-title-input";
-import { FormTabs } from "@/components/forms/form-tabs";
+import { FormTopBar } from "@/components/forms/form-top-bar";
+import { CopyLinkButton, OpenLiveButton } from "@/components/forms/live-link-actions";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
@@ -62,6 +76,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -106,7 +121,10 @@ export function FormBuilder({
   onPublish,
   onUnpublish,
   onRename,
+  addLeadCaptureOnOpen = false,
 }: {
+  /** Opened from "Add lead capture" elsewhere (`?leadCapture=1`). */
+  addLeadCaptureOnOpen?: boolean;
   formTitle: string;
   workspaceId: string;
   formId: string;
@@ -128,14 +146,39 @@ export function FormBuilder({
     title: string,
   ) => Promise<{ ok: true; title: string } | { ok: false; message: string }>;
 }) {
-  const [schema, setSchema] = useState(initialSchema);
+  // Arriving via "Add lead capture" inserts the block straight away (it
+  // autosaves like any other edit) and selects it.
+  const [opening] = useState(() => {
+    if (addLeadCaptureOnOpen && !hasLeadCapture(initialSchema.questions)) {
+      const { questions, id } = insertLeadCapture(initialSchema.questions);
+      return { schema: { ...initialSchema, questions }, selectedId: id, added: true };
+    }
+    return {
+      schema: initialSchema,
+      selectedId: initialSchema.questions[0]?.id,
+      added: false,
+    };
+  });
+  const [schema, setSchema] = useState(opening.schema);
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [liveDialogOpen, setLiveDialogOpen] = useState(false);
   const [selection, setSelection] = useState<Selection>({
     kind: "question",
-    id: initialSchema.questions[0]?.id,
+    id: opening.selectedId,
   });
+  const router = useRouter();
+  const announcedLeadCaptureRef = useRef(false);
+
+  useEffect(() => {
+    if (!opening.added || announcedLeadCaptureRef.current) return;
+    announcedLeadCaptureRef.current = true;
+    toast.success("Lead capture added", {
+      description: "It sits before your last question — adjust the fields on the right.",
+    });
+    router.replace(`/forms/${formId}`);
+  }, [opening.added, router, formId]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "question"; id: string; label: string; affectedRules: LogicRuleV1[] }
@@ -255,6 +298,12 @@ export function FormBuilder({
     setSelection({ kind: "question", id: question.id });
   }
 
+  function handleAddLeadCapture() {
+    const { questions, id } = insertLeadCapture(schema.questions);
+    setSchema((s) => ({ ...s, questions }));
+    setSelection({ kind: "question", id });
+  }
+
   function requestDeleteQuestion(id: string) {
     const question = schema.questions.find((q) => q.id === id);
     if (!question || !canDeleteQuestion(schema.questions, id)) return;
@@ -337,18 +386,6 @@ export function FormBuilder({
 
   const liveUrl = `${appUrl}/f/${slug}`;
 
-  async function copyLiveLink() {
-    // appUrl may be unset in some environments — fall back to the
-    // origin the creator is actually on so the copied link is absolute.
-    const absolute = appUrl ? liveUrl : `${window.location.origin}/f/${slug}`;
-    try {
-      await navigator.clipboard.writeText(absolute);
-      toast.success("Link copied", { description: absolute });
-    } catch {
-      toast.error("Couldn't copy the link", { description: absolute });
-    }
-  }
-
   /** Publish reads the draft from the database, so any edit still
    * sitting in the autosave debounce (or mid-save) must land first —
    * otherwise "edit, then quickly Publish" publishes without the edit. */
@@ -383,10 +420,13 @@ export function FormBuilder({
         publishedVersionNumber: result.publishedVersionNumber,
         hasUnpublishedChanges: false,
       });
-      toast.success(publishInfo.isPublished ? "Republished" : "Published", {
-        description: "Your form is live.",
-        action: { label: "View live", onClick: () => window.open(liveUrl, "_blank") },
-      });
+      if (publishInfo.isPublished) {
+        toast.success("Changes published", {
+          description: "Respondents now see the latest version.",
+        });
+      } else {
+        setLiveDialogOpen(true);
+      }
     } else {
       toast.error("Couldn't publish", { description: result.message });
     }
@@ -433,160 +473,179 @@ export function FormBuilder({
     }
   }
 
+  const publishLabel = publishing
+    ? "Publishing…"
+    : !publishInfo.isPublished
+      ? "Publish"
+      : publishInfo.hasUnpublishedChanges
+        ? "Publish changes"
+        : "Up to date";
+
   return (
-    <div className="flex h-screen flex-col">
-      <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b px-3">
-        <div className="flex min-w-0 items-center gap-1">
-          <Button asChild variant="ghost" size="icon" aria-label="Back to dashboard">
-            <Link href="/dashboard">
-              <ArrowLeft />
-            </Link>
-          </Button>
-          <FormTitleInput
-            title={formTitle}
-            onRename={(title) => onRename(formId, title)}
-            onTitleChange={(title) =>
-              setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
-            }
-          />
-          <div className="hidden shrink-0 items-center gap-2 lg:flex">
-            <SaveStatus
-              state={saveState}
-              problem={saveProblem?.message}
-              onProblemClick={showProblem}
+    <div className="bg-canvas flex h-dvh flex-col">
+      <FormTopBar
+        formId={formId}
+        active="build"
+        title={
+          <>
+            <FormTitleInput
+              title={formTitle}
+              onRename={(title) => onRename(formId, title)}
+              onTitleChange={(title) =>
+                setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
+              }
             />
-            {saveState === "stale" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => window.location.reload()}
-              >
-                Reload
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <FormTabs formId={formId} active="build" />
-
-        <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto [&>*]:shrink-0">
-          {publishInfo.isPublished && (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className={cn(
-                      "flex items-center gap-1.5 text-xs font-medium",
-                      publishInfo.hasUnpublishedChanges
-                        ? "text-amber-600"
-                        : "text-emerald-600",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "size-2 rounded-full",
-                        publishInfo.hasUnpublishedChanges
-                          ? "bg-amber-500"
-                          : "bg-emerald-500",
-                      )}
-                    />
-                    <span className="hidden 2xl:inline">
-                      {publishInfo.hasUnpublishedChanges ? "Unpublished changes" : "Live"}
-                    </span>
-                    <span className="sr-only 2xl:hidden">
-                      {publishInfo.hasUnpublishedChanges ? "Unpublished changes" : "Live"}
-                    </span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {publishInfo.hasUnpublishedChanges
-                    ? "Respondents still see the last published version. Publish to update it."
-                    : "Respondents see exactly what you're editing."}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="Copy link"
-                    onClick={() => void copyLiveLink()}
-                  >
-                    <Link2 />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Copy link</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    asChild
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="Open live form"
-                  >
-                    <a href={liveUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink />
-                    </a>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{liveUrl}</TooltipContent>
-              </Tooltip>
-            </>
-          )}
-          <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
-            <Eye /> Preview
-          </Button>
-          <Button
-            size="sm"
-            variant={
-              publishInfo.isPublished && !publishInfo.hasUnpublishedChanges
-                ? "outline"
-                : "default"
-            }
-            disabled={publishing}
-            onClick={handlePublish}
-          >
-            {publishing
-              ? "Publishing…"
-              : !publishInfo.isPublished
-                ? "Publish"
-                : publishInfo.hasUnpublishedChanges
-                  ? "Publish changes"
-                  : "Republish"}
-          </Button>
-          {publishInfo.isPublished && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+              <SaveStatus
+                state={saveState}
+                problem={saveProblem?.message}
+                onProblemClick={showProblem}
+              />
+              {saveState === "stale" && (
                 <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="More publishing options"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.location.reload()}
                 >
-                  <MoreHorizontal />
+                  Reload
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={publishing}
-                  onSelect={() => void handleUnpublish()}
-                >
-                  <EyeOff /> Unpublish
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </header>
+              )}
+            </div>
+          </>
+        }
+        actions={
+          <>
+            {publishInfo.isPublished && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="hidden items-center px-1 sm:flex">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          publishInfo.hasUnpublishedChanges
+                            ? "bg-amber-500"
+                            : "bg-emerald-500",
+                        )}
+                      />
+                      <span className="sr-only">
+                        {publishInfo.hasUnpublishedChanges
+                          ? "Unpublished changes"
+                          : "Live"}
+                      </span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {publishInfo.hasUnpublishedChanges
+                      ? "Live — but your latest edits aren't published yet."
+                      : "Live — respondents see exactly what you're editing."}
+                  </TooltipContent>
+                </Tooltip>
+                <CopyLinkButton slug={slug} />
+                <OpenLiveButton slug={slug} />
+              </>
+            )}
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+              <Eye />
+              <span className="hidden sm:inline">Preview</span>
+            </Button>
+            <Button
+              variant={
+                publishInfo.isPublished && !publishInfo.hasUnpublishedChanges
+                  ? "outline"
+                  : "default"
+              }
+              disabled={
+                publishing ||
+                (publishInfo.isPublished && !publishInfo.hasUnpublishedChanges)
+              }
+              onClick={handlePublish}
+            >
+              {publishing ? <Loader2 className="animate-spin" /> : <Rocket />}
+              <span
+                className={cn(
+                  publishInfo.isPublished &&
+                    !publishInfo.hasUnpublishedChanges &&
+                    "sr-only sm:not-sr-only",
+                )}
+              >
+                {publishLabel}
+              </span>
+            </Button>
+            {publishInfo.isPublished && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="More publishing options"
+                  >
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/forms/${formId}/share`}>
+                      <Send /> Share options
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={publishing}
+                    onSelect={() => void handlePublish()}
+                  >
+                    <RefreshCw /> Republish
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={publishing}
+                    onSelect={() => void handleUnpublish()}
+                  >
+                    <EyeOff /> Unpublish
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        }
+      />
+
+      <Dialog open={liveDialogOpen} onOpenChange={setLiveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>🎉 Your form is live</DialogTitle>
+            <DialogDescription>
+              Anyone with this link can fill it in. Keep editing any time — changes go
+              live when you publish them.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted/60 truncate rounded-md border px-3 py-2 font-mono text-sm">
+            {appUrl ? liveUrl : `/f/${slug}`}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button asChild variant="ghost">
+              <Link href={`/forms/${formId}/share`}>More ways to share</Link>
+            </Button>
+            <div className="flex gap-2">
+              <OpenLiveButton slug={slug} label="Open" />
+              <CopyLinkButton slug={slug} label="Copy link" variant="default" />
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PreviewDialog schema={schema} open={previewOpen} onOpenChange={setPreviewOpen} />
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-r p-3">
+      {/* Three panes side by side from md up; stacked (and the whole page
+          scrolls) on phones. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+        <aside className="bg-background flex w-full shrink-0 flex-col gap-4 border-b p-3 md:w-72 md:overflow-y-auto md:border-r md:border-b-0">
           <div>
-            <p className="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">
+            <p className="text-muted-foreground mb-2 flex items-center justify-between px-1 text-xs font-semibold tracking-wide uppercase">
               Questions
+              <span className="font-normal normal-case">
+                {schema.questions.length} step{schema.questions.length === 1 ? "" : "s"}
+              </span>
             </p>
             <QuestionList
               questions={schema.questions}
@@ -602,11 +661,27 @@ export function FormBuilder({
             canAddWelcome={!schema.questions.some((q) => q.type === "welcome_screen")}
           />
 
+          {!hasLeadCapture(schema.questions) && (
+            <div className="border-primary/25 bg-accent/60 rounded-lg border p-3">
+              <p className="text-accent-foreground flex items-center gap-1.5 text-sm font-semibold">
+                <Contact className="size-4" />
+                Capture leads
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Ask for name, email and phone before your last question. Details are saved
+                the moment they&apos;re entered — even if the person never submits.
+              </p>
+              <Button size="sm" className="mt-2 w-full" onClick={handleAddLeadCapture}>
+                <Plus /> Add lead capture
+              </Button>
+            </div>
+          )}
+
           <Separator />
 
           <div>
             <div className="mb-2 flex items-center justify-between px-1">
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                 Endings
               </p>
               <button
@@ -667,7 +742,7 @@ export function FormBuilder({
               )}
             >
               <Palette className="text-muted-foreground size-4" />
-              Theme
+              Design
             </button>
             <button
               type="button"
@@ -690,12 +765,20 @@ export function FormBuilder({
           </div>
         </aside>
 
-        <main className="flex-1 overflow-y-auto px-10 py-12">
+        <main className="flex-1 px-4 py-8 sm:px-10 sm:py-12 md:overflow-y-auto">
           {selectedQuestion && (
-            <QuestionEditor question={selectedQuestion} onChange={updateQuestion} />
+            <QuestionEditor
+              question={selectedQuestion}
+              theme={schema.theme}
+              onChange={updateQuestion}
+            />
           )}
           {selectedEnding && (
-            <EndingEditor ending={selectedEnding} onChange={updateEnding} />
+            <EndingEditor
+              ending={selectedEnding}
+              theme={schema.theme}
+              onChange={updateEnding}
+            />
           )}
           {selection.kind === "theme" && (
             <ThemePreview
@@ -715,7 +798,7 @@ export function FormBuilder({
 
         <aside
           className={cn(
-            "w-80 shrink-0 overflow-y-auto border-l p-4",
+            "bg-background w-full shrink-0 border-t p-4 md:w-72 md:overflow-y-auto md:border-t-0 md:border-l lg:w-80",
             // The logic editor has no side settings; give it the room.
             selection.kind === "logic" && "hidden",
           )}

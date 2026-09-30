@@ -9,6 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "cn";
+import {
+  CONTACT_FIELD_LABELS,
+  type ContactField,
+} from "@/domains/forms/schema/question-types";
 
 /** Radio item value for the "Other" choice only — never stored. */
 const OTHER_OPTION_ID = "__other__";
@@ -84,6 +88,16 @@ export function RuntimeQuestionInput({
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder="+1 555 000 0000"
+        />
+      );
+
+    case "contact_info":
+      return (
+        <ContactInfoInput
+          fields={question.settings.fields}
+          requiredFields={question.settings.requiredFields}
+          value={value}
+          onChange={onChange}
         />
       );
 
@@ -452,6 +466,75 @@ function FileUploadInput({
           Upload failed — please try a different file.
         </p>
       )}
+    </div>
+  );
+}
+
+const CONTACT_INPUT: Record<
+  ContactField,
+  { type: string; autoComplete: string; placeholder: string }
+> = {
+  name: { type: "text", autoComplete: "name", placeholder: "Jane Smith" },
+  email: { type: "email", autoComplete: "email", placeholder: "jane@company.com" },
+  phone: { type: "tel", autoComplete: "tel", placeholder: "+1 555 000 0000" },
+  company: { type: "text", autoComplete: "organization", placeholder: "Acme Inc." },
+};
+
+/** Lead capture: a few labelled fields on one step. Enter moves to the
+ * next field (the last one continues the form, via the runtime's own
+ * Enter handling). */
+function ContactInfoInput({
+  fields,
+  requiredFields,
+  value,
+  onChange,
+}: {
+  fields: ContactField[];
+  requiredFields: ContactField[];
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, string>)
+      : {};
+
+  return (
+    <div className="grid gap-3">
+      {fields.map((field, index) => {
+        const id = `contact-${field}`;
+        const required = requiredFields.includes(field);
+        return (
+          <div key={field} className="grid gap-1.5">
+            <label htmlFor={id} className="text-sm font-medium opacity-80">
+              {CONTACT_FIELD_LABELS[field]}
+              {required ? (
+                <span aria-hidden> *</span>
+              ) : (
+                <span className="font-normal opacity-60"> (optional)</span>
+              )}
+            </label>
+            <Input
+              id={id}
+              autoFocus={index === 0}
+              required={required}
+              {...CONTACT_INPUT[field]}
+              value={record[field] ?? ""}
+              onChange={(e) => {
+                const next = { ...record, [field]: e.target.value };
+                if (!e.target.value) delete next[field];
+                onChange(next);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || index === fields.length - 1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                document.getElementById(`contact-${fields[index + 1]}`)?.focus();
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

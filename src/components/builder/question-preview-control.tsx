@@ -1,30 +1,38 @@
 "use client";
 
-import type { QuestionV1 } from "@/domains/forms/schema/v1";
+import type { QuestionV1, ThemeV1 } from "@/domains/forms/schema/v1";
+import { ThemedButton } from "./themed-slide";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Star, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CONTACT_FIELD_LABELS } from "@/domains/forms/schema/question-types";
 
 /** A non-interactive, disabled preview of what this question's input
  * will look like to a respondent — gives the creator a WYSIWYG sense
  * of the question without building a second live-input tree here (the
  * real interactive runtime is the public form, built separately). */
-export function QuestionPreviewControl({ question }: { question: QuestionV1 }) {
+export function QuestionPreviewControl({
+  question,
+  theme,
+}: {
+  question: QuestionV1;
+  theme: ThemeV1;
+}) {
   switch (question.type) {
     case "welcome_screen":
       return (
-        <Button type="button" disabled className="pointer-events-none">
+        <ThemedButton theme={theme}>
           {question.settings.buttonLabel || "Start"}
-        </Button>
+        </ThemedButton>
       );
     case "statement":
       return (
-        <Button type="button" disabled className="pointer-events-none">
+        <ThemedButton theme={theme}>
           {question.settings.buttonLabel || "Continue"}
-        </Button>
+        </ThemedButton>
       );
     case "short_text":
       return (
@@ -47,6 +55,20 @@ export function QuestionPreviewControl({ question }: { question: QuestionV1 }) {
       return <Input disabled placeholder="+1 555 000 0000" />;
     case "url":
       return <Input disabled placeholder="https://example.com" />;
+    case "contact_info":
+      return (
+        <div className="grid gap-3">
+          {question.settings.fields.map((field) => (
+            <div key={field} className="grid gap-1.5">
+              <span className="text-sm font-medium opacity-80">
+                {CONTACT_FIELD_LABELS[field]}
+                {question.settings.requiredFields.includes(field) ? " *" : " (optional)"}
+              </span>
+              <Input disabled />
+            </div>
+          ))}
+        </div>
+      );
     case "number":
       return <Input disabled type="number" placeholder="0" />;
     case "date":

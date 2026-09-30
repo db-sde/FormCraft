@@ -16,12 +16,14 @@ test.describe("form builder", () => {
   test("dashboard empty state creates a form and lands in the builder", async ({
     page,
   }) => {
-    await expect(page.getByText("No forms yet")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Welcome to FormCraft" }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Start from scratch" }).click();
 
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
     // The starter schema's welcome screen question is selected by default.
-    await expect(page.getByText("WELCOME SCREEN")).toBeVisible();
+    await expect(page.getByText("Welcome screen", { exact: true })).toBeVisible();
   });
 
   test("add, edit, and delete a question, with autosave confirming the write persisted", async ({
@@ -33,7 +35,7 @@ test.describe("form builder", () => {
     await page.getByRole("button", { name: "Add question" }).click();
     await page.getByRole("menuitem", { name: "Short text" }).click();
 
-    const questionTextInput = page.getByPlaceholder("Question text");
+    const questionTextInput = page.getByLabel("Question text");
     await expect(questionTextInput).toBeVisible();
     await questionTextInput.fill("What's your favorite color?");
 

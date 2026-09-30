@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import {
+  createConfirmedUser,
+  createPublishedForm,
+  deleteUser,
+  loginViaUI,
+} from "./helpers";
 
 /**
  * Journey 8 (docs/testing.md): duplicate submit protection. Driven at
@@ -26,13 +31,29 @@ test.describe("duplicate submit protection", () => {
     page,
     request,
   }) => {
-    await page.getByRole("button", { name: "Start from scratch" }).click();
-    await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
-    const formId = page.url().split("/forms/")[1];
-
-    await page.getByRole("button", { name: "Publish" }).click();
-    await expect(page.getByRole("link", { name: "Open live form" })).toBeVisible({
-      timeout: 10000,
+    // Known question ids (the starter form's are random), published
+    // straight through the database.
+    const { formId } = await createPublishedForm(user, {
+      schemaVersion: 1,
+      meta: { title: "Duplicate submit" },
+      theme: {
+        primaryColor: "#0f172a",
+        backgroundColor: "#ffffff",
+        fontFamily: "inter",
+        buttonStyle: "rounded",
+      },
+      endings: [{ id: "end", title: "Thanks!", isDefault: true }],
+      questions: [
+        {
+          id: "q_first",
+          type: "short_text",
+          order: 0,
+          label: "Name",
+          required: true,
+          settings: {},
+        },
+      ],
+      logic: [],
     });
 
     const startRes = await request.post("/api/responses/start", {
@@ -66,6 +87,8 @@ test.describe("duplicate submit protection", () => {
     expect(secondBody.endingId).toBe(firstBody.endingId);
 
     await page.goto(`/forms/${formId}/responses`);
-    await expect(page.getByText("1 response")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("link", { name: /Completed\s*1/ })).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

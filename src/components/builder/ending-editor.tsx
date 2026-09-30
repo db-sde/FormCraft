@@ -1,44 +1,49 @@
 "use client";
 
-import type { EndingV1 } from "@/domains/forms/schema/v1";
+import type { EndingV1, ThemeV1 } from "@/domains/forms/schema/v1";
+import { ThemedButton, ThemedSlide } from "./themed-slide";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 
 export function EndingEditor({
   ending,
+  theme,
   onChange,
 }: {
   ending: EndingV1;
+  theme: ThemeV1;
   onChange: (next: EndingV1) => void;
 }) {
+  const editable =
+    "resize-none border-none bg-transparent px-0 text-center shadow-none placeholder:text-current placeholder:opacity-40 focus-visible:ring-0 dark:bg-transparent";
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-      <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        {ending.isDefault ? "Default ending" : "Ending"}
-      </span>
-      <Textarea
-        value={ending.title}
-        onChange={(e) => onChange({ ...ending, title: e.target.value })}
-        placeholder="Thank you!"
-        aria-label="Ending title"
-        rows={1}
-        className="resize-none border-none px-0 text-2xl font-semibold shadow-none focus-visible:ring-0 md:text-2xl"
-      />
-      <Textarea
-        value={ending.description ?? ""}
-        onChange={(e) => onChange({ ...ending, description: e.target.value })}
-        placeholder="Description (optional)"
-        aria-label="Ending description"
-        rows={2}
-        className="text-muted-foreground resize-none border-none px-0 shadow-none focus-visible:ring-0"
-      />
-      <div className="mt-2">
-        <Button type="button" disabled className="pointer-events-none">
-          {ending.buttonLabel || "Done"}
-        </Button>
+    <div className="mx-auto w-full max-w-2xl">
+      <div className="text-muted-foreground mb-3 text-xs font-medium">
+        {ending.isDefault ? "Default ending" : "Ending"} — shown after the form is
+        submitted
       </div>
+      <ThemedSlide theme={theme} className="items-center text-center">
+        <Textarea
+          value={ending.title}
+          onChange={(e) => onChange({ ...ending, title: e.target.value })}
+          placeholder="Thank you!"
+          aria-label="Ending title"
+          rows={1}
+          className={`${editable} min-h-0 text-2xl font-semibold md:text-2xl`}
+        />
+        <Textarea
+          value={ending.description ?? ""}
+          onChange={(e) => onChange({ ...ending, description: e.target.value })}
+          placeholder="Add a message (optional)"
+          aria-label="Ending description"
+          rows={2}
+          className={`${editable} min-h-0 opacity-75`}
+        />
+        {(ending.redirectUrl || ending.buttonLabel) && (
+          <ThemedButton theme={theme}>{ending.buttonLabel || "Done"}</ThemedButton>
+        )}
+      </ThemedSlide>
     </div>
   );
 }

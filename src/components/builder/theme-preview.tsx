@@ -1,5 +1,5 @@
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
-import { THEME_FONT_STACK, THEME_BUTTON_RADIUS } from "@/components/theme-styles";
+import { ThemedButton, ThemedSlide } from "./themed-slide";
 
 /** Renders a small mock "welcome screen" styled with the current
  * theme, so the creator sees a live effect of every change without
@@ -12,36 +12,15 @@ export function ThemePreview({
   formTitle: string;
 }) {
   return (
-    <div
-      className="mx-auto flex w-full max-w-md flex-col items-center gap-4 rounded-lg border p-10 text-center shadow-sm"
-      style={{
-        backgroundColor: theme.backgroundColor,
-        color: theme.textColor ?? undefined,
-        fontFamily: THEME_FONT_STACK[theme.fontFamily],
-        backgroundImage: theme.backgroundImageUrl
-          ? `url(${theme.backgroundImageUrl})`
-          : undefined,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
-      {theme.logoUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL
-        <img src={theme.logoUrl} alt="" className="h-10 object-contain" />
-      )}
-      <h2 className="text-xl font-semibold">{formTitle}</h2>
-      <p className="text-sm opacity-70">This is what your theme looks like.</p>
-      <button
-        type="button"
-        disabled
-        className="pointer-events-none px-5 py-2 text-sm font-medium text-white"
-        style={{
-          backgroundColor: theme.primaryColor,
-          borderRadius: THEME_BUTTON_RADIUS[theme.buttonStyle],
-        }}
-      >
-        Start
-      </button>
+    <div className="mx-auto w-full max-w-2xl">
+      <div className="text-muted-foreground mb-3 text-xs font-medium">
+        Design — colours, font and buttons for every screen of this form
+      </div>
+      <ThemedSlide theme={theme} className="items-center text-center">
+        <h2 className="text-2xl font-semibold">{formTitle}</h2>
+        <p className="opacity-70">This is how your form looks to respondents.</p>
+        <ThemedButton theme={theme}>Start</ThemedButton>
+      </ThemedSlide>
     </div>
   );
 }

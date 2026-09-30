@@ -21,6 +21,7 @@ const DEFAULT_LABEL: Record<QuestionType, string> = {
   email: "What's your email?",
   phone: "What's your phone number?",
   url: "Share a link",
+  contact_info: "Where can we reach you?",
   number: "Enter a number",
   single_select: "Pick one",
   multi_select: "Pick any that apply",
@@ -50,6 +51,8 @@ function defaultSettings(type: QuestionType): QuestionV1["settings"] {
       return {};
     case "url":
       return {};
+    case "contact_info":
+      return { fields: ["name", "email", "phone"], requiredFields: ["name", "email"] };
     case "number":
       return {};
     case "single_select":
@@ -120,6 +123,28 @@ export function insertQuestion(
   const next = [...questions];
   next.splice(Math.max(atIndex, firstMovableIndex(questions)), 0, question);
   return reindex(next);
+}
+
+/**
+ * Adds a Contact info (lead capture) block just before the form's last
+ * question — the point where a respondent has invested enough to share
+ * their details, while there's still a question left so the lead is
+ * saved even if they drop off before submitting. Returns the new list
+ * and the block's id.
+ */
+export function insertLeadCapture(questions: QuestionV1[]): {
+  questions: QuestionV1[];
+  id: string;
+} {
+  const block = createQuestion("contact_info", 0);
+  const lastRegular = questions.length - 1;
+  const hasRegularQuestion = lastRegular >= firstMovableIndex(questions);
+  const atIndex = hasRegularQuestion ? lastRegular : questions.length;
+  return { questions: insertQuestion(questions, block, atIndex), id: block.id };
+}
+
+export function hasLeadCapture(questions: QuestionV1[]): boolean {
+  return questions.some((q) => q.type === "contact_info");
 }
 
 /** Whether `id` may be deleted — a form always keeps at least one

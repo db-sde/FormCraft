@@ -146,3 +146,21 @@ export async function createPublishedForm(
 
   return { formId: form.id, liveLink: `/f/${slug}` };
 }
+
+/** Clicks Publish in the builder and returns the live link from the
+ * "Your form is live" dialog (then closes it). */
+export async function publishFromBuilder(page: Page): Promise<string> {
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: /your form is live/i });
+  await dialog.waitFor({ timeout: 15000 });
+  const href = await dialog.getByRole("link", { name: "Open" }).getAttribute("href");
+  await page.keyboard.press("Escape");
+  if (!href) throw new Error("no live link in the publish dialog");
+  return href;
+}
+
+export async function logOutViaUI(page: Page) {
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Log out" }).click();
+  await page.waitForURL("**/login");
+}

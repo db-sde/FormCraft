@@ -17,7 +17,7 @@ test.describe("templates", () => {
     page,
   }) => {
     await page.goto("/templates");
-    await expect(page.getByRole("heading", { name: "Choose a template" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Templates" })).toBeVisible();
 
     await page.getByRole("button", { name: "Use this template" }).first().click();
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
@@ -28,7 +28,7 @@ test.describe("templates", () => {
     // `templates` row.
     await page.getByRole("button", { name: "Add question" }).click();
     await page.getByRole("menuitem", { name: "Short text" }).click();
-    const questionTextInput = page.getByPlaceholder("Question text");
+    const questionTextInput = page.getByLabel("Question text");
     await questionTextInput.fill("A question only this form has");
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
 

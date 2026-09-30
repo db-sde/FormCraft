@@ -1,4 +1,8 @@
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
+import {
+  CONTACT_FIELD_LABELS,
+  type ContactField,
+} from "@/domains/forms/schema/question-types";
 
 /** Prefix for a free-text "Other" choice on single/multi-select, e.g.
  * `"other:Purple"`. Shared with formatAnswerValue and the runtime input
@@ -37,7 +41,57 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
     );
   }
   if (typeof value === "number") return Number.isFinite(value);
+  if (question.type === "contact_info") {
+    return (
+      typeof value === "object" &&
+      Object.values(value).some((v) => typeof v === "string" && v.trim() !== "")
+    );
+  }
   return question.type === "yes_no" ? typeof value === "boolean" : true;
+}
+
+const MAX_CONTACT_FIELD_LENGTH = 300;
+
+function validPhone(raw: string): boolean {
+  if (!/^[\d\s+().-]+$/.test(raw)) return false;
+  const digits = raw.replace(/\D/g, "").length;
+  return digits >= 7 && digits <= 15;
+}
+
+function validateContactInfo(
+  settings: { fields: ContactField[]; requiredFields: ContactField[] },
+  value: unknown,
+): AnswerValidation {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  if (value !== undefined && value !== null && record !== value) {
+    return fail("Enter your contact details.");
+  }
+  // Only the fields this block shows may be stored.
+  if (Object.keys(record).some((key) => !settings.fields.includes(key as ContactField))) {
+    return fail("Enter your contact details.");
+  }
+  for (const field of settings.fields) {
+    const raw = record[field];
+    if (raw !== undefined && typeof raw !== "string") {
+      return fail("Enter your contact details.");
+    }
+    const text = (raw ?? "").trim();
+    const label = CONTACT_FIELD_LABELS[field].toLowerCase();
+    if (!text) {
+      if (settings.requiredFields.includes(field)) return fail(`Enter your ${label}.`);
+      continue;
+    }
+    if (text.length > MAX_CONTACT_FIELD_LENGTH) return fail(`That ${label} is too long.`);
+    if (field === "email" && !EMAIL_PATTERN.test(text)) {
+      return fail("Enter a valid email address.");
+    }
+    if (field === "phone" && !validPhone(text))
+      return fail("Enter a valid phone number.");
+  }
+  return OK;
 }
 
 function isValidUrl(raw: string): boolean {
@@ -78,6 +132,10 @@ function validateOption(
  */
 export function validateAnswer(question: QuestionV1, value: unknown): AnswerValidation {
   if (question.type === "welcome_screen" || question.type === "statement") return OK;
+  // Required-ness is per sub-field, so it's checked field by field.
+  if (question.type === "contact_info") {
+    return validateContactInfo(question.settings, value);
+  }
 
   if (!hasAnswer(question, value)) {
     return question.required ? fail("This question requires an answer.") : OK;
