@@ -39,14 +39,21 @@ import {
   rulesReferencingEnding,
   hasLeadCapture,
   insertLeadCapture,
+  convertQuestion,
+  rulesBrokenByTypeChange,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
   type SchemaProblem,
 } from "@/domains/forms/schema/validate";
 import { toast } from "sonner";
-import type { SaveDraftResult, PublishResult } from "@/app/(form)/forms/[id]/actions";
+import {
+  trackBuilderEventAction,
+  type SaveDraftResult,
+  type PublishResult,
+} from "@/app/(form)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
+import { QUESTION_TYPE_META } from "./question-meta";
 import { AddQuestionMenu } from "./add-question-menu";
 import { QuestionEditor } from "./question-editor";
 import { SettingsPanel } from "./settings-panel";
@@ -122,7 +129,10 @@ export function FormBuilder({
   onUnpublish,
   onRename,
   addLeadCaptureOnOpen = false,
+  openPreviewOnLoad = false,
 }: {
+  /** Opened from a dashboard "Preview" (`?preview=1`). */
+  openPreviewOnLoad?: boolean;
   /** Opened from "Add lead capture" elsewhere (`?leadCapture=1`). */
   addLeadCaptureOnOpen?: boolean;
   formTitle: string;
@@ -162,8 +172,14 @@ export function FormBuilder({
   const [schema, setSchema] = useState(opening.schema);
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
   const [publishing, setPublishing] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(openPreviewOnLoad);
   const [liveDialogOpen, setLiveDialogOpen] = useState(false);
+  const [pendingTypeChange, setPendingTypeChange] = useState<{
+    question: QuestionV1;
+    to: QuestionType;
+    lossy: boolean;
+    brokenRules: LogicRuleV1[];
+  } | null>(null);
   const [selection, setSelection] = useState<Selection>({
     kind: "question",
     id: opening.selectedId,
@@ -196,6 +212,26 @@ export function FormBuilder({
   const [saveProblem, setSaveProblem] = useState<SchemaProblem | null>(null);
 
   useEffect(() => () => clearTimeout(retryTimerRef.current), []);
+
+  // Leaving with edits that haven't reached the server — still in the
+  // autosave debounce, mid-save, failing, or invalid — must not be
+  // silent (PRD §3.2). Closing/reloading the tab gets the browser's
+  // "leave site?" prompt; navigating within the app flushes the save
+  // on the way out instead.
+  useEffect(() => {
+    const unsaved = () =>
+      !staleRef.current &&
+      (isSavingRef.current || latestSchemaRef.current !== savedSchemaRef.current);
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      if (!unsaved()) return;
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      if (unsaved()) void performSaveRef.current(latestSchemaRef.current);
+    };
+  }, []);
 
   latestSchemaRef.current = schema;
 
@@ -260,6 +296,11 @@ export function FormBuilder({
     }
   }
 
+  const performSaveRef = useRef(performSave);
+  useEffect(() => {
+    performSaveRef.current = performSave;
+  });
+
   useEffect(() => {
     if (schema === savedSchemaRef.current || staleRef.current) return;
     const timer = setTimeout(() => void performSave(schema), AUTOSAVE_DEBOUNCE_MS);
@@ -289,7 +330,12 @@ export function FormBuilder({
     setSchema((s) => ({ ...s, logic: next }));
   }
 
+  function track(eventType: "question_added" | "form_previewed", questionType?: string) {
+    void trackBuilderEventAction(formId, eventType, questionType).catch(() => undefined);
+  }
+
   function handleAdd(type: QuestionType) {
+    track("question_added", type);
     const question = createQuestion(type, schema.questions.length);
     setSchema((s) => ({
       ...s,
@@ -298,7 +344,38 @@ export function FormBuilder({
     setSelection({ kind: "question", id: question.id });
   }
 
+  function applyTypeChange(question: QuestionV1, to: QuestionType) {
+    const converted = convertQuestion(question, to).question;
+    const broken = new Set(
+      rulesBrokenByTypeChange(schema.logic, question.id, question.type, to).map(
+        (r) => r.id,
+      ),
+    );
+    setSchema((s) => ({
+      ...s,
+      questions: s.questions.map((q) => (q.id === question.id ? converted : q)),
+      logic: s.logic.filter((r) => !broken.has(r.id)),
+    }));
+  }
+
+  function requestTypeChange(question: QuestionV1, to: QuestionType) {
+    if (question.type === to) return;
+    const { lossy } = convertQuestion(question, to);
+    const brokenRules = rulesBrokenByTypeChange(
+      schema.logic,
+      question.id,
+      question.type,
+      to,
+    );
+    if (lossy || brokenRules.length > 0) {
+      setPendingTypeChange({ question, to, lossy, brokenRules });
+    } else {
+      applyTypeChange(question, to);
+    }
+  }
+
   function handleAddLeadCapture() {
+    track("question_added", "contact_info");
     const { questions, id } = insertLeadCapture(schema.questions);
     setSchema((s) => ({ ...s, questions }));
     setSelection({ kind: "question", id });
@@ -545,7 +622,13 @@ export function FormBuilder({
                 <OpenLiveButton slug={slug} />
               </>
             )}
-            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPreviewOpen(true);
+                track("form_previewed");
+              }}
+            >
               <Eye />
               <span className="hidden sm:inline">Preview</span>
             </Button>
@@ -811,7 +894,13 @@ export function FormBuilder({
             </Alert>
           )}
           {selectedQuestion && (
-            <SettingsPanel question={selectedQuestion} onChange={updateQuestion} />
+            <SettingsPanel
+              workspaceId={workspaceId}
+              formId={formId}
+              question={selectedQuestion}
+              onChange={updateQuestion}
+              onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
+            />
           )}
           {selectedEnding && (
             <EndingSettingsPanel ending={selectedEnding} onChange={updateEnding} />
@@ -826,6 +915,41 @@ export function FormBuilder({
           )}
         </aside>
       </div>
+
+      <AlertDialog
+        open={pendingTypeChange !== null}
+        onOpenChange={(open) => !open && setPendingTypeChange(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Change to{" "}
+              {pendingTypeChange && QUESTION_TYPE_META[pendingTypeChange.to].label}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingTypeChange?.lossy &&
+                "This question's settings (options, limits, validation) will reset. "}
+              {pendingTypeChange &&
+                pendingTypeChange.brokenRules.length > 0 &&
+                `${pendingTypeChange.brokenRules.length} logic rule${pendingTypeChange.brokenRules.length === 1 ? "" : "s"} based on its answer will be removed. `}
+              Responses you&apos;ve already collected keep their answers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingTypeChange) {
+                  applyTypeChange(pendingTypeChange.question, pendingTypeChange.to);
+                }
+                setPendingTypeChange(null);
+              }}
+            >
+              Change type
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={pendingDelete !== null}

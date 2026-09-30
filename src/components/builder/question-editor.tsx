@@ -33,6 +33,14 @@ export function QuestionEditor({
         {question.required && !isScreen && <span>· Required</span>}
       </div>
       <ThemedSlide theme={theme} className={isScreen ? "items-center text-center" : ""}>
+        {isScreen && question.settings.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL
+          <img
+            src={question.settings.imageUrl}
+            alt={question.settings.imageAlt ?? ""}
+            className="max-h-48 rounded-lg object-contain"
+          />
+        )}
         <div className="flex w-full items-start gap-2">
           {number !== undefined && (
             <span className="mt-2.5 shrink-0 text-sm font-medium opacity-60">

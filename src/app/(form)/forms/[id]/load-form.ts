@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { getPublishInfo } from "@/domains/forms";
+import { getPublishInfo, publishStateFrom } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 
 /** The form a /forms/[id]/* page is about, scoped to the caller's
@@ -17,8 +17,12 @@ export const loadFormForPage = cache(async (formId: string) => {
     .maybeSingle();
   if (!form) notFound();
 
-  const publishInfo = await getPublishInfo(supabase, formId);
+  const [publishInfo, { data: versions }] = await Promise.all([
+    getPublishInfo(supabase, formId),
+    supabase.from("form_versions").select("status").eq("form_id", formId),
+  ]);
   return {
+    publishState: publishStateFrom((versions ?? []).map((v) => v.status)),
     supabase,
     workspace,
     user,

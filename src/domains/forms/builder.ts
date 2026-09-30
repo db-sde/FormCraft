@@ -296,3 +296,90 @@ export function availableOperators(type: QuestionType): LogicOperator[] {
   if (NUMERIC_TYPES.includes(type)) return [...base, "gt", "lt"];
   return base;
 }
+
+// --- changing a question's type ------------------------------------------
+
+const TEXT_TYPES: QuestionType[] = ["short_text", "long_text", "email", "phone", "url"];
+const CHOICE_TYPES: QuestionType[] = ["single_select", "multi_select", "dropdown"];
+
+function family(type: QuestionType): "text" | "choice" | QuestionType {
+  if (TEXT_TYPES.includes(type)) return "text";
+  if (CHOICE_TYPES.includes(type)) return "choice";
+  return type;
+}
+
+/**
+ * Converts a question to another type, keeping its id (so responses and
+ * logic references stay attached), text and required flag, and carrying
+ * over whatever settings still make sense: text-like types keep
+ * placeholder/length limits, choice types keep their options. `lossy`
+ * is true when settings had to be reset, so the builder can warn first.
+ */
+export function convertQuestion(
+  question: QuestionV1,
+  to: QuestionType,
+): { question: QuestionV1; lossy: boolean } {
+  if (question.type === to) return { question, lossy: false };
+  const fresh = createQuestion(to, question.order);
+  const base = {
+    ...fresh,
+    id: question.id,
+    label: question.label,
+    description: question.description,
+    required:
+      to === "welcome_screen" || to === "statement"
+        ? false
+        : question.type === "welcome_screen" || question.type === "statement"
+          ? fresh.required
+          : question.required,
+  } as QuestionV1;
+
+  const from = question.settings as Record<string, unknown>;
+  if (family(question.type) === "text" && family(to) === "text") {
+    const carried: Record<string, unknown> = { ...base.settings };
+    if (
+      (to === "short_text" || to === "long_text") &&
+      typeof from.placeholder === "string"
+    ) {
+      carried.placeholder = from.placeholder;
+    }
+    if (
+      (to === "short_text" || to === "long_text") &&
+      typeof from.maxLength === "number"
+    ) {
+      carried.maxLength = from.maxLength;
+    }
+    return { question: { ...base, settings: carried } as QuestionV1, lossy: false };
+  }
+  if (family(question.type) === "choice" && family(to) === "choice") {
+    const carried: Record<string, unknown> = { ...base.settings, options: from.options };
+    const droppedOther = Boolean(from.allowOther) && to === "dropdown";
+    if (to !== "dropdown") carried.allowOther = Boolean(from.allowOther);
+    const droppedLimits =
+      question.type === "multi_select" &&
+      (from.minSelections !== undefined || from.maxSelections !== undefined);
+    return {
+      question: { ...base, settings: carried } as QuestionV1,
+      lossy: droppedOther || droppedLimits,
+    };
+  }
+  return { question: base, lossy: true };
+}
+
+/** Logic rules on `questionId` that stop making sense once it becomes
+ * `to` — all of them across families (their values no longer match),
+ * otherwise those whose operator the new type doesn't offer. */
+export function rulesBrokenByTypeChange(
+  logic: LogicRuleV1[],
+  questionId: string,
+  from: QuestionType,
+  to: QuestionType,
+): LogicRuleV1[] {
+  const operators = availableOperators(to);
+  const sameFamily = family(from) === family(to);
+  return logic.filter(
+    (rule) =>
+      rule.questionId === questionId &&
+      (!sameFamily || !operators.includes(rule.operator)),
+  );
+}

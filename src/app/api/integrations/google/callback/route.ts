@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { exchangeCodeForTokens, saveConnection } from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { trackEvent } from "@/lib/analytics/track";
 
 /**
  * Google redirects the respondent's (creator's) browser back here with
@@ -52,6 +53,11 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code);
     await saveConnection(supabase, workspace.id, formId, tokens);
     redirectTo.search = "?sheets_connected=1";
+    trackEvent({
+      formId,
+      eventType: "integration_connected",
+      metadata: { provider: "google_sheets" },
+    });
   } catch {
     redirectTo.search = "?sheets_error=exchange_failed";
   }

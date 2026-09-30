@@ -9,7 +9,11 @@ import {
   reorderQuestions,
   canDeleteQuestion,
   insertLeadCapture,
+  convertQuestion,
+  rulesBrokenByTypeChange,
+  createLogicRule,
 } from "@/domains/forms/builder";
+import { parseFormSchema } from "@/domains/forms/schema";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 
 function threeQuestions(): QuestionV1[] {
@@ -195,5 +199,54 @@ describe("insertLeadCapture", () => {
   it("goes after a lone welcome screen, never above it", () => {
     const { questions } = insertLeadCapture([createQuestion("welcome_screen", 0)]);
     expect(questions.map((q) => q.type)).toEqual(["welcome_screen", "contact_info"]);
+  });
+});
+
+describe("convertQuestion", () => {
+  it("keeps id, text and placeholder between text types", () => {
+    const q = {
+      ...createQuestion("short_text", 0),
+      label: "Name",
+      settings: { placeholder: "Ada" },
+    };
+    const { question, lossy } = convertQuestion(q as QuestionV1, "long_text");
+    expect(question).toMatchObject({ id: q.id, type: "long_text", label: "Name" });
+    expect(question.settings).toMatchObject({ placeholder: "Ada" });
+    expect(lossy).toBe(false);
+  });
+
+  it("keeps options between choice types, flagging a dropped Other", () => {
+    const q = createQuestion("single_select", 0);
+    if (q.type !== "single_select") throw new Error();
+    q.settings.allowOther = true;
+    const { question, lossy } = convertQuestion(q, "dropdown");
+    expect(question.type).toBe("dropdown");
+    if (question.type === "dropdown")
+      expect(question.settings.options).toEqual(q.settings.options);
+    expect(lossy).toBe(true);
+  });
+
+  it("resets settings across families, and the result is schema-valid", () => {
+    const q = createQuestion("rating", 0);
+    const { question, lossy } = convertQuestion(q, "multi_select");
+    expect(lossy).toBe(true);
+    expect(() =>
+      parseFormSchema({
+        schemaVersion: 1,
+        meta: { title: "t" },
+        theme: {},
+        endings: [{ id: "e", title: "Thanks", isDefault: true }],
+        questions: [question],
+        logic: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it("drops logic that no longer fits the new type", () => {
+    const q = createQuestion("number", 0);
+    const gt = createLogicRule(q.id, { type: "jump_to_ending", endingId: "e" });
+    const rules = [{ ...gt, operator: "gt" as const, value: 5 }];
+    expect(rulesBrokenByTypeChange(rules, q.id, "number", "short_text")).toHaveLength(1);
+    expect(rulesBrokenByTypeChange(rules, q.id, "number", "number")).toHaveLength(0);
   });
 });

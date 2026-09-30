@@ -8,7 +8,7 @@ import {
   UnsupportedFileTypeError,
   FileTooLargeError,
 } from "@/domains/uploads";
-import { checkRateLimit } from "@/domains/abuse";
+import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp } from "../../../shared";
 
@@ -26,7 +26,12 @@ export async function POST(
   }
 
   const rateLimitKey = `uploads:${getClientIp(request)}:${id}`;
-  const rateLimit = checkRateLimit(rateLimitKey, 30, 10 * 60 * 1000);
+  const rateLimit = await hitRateLimit(
+    createAdminClient(),
+    rateLimitKey,
+    30,
+    10 * 60 * 1000,
+  );
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }

@@ -256,11 +256,30 @@ export type Database = {
         };
         Relationships: [];
       };
+      rate_limits: {
+        Row: {
+          count: number;
+          key: string;
+          window_start: string;
+        };
+        Insert: {
+          count: number;
+          key: string;
+          window_start: string;
+        };
+        Update: {
+          count?: number;
+          key?: string;
+          window_start?: string;
+        };
+        Relationships: [];
+      };
       responses: {
         Row: {
           client_revision: number;
           completed_at: string | null;
           created_at: string;
+          embedded: boolean;
           ending_id: string | null;
           form_id: string;
           form_version_id: string;
@@ -282,6 +301,7 @@ export type Database = {
           client_revision?: number;
           completed_at?: string | null;
           created_at?: string;
+          embedded?: boolean;
           ending_id?: string | null;
           form_id: string;
           form_version_id: string;
@@ -303,6 +323,7 @@ export type Database = {
           client_revision?: number;
           completed_at?: string | null;
           created_at?: string;
+          embedded?: boolean;
           ending_id?: string | null;
           form_id?: string;
           form_version_id?: string;
@@ -706,6 +727,10 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      hit_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_window_seconds: number };
+        Returns: boolean;
       };
       is_workspace_member: {
         Args: { target_workspace_id: string };

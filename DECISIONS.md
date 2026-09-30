@@ -3,6 +3,43 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-09-30 — PRD gap closure: definitions and defaults
+
+Decisions made while aligning v0 with the PRD (Phase 1 + P2.7):
+
+- **A start is the first interaction** (pressing Start, typing,
+  choosing), matching the PRD's definition. The response row is created
+  then, not on page load — so Starts no longer equal Views.
+- **Partial = at least one saved answer.** Moving past the welcome
+  screen alone keeps a response `in_progress` (it still counts toward
+  drop-off at the first question).
+- **Abandoned after 30 minutes idle** (user-confirmed), derived from
+  `last_active_at` at read time; nothing stored, so the threshold can
+  change freely (`ABANDONED_AFTER_MINUTES`).
+- **Saving unfinished answers is on by default, with a respondent
+  notice.** Creators can turn it off per form (server-enforced) and set
+  automatic deletion after 30/90/180/365 days (daily cron). No
+  "lead didn't finish" alert yet — not in the PRD; revisit on demand.
+- **Spam:** hidden honeypot field; a filled one gets a fake success
+  and nothing is completed/notified. Rate limits moved to Postgres
+  (`hit_rate_limit`) so they hold across instances, falling back to the
+  in-memory limiter if the database call fails.
+- **Events (PRD §3.6):** creator events recorded server-side; respondent
+  `question_viewed` / `question_answered` via a rate-limited endpoint.
+  Ids and small metadata only — never answer values.
+- **Uploaded files / malware (PRD P1.5):** no scanner yet. Mitigations
+  in place: server-side size limit, magic-byte type sniffing, private
+  bucket, access only via short-lived signed URLs. A scanning service
+  (e.g. ClamAV or a vendor API) is required before handling untrusted
+  uploads at scale — tracked as a production-readiness item.
+- **Question type change:** keeps id/text/required; text-like types
+  keep placeholder/length, choice types keep options; otherwise settings
+  reset. Logic rules that no longer fit are removed, after a warning.
+- **Account deletion** is immediate and permanent (workspaces, forms,
+  responses, uploaded files, auth user), confirmed by typing the email.
+- **Embeds** use `?embed=1`: views and responses are flagged as
+  embedded, and the form reports its height so the iframe resizes.
+
 ## 2026-09-30 — Lead capture is a question type, placed before the last question
 
 Requested directly by the user (it overrides the Phase 1 scope rule for

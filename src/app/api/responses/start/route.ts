@@ -4,7 +4,7 @@ import { NextResponse, after } from "next/server";
 import { startResponse, FormNotAvailableError } from "@/domains/responses";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
-import { checkRateLimit } from "@/domains/abuse";
+import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
@@ -16,6 +16,7 @@ const StartBody = z.object({
   utmCampaign: z.string().max(200).optional(),
   utmTerm: z.string().max(200).optional(),
   utmContent: z.string().max(200).optional(),
+  embedded: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -27,7 +28,12 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
 
   const rateLimitKey = `start:${getClientIp(request)}:${parsed.data.formId}`;
-  const rateLimit = checkRateLimit(rateLimitKey, 20, 10 * 60 * 1000);
+  const rateLimit = await hitRateLimit(
+    createAdminClient(),
+    rateLimitKey,
+    20,
+    10 * 60 * 1000,
+  );
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }
@@ -41,6 +47,7 @@ export async function POST(request: NextRequest) {
       utmCampaign: parsed.data.utmCampaign,
       utmTerm: parsed.data.utmTerm,
       utmContent: parsed.data.utmContent,
+      embedded: parsed.data.embedded,
     });
 
     // A response row only gets created here — never on a resumed

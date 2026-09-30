@@ -105,6 +105,18 @@ function DropoffCard({ steps, total }: { steps: DropoffStep[]; total: number }) 
   );
 }
 
+const PERIODS = [
+  { id: "7d", label: "7 days", days: 7 },
+  { id: "30d", label: "30 days", days: 30 },
+  { id: "90d", label: "90 days", days: 90 },
+  { id: "all", label: "All time", days: 0 },
+];
+
+/** Start of a "last N days" window; undefined = all time. */
+function periodStart(days: number): Date | undefined {
+  return days ? new Date(Date.now() - days * 86_400_000) : undefined;
+}
+
 function ProgressBar({ answered, total }: { answered: number; total: number }) {
   const percent = total === 0 ? 0 : Math.round((answered / total) * 100);
   return (
@@ -127,18 +139,20 @@ export default async function ResponsesPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ page?: string; view?: string }>;
+  searchParams: Promise<{ page?: string; view?: string; period?: string }>;
 }) {
   const { id: formId } = await params;
-  const { page: pageParam, view: viewParam } = await searchParams;
-  const { supabase, form, isLive } = await loadFormForPage(formId);
+  const { page: pageParam, view: viewParam, period: periodParam } = await searchParams;
+  const period = PERIODS.find((p) => p.id === periodParam) ?? PERIODS[PERIODS.length - 1];
+  const since = periodStart(period.days);
+  const { supabase, form, isLive, publishState } = await loadFormForPage(formId);
   const view: ResponseView = viewParam === "incomplete" ? "incomplete" : "completed";
 
   const page = Math.max(1, Number(pageParam) || 1);
   const [responses, counts, funnel, dropoff] = await Promise.all([
     listResponses(supabase, formId, { page, view }),
     getResponseCounts(supabase, formId),
-    getFunnelSummaryForForm(supabase, formId),
+    getFunnelSummaryForForm(supabase, formId, since),
     view === "incomplete" ? getDropoff(supabase, formId) : null,
   ]);
 
@@ -154,13 +168,27 @@ export default async function ResponsesPage({
         title={
           <>
             <FormTitle>{form.title}</FormTitle>
-            <FormStatusBadge live={isLive} />
+            <FormStatusBadge state={publishState} />
           </>
         }
         actions={<FormPageActions formId={formId} slug={form.slug} isLive={isLive} />}
       />
 
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-muted-foreground text-sm">
+            Performance · {period.days ? `last ${period.label}` : "all time"}
+          </p>
+          <ViewSwitch
+            label="Period"
+            active={period.id}
+            options={PERIODS.map((p) => ({
+              id: p.id,
+              label: p.label,
+              href: `${base}?view=${view}&period=${p.id}`,
+            }))}
+          />
+        </div>
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
             label="Views"
@@ -176,7 +204,7 @@ export default async function ResponsesPage({
           />
           <StatCard
             label="Completed"
-            value={counts.completed}
+            value={funnel.completions}
             icon={CheckCircle2}
             hint="Submitted the form"
           />
@@ -201,13 +229,13 @@ export default async function ResponsesPage({
                 id: "completed",
                 label: "Completed",
                 count: counts.completed,
-                href: `${base}?view=completed`,
+                href: `${base}?view=completed&period=${period.id}`,
               },
               {
                 id: "incomplete",
                 label: "Incomplete",
                 count: counts.partial,
-                href: `${base}?view=incomplete`,
+                href: `${base}?view=incomplete&period=${period.id}`,
               },
             ]}
           />

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { buildResponsesCsv } from "@/domains/responses";
 import { ExportTooLargeError, MAX_SYNCHRONOUS_EXPORT_ROWS } from "@/domains/exports";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { trackEvent } from "@/lib/analytics/track";
 
 /**
  * Creator-only, session-scoped (never the admin client) — RLS on
@@ -40,6 +41,7 @@ export async function GET(
     const base = form.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase() || "form";
     const filename = `${base}-${view === "completed" ? "responses" : "incomplete"}.csv`;
 
+    trackEvent({ formId, eventType: "export_completed", metadata: { kind: view } });
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

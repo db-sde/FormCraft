@@ -48,8 +48,16 @@ export type OptionV1 = z.infer<typeof OptionV1>;
 
 // --- per-type settings -----------------------------------------------
 
+// Optional picture on intro/informational screens (PRD P1.5), with alt
+// text for screen readers (§3.4).
+const screenImage = {
+  imageUrl: webUrl.optional(),
+  imageAlt: optionalSafeText(300),
+};
+
 const WelcomeScreenSettings = z.object({
   buttonLabel: optionalSafeText(100),
+  ...screenImage,
 });
 
 const ShortTextSettings = z.object({
@@ -145,6 +153,7 @@ const FileUploadSettings = z.object({
 
 const StatementSettings = z.object({
   buttonLabel: optionalSafeText(100),
+  ...screenImage,
 });
 
 // --- discriminated question union --------------------------------------

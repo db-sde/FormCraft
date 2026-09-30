@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { dispatchDueDeliveries } from "@/domains/webhooks";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
 /**
  * Processes due webhook redeliveries (retries whose backoff window has
@@ -17,24 +18,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * reachable by an anonymous caller, since it fans out real HTTP
  * requests to creator-configured URLs.
  */
-export async function POST(request: NextRequest) {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    return NextResponse.json(
-      { error: { code: "not_configured", message: "CRON_SECRET is not set." } },
-      { status: 503 },
-    );
-  }
-
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${expected}`) {
-    return NextResponse.json(
-      { error: { code: "unauthorized", message: "Unauthorized." } },
-      { status: 401 },
-    );
-  }
-
-  const admin = createAdminClient();
-  const result = await dispatchDueDeliveries(admin);
+async function run(request: NextRequest) {
+  const rejected = rejectUnlessCron(request);
+  if (rejected) return rejected;
+  const result = await dispatchDueDeliveries(createAdminClient());
   return NextResponse.json(result);
 }
+
+// GET for Vercel Cron (vercel.json), POST for other schedulers.
+export const GET = run;
+export const POST = run;

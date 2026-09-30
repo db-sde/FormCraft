@@ -5,9 +5,21 @@ import type { AnalyticsEventLite, FunnelSummary } from "./completion-rate";
 type Client = SupabaseClient<Database>;
 
 export const ANALYTICS_EVENT_TYPES = [
+  // Respondent funnel (drive Views / Starts / Completed).
   "form_viewed",
   "form_started",
   "form_submitted",
+  // Respondent step events (PRD §3.6) — question ids only, never values.
+  "question_viewed",
+  "question_answered",
+  // Creator product events.
+  "form_created",
+  "question_added",
+  "form_previewed",
+  "form_published",
+  "form_unpublished",
+  "integration_connected",
+  "export_completed",
 ] as const;
 export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
 
@@ -55,14 +67,19 @@ export async function recordAnalyticsEvent(
 export async function getFunnelSummaryForForm(
   supabase: Client,
   formId: string,
+  /** Only count events at or after this instant (PRD P1.20 "selected
+   * period"); omit for all time. */
+  since?: Date,
 ): Promise<FunnelSummary> {
   const count = async (eventType: AnalyticsEventType) => {
-    const { count, error } = await supabase
+    let query = supabase
       .from("analytics_events")
       .select("id", { count: "exact", head: true })
       .eq("form_id", formId)
       .eq("event_type", eventType)
       .eq("is_preview", false);
+    if (since) query = query.gte("created_at", since.toISOString());
+    const { count, error } = await query;
     if (error) throw error;
     return count ?? 0;
   };

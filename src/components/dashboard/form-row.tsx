@@ -4,7 +4,32 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Inbox, Link2, MoreHorizontal, Pencil, Send, Trash2 } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  EyeOff,
+  Inbox,
+  Link2,
+  MoreHorizontal,
+  Pencil,
+  Rocket,
+  Send,
+  TextCursorInput,
+  Trash2,
+} from "lucide-react";
+import {
+  publishAction,
+  renameFormAction,
+  unpublishAction,
+} from "@/app/(form)/forms/[id]/actions";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { FormListItem } from "@/domains/forms";
 import { duplicateFormAction, deleteFormAction } from "@/app/(dashboard)/actions";
 import { Button } from "@/components/ui/button";
@@ -31,6 +56,8 @@ import { LocalTime } from "@/components/local-time";
 export function FormRow({ form }: { form: FormListItem }) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newTitle, setNewTitle] = useState(form.title);
   const [pending, startTransition] = useTransition();
 
   function copyLink() {
@@ -39,6 +66,34 @@ export function FormRow({ form }: { form: FormListItem }) {
       () => toast.success("Link copied", { description: url }),
       () => toast.error("Couldn't copy the link", { description: url }),
     );
+  }
+
+  function rename() {
+    startTransition(async () => {
+      const result = await renameFormAction(form.id, newTitle);
+      if (result.ok) {
+        setRenaming(false);
+        toast.success("Renamed");
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
+
+  function togglePublished() {
+    startTransition(async () => {
+      if (form.publishState === "live") {
+        const result = await unpublishAction(form.id);
+        if (result.ok) toast("Unpublished", { description: "The public link is off." });
+        else toast.error(result.message);
+      } else {
+        const result = await publishAction(form.id);
+        if (result.ok) toast.success("Published", { description: "Your form is live." });
+        else toast.error("Couldn't publish", { description: result.message });
+      }
+      router.refresh();
+    });
   }
 
   function duplicate() {
@@ -86,7 +141,7 @@ export function FormRow({ form }: { form: FormListItem }) {
             >
               {form.title}
             </Link>
-            <FormStatusBadge live={form.hasPublishedVersion} />
+            <FormStatusBadge state={form.publishState} />
           </div>
           <p className="text-muted-foreground mt-0.5 text-xs">
             Edited <LocalTime iso={form.updatedAt} variant="relative" />
@@ -133,6 +188,19 @@ export function FormRow({ form }: { form: FormListItem }) {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
+                <Link href={`/forms/${form.id}?preview=1`}>
+                  <Eye /> Preview
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setNewTitle(form.title);
+                  setRenaming(true);
+                }}
+              >
+                <TextCursorInput /> Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
                 <Link href={`/forms/${form.id}/share`}>
                   <Send /> Share
                 </Link>
@@ -147,6 +215,17 @@ export function FormRow({ form }: { form: FormListItem }) {
                   <Link2 /> Copy link
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onSelect={togglePublished}>
+                {form.publishState === "live" ? (
+                  <>
+                    <EyeOff /> Unpublish
+                  </>
+                ) : (
+                  <>
+                    <Rocket /> Publish
+                  </>
+                )}
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={duplicate}>
                 <Copy /> Duplicate
               </DropdownMenuItem>
@@ -161,6 +240,36 @@ export function FormRow({ form }: { form: FormListItem }) {
           </DropdownMenu>
         </div>
       </div>
+
+      <Dialog open={renaming} onOpenChange={setRenaming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename form</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              rename();
+            }}
+          >
+            <Input
+              aria-label="Form name"
+              value={newTitle}
+              maxLength={200}
+              onChange={(e) => setNewTitle(e.target.value)}
+              autoFocus
+            />
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="ghost" onClick={() => setRenaming(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending || !newTitle.trim()}>
+                {pending ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

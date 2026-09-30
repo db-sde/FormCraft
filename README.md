@@ -59,9 +59,13 @@ First E2E run: `npx playwright install chromium webkit`. See
    Signup-confirmation and password-reset links land there; if it's
    missing, Supabase silently redirects to the Site URL instead and
    the links never sign anyone in.
-4. Schedule the integration retry sweeps — `POST
-/api/cron/webhooks/dispatch` and `POST /api/cron/sheets/dispatch`
-   with `Authorization: Bearer $CRON_SECRET` — every few minutes.
+4. Scheduled jobs are defined in `vercel.json` (Vercel Cron sends
+   `Authorization: Bearer $CRON_SECRET` automatically): webhook and
+   Google Sheets retry sweeps every 5 minutes, and the daily retention
+   job that deletes expired unfinished responses and old rate-limit
+   rows. On other hosts, call the same `/api/cron/*` paths (GET or
+   POST) with that header.
+5. Set `RESEND_API_KEY` and `EMAIL_FROM` for owner notifications.
 
 ## Project map
 

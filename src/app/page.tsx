@@ -127,7 +127,12 @@ function ProductPreview() {
   );
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ account?: string }>;
+}) {
+  const accountDeleted = (await searchParams).account === "deleted";
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -166,6 +171,14 @@ export default async function Home() {
         </div>
       </header>
 
+      {accountDeleted && (
+        <p
+          role="status"
+          className="bg-muted text-foreground border-b px-4 py-3 text-center text-sm"
+        >
+          Your account and all its data have been deleted.
+        </p>
+      )}
       <main className="flex-1">
         <section className="relative overflow-hidden px-4 pt-16 pb-20 sm:px-6 sm:pt-24">
           <div

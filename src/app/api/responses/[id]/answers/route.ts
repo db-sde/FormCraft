@@ -6,7 +6,7 @@ import {
   ResponseNotFoundError,
   StaleResponseWriteError,
 } from "@/domains/responses";
-import { checkRateLimit } from "@/domains/abuse";
+import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
 
@@ -33,7 +33,12 @@ export async function PATCH(
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
 
   const rateLimitKey = `answers:${getClientIp(request)}:${id}`;
-  const rateLimit = checkRateLimit(rateLimitKey, 120, 10 * 60 * 1000);
+  const rateLimit = await hitRateLimit(
+    createAdminClient(),
+    rateLimitKey,
+    120,
+    10 * 60 * 1000,
+  );
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }

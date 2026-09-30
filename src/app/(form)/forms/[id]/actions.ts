@@ -12,6 +12,7 @@ import {
 } from "@/domains/forms";
 import type { FormSchemaV1 } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { trackEvent } from "@/lib/analytics/track";
 
 export async function renameFormAction(
   formId: string,
@@ -86,11 +87,17 @@ export type PublishResult =
  * reaching the public runtime).
  */
 export async function publishAction(formId: string): Promise<PublishResult> {
-  const { supabase } = await getCurrentWorkspace();
+  const { supabase, user } = await getCurrentWorkspace();
 
   try {
     const result = await publishForm(supabase, formId);
     revalidatePath(`/forms/${formId}`);
+    trackEvent({
+      formId,
+      eventType: "form_published",
+      actorId: user.id,
+      metadata: { version: result.versionNumber },
+    });
     return { ok: true, publishedVersionNumber: result.versionNumber };
   } catch (error) {
     if (error instanceof FormSchemaError) {
@@ -107,13 +114,41 @@ export async function publishAction(formId: string): Promise<PublishResult> {
 export async function unpublishAction(
   formId: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { supabase } = await getCurrentWorkspace();
+  const { supabase, user } = await getCurrentWorkspace();
 
   try {
     await unpublishForm(supabase, formId);
     revalidatePath(`/forms/${formId}`);
+    trackEvent({ formId, eventType: "form_unpublished", actorId: user.id });
     return { ok: true };
   } catch {
     return { ok: false, message: "Failed to unpublish. Please try again." };
   }
+}
+
+const BUILDER_EVENTS = ["question_added", "form_previewed"] as const;
+
+/** Product events that happen purely in the builder's browser state
+ * (they reach the server only via autosave otherwise). Ownership is
+ * checked so events can't be attributed to someone else's form. */
+export async function trackBuilderEventAction(
+  formId: string,
+  eventType: (typeof BUILDER_EVENTS)[number],
+  questionType?: string,
+): Promise<void> {
+  if (!BUILDER_EVENTS.includes(eventType)) return;
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  const { data } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (!data) return;
+  trackEvent({
+    formId,
+    eventType,
+    actorId: user.id,
+    metadata: questionType ? { questionType: questionType.slice(0, 40) } : undefined,
+  });
 }

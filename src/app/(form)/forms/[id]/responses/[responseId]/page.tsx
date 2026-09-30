@@ -68,7 +68,7 @@ export default async function ResponseDetailPage({
   params: Promise<{ id: string; responseId: string }>;
 }) {
   const { id: formId, responseId } = await params;
-  const { supabase, form, isLive } = await loadFormForPage(formId);
+  const { supabase, form, isLive, publishState } = await loadFormForPage(formId);
 
   const detail = await getResponseDetail(supabase, responseId);
   if (!detail || detail.formId !== formId) notFound();
@@ -114,7 +114,7 @@ export default async function ResponseDetailPage({
         title={
           <>
             <FormTitle>{form.title}</FormTitle>
-            <FormStatusBadge live={isLive} />
+            <FormStatusBadge state={publishState} />
           </>
         }
         actions={<FormPageActions formId={formId} slug={form.slug} isLive={isLive} />}

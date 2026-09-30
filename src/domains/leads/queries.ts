@@ -136,9 +136,20 @@ function toLead(row: LeadRow, sources: Map<string, ContactSource>): Lead | null 
   return lead.name || lead.email || lead.phone || lead.company ? lead : null;
 }
 
-function leadsQuery(supabase: Client, sources: ContactSource[]) {
+/** Keeps only characters that are safe inside a PostgREST `or` filter
+ * and meaningful in a contact search. */
+function searchTerm(raw: string | undefined): string | null {
+  const term = (raw ?? "")
+    .replace(/[^\p{L}\p{N}@.+\-_ ]/gu, "")
+    .trim()
+    .slice(0, 80);
+  return term.length >= 2 ? term : null;
+}
+
+function leadsQuery(supabase: Client, sources: ContactSource[], search?: string) {
   const questionIds = [...new Set(sources.flatMap((s) => [...s.questionIds]))];
-  return supabase
+  const term = searchTerm(search);
+  const query = supabase
     .from("answers")
     .select(
       "value, question_id, updated_at, responses!inner(id, form_id, status, last_active_at, referrer, utm_source)",
@@ -152,6 +163,13 @@ function leadsQuery(supabase: Client, sources: ContactSource[]) {
       sources.map((s) => s.formId),
     )
     .order("updated_at", { ascending: false });
+  return term
+    ? query.or(
+        ["name", "email", "phone", "company"]
+          .map((field) => `value->>${field}.ilike.*${term}*`)
+          .join(","),
+      )
+    : query;
 }
 
 /**
@@ -164,17 +182,18 @@ function leadsQuery(supabase: Client, sources: ContactSource[]) {
 export async function listLeads(
   supabase: Client,
   workspaceId: string,
-  options: { page?: number; formId?: string } = {},
+  options: { page?: number; formId?: string; search?: string } = {},
 ): Promise<LeadPage> {
   const page = Math.max(1, options.page ?? 1);
   const sources = await contactSources(supabase, workspaceId, options.formId);
   if (sources.length === 0) return { items: [], totalCount: 0, page, pageCount: 1 };
 
   const from = (page - 1) * PAGE_SIZE;
-  const { data, error, count } = await leadsQuery(supabase, sources).range(
-    from,
-    from + PAGE_SIZE - 1,
-  );
+  const { data, error, count } = await leadsQuery(
+    supabase,
+    sources,
+    options.search,
+  ).range(from, from + PAGE_SIZE - 1);
   if (error) throw error;
 
   const bySource = new Map(sources.map((s) => [s.formId, s]));

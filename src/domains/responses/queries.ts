@@ -45,6 +45,8 @@ export type StartAttribution = {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
+  /** Came through an embed on another site. */
+  embedded?: boolean;
 };
 
 /**
@@ -90,6 +92,7 @@ export async function startResponse(
       utm_campaign: attribution.utmCampaign,
       utm_term: attribution.utmTerm,
       utm_content: attribution.utmContent,
+      embedded: attribution.embedded ?? false,
     })
     .select("id, form_version_id")
     .single();

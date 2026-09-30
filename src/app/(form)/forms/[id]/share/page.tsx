@@ -51,7 +51,7 @@ function Section({
 
 export default async function SharePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: formId } = await params;
-  const { supabase, workspace, form, isLive, hasUnpublishedChanges } =
+  const { supabase, workspace, form, isLive, hasUnpublishedChanges, publishState } =
     await loadFormForPage(formId);
   const draft = await getDraftForEdit(supabase, formId, workspace.id);
   const hasLeadCapture =
@@ -60,7 +60,15 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const url = `${appUrl}/f/${form.slug}`;
   const shareText = encodeURIComponent(`${form.title} — ${url}`);
-  const embed = `<iframe src="${url}" width="100%" height="600" style="border:0;border-radius:12px" title="${form.title.replace(/"/g, "&quot;")}"></iframe>`;
+  const embedOrigin = appUrl || "";
+  const title = form.title.replace(/"/g, "&quot;");
+  // The form reports its height (postMessage) and this snippet resizes
+  // the iframe to match — only for messages from our own origin and
+  // only for the iframe that sent them.
+  const embed = [
+    `<iframe src="${url}?embed=1" data-formcraft="${form.id}" width="100%" height="600" style="border:0;border-radius:12px;width:100%" title="${title}"></iframe>`,
+    `<script>window.addEventListener("message",function(e){if(e.origin!==${JSON.stringify(embedOrigin)}||!e.data||e.data.type!=="formcraft:height")return;document.querySelectorAll('iframe[data-formcraft="${form.id}"]').forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+"px"})});</script>`,
+  ].join("\n");
 
   return (
     <>
@@ -70,7 +78,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
         title={
           <>
             <FormTitle>{form.title}</FormTitle>
-            <FormStatusBadge live={isLive} />
+            <FormStatusBadge state={publishState} />
           </>
         }
       />
@@ -168,7 +176,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
             <Section
               icon={Code2}
               title="Embed on your website"
-              description="Paste this where you want the form to appear on your site."
+              description="Paste this where you want the form to appear on your site. It resizes to fit each question, and embedded visits are tracked separately."
             >
               <pre className="bg-muted/60 overflow-x-auto rounded-md border p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
                 {embed}

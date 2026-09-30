@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createFormWithDraft, duplicateForm, softDeleteForm } from "@/domains/forms";
 import { getTemplateById } from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { trackEvent } from "@/lib/analytics/track";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -15,6 +16,12 @@ export async function createFormAction(): Promise<void> {
     user.id,
     "Untitled form",
   );
+  trackEvent({
+    formId: id,
+    eventType: "form_created",
+    actorId: user.id,
+    metadata: { source: "scratch" },
+  });
   redirect(`/forms/${id}`);
 }
 
@@ -30,6 +37,12 @@ export async function createFormFromTemplateAction(templateId: string): Promise<
     template.schema.meta.title,
     template.schema,
   );
+  trackEvent({
+    formId: id,
+    eventType: "form_created",
+    actorId: user.id,
+    metadata: { source: "template", templateId },
+  });
   redirect(`/forms/${id}`);
 }
 
@@ -43,6 +56,12 @@ export async function duplicateFormAction(
   try {
     const copy = await duplicateForm(supabase, formId, workspace.id, user.id);
     if (!copy) return { ok: false, message: "Form not found." };
+    trackEvent({
+      formId: copy.id,
+      eventType: "form_created",
+      actorId: user.id,
+      metadata: { source: "duplicate" },
+    });
     revalidatePath("/dashboard");
     return { ok: true, id: copy.id };
   } catch {

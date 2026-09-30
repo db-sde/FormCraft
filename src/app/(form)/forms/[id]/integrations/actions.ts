@@ -11,6 +11,7 @@ import {
 } from "@/domains/webhooks";
 import { setSpreadsheetId, setConnectionEnabled, disconnectForm } from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { trackEvent } from "@/lib/analytics/track";
 
 const MAX_URL_LENGTH = 2000;
 
@@ -52,6 +53,11 @@ export async function createWebhookEndpointAction(
   try {
     const result = await createWebhookEndpoint(supabase, formId, url);
     revalidatePath(`/forms/${formId}/integrations`);
+    trackEvent({
+      formId,
+      eventType: "integration_connected",
+      metadata: { provider: "webhook" },
+    });
     return {
       ok: true,
       id: result.id,

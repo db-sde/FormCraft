@@ -7,7 +7,7 @@ import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webho
 import { enqueueSheetsSync, dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
-import { checkRateLimit } from "@/domains/abuse";
+import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
 
@@ -37,7 +37,12 @@ export async function POST(
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
 
   const rateLimitKey = `complete:${getClientIp(request)}:${id}`;
-  const rateLimit = checkRateLimit(rateLimitKey, 10, 10 * 60 * 1000);
+  const rateLimit = await hitRateLimit(
+    createAdminClient(),
+    rateLimitKey,
+    10,
+    10 * 60 * 1000,
+  );
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }

@@ -2,6 +2,9 @@
 
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OptionsEditor } from "./options-editor";
+import { ImageUploadField } from "./image-upload-field";
+import { ADDABLE_QUESTION_TYPES, QUESTION_TYPE_META } from "./question-meta";
+import type { QuestionType } from "@/domains/forms/schema/question-types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -38,12 +41,43 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function SettingsPanel({
   question,
   onChange,
+  onChangeType,
+  workspaceId,
+  formId,
 }: {
+  /** For uploading a welcome/statement image. */
+  workspaceId: string;
+  formId: string;
   question: QuestionV1;
   onChange: (next: QuestionV1) => void;
+  /** Convert to another type (the builder confirms lossy changes). */
+  onChangeType?: (type: QuestionType) => void;
 }) {
   return (
     <div className="space-y-5">
+      {question.type !== "welcome_screen" && onChangeType && (
+        <Field label="Question type">
+          <Select
+            value={question.type}
+            onValueChange={(value) => onChangeType(value as QuestionType)}
+          >
+            <SelectTrigger className="w-full" aria-label="Question type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ADDABLE_QUESTION_TYPES.map((type) => {
+                const Icon = QUESTION_TYPE_META[type].icon;
+                return (
+                  <SelectItem key={type} value={type}>
+                    <Icon className="text-muted-foreground" />
+                    {QUESTION_TYPE_META[type].label}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
       {question.type !== "welcome_screen" &&
         question.type !== "statement" &&
         question.type !== "contact_info" && (
@@ -61,6 +95,38 @@ export function SettingsPanel({
             <Separator />
           </>
         )}
+
+      {(question.type === "welcome_screen" || question.type === "statement") && (
+        <>
+          <ImageUploadField
+            label="Image (optional)"
+            workspaceId={workspaceId}
+            formId={formId}
+            value={question.settings.imageUrl}
+            onChange={(imageUrl) =>
+              onChange({ ...question, settings: { ...question.settings, imageUrl } })
+            }
+          />
+          {question.settings.imageUrl && (
+            <Field label="Image description (alt text)">
+              <Input
+                value={question.settings.imageAlt ?? ""}
+                placeholder="What the image shows, for screen readers"
+                maxLength={300}
+                onChange={(e) =>
+                  onChange({
+                    ...question,
+                    settings: {
+                      ...question.settings,
+                      imageAlt: e.target.value || undefined,
+                    },
+                  })
+                }
+              />
+            </Field>
+          )}
+        </>
+      )}
 
       {question.type === "welcome_screen" && (
         <Field label="Button label">

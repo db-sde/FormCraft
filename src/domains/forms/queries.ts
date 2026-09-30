@@ -20,12 +20,22 @@ function toJson(schema: FormSchemaV1): Json {
   return schema as unknown as Json;
 }
 
+/** Draft: never published. Live: a published version is serving.
+ * Unpublished: it was live, then taken down (versions archived). */
+export type PublishState = "draft" | "live" | "unpublished";
+
+export function publishStateFrom(versionStatuses: string[]): PublishState {
+  if (versionStatuses.includes("published")) return "live";
+  return versionStatuses.includes("archived") ? "unpublished" : "draft";
+}
+
 export type FormListItem = {
   id: string;
   title: string;
   slug: string;
   updatedAt: string;
   hasPublishedVersion: boolean;
+  publishState: PublishState;
   /** Submitted responses. */
   responseCount: number;
   /** Respondents who answered something but never submitted. */
@@ -116,6 +126,7 @@ export async function listFormsForWorkspace(
     slug: form.slug,
     updatedAt: form.updated_at,
     hasPublishedVersion: (form.form_versions ?? []).some((v) => v.status === "published"),
+    publishState: publishStateFrom((form.form_versions ?? []).map((v) => v.status)),
     responseCount: form.completed?.[0]?.count ?? 0,
     incompleteCount: form.incomplete?.[0]?.count ?? 0,
   }));

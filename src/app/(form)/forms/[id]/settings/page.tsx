@@ -13,7 +13,8 @@ export default async function FormSettingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: formId } = await params;
-  const { supabase, workspace, user, form, isLive } = await loadFormForPage(formId);
+  const { supabase, workspace, user, form, isLive, publishState } =
+    await loadFormForPage(formId);
   const [settings, notificationsEnabled] = await Promise.all([
     getFormSettings(supabase, formId, workspace.id),
     getNotificationsEnabled(supabase, formId),
@@ -28,7 +29,7 @@ export default async function FormSettingsPage({
         title={
           <>
             <FormTitle>{form.title}</FormTitle>
-            <FormStatusBadge live={isLive} />
+            <FormStatusBadge state={publishState} />
           </>
         }
         actions={<FormPageActions formId={formId} slug={form.slug} isLive={isLive} />}

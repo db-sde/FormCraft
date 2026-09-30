@@ -118,7 +118,10 @@ export function PublicFormRuntime({
   formVersionId,
   compiled,
   savesProgress = true,
+  embedded = false,
 }: {
+  /** Rendered inside another site's iframe (Share → Embed). */
+  embedded?: boolean;
   formId: string;
   formVersionId: string;
   compiled: CompiledFormV1;
@@ -144,6 +147,23 @@ export function PublicFormRuntime({
   const startPromiseRef = useRef<Promise<StoredResponse> | null>(null);
 
   const theme = compiled.schema.theme;
+
+  useEffect(() => {
+    if (!embedded || window.parent === window) return;
+    const report = () =>
+      window.parent.postMessage(
+        {
+          type: "formcraft:height",
+          formId,
+          height: document.documentElement.scrollHeight,
+        },
+        "*",
+      );
+    const observer = new ResizeObserver(report);
+    observer.observe(document.body);
+    report();
+    return () => observer.disconnect();
+  }, [embedded, formId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,6 +382,24 @@ export function PublicFormRuntime({
     }
   }
 
+  function sendStepEvent(
+    type: "question_viewed" | "question_answered",
+    questionId: string,
+  ) {
+    // Fire-and-forget; keepalive lets it finish even if the page closes.
+    void fetch("/api/responses/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        formId,
+        questionId,
+        type,
+        responseId: sessionRef.current?.responseId,
+      }),
+    }).catch(() => undefined);
+  }
+
   if (resumed === undefined) {
     return (
       <div
@@ -384,7 +422,11 @@ export function PublicFormRuntime({
       onComplete={handleComplete}
       getResponseId={() => ensureSession().then((s) => s.responseId)}
       savesProgress={savesProgress}
-      className="min-h-dvh"
+      onStepEvent={sendStepEvent}
+      // Embedded: natural height, reported to the host page so its
+      // iframe grows/shrinks to fit (full-viewport height would pin the
+      // iframe at whatever size it started with).
+      className={embedded ? "min-h-[480px]" : "min-h-dvh"}
     />
   );
 }

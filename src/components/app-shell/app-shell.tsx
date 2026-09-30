@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  Settings,
   UsersRound,
   X,
 } from "lucide-react";
@@ -141,6 +142,12 @@ function SidebarContent({
               <span className="block truncate">{userEmail}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings" onClick={onNavigate}>
+                <Settings />
+                Account settings
+              </Link>
+            </DropdownMenuItem>
             <form action={logOutAction}>
               <DropdownMenuItem asChild>
                 <button type="submit" className="w-full">

@@ -9,6 +9,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { FormFilter } from "@/components/dashboard/form-filter";
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -44,17 +45,18 @@ function ActivityBadge({ activity }: { activity: ResponseActivity }) {
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; form?: string }>;
+  searchParams: Promise<{ page?: string; form?: string; q?: string }>;
 }) {
-  const { page: pageParam, form: formParam } = await searchParams;
+  const { page: pageParam, form: formParam, q } = await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
   const forms = await listFormsForWorkspace(supabase, workspace.id);
   const formId = forms.some((f) => f.id === formParam) ? formParam : undefined;
   const page = Math.max(1, Number(pageParam) || 1);
-  const leads = await listLeads(supabase, workspace.id, { page, formId });
+  const leads = await listLeads(supabase, workspace.id, { page, formId, search: q });
 
   const exportHref = `/api/leads/export.csv${formId ? `?form=${formId}` : ""}`;
-  const hrefFor = (p: number) => `/leads?${formId ? `form=${formId}&` : ""}page=${p}`;
+  const hrefFor = (p: number) =>
+    `/leads?${formId ? `form=${formId}&` : ""}${q ? `q=${encodeURIComponent(q)}&` : ""}page=${p}`;
 
   return (
     <>
@@ -74,7 +76,17 @@ export default async function LeadsPage({
       />
 
       {forms.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+          <form action="/leads" className="flex-1 sm:max-w-xs">
+            {formId && <input type="hidden" name="form" value={formId} />}
+            <Input
+              type="search"
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Search name, email, phone…"
+              aria-label="Search leads"
+            />
+          </form>
           <FormFilter
             forms={forms.map((f) => ({ id: f.id, title: f.title }))}
             value={formId}
@@ -85,7 +97,13 @@ export default async function LeadsPage({
       {leads.items.length === 0 ? (
         <EmptyState
           icon={UsersRound}
-          title={formId ? "No leads from this form yet" : "No leads yet"}
+          title={
+            q
+              ? `No leads match “${q}”`
+              : formId
+                ? "No leads from this form yet"
+                : "No leads yet"
+          }
           description={
             <>
               Leads come from a <strong>Contact info</strong> step in your form. Put it

@@ -8,7 +8,8 @@ import {
   ResetPasswordInput,
   mapAuthError,
 } from "@/domains/identity";
-import { checkRateLimit } from "@/domains/abuse";
+import { hitRateLimit } from "@/domains/abuse";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getClientIpFromHeaders } from "@/lib/http/client-ip";
 import { safeNextPath } from "@/lib/http/safe-next-path";
@@ -63,7 +64,9 @@ export async function signUpAction(
   const ip = await getClientIpFromHeaders();
   // Per-IP, not per-email — an attacker enumerating emails shouldn't
   // get a fresh budget for every address they try.
-  if (!checkRateLimit(`signup:${ip}`, 10, 60 * 60 * 1000).allowed) {
+  if (
+    !(await hitRateLimit(createAdminClient(), `signup:${ip}`, 10, 60 * 60 * 1000)).allowed
+  ) {
     return { error: RATE_LIMITED_MESSAGE, values };
   }
 
@@ -103,7 +106,9 @@ export async function logInAction(
   // lock every account behind it out from a few failed guesses on
   // someone else's login.
   const rateLimitKey = `login:${ip}:${parsed.data.email.toLowerCase()}`;
-  if (!checkRateLimit(rateLimitKey, 10, 10 * 60 * 1000).allowed) {
+  if (
+    !(await hitRateLimit(createAdminClient(), rateLimitKey, 10, 10 * 60 * 1000)).allowed
+  ) {
     return { error: RATE_LIMITED_MESSAGE, values };
   }
 
@@ -135,7 +140,10 @@ export async function requestPasswordResetAction(
   }
 
   const ip = await getClientIpFromHeaders();
-  if (!checkRateLimit(`forgot-password:${ip}`, 5, 60 * 60 * 1000).allowed) {
+  if (
+    !(await hitRateLimit(createAdminClient(), `forgot-password:${ip}`, 5, 60 * 60 * 1000))
+      .allowed
+  ) {
     // Same "always redirect to check-email" behavior as success —
     // rate-limit state must not leak account-enumeration signal
     // either (see the no-op-on-purpose comment below).

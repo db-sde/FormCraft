@@ -7,6 +7,7 @@ import type { EndingV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
   evaluateNextStep,
   validateAnswer,
+  hasAnswer,
   OTHER_PREFIX,
   type AnswerMap,
 } from "@/domains/logic";
@@ -63,8 +64,14 @@ export function FormRuntime({
   onComplete,
   getResponseId,
   savesProgress = false,
+  onStepEvent,
   className,
 }: {
+  /** Public runtime only: step analytics (ids only, never values). */
+  onStepEvent?: (
+    type: "question_viewed" | "question_answered",
+    questionId: string,
+  ) => void;
   /** The public form saves answers as they're given — tell respondents
    * so (PRD P2.7). Off in Preview, which never saves anything. */
   savesProgress?: boolean;
@@ -147,6 +154,9 @@ export function FormRuntime({
       return;
     }
 
+    if (!isEntryScreen(question) && hasAnswer(question, currentAnswers[question.id])) {
+      onStepEvent?.("question_answered", question.id);
+    }
     const next = evaluateNextStep(compiled, question.id, currentAnswers);
     if (next.type === "ending") {
       void finish(currentAnswers, next.endingId);
@@ -186,6 +196,15 @@ export function FormRuntime({
     setError(null);
     onAnswerChange?.(answers, prev, prevHistory);
   }
+
+  // One question_viewed per step shown (the ref also absorbs Strict
+  // Mode's double effect run in development).
+  const lastViewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onStepEvent || ending || lastViewedRef.current === currentId) return;
+    lastViewedRef.current = currentId;
+    onStepEvent("question_viewed", currentId);
+  }, [currentId, ending, onStepEvent]);
 
   // Latest goNext for the document-level listener below, which is
   // registered once rather than on every render.
@@ -327,6 +346,14 @@ export function FormRuntime({
         {theme.logoUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL
           <img src={theme.logoUrl} alt="" className="h-8 self-start object-contain" />
+        )}
+        {entry && question.settings.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+          <img
+            src={question.settings.imageUrl}
+            alt={question.settings.imageAlt ?? ""}
+            className="max-h-64 w-full rounded-lg object-contain"
+          />
         )}
         <div>
           <h2 className="text-xl font-semibold sm:text-2xl">

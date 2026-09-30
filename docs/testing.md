@@ -81,6 +81,17 @@ writing:
     (`autosave-race.spec.ts`; the old code fails it with an emptied
     field)
 
+18. Opening a form isn't a start; the first interaction is, with its
+    UTM campaign — **done** (`form-starts.spec.ts`)
+19. Form settings: saving unfinished answers off stores nothing before
+    submit (and hides the respondent notice); renaming the public link
+    moves the form — **done** (`form-settings.spec.ts`)
+
+Integration: shared rate limit (`rate-limit.test.ts`), account deletion
+(`account-deletion.test.ts`), partial-status rule, drop-off and
+retention (`responses.test.ts`). E2E runs clear the persistent
+rate-limit table first (`tests/e2e/global-setup.ts`).
+
 CSV export past PostgREST's 1000-row cap is covered at the
 integration level (`tests/integration/csv-export.test.ts`) rather than
 E2E, since it needs 1000+ seeded responses.

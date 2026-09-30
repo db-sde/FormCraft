@@ -30,7 +30,7 @@ export default async function IntegrationsPage({
   const { id: formId } = await params;
   const { sheets_error: sheetsError, sheets_connected: sheetsConnected } =
     await searchParams;
-  const { supabase, form, isLive } = await loadFormForPage(formId);
+  const { supabase, form, isLive, publishState } = await loadFormForPage(formId);
 
   const endpoints = await listWebhookEndpoints(supabase, formId);
   const deliveriesByEndpoint = Object.fromEntries(
@@ -52,7 +52,7 @@ export default async function IntegrationsPage({
         title={
           <>
             <FormTitle>{form.title}</FormTitle>
-            <FormStatusBadge live={isLive} />
+            <FormStatusBadge state={publishState} />
           </>
         }
         actions={<FormPageActions formId={formId} slug={form.slug} isLive={isLive} />}

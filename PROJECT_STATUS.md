@@ -4,6 +4,25 @@ Last updated: 2026-09-30
 
 ## Current milestone
 
+**PRD GAP CLOSURE — v0 = Phase 1 + P2.7** (2026-09-30), three batches:
+
+1. Unfinished-response data: starts on first interaction, In progress
+   vs Abandoned (30 min), referrer/UTM capture, per-question drop-off,
+   time spent.
+2. Privacy: per-form "save unfinished answers" (server-enforced),
+   respondent notice, retention auto-delete (daily cron).
+3. Phase 1 must-haves: account settings + deletion, notification
+   toggle, editable link, honeypot + shared (Postgres) rate limits,
+   unsaved-edit guard, dashboard Unpublished/Preview/Rename/Publish,
+   analytics periods, product events, embed auto-height + attribution,
+   question type change, screen images with alt text, lead search,
+   `vercel.json` crons.
+
+Remaining before production: file malware scanning service, Resend and
+Google OAuth credentials, Supabase redirect URLs (see README).
+
+### Earlier milestone
+
 **LEAD CAPTURE + REDESIGN** (2026-09-30):
 
 - Fixed published forms restarting from question one mid-fill (an

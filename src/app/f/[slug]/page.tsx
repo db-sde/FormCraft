@@ -23,10 +23,14 @@ const loadPublicForm = cache(async (slug: string) => {
 // network-free renderer.
 export default async function PublicFormPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ embed?: string }>;
 }) {
   const { slug } = await params;
+  // Set by the embed code on the Share page.
+  const embedded = (await searchParams).embed === "1";
   const publicForm = await loadPublicForm(slug);
   if (!publicForm) notFound();
 
@@ -41,6 +45,7 @@ export default async function PublicFormPage({
       await recordAnalyticsEvent(admin, {
         formId: publicForm.formId,
         eventType: "form_viewed",
+        metadata: { embedded },
       });
     } catch {
       // Swallow — see comment above.
@@ -48,17 +53,18 @@ export default async function PublicFormPage({
     await captureServerEvent({
       distinctId,
       event: "form_viewed",
-      properties: { formId: publicForm.formId },
+      properties: { formId: publicForm.formId, embedded },
     });
   });
 
   return (
-    <div className="min-h-screen">
+    <div className={embedded ? undefined : "min-h-screen"}>
       <PublicFormRuntime
         formId={publicForm.formId}
         formVersionId={publicForm.formVersionId}
         compiled={publicForm.compiled}
         savesProgress={publicForm.savePartialResponses}
+        embedded={embedded}
       />
     </div>
   );
