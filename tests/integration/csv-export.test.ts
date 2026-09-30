@@ -158,10 +158,12 @@ describe("CSV export (integration)", () => {
     const csv = await buildResponsesCsv(supabase, formId);
     const lines = csv.trimEnd().split("\r\n");
 
-    expect(lines[0]).toBe("Submitted at,Ending,Name,CV");
+    expect(lines[0]).toBe(
+      "Submitted at,Ending,Name,CV,Referrer,UTM source,UTM medium,UTM campaign,UTM term,UTM content",
+    );
     expect(lines).toHaveLength(RESPONSE_COUNT + 1);
     expect(lines[1]).toContain("Person 0");
     expect(lines[RESPONSE_COUNT]).toContain(`Person ${RESPONSE_COUNT - 1}`);
-    expect(lines[RESPONSE_COUNT]).toMatch(/,ada-cv\.pdf$/);
+    expect(lines[RESPONSE_COUNT]).toMatch(/,ada-cv\.pdf,/);
   }, 60_000);
 });

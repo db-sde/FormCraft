@@ -7,7 +7,15 @@ import {
   MousePointerClick,
   Percent,
 } from "lucide-react";
-import { listResponses, getResponseCounts, type ResponseView } from "@/domains/responses";
+import {
+  ACTIVITY_LABEL,
+  getDropoff,
+  getResponseCounts,
+  listResponses,
+  responseActivity,
+  type DropoffStep,
+  type ResponseView,
+} from "@/domains/responses";
 import { getFunnelSummaryForForm } from "@/domains/analytics";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { FormTopBar, FormTitle } from "@/components/forms/form-top-bar";
@@ -30,6 +38,72 @@ import {
 } from "@/components/ui/table";
 import { LocalTime } from "@/components/local-time";
 import { loadFormForPage } from "../load-form";
+import { ABANDONED_AFTER_MINUTES } from "@/domains/responses/activity";
+import { cn } from "cn";
+
+function ActivityPill({
+  status,
+  lastActiveAt,
+}: {
+  status: string;
+  lastActiveAt: string;
+}) {
+  const activity = responseActivity({ status, lastActiveAt });
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap",
+        activity === "in_progress"
+          ? "bg-sky-50 text-sky-700"
+          : activity === "abandoned"
+            ? "bg-amber-50 text-amber-700"
+            : "bg-emerald-50 text-emerald-700",
+      )}
+    >
+      {ACTIVITY_LABEL[activity]}
+    </span>
+  );
+}
+
+/** Where abandoned respondents stopped, question by question. */
+function DropoffCard({ steps, total }: { steps: DropoffStep[]; total: number }) {
+  if (total === 0) return null;
+  const max = Math.max(...steps.map((s) => s.stopped));
+  return (
+    <div className="bg-card mb-6 rounded-xl border p-5 shadow-xs">
+      <p className="font-medium">Where people drop off</p>
+      <p className="text-muted-foreground mb-4 text-sm">
+        The last question {total} abandoned respondent{total === 1 ? "" : "s"} saw before
+        leaving (inactive {ABANDONED_AFTER_MINUTES}+ minutes).
+      </p>
+      <ol className="space-y-2.5">
+        {steps.map((step, i) => (
+          <li
+            key={step.questionId}
+            className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-3 text-sm"
+          >
+            <span className="text-muted-foreground tabular-nums">{i + 1}</span>
+            <div className="min-w-0">
+              <p className="truncate">{step.label}</p>
+              <div className="bg-muted mt-1 h-1.5 overflow-hidden rounded-full">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    step.stopped === max ? "bg-amber-500" : "bg-primary/60",
+                  )}
+                  style={{ width: `${max ? (step.stopped / max) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-muted-foreground w-24 text-right tabular-nums">
+              {step.stopped} · {Math.round((step.stopped / total) * 100)}%
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 function ProgressBar({ answered, total }: { answered: number; total: number }) {
   const percent = total === 0 ? 0 : Math.round((answered / total) * 100);
@@ -61,10 +135,11 @@ export default async function ResponsesPage({
   const view: ResponseView = viewParam === "incomplete" ? "incomplete" : "completed";
 
   const page = Math.max(1, Number(pageParam) || 1);
-  const [responses, counts, funnel] = await Promise.all([
+  const [responses, counts, funnel, dropoff] = await Promise.all([
     listResponses(supabase, formId, { page, view }),
     getResponseCounts(supabase, formId),
     getFunnelSummaryForForm(supabase, formId),
+    view === "incomplete" ? getDropoff(supabase, formId) : null,
   ]);
 
   const base = `/forms/${formId}/responses`;
@@ -147,11 +222,18 @@ export default async function ResponsesPage({
         </div>
 
         {!completed && (
-          <p className="text-muted-foreground mb-4 text-sm">
-            People who answered at least one question but didn&apos;t submit. Answers are
-            saved as they go, so you still see everything they entered — including their
-            contact details if they got past your lead capture step.
-          </p>
+          <>
+            <p className="text-muted-foreground mb-4 text-sm">
+              People who answered at least one question but didn&apos;t submit. Answers
+              are saved as they go, so you see everything they entered — including contact
+              details if they got past your lead capture step.{" "}
+              <strong className="text-foreground font-medium">In progress</strong> means
+              active in the last {ABANDONED_AFTER_MINUTES} minutes;{" "}
+              <strong className="text-foreground font-medium">Abandoned</strong> means
+              they&apos;ve gone quiet since.
+            </p>
+            {dropoff && <DropoffCard {...dropoff} />}
+          </>
         )}
 
         {responses.items.length === 0 ? (
@@ -202,6 +284,8 @@ export default async function ResponsesPage({
                     {!completed && (
                       <TableHead className="whitespace-nowrap">Stopped at</TableHead>
                     )}
+                    {!completed && <TableHead>Status</TableHead>}
+                    <TableHead className="hidden xl:table-cell">Source</TableHead>
                     <TableHead className="w-1">
                       <span className="sr-only">Actions</span>
                     </TableHead>
@@ -251,6 +335,17 @@ export default async function ResponsesPage({
                           </span>
                         </TableCell>
                       )}
+                      {!completed && (
+                        <TableCell>
+                          <ActivityPill
+                            status={item.status}
+                            lastActiveAt={item.lastActiveAt}
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className="text-muted-foreground hidden max-w-32 xl:table-cell">
+                        <span className="line-clamp-1">{item.source}</span>
+                      </TableCell>
                       <TableCell className="relative z-10">
                         <DeleteResponseButton formId={formId} responseId={item.id} />
                       </TableCell>

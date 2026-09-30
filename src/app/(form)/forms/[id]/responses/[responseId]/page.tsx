@@ -10,7 +10,14 @@ import {
   Phone,
   UserRound,
 } from "lucide-react";
-import { getResponseDetail, getAdjacentResponseIds } from "@/domains/responses";
+import {
+  ACTIVITY_LABEL,
+  describeSource,
+  formatDuration,
+  getAdjacentResponseIds,
+  getResponseDetail,
+  responseActivity,
+} from "@/domains/responses";
 import { getUploadSignedUrl } from "@/domains/uploads";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { FormTopBar, FormTitle } from "@/components/forms/form-top-bar";
@@ -67,6 +74,7 @@ export default async function ResponseDetailPage({
   if (!detail || detail.formId !== formId) notFound();
 
   const completed = detail.status === "completed";
+  const activity = responseActivity(detail);
   const adjacent = await getAdjacentResponseIds(supabase, formId, detail);
 
   // Show the respondent's original file name, not the internal upload
@@ -141,49 +149,83 @@ export default async function ResponseDetailPage({
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-xs font-medium",
-                completed
+                activity === "completed"
                   ? "bg-emerald-50 text-emerald-700"
-                  : "bg-amber-50 text-amber-700",
+                  : activity === "in_progress"
+                    ? "bg-sky-50 text-sky-700"
+                    : "bg-amber-50 text-amber-700",
               )}
             >
-              {completed ? "Completed" : "Didn't finish"}
+              {ACTIVITY_LABEL[activity]}
             </span>
             <span className="text-muted-foreground text-sm">
-              {completed ? "Submitted " : "Last active "}
-              <LocalTime
-                iso={
-                  completed
-                    ? (detail.completedAt ?? detail.lastActiveAt)
-                    : detail.lastActiveAt
-                }
-              />
-            </span>
-          </div>
-          <p className="text-muted-foreground mt-2 text-sm">
-            {completed ? (
-              detail.endingTitle && (
-                <>
-                  Reached ending{" "}
-                  <span className="text-foreground font-medium">
-                    {detail.endingTitle}
-                  </span>
-                </>
-              )
-            ) : (
-              <>
-                Answered {answeredCount} of {detail.answers.length} questions
-                {detail.lastQuestionLabel && (
+              {completed ? (
+                detail.endingTitle && (
                   <>
-                    {" "}
-                    — stopped at{" "}
+                    Reached ending{" "}
                     <span className="text-foreground font-medium">
-                      {detail.lastQuestionLabel}
+                      {detail.endingTitle}
                     </span>
                   </>
+                )
+              ) : (
+                <>
+                  Answered {answeredCount} of {detail.answers.length} questions
+                  {detail.lastQuestionLabel && (
+                    <>
+                      {" "}
+                      — stopped at{" "}
+                      <span className="text-foreground font-medium">
+                        {detail.lastQuestionLabel}
+                      </span>
+                    </>
+                  )}
+                </>
+              )}
+            </span>
+          </div>
+          <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-muted-foreground text-xs">Started</dt>
+              <dd>
+                <LocalTime iso={detail.startedAt} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">
+                {completed ? "Submitted" : "Last active"}
+              </dt>
+              <dd>
+                <LocalTime
+                  iso={
+                    completed
+                      ? (detail.completedAt ?? detail.lastActiveAt)
+                      : detail.lastActiveAt
+                  }
+                />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Time spent</dt>
+              <dd>
+                {formatDuration(
+                  detail.startedAt,
+                  completed
+                    ? (detail.completedAt ?? detail.lastActiveAt)
+                    : detail.lastActiveAt,
                 )}
-              </>
-            )}
-          </p>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground text-xs">Source</dt>
+              <dd className="truncate">
+                {describeSource({
+                  utmSource: detail.utmSource,
+                  referrer: detail.referrer,
+                })}
+              </dd>
+            </div>
+          </dl>
         </div>
 
         {contact && (
@@ -265,17 +307,31 @@ export default async function ResponseDetailPage({
           })}
         </div>
 
-        {(detail.referrer || detail.utmSource) && (
-          <div className="text-muted-foreground mt-6 space-y-1 text-xs">
-            {detail.referrer && <p>Came from: {detail.referrer}</p>}
-            {detail.utmSource && (
-              <p>
-                Campaign: {detail.utmSource}
-                {detail.utmMedium ? ` / ${detail.utmMedium}` : ""}
-                {detail.utmCampaign ? ` / ${detail.utmCampaign}` : ""}
-              </p>
+        {(detail.referrer || detail.utmSource || detail.utmCampaign) && (
+          <dl className="text-muted-foreground mt-6 grid gap-1 text-xs sm:grid-cols-2">
+            {detail.referrer && (
+              <div className="truncate">
+                <dt className="inline">Referrer: </dt>
+                <dd className="inline">{detail.referrer}</dd>
+              </div>
             )}
-          </div>
+            {(
+              [
+                ["UTM source", detail.utmSource],
+                ["UTM medium", detail.utmMedium],
+                ["UTM campaign", detail.utmCampaign],
+                ["UTM term", detail.utmTerm],
+                ["UTM content", detail.utmContent],
+              ] as const
+            )
+              .filter(([, value]) => value)
+              .map(([label, value]) => (
+                <div key={label} className="truncate">
+                  <dt className="inline">{label}: </dt>
+                  <dd className="inline">{value}</dd>
+                </div>
+              ))}
+          </dl>
         )}
       </main>
     </>

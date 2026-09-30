@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
-import { walkForm, validateAnswer, hasAnswer, type AnswerMap } from "@/domains/logic";
+import {
+  walkForm,
+  validateAnswer,
+  hasAnswer,
+  isAnswered,
+  type AnswerMap,
+} from "@/domains/logic";
 import type { ResponseStatus } from "./state-machine";
 
 type Client = SupabaseClient<Database>;
@@ -37,6 +43,8 @@ export type StartAttribution = {
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+  utmTerm?: string;
+  utmContent?: string;
 };
 
 /**
@@ -80,6 +88,8 @@ export async function startResponse(
       utm_source: attribution.utmSource,
       utm_medium: attribution.utmMedium,
       utm_campaign: attribution.utmCampaign,
+      utm_term: attribution.utmTerm,
+      utm_content: attribution.utmContent,
     })
     .select("id, form_version_id")
     .single();
@@ -146,10 +156,39 @@ export async function saveResponseAnswers(
   lastQuestionId: string,
   answers: AnswerMap,
 ): Promise<{ status: ResponseStatus; revision: number }> {
+  // Schema first: whether this save contains a real answer decides the
+  // status. Only a response with at least one answer is "partial"; one
+  // that has only moved past the welcome screen stays in_progress (it
+  // still shows up in drop-off, but not as an incomplete response with
+  // nothing in it).
+  const { data: current, error: currentError } = await admin
+    .from("responses")
+    .select("status, client_revision, form_version_id")
+    .eq("id", responseId)
+    .maybeSingle();
+  if (currentError) throw currentError;
+  if (!current) throw new ResponseNotFoundError();
+  if (current.status === "completed") {
+    // A late autosave arriving after the respondent already submitted
+    // is a benign race (e.g. a debounced save that was in flight when
+    // Enter completed the form) — accept it as a no-op.
+    return { status: "completed", revision: current.client_revision };
+  }
+
+  const { data: versionRow, error: versionError } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("id", current.form_version_id)
+    .single();
+  if (versionError) throw versionError;
+  const schema = parseFormSchema(versionRow.schema);
+  const known = filterAnswersToKnownQuestions(schema, answers);
+  const hasAnyAnswer = Object.values(known).some(isAnswered);
+
   const { data: updated, error } = await admin
     .from("responses")
     .update({
-      status: "partial",
+      ...(hasAnyAnswer ? { status: "partial" as const } : {}),
       client_revision: expectedRevision,
       last_question_id: lastQuestionId,
       last_active_at: new Date().toISOString(),
@@ -157,37 +196,25 @@ export async function saveResponseAnswers(
     .eq("id", responseId)
     .neq("status", "completed")
     .lt("client_revision", expectedRevision)
-    .select("status, client_revision, form_version_id")
+    .select("status, client_revision")
     .maybeSingle();
   if (error) throw error;
 
   if (!updated) {
-    const { data: current, error: fetchError } = await admin
+    const { data: latest, error: fetchError } = await admin
       .from("responses")
       .select("status, client_revision")
       .eq("id", responseId)
       .maybeSingle();
     if (fetchError) throw fetchError;
-    if (!current) throw new ResponseNotFoundError();
-    if (current.status === "completed") {
-      // A late autosave arriving after the respondent already submitted
-      // is a benign race (e.g. a debounced save that was in flight when
-      // Enter completed the form) — accept it as a no-op rather than
-      // erroring, since nothing about it is actually wrong.
-      return { status: "completed", revision: current.client_revision };
+    if (!latest) throw new ResponseNotFoundError();
+    if (latest.status === "completed") {
+      return { status: "completed", revision: latest.client_revision };
     }
-    throw new StaleResponseWriteError(current.client_revision);
+    throw new StaleResponseWriteError(latest.client_revision);
   }
 
-  const { data: versionRow, error: versionError } = await admin
-    .from("form_versions")
-    .select("schema")
-    .eq("id", updated.form_version_id)
-    .single();
-  if (versionError) throw versionError;
-  const schema = parseFormSchema(versionRow.schema);
-
-  await upsertAnswers(admin, responseId, filterAnswersToKnownQuestions(schema, answers));
+  await upsertAnswers(admin, responseId, known);
 
   return { status: updated.status, revision: updated.client_revision };
 }

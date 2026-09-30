@@ -61,16 +61,20 @@ export function FormRuntime({
   initialHistory,
   onAnswerChange,
   onComplete,
-  responseId,
+  getResponseId,
+  savesProgress = false,
   className,
 }: {
+  /** The public form saves answers as they're given — tell respondents
+   * so (PRD P2.7). Off in Preview, which never saves anything. */
+  savesProgress?: boolean;
   compiled: CompiledFormV1;
   initialAnswers?: AnswerMap;
   initialQuestionId?: string;
   initialHistory?: string[];
   /** Only present in the real public runtime — see
    * runtime-question-input.tsx's FileUploadInput for why. */
-  responseId?: string;
+  getResponseId?: () => Promise<string>;
   onAnswerChange?: (
     answers: AnswerMap,
     currentQuestionId: string,
@@ -309,6 +313,16 @@ export function FormRuntime({
       )}
       style={containerStyle}
     >
+      {/* Spam trap: invisible to people and skipped by keyboard/screen
+          readers; bots that fill every field reveal themselves. */}
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
+      />
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-5">
         {theme.logoUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL
@@ -339,7 +353,7 @@ export function FormRuntime({
           value={answers[question.id]}
           onChange={setAnswer}
           primaryColor={theme.primaryColor}
-          responseId={responseId}
+          getResponseId={getResponseId}
         />
 
         {error && (
@@ -389,6 +403,13 @@ export function FormRuntime({
         </div>
       </div>
 
+      {savesProgress && currentIndex >= 0 && (
+        <p className="mx-auto -mb-3 w-full max-w-xl text-xs opacity-50">
+          {question.type === "contact_info"
+            ? "Your details are saved when you continue, even if you don't finish."
+            : "Your answers are saved as you go."}
+        </p>
+      )}
       {currentIndex >= 0 && (
         <div
           role="progressbar"

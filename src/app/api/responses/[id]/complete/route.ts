@@ -16,6 +16,8 @@ const CompleteBody = z.object({
   lastQuestionId: z.string().min(1).max(64),
   answers: z.record(z.string(), z.unknown()),
   idempotencyKey: z.string().uuid(),
+  /** Hidden spam-trap field — people never see it, bots fill it. */
+  website: z.string().max(2000).optional(),
 });
 
 export async function POST(
@@ -38,6 +40,13 @@ export async function POST(
   const rateLimit = checkRateLimit(rateLimitKey, 10, 10 * 60 * 1000);
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
+  }
+
+  if (parsed.data.website) {
+    // Looks like success to the bot (so it doesn't adapt), but nothing
+    // is completed, notified, or delivered. The unfinished row is left
+    // for retention cleanup.
+    return NextResponse.json({ endingId: "", alreadyCompleted: false });
   }
 
   try {

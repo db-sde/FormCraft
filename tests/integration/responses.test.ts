@@ -310,4 +310,49 @@ describe("response engine (integration)", () => {
     expect(finalQuestionIds.sort()).toEqual(["q_name", "q_notes"]);
     expect(finalQuestionIds).not.toContain("another_forged_id");
   });
+
+  it("stays in_progress until an actual answer is saved, then becomes partial", async () => {
+    const { responseId } = await startResponse(supabase, formId, {
+      utmSource: "newsletter",
+      utmTerm: "forms",
+    });
+
+    // Moved past the welcome screen, nothing answered yet.
+    const moved = await saveResponseAnswers(supabase, responseId, 1, "q_name", {});
+    expect(moved.status).toBe("in_progress");
+
+    const answered = await saveResponseAnswers(supabase, responseId, 2, "q_name", {
+      q_name: "Grace",
+    });
+    expect(answered.status).toBe("partial");
+
+    const { data } = await supabase
+      .from("responses")
+      .select("utm_source, utm_term")
+      .eq("id", responseId)
+      .single();
+    expect(data).toEqual({ utm_source: "newsletter", utm_term: "forms" });
+  });
+
+  it("counts drop-off only for sessions idle past the abandonment threshold", async () => {
+    const idle = await startResponse(supabase, formId);
+    await saveResponseAnswers(supabase, idle.responseId, 1, "q_notes", { q_name: "A" });
+    const active = await startResponse(supabase, formId);
+    await saveResponseAnswers(supabase, active.responseId, 1, "q_notes", { q_name: "B" });
+    // Make the first one look 2 hours stale.
+    await supabase
+      .from("responses")
+      .update({ last_active_at: new Date(Date.now() - 2 * 3600_000).toISOString() })
+      .eq("id", idle.responseId);
+
+    const { data, error } = await supabase.rpc("response_dropoff", {
+      target_form_id: formId,
+      idle_minutes: 30,
+    });
+    expect(error).toBeNull();
+    const notes = (data ?? []).find((row) => row.question_id === "q_notes");
+    // Only the idle session counts (earlier tests may add others at
+    // different questions, but none idle at q_notes besides this one).
+    expect(notes?.stopped).toBe(1);
+  });
 });

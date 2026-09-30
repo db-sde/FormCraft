@@ -3,6 +3,11 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { ContactField } from "@/domains/forms/schema/question-types";
 import { toCsv } from "@/domains/exports";
+import {
+  ACTIVITY_LABEL,
+  describeSource,
+  responseActivity,
+} from "@/domains/responses/activity";
 
 type Client = SupabaseClient<Database>;
 
@@ -16,6 +21,10 @@ export type Lead = {
   company: string;
   /** Whether the respondent went on to submit the form. */
   completed: boolean;
+  /** The response's last activity (drives In progress vs Abandoned). */
+  lastActiveAt: string;
+  /** Campaign source / referring site / "Direct". */
+  source: string;
   /** When the contact details were last saved. */
   capturedAt: string;
 };
@@ -87,7 +96,14 @@ type LeadRow = {
   value: unknown;
   question_id: string;
   updated_at: string;
-  responses: { id: string; form_id: string; status: string } | null;
+  responses: {
+    id: string;
+    form_id: string;
+    status: string;
+    last_active_at: string;
+    referrer: string | null;
+    utm_source: string | null;
+  } | null;
 };
 
 function toLead(row: LeadRow, sources: Map<string, ContactSource>): Lead | null {
@@ -110,6 +126,11 @@ function toLead(row: LeadRow, sources: Map<string, ContactSource>): Lead | null 
     phone: text(record, "phone"),
     company: text(record, "company"),
     completed: response.status === "completed",
+    lastActiveAt: response.last_active_at,
+    source: describeSource({
+      utmSource: response.utm_source,
+      referrer: response.referrer,
+    }),
     capturedAt: row.updated_at,
   };
   return lead.name || lead.email || lead.phone || lead.company ? lead : null;
@@ -119,9 +140,12 @@ function leadsQuery(supabase: Client, sources: ContactSource[]) {
   const questionIds = [...new Set(sources.flatMap((s) => [...s.questionIds]))];
   return supabase
     .from("answers")
-    .select("value, question_id, updated_at, responses!inner(id, form_id, status)", {
-      count: "exact",
-    })
+    .select(
+      "value, question_id, updated_at, responses!inner(id, form_id, status, last_active_at, referrer, utm_source)",
+      {
+        count: "exact",
+      },
+    )
     .in("question_id", questionIds)
     .in(
       "responses.form_id",
@@ -201,7 +225,16 @@ export async function buildLeadsCsv(
     }
   }
 
-  const columns = ["Name", "Email", "Phone", "Company", "Form", "Status", "Captured at"];
+  const columns = [
+    "Name",
+    "Email",
+    "Phone",
+    "Company",
+    "Form",
+    "Status",
+    "Source",
+    "Captured at",
+  ];
   return toCsv(
     columns,
     leads.map((lead) => ({
@@ -210,7 +243,14 @@ export async function buildLeadsCsv(
       Phone: lead.phone,
       Company: lead.company,
       Form: lead.formTitle,
-      Status: lead.completed ? "Completed form" : "Didn't finish",
+      Status:
+        ACTIVITY_LABEL[
+          responseActivity({
+            status: lead.completed ? "completed" : "partial",
+            lastActiveAt: lead.lastActiveAt,
+          })
+        ],
+      Source: lead.source,
       "Captured at": lead.capturedAt,
     })),
   );

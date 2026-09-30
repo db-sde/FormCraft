@@ -73,7 +73,8 @@ test("a respondent who leaves before the last question is still a lead", async (
     await expect(row).toBeVisible({ timeout: 10000 });
     await expect(row).toContainText("grace@example.com");
     await expect(row).toContainText("+1 555 010 2030");
-    await expect(row).toContainText("Didn't finish");
+    // Left seconds ago: still "In progress" until the 30-minute threshold.
+    await expect(row).toContainText("In progress");
 
     await page.goto(`/forms/${formId}/responses?view=incomplete`);
     await expect(page.getByRole("link", { name: /Incomplete\s*1/ })).toBeVisible();

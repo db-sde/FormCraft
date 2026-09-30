@@ -14,6 +14,8 @@ const StartBody = z.object({
   utmSource: z.string().max(200).optional(),
   utmMedium: z.string().max(200).optional(),
   utmCampaign: z.string().max(200).optional(),
+  utmTerm: z.string().max(200).optional(),
+  utmContent: z.string().max(200).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -37,6 +39,8 @@ export async function POST(request: NextRequest) {
       utmSource: parsed.data.utmSource,
       utmMedium: parsed.data.utmMedium,
       utmCampaign: parsed.data.utmCampaign,
+      utmTerm: parsed.data.utmTerm,
+      utmContent: parsed.data.utmContent,
     });
 
     // A response row only gets created here — never on a resumed

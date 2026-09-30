@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { AnswerMap } from "@/domains/logic";
 import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
-import { Button } from "@/components/ui/button";
 
 type StoredResponse = {
   responseId: string;
@@ -21,6 +20,10 @@ type StoredResponse = {
   lastQuestionId: string;
   history: string[];
 };
+
+/** What the respondent has done so far, before or after a response
+ * row exists. */
+type Progress = Pick<StoredResponse, "answers" | "lastQuestionId" | "history">;
 
 function storageKey(formId: string) {
   return `formcraft:response:${formId}`;
@@ -53,25 +56,34 @@ function clearStored(formId: string) {
   }
 }
 
-async function startSession(formId: string, firstQuestionId: string) {
+/** Where this visit came from (PRD P2.11) — the page URL's UTM
+ * parameters and the referring page. Respondent-controlled, so it's
+ * only ever stored and displayed, never trusted for anything else. */
+function attribution() {
+  const params = new URLSearchParams(window.location.search);
+  const pick = (key: string) => params.get(key)?.slice(0, 200) || undefined;
+  return {
+    referrer: document.referrer ? document.referrer.slice(0, 2000) : undefined,
+    utmSource: pick("utm_source"),
+    utmMedium: pick("utm_medium"),
+    utmCampaign: pick("utm_campaign"),
+    utmTerm: pick("utm_term"),
+    utmContent: pick("utm_content"),
+    embedded: params.get("embed") === "1",
+  };
+}
+
+async function startSession(formId: string): Promise<{
+  responseId: string;
+  formVersionId: string;
+}> {
   const res = await fetch("/api/responses/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ formId }),
+    body: JSON.stringify({ formId, ...attribution() }),
   });
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
-  const data = (await res.json()) as { responseId: string; formVersionId: string };
-  const fresh: StoredResponse = {
-    responseId: data.responseId,
-    formVersionId: data.formVersionId,
-    idempotencyKey: crypto.randomUUID(),
-    revision: 0,
-    answers: {},
-    lastQuestionId: firstQuestionId,
-    history: [],
-  };
-  writeStored(formId, fresh);
-  return fresh;
+  return (await res.json()) as { responseId: string; formVersionId: string };
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 600;
@@ -83,91 +95,121 @@ const AUTOSAVE_DEBOUNCE_MS = 600;
  * that component stays a pure, network-free renderer usable by the
  * builder's Preview dialog too (see form-runtime.tsx).
  *
+ * Start: the response row is created on the respondent's first real
+ * interaction — pressing Start, typing, choosing — not on page load
+ * (PRD: a "form start" is the first interaction). Visitors who only look
+ * count as views, never as starts or empty responses.
+ *
  * Resume: a response id + its answers, position and back-history are
  * cached in localStorage per form, so a refresh picks up exactly where
  * the respondent left off.
  *
  * Autosave is single-flight: at most one save request is in the air,
- * and each claims a fresh revision before it's sent. (It used to reuse
- * the last *acknowledged* revision, so two overlapping saves carried the
- * same number, the server rejected one as stale, and the client's
- * response to that — wipe the session and reload — restarted the form
- * from question one a moment after the respondent answered.) A genuine
- * conflict now resyncs to the server's revision and saves again; the
- * respondent's progress is never thrown away.
+ * and each claims a fresh revision before it's sent (reusing the last
+ * acknowledged revision once let two overlapping saves collide, and the
+ * old reaction — wipe and reload — restarted the form). A conflict
+ * resyncs to the server's revision and saves again.
+ *
+ * When the creator has turned off saving unfinished responses,
+ * nothing is written anywhere (server or this browser) until submit.
  */
 export function PublicFormRuntime({
   formId,
   formVersionId,
   compiled,
+  savesProgress = true,
 }: {
   formId: string;
   formVersionId: string;
   compiled: CompiledFormV1;
+  /** Creator setting: keep answers from respondents who don't finish. */
+  savesProgress?: boolean;
 }) {
-  const [session, setSession] = useState<StoredResponse | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+  // undefined = still checking this browser for a session to resume.
+  const [resumed, setResumed] = useState<StoredResponse | null | undefined>(undefined);
   const sessionRef = useRef<StoredResponse | null>(null);
+  const progressRef = useRef<Progress>({
+    answers: {},
+    lastQuestionId: compiled.orderedQuestionIds[0] ?? "",
+    history: [],
+  });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The in-flight save (if any), and whether newer changes arrived
   // while it was running and need their own save afterwards.
   const inFlightRef = useRef<Promise<void> | null>(null);
   const dirtyRef = useRef(false);
-  // One /start request per attempt, shared by every effect run. React
-  // Strict Mode mounts → cleans up → remounts in dev: the first run's
-  // result must still reach whichever run is current, or the page
-  // stays blank forever (a real bug: an earlier "skip if in flight"
-  // guard dropped the result on the floor). Refs survive that remount.
+  // Refs survive React Strict Mode's mount → unmount → mount in dev, so
+  // both runs share one localStorage read and one /start request.
+  const resumeCheckRef = useRef<Promise<StoredResponse | null> | null>(null);
   const startPromiseRef = useRef<Promise<StoredResponse> | null>(null);
 
   const theme = compiled.schema.theme;
-  const firstQuestionId = compiled.orderedQuestionIds[0] ?? "";
 
   useEffect(() => {
     let cancelled = false;
-
-    if (!startPromiseRef.current) {
-      const existing = readStored(formId);
+    if (!resumeCheckRef.current) {
+      const existing = savesProgress ? readStored(formId) : null;
       // A response started against an older published version can't be
       // continued on the new one — its question ids may not exist.
       const resumable =
         existing &&
-        (existing.formVersionId === undefined ||
-          existing.formVersionId === formVersionId);
-      startPromiseRef.current = resumable
-        ? Promise.resolve({ ...existing, history: existing.history ?? [] })
-        : startSession(formId, firstQuestionId);
+        (existing.formVersionId === undefined || existing.formVersionId === formVersionId)
+          ? { ...existing, history: existing.history ?? [] }
+          : null;
+      resumeCheckRef.current = Promise.resolve(resumable);
     }
-    startPromiseRef.current.then(
-      (fresh) => {
-        if (cancelled) return;
-        sessionRef.current = fresh;
-        setSession(fresh);
-      },
-      () => {
-        if (!cancelled) setLoadFailed(true);
-      },
-    );
-
+    void resumeCheckRef.current.then((existing) => {
+      if (cancelled) return;
+      sessionRef.current = existing;
+      if (existing) {
+        progressRef.current = {
+          answers: existing.answers,
+          lastQuestionId: existing.lastQuestionId,
+          history: existing.history,
+        };
+      }
+      setResumed(existing);
+    });
     return () => {
       cancelled = true;
     };
-  }, [formId, formVersionId, firstQuestionId, attempt]);
-
-  function retryStart() {
-    startPromiseRef.current = null;
-    setLoadFailed(false);
-    setAttempt((a) => a + 1);
-  }
+  }, [formId, formVersionId, savesProgress]);
 
   function updateSession(patch: Partial<StoredResponse>) {
     const current = sessionRef.current;
     if (!current) return null;
     const updated = { ...current, ...patch };
     sessionRef.current = updated;
-    writeStored(formId, updated);
+    if (savesProgress) writeStored(formId, updated);
     return updated;
+  }
+
+  /** The response row, created on first need and shared by everyone
+   * who asks while it's being created. A failed start is retried on the
+   * next call. */
+  function ensureSession(): Promise<StoredResponse> {
+    if (sessionRef.current) return Promise.resolve(sessionRef.current);
+    if (!startPromiseRef.current) {
+      startPromiseRef.current = startSession(formId).then(
+        (data) => {
+          const fresh: StoredResponse = {
+            responseId: data.responseId,
+            formVersionId: data.formVersionId,
+            idempotencyKey: crypto.randomUUID(),
+            revision: 0,
+            ...progressRef.current,
+          };
+          sessionRef.current = fresh;
+          if (savesProgress) writeStored(formId, fresh);
+          return fresh;
+        },
+        (error: unknown) => {
+          startPromiseRef.current = null;
+          throw error;
+        },
+      );
+    }
+    return startPromiseRef.current;
   }
 
   function handleAnswerChange(
@@ -175,10 +217,19 @@ export function PublicFormRuntime({
     currentQuestionId: string,
     history: string[],
   ) {
-    if (!updateSession({ answers, lastQuestionId: currentQuestionId, history })) return;
-    dirtyRef.current = true;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => void flushSaves(), AUTOSAVE_DEBOUNCE_MS);
+    progressRef.current = { answers, lastQuestionId: currentQuestionId, history };
+    ensureSession().then(
+      () => {
+        updateSession(progressRef.current);
+        if (!savesProgress) return;
+        dirtyRef.current = true;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => void flushSaves(), AUTOSAVE_DEBOUNCE_MS);
+      },
+      () => {
+        // Offline for now — the next change (or the submit) tries again.
+      },
+    );
   }
 
   /** Saves until nothing is dirty, one request at a time. */
@@ -241,8 +292,15 @@ export function PublicFormRuntime({
   }
 
   async function handleComplete(answers: AnswerMap): Promise<CompleteOutcome> {
-    if (!sessionRef.current) {
-      return { ok: false, message: "Your session expired. Please refresh the page." };
+    progressRef.current = { ...progressRef.current, answers };
+    let session: StoredResponse;
+    try {
+      session = await ensureSession();
+    } catch {
+      return {
+        ok: false,
+        message: "Couldn't reach the server — check your connection and try again.",
+      };
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     // Let any in-flight autosave land first; the submit carries every
@@ -251,7 +309,7 @@ export function PublicFormRuntime({
     await inFlightRef.current?.catch(() => undefined);
     const current = updateSession({
       answers,
-      revision: (sessionRef.current?.revision ?? 0) + 1,
+      revision: (sessionRef.current?.revision ?? session.revision) + 1,
     });
     if (!current) {
       return { ok: false, message: "Your session expired. Please refresh the page." };
@@ -268,6 +326,8 @@ export function PublicFormRuntime({
           // Same key on every retry: a submit whose response was lost
           // in transit is recognised server-side, never duplicated.
           idempotencyKey: current.idempotencyKey,
+          // Spam trap (see FormRuntime): real respondents never fill it.
+          website: honeypotValue(),
         }),
       });
 
@@ -302,33 +362,11 @@ export function PublicFormRuntime({
     }
   }
 
-  const shellStyle: React.CSSProperties = {
-    backgroundColor: theme.backgroundColor,
-    color: theme.textColor ?? undefined,
-  };
-
-  if (loadFailed) {
-    return (
-      <div
-        className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
-        style={shellStyle}
-      >
-        <p className="text-lg font-medium">This form couldn&apos;t be loaded.</p>
-        <p className="max-w-sm text-sm opacity-70">
-          It may have just been unpublished, or your connection dropped.
-        </p>
-        <Button type="button" variant="outline" onClick={retryStart}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-
-  if (!session) {
+  if (resumed === undefined) {
     return (
       <div
         className="flex min-h-dvh items-center justify-center"
-        style={shellStyle}
+        style={{ backgroundColor: theme.backgroundColor }}
         aria-busy="true"
       >
         <Loader2 className="size-6 animate-spin opacity-50" aria-label="Loading form" />
@@ -339,13 +377,20 @@ export function PublicFormRuntime({
   return (
     <FormRuntime
       compiled={compiled}
-      initialAnswers={session.answers}
-      initialQuestionId={session.lastQuestionId}
-      initialHistory={session.history}
+      initialAnswers={resumed?.answers}
+      initialQuestionId={resumed?.lastQuestionId}
+      initialHistory={resumed?.history}
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}
-      responseId={session.responseId}
+      getResponseId={() => ensureSession().then((s) => s.responseId)}
+      savesProgress={savesProgress}
       className="min-h-dvh"
     />
   );
+}
+
+/** Reads the hidden spam-trap field FormRuntime renders. */
+function honeypotValue(): string | undefined {
+  const field = document.querySelector<HTMLInputElement>('input[name="website"]');
+  return field?.value || undefined;
 }

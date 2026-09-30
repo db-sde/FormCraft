@@ -18,6 +18,28 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "cn";
+import {
+  ACTIVITY_LABEL,
+  responseActivity,
+  type ResponseActivity,
+} from "@/domains/responses/activity";
+
+function ActivityBadge({ activity }: { activity: ResponseActivity }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap",
+        activity === "completed"
+          ? "bg-emerald-50 text-emerald-700"
+          : activity === "in_progress"
+            ? "bg-sky-50 text-sky-700"
+            : "bg-amber-50 text-amber-700",
+      )}
+    >
+      {ACTIVITY_LABEL[activity]}
+    </span>
+  );
+}
 
 export default async function LeadsPage({
   searchParams,
@@ -97,6 +119,7 @@ export default async function LeadsPage({
                   <TableHead className="hidden md:table-cell">Company</TableHead>
                   <TableHead className="hidden lg:table-cell">Form</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="hidden xl:table-cell">Source</TableHead>
                   <TableHead className="whitespace-nowrap">Captured</TableHead>
                 </TableRow>
               </TableHeader>
@@ -142,16 +165,15 @@ export default async function LeadsPage({
                       <span className="line-clamp-1">{lead.formTitle}</span>
                     </TableCell>
                     <TableCell>
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap",
-                          lead.completed
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-amber-50 text-amber-700",
-                        )}
-                      >
-                        {lead.completed ? "Completed" : "Didn't finish"}
-                      </span>
+                      <ActivityBadge
+                        activity={responseActivity({
+                          status: lead.completed ? "completed" : "partial",
+                          lastActiveAt: lead.lastActiveAt,
+                        })}
+                      />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden max-w-32 xl:table-cell">
+                      <span className="line-clamp-1">{lead.source}</span>
                     </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       <LocalTime iso={lead.capturedAt} variant="relative" />

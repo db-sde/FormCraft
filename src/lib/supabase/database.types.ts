@@ -267,8 +267,10 @@ export type Database = {
           started_at: string;
           status: Database["public"]["Enums"]["response_status"];
           utm_campaign: string | null;
+          utm_content: string | null;
           utm_medium: string | null;
           utm_source: string | null;
+          utm_term: string | null;
         };
         Insert: {
           client_revision?: number;
@@ -286,8 +288,10 @@ export type Database = {
           started_at?: string;
           status?: Database["public"]["Enums"]["response_status"];
           utm_campaign?: string | null;
+          utm_content?: string | null;
           utm_medium?: string | null;
           utm_source?: string | null;
+          utm_term?: string | null;
         };
         Update: {
           client_revision?: number;
@@ -305,8 +309,10 @@ export type Database = {
           started_at?: string;
           status?: Database["public"]["Enums"]["response_status"];
           utm_campaign?: string | null;
+          utm_content?: string | null;
           utm_medium?: string | null;
           utm_source?: string | null;
+          utm_term?: string | null;
         };
         Relationships: [
           {
@@ -718,6 +724,13 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      response_dropoff: {
+        Args: { idle_minutes: number; target_form_id: string };
+        Returns: {
+          question_id: string;
+          stopped: number;
+        }[];
       };
       workspace_role_for: {
         Args: { target_workspace_id: string };

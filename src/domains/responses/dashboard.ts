@@ -9,6 +9,7 @@ import {
   questionColumnLabels,
 } from "./format";
 import { hasAnswer } from "@/domains/logic/validate-answer";
+import { ABANDONED_AFTER_MINUTES, describeSource } from "./activity";
 import {
   toCsv,
   ExportTooLargeError,
@@ -38,6 +39,8 @@ export type ResponseListItem = {
   progress: { answered: number; total: number };
   /** Where an unfinished respondent stopped. */
   lastQuestionLabel: string | null;
+  /** Campaign source / referring site / "Direct". */
+  source: string;
 };
 
 export type ResponseListPage = {
@@ -49,6 +52,15 @@ export type ResponseListPage = {
 };
 
 const PREVIEW_COLUMN_COUNT = 3;
+
+const ATTRIBUTION_COLUMNS = [
+  "Referrer",
+  "UTM source",
+  "UTM medium",
+  "UTM campaign",
+  "UTM term",
+  "UTM content",
+];
 
 function isAnswerable(q: QuestionV1): boolean {
   return q.type !== "welcome_screen" && q.type !== "statement";
@@ -103,7 +115,7 @@ export async function listResponses(
   let query = supabase
     .from("responses")
     .select(
-      "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id",
+      "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source",
       { count: "exact" },
     )
     .eq("form_id", formId);
@@ -174,6 +186,7 @@ export async function listResponses(
       preview,
       progress: { answered, total: ownAnswerable.length },
       lastQuestionLabel: lastQuestion ? questionColumnLabel(lastQuestion) : null,
+      source: describeSource({ utmSource: row.utm_source, referrer: row.referrer }),
     });
   }
 
@@ -255,6 +268,8 @@ export type ResponseDetail = {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
+  utmTerm: string | null;
+  utmContent: string | null;
   answers: {
     questionId: string;
     label: string;
@@ -272,7 +287,7 @@ export async function getResponseDetail(
   const { data: response, error } = await supabase
     .from("responses")
     .select(
-      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign",
+      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -323,6 +338,8 @@ export async function getResponseDetail(
     utmSource: response.utm_source,
     utmMedium: response.utm_medium,
     utmCampaign: response.utm_campaign,
+    utmTerm: response.utm_term,
+    utmContent: response.utm_content,
     answers,
   };
 }
@@ -409,11 +426,19 @@ export async function buildResponsesCsv(
     last_active_at: string;
     ending_id: string | null;
     form_version_id: string;
+    referrer: string | null;
+    utm_source: string | null;
+    utm_medium: string | null;
+    utm_campaign: string | null;
+    utm_term: string | null;
+    utm_content: string | null;
   }[] = [];
   for (let from = 0; ; from += FETCH_PAGE) {
     const { data, error } = await supabase
       .from("responses")
-      .select("id, completed_at, last_active_at, ending_id, form_version_id")
+      .select(
+        "id, completed_at, last_active_at, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content",
+      )
       .eq("form_id", formId)
       .eq("status", view === "completed" ? "completed" : "partial")
       .order(view === "completed" ? "completed_at" : "last_active_at", {
@@ -496,12 +521,59 @@ export async function buildResponsesCsv(
       labels.forEach((label, i) => (row[label] = cells[i]));
     }
 
+    Object.assign(row, {
+      Referrer: response.referrer ?? "",
+      "UTM source": response.utm_source ?? "",
+      "UTM medium": response.utm_medium ?? "",
+      "UTM campaign": response.utm_campaign ?? "",
+      "UTM term": response.utm_term ?? "",
+      "UTM content": response.utm_content ?? "",
+    });
+
     rows.push(row);
   }
 
   const columns = [
     ...(view === "completed" ? ["Submitted at", "Ending"] : ["Last active"]),
     ...referenceQuestions.flatMap(questionColumnLabels),
+    ...ATTRIBUTION_COLUMNS,
   ];
   return toCsv(columns, rows);
+}
+
+export type DropoffStep = {
+  questionId: string;
+  label: string;
+  /** Abandoned respondents whose last step was this question. */
+  stopped: number;
+};
+
+/**
+ * Where abandoned respondents stopped, in form order (latest version's
+ * questions). Only sessions idle past the abandonment threshold count —
+ * someone mid-answer hasn't dropped off. Aggregated in the database
+ * (response_dropoff), scoped by RLS to the caller's forms.
+ */
+export async function getDropoff(
+  supabase: Client,
+  formId: string,
+): Promise<{ steps: DropoffStep[]; total: number }> {
+  const [{ data, error }, latest] = await Promise.all([
+    supabase.rpc("response_dropoff", {
+      target_form_id: formId,
+      idle_minutes: ABANDONED_AFTER_MINUTES,
+    }),
+    getLatestSchema(supabase, formId),
+  ]);
+  if (error) throw error;
+
+  const counts = new Map((data ?? []).map((row) => [row.question_id, row.stopped]));
+  const steps = (latest?.questions ?? [])
+    .filter((q) => q.type !== "welcome_screen")
+    .map((q) => ({
+      questionId: q.id,
+      label: questionColumnLabel(q),
+      stopped: counts.get(q.id) ?? 0,
+    }));
+  return { steps, total: steps.reduce((sum, s) => sum + s.stopped, 0) };
 }

@@ -29,17 +29,17 @@ export function RuntimeQuestionInput({
   value,
   onChange,
   primaryColor,
-  responseId,
+  getResponseId,
 }: {
   question: QuestionV1;
   value: unknown;
   onChange: (value: unknown) => void;
   primaryColor: string;
   /** Only present in the real public runtime, never the builder's
-   * Preview dialog — file_upload uses this to know whether it can
-   * actually upload (Preview just tracks a filename locally, keeping
-   * its no-network-calls guarantee). */
-  responseId?: string;
+   * Preview dialog — file_upload uses it to get (creating on demand) the
+   * response to upload against. Preview just tracks a filename locally,
+   * keeping its no-network-calls guarantee. */
+  getResponseId?: () => Promise<string>;
 }) {
   switch (question.type) {
     case "welcome_screen":
@@ -371,7 +371,7 @@ export function RuntimeQuestionInput({
           question={question}
           value={value}
           onChange={onChange}
-          responseId={responseId}
+          getResponseId={getResponseId}
         />
       );
   }
@@ -391,12 +391,12 @@ function FileUploadInput({
   question,
   value,
   onChange,
-  responseId,
+  getResponseId,
 }: {
   question: Extract<QuestionV1, { type: "file_upload" }>;
   value: unknown;
   onChange: (value: unknown) => void;
-  responseId?: string;
+  getResponseId?: () => Promise<string>;
 }) {
   const [fileName, setFileName] = useState<string | null>(
     typeof value === "string" ? value : null,
@@ -407,7 +407,7 @@ function FileUploadInput({
     if (!file) return;
     setFileName(file.name);
 
-    if (!responseId) {
+    if (!getResponseId) {
       // Preview mode: no network calls at all (see FormRuntime's
       // module doc) — just reflect the filename locally so required-
       // field validation and the visual state behave sensibly.
@@ -417,6 +417,7 @@ function FileUploadInput({
 
     setStatus("uploading");
     try {
+      const responseId = await getResponseId();
       const body = new FormData();
       body.set("file", file);
       const res = await fetch(`/api/responses/${responseId}/uploads/${question.id}`, {
