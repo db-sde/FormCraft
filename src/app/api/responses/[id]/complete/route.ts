@@ -90,44 +90,43 @@ export async function POST(
       // (missing API key, an unreachable webhook endpoint, ...) can
       // never affect the response itself (see ARCHITECTURE.md).
       after(async () => {
-        try {
-          await recordAnalyticsEvent(admin, {
+        // Each step is independent: one failing (analytics down, no
+        // email key, a webhook consumer erroring) must not skip the
+        // rest. Anything that still doesn't happen is picked up by the
+        // cron recovery sweeps, which create the missing jobs.
+        const step = async (work: () => Promise<unknown>) => {
+          try {
+            await work();
+          } catch {
+            // Intentionally swallowed — see above.
+          }
+        };
+        await step(() =>
+          recordAnalyticsEvent(admin, {
             formId: result.formId,
             eventType: "form_submitted",
             sessionId: id,
             metadata: { endingId: result.endingId || null },
-          });
-        } catch {
-          // Analytics must never block the notification/webhook side
-          // effects that follow.
-        }
-        await captureServerEvent({
-          distinctId: id,
-          event: "form_submitted",
-          properties: { formId: result.formId, endingId: result.endingId || null },
-        });
-        await notifyFormOwnerOfCompletedResponse(admin, result.formId, id);
-        await enqueueWebhookDeliveries(
-          admin,
-          result.formId,
-          id,
-          result.endingId || null,
-          parsed.data.answers,
+          }),
         );
-        // Attempt the just-enqueued (and any other due) deliveries
-        // immediately rather than waiting for the next scheduled
-        // sweep — see /api/cron/webhooks/dispatch for the sweep that
-        // covers retries after this.
-        await dispatchDueDeliveries(admin);
-
-        try {
+        await step(() =>
+          captureServerEvent({
+            distinctId: id,
+            event: "form_submitted",
+            properties: { formId: result.formId, endingId: result.endingId || null },
+          }),
+        );
+        await step(() => notifyFormOwnerOfCompletedResponse(admin, result.formId, id));
+        await step(async () => {
+          await enqueueWebhookDeliveries(admin, id);
+          // Send right away rather than waiting for the next scheduled
+          // sweep; the sweep covers retries.
+          await dispatchDueDeliveries(admin);
+        });
+        await step(async () => {
           const enqueued = await enqueueSheetsSync(admin, result.formId, id);
           if (enqueued) await dispatchDueSheetsSyncs(admin);
-        } catch {
-          // Sheets sync is the least mature of these integrations —
-          // never let it take down the notification/webhook work above
-          // it, which already succeeded by this point.
-        }
+        });
       });
     }
 

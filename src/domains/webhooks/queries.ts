@@ -109,37 +109,70 @@ export async function listDeliveries(
   }));
 }
 
+/** The delivery's payload comes from what is *stored* for the response
+ * (completion time, ending, the answers on the path taken) — never from
+ * the request that completed it — so every route to a delivery (right
+ * after submit, or the recovery sweep) sends the same thing. */
+async function loadResponseForDelivery(admin: Client, responseId: string) {
+  const { data: response, error } = await admin
+    .from("responses")
+    .select("form_id, status, spam_suspected, ending_id, completed_at")
+    .eq("id", responseId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!response || response.status !== "completed" || response.spam_suspected)
+    return null;
+
+  const { data: answerRows, error: answersError } = await admin
+    .from("answers")
+    .select("question_id, value")
+    .eq("response_id", responseId);
+  if (answersError) throw answersError;
+
+  return {
+    formId: response.form_id,
+    endingId: response.ending_id,
+    submittedAt: response.completed_at ?? new Date().toISOString(),
+    answers: Object.fromEntries(
+      (answerRows ?? []).map((a) => [a.question_id, a.value]),
+    ) as AnswerMap,
+  };
+}
+
 /**
- * Called (via the admin client) right after a response completes.
- * Enqueues one `pending` delivery per enabled endpoint on the form —
- * enqueueing is separate from actually sending, so a slow/unreachable
- * consumer can never affect the respondent-facing response, and the
- * retry sweep has real rows to work from.
+ * Enqueues one `pending` delivery per enabled endpoint on the form for a
+ * completed response. Enqueueing is separate from sending, so a slow or
+ * unreachable consumer can never affect the respondent. Idempotent
+ * (one delivery per endpoint + response): calling it twice, or racing
+ * the recovery sweep, never produces a duplicate. Spam-flagged and
+ * unfinished responses get nothing.
  */
 export async function enqueueWebhookDeliveries(
   admin: Client,
-  formId: string,
   responseId: string,
-  endingId: string | null,
-  answers: AnswerMap,
-): Promise<string[]> {
-  const { data: endpoints, error: endpointsError } = await admin
+  onlyEndpointIds?: string[],
+): Promise<number> {
+  const response = await loadResponseForDelivery(admin, responseId);
+  if (!response) return 0;
+
+  let endpointsQuery = admin
     .from("webhook_endpoints")
     .select("id")
-    .eq("form_id", formId)
+    .eq("form_id", response.formId)
     .eq("enabled", true);
+  if (onlyEndpointIds) endpointsQuery = endpointsQuery.in("id", onlyEndpointIds);
+  const { data: endpoints, error: endpointsError } = await endpointsQuery;
   if (endpointsError) throw endpointsError;
-  if (!endpoints || endpoints.length === 0) return [];
+  if (!endpoints || endpoints.length === 0) return 0;
 
-  const submittedAt = new Date().toISOString();
   const rows = endpoints.map((endpoint) => {
     const payload = buildWebhookPayload({
       eventId: crypto.randomUUID(),
-      formId,
+      formId: response.formId,
       responseId,
-      submittedAt,
-      endingId,
-      answers,
+      submittedAt: response.submittedAt,
+      endingId: response.endingId,
+      answers: response.answers,
     });
     return {
       endpoint_id: endpoint.id,
@@ -153,11 +186,42 @@ export async function enqueueWebhookDeliveries(
 
   const { data: inserted, error: insertError } = await admin
     .from("webhook_deliveries")
-    .insert(rows)
+    .upsert(rows, {
+      onConflict: "endpoint_id,response_id,event_type",
+      ignoreDuplicates: true,
+    })
     .select("id");
   if (insertError) throw insertError;
+  return inserted?.length ?? 0;
+}
 
-  return (inserted ?? []).map((r) => r.id);
+const RECOVERY_BATCH = 200;
+
+/**
+ * Creates the deliveries a completed response should have but doesn't —
+ * because the work after the response was sent failed or the process was
+ * killed. Run by the cron sweep before dispatching.
+ */
+export async function recoverMissingWebhookDeliveries(
+  admin: Client,
+): Promise<{ recovered: number }> {
+  const { data, error } = await admin.rpc("responses_missing_webhook_delivery", {
+    p_limit: RECOVERY_BATCH,
+  });
+  if (error) throw error;
+
+  const byResponse = new Map<string, string[]>();
+  for (const row of data ?? []) {
+    byResponse.set(row.response_id, [
+      ...(byResponse.get(row.response_id) ?? []),
+      row.endpoint_id,
+    ]);
+  }
+  let recovered = 0;
+  for (const [responseId, endpointIds] of byResponse) {
+    recovered += await enqueueWebhookDeliveries(admin, responseId, endpointIds);
+  }
+  return { recovered };
 }
 
 export type DeliveryAttemptResult = {
@@ -224,70 +288,98 @@ async function attemptDelivery(
 }
 
 const DISPATCH_BATCH_SIZE = 20;
+/** How long a claimed job is reserved for its worker; if the worker dies
+ * mid-attempt the job becomes due again after this. Comfortably longer
+ * than the 10-second request timeout. */
+const CLAIM_LEASE_SECONDS = 120;
 
 /**
- * The retry sweep: processes due deliveries (status pending/failed
- * with next_attempt_at in the past), one HTTP attempt each, updating
- * status/attempt_count/next_attempt_at per the bounded backoff
- * schedule. Meant to be invoked by POST /api/cron/webhooks/dispatch on
- * an external schedule (see that route's docs) — there's no
- * long-running worker process in this deployment model.
+ * The delivery sweep: claims due deliveries (so overlapping sweeps never
+ * take the same row), makes one HTTP attempt each, and records the
+ * outcome with the bounded backoff schedule. Each job is isolated — one
+ * that throws (or whose destination is gone) is recorded and the rest
+ * still run. Meant to be called by /api/cron/webhooks/dispatch; there's
+ * no long-running worker in this deployment model.
  */
 export async function dispatchDueDeliveries(
   admin: Client,
 ): Promise<{ processed: number }> {
-  const { data: due, error } = await admin
-    .from("webhook_deliveries")
-    .select("id, endpoint_id, payload, attempt_count")
-    .in("status", ["pending", "failed"])
-    .lte("next_attempt_at", new Date().toISOString())
-    .limit(DISPATCH_BATCH_SIZE);
+  const { data: due, error } = await admin.rpc("claim_due_webhook_deliveries", {
+    p_limit: DISPATCH_BATCH_SIZE,
+    p_lease_seconds: CLAIM_LEASE_SECONDS,
+  });
   if (error) throw error;
   if (!due || due.length === 0) return { processed: 0 };
 
   for (const delivery of due) {
-    const { data: endpoint } = await admin
-      .from("webhook_endpoints")
-      .select("url, signing_secret, enabled")
-      .eq("id", delivery.endpoint_id)
-      .maybeSingle();
-
-    if (!endpoint || !endpoint.enabled) {
-      await admin
-        .from("webhook_deliveries")
-        .update({ status: "failed", last_error: "endpoint disabled or deleted" })
-        .eq("id", delivery.id);
-      continue;
+    try {
+      await processDelivery(admin, delivery);
+    } catch (jobError) {
+      await recordFailure(
+        admin,
+        delivery.id,
+        delivery.attempt_count + 1,
+        jobError instanceof Error ? jobError.message : "delivery failed",
+      );
     }
-
-    const attemptCount = delivery.attempt_count + 1;
-    const result = await attemptDelivery(
-      endpoint.url,
-      endpoint.signing_secret,
-      delivery.payload as unknown as WebhookPayload,
-    );
-
-    if (result.status === "succeeded") {
-      await admin
-        .from("webhook_deliveries")
-        .update({ status: "succeeded", attempt_count: attemptCount, last_error: null })
-        .eq("id", delivery.id);
-      continue;
-    }
-
-    const delayMs = nextBackoffDelayMs(attemptCount);
-    await admin
-      .from("webhook_deliveries")
-      .update({
-        status: isExhausted(attemptCount) ? "exhausted" : "failed",
-        attempt_count: attemptCount,
-        last_error: result.error ?? "unknown error",
-        next_attempt_at: new Date(Date.now() + (delayMs ?? 0)).toISOString(),
-      })
-      .eq("id", delivery.id);
   }
 
   return { processed: due.length };
+}
+
+async function recordFailure(
+  admin: Client,
+  deliveryId: string,
+  attemptCount: number,
+  message: string,
+) {
+  const delayMs = nextBackoffDelayMs(attemptCount);
+  await admin
+    .from("webhook_deliveries")
+    .update({
+      status: isExhausted(attemptCount) ? "exhausted" : "failed",
+      attempt_count: attemptCount,
+      last_error: message.slice(0, 500),
+      next_attempt_at: new Date(Date.now() + (delayMs ?? 0)).toISOString(),
+    })
+    .eq("id", deliveryId);
+}
+
+async function processDelivery(
+  admin: Client,
+  delivery: { id: string; endpoint_id: string; payload: Json; attempt_count: number },
+) {
+  const { data: endpoint } = await admin
+    .from("webhook_endpoints")
+    .select("url, signing_secret, enabled")
+    .eq("id", delivery.endpoint_id)
+    .maybeSingle();
+
+  if (!endpoint || !endpoint.enabled) {
+    // Terminal, not "failed": a failed row stays due and would be picked
+    // up by every sweep, crowding out deliveries that can succeed.
+    await admin
+      .from("webhook_deliveries")
+      .update({ status: "exhausted", last_error: "endpoint disabled or deleted" })
+      .eq("id", delivery.id);
+    return;
+  }
+
+  const attemptCount = delivery.attempt_count + 1;
+  const result = await attemptDelivery(
+    endpoint.url,
+    endpoint.signing_secret,
+    delivery.payload as unknown as WebhookPayload,
+  );
+
+  if (result.status === "succeeded") {
+    await admin
+      .from("webhook_deliveries")
+      .update({ status: "succeeded", attempt_count: attemptCount, last_error: null })
+      .eq("id", delivery.id);
+    return;
+  }
+  await recordFailure(admin, delivery.id, attemptCount, result.error ?? "unknown error");
 }
 
 /** Sends a synthetic test payload immediately (no enqueue/retry) so a

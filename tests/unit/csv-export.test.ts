@@ -3,6 +3,7 @@ import {
   toCsv,
   ExportTooLargeError,
   MAX_SYNCHRONOUS_EXPORT_ROWS,
+  neutralizeFormulaInjection,
 } from "@/domains/exports";
 
 describe("toCsv", () => {
@@ -32,5 +33,37 @@ describe("toCsv", () => {
       id: i,
     }));
     expect(() => toCsv(["id"], rows)).toThrow(ExportTooLargeError);
+  });
+});
+
+describe("neutralizeFormulaInjection", () => {
+  it("prefixes anything a spreadsheet would run as a formula", () => {
+    for (const value of [
+      "=1+1",
+      "+cmd",
+      "-cmd",
+      "@SUM(A1)",
+      "\tx",
+      "\rx",
+      '=HYPERLINK("u")',
+    ]) {
+      expect(neutralizeFormulaInjection(value), value).toBe(`'${value}`);
+    }
+  });
+
+  it("leaves ordinary text and plain numbers alone", () => {
+    for (const value of [
+      "",
+      "Ada",
+      "5",
+      "-5",
+      "+5",
+      "-5.25",
+      "a=b",
+      "2026-09-30",
+      " leading",
+    ]) {
+      expect(neutralizeFormulaInjection(value), value).toBe(value);
+    }
   });
 });

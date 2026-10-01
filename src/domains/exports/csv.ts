@@ -12,15 +12,20 @@ export class ExportTooLargeError extends Error {
 }
 
 const FORMULA_TRIGGER_CHARS = new Set(["=", "+", "-", "@", "\t", "\r"]);
+/** Plain numbers can't be formulas, so "-5" stays a number rather than
+ * becoming the text "'-5". */
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/;
 
 /**
  * Guards against CSV/spreadsheet formula injection: a cell whose content
  * starts with a character a spreadsheet app would interpret as the start
- * of a formula gets a leading apostrophe/quote-neutralizing prefix so
- * Excel/Sheets renders it as literal text instead of executing it.
+ * of a formula gets a leading apostrophe so Excel/Sheets render it as
+ * literal text instead of executing it. Shared by the CSV export and
+ * the Google Sheets sync — respondents control this text.
  */
-function neutralizeFormulaInjection(value: string): string {
+export function neutralizeFormulaInjection(value: string): string {
   if (value.length === 0) return value;
+  if (PLAIN_NUMBER.test(value)) return value;
   return FORMULA_TRIGGER_CHARS.has(value[0]) ? `'${value}` : value;
 }
 

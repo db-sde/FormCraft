@@ -100,6 +100,28 @@ test("another workspace's data is invisible and untouchable", async ({
   }
 });
 
+test("the Google callback only accepts a connection this user's browser started", async ({
+  page,
+}) => {
+  const owner = await createConfirmedUser("e2e-oauth");
+  try {
+    const { formId } = await createPublishedForm(owner, schema);
+    await loginViaUI(page, owner.email, owner.password);
+
+    // The old flow's state was just the form id — anyone could craft it.
+    for (const state of [formId, "forged.state", ""]) {
+      const res = await page.request.get(
+        `/api/integrations/google/callback?code=abc&state=${encodeURIComponent(state)}`,
+        { maxRedirects: 0 },
+      );
+      expect(res.status(), `state "${state}"`).toBe(400);
+      expect((await res.json()).error.code).toBe("invalid_state");
+    }
+  } finally {
+    await deleteUser(owner.userId);
+  }
+});
+
 test("signed-out visitors are sent to log in, and exports refuse them", async ({
   page,
   request,

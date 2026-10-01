@@ -1,6 +1,12 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { buildAuthorizeUrl, isGoogleOAuthConfigured } from "@/domains/sheets";
+import {
+  buildAuthorizeUrl,
+  createOAuthState,
+  isGoogleOAuthConfigured,
+  OAUTH_STATE_COOKIE,
+  OAUTH_STATE_TTL_SECONDS,
+} from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 
 /**
@@ -18,7 +24,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { supabase, workspace } = await getCurrentWorkspace();
+  const { supabase, workspace, user } = await getCurrentWorkspace();
   const { data: form } = await supabase
     .from("forms")
     .select("id")
@@ -40,5 +46,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.redirect(buildAuthorizeUrl(formId));
+  // Bind the flow to this user and this browser (see oauth-state.ts).
+  const { state, nonce } = createOAuthState({ formId, userId: user.id });
+  const response = NextResponse.redirect(buildAuthorizeUrl(state));
+  response.cookies.set(OAUTH_STATE_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: "lax", // sent on the redirect back from Google
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/integrations/google",
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  });
+  return response;
 }

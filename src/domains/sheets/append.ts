@@ -1,3 +1,5 @@
+import { neutralizeFormulaInjection } from "@/domains/exports/csv";
+
 const DEFAULT_SHEETS_API_BASE = "https://sheets.googleapis.com";
 
 export class SheetsApiError extends Error {
@@ -13,7 +15,9 @@ export class SheetsApiError extends Error {
 /** Appends one row to the end of a spreadsheet's first sheet via the
  * Sheets API `values.append` endpoint (USER_ENTERED so Google parses
  * dates/numbers the same way typing them in by hand would, matching
- * what a creator expects to see). `apiBase` is overridable so this can
+ * what a creator expects to see). Because USER_ENTERED also *evaluates*
+ * anything that looks like a formula, every cell is passed through
+ * neutralizeFormulaInjection first — respondents control these values. `apiBase` is overridable so this can
  * be exercised against a local fake server for live verification
  * without a real Google Cloud project (see DECISIONS.md). */
 export async function appendRowToSheet(
@@ -30,7 +34,7 @@ export async function appendRowToSheet(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ values: [values] }),
+    body: JSON.stringify({ values: [values.map(neutralizeFormulaInjection)] }),
   });
 
   if (!res.ok) {

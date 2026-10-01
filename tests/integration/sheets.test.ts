@@ -10,6 +10,7 @@ import {
   disconnectForm,
   enqueueSheetsSync,
   dispatchDueSheetsSyncs,
+  recoverMissingSheetsSyncs,
 } from "@/domains/sheets/queries";
 import type { OAuthTokens } from "@/domains/sheets/oauth";
 import { completeResponse, startResponse } from "@/domains/responses";
@@ -337,5 +338,207 @@ describe("sheets integration (real Postgres + a fake local Google server)", () =
     expect(JSON.stringify(row?.encrypted_tokens)).not.toContain("at_should_not_leak");
 
     await disconnectForm(supabase, formId);
+  });
+
+  describe("workers", () => {
+    const options = () => ({
+      tokenEndpoint: `${fakeGoogleBase}/token`,
+      sheetsApiBase: fakeGoogleBase,
+    });
+    const goodTokens = () => ({
+      accessToken: "at_ok",
+      refreshToken: "rt_ok",
+      expiresAt: Date.now() + 3600_000,
+    });
+
+    async function completed(answers: Record<string, unknown>, form = formId) {
+      const { responseId } = await startResponse(supabase, form);
+      const result = await completeResponse(
+        supabase,
+        responseId,
+        1,
+        "q_name",
+        answers,
+        crypto.randomUUID(),
+      );
+      expect(result.ok).toBe(true);
+      return responseId;
+    }
+
+    async function secondForm() {
+      const { data: form } = await supabase
+        .from("forms")
+        .insert({
+          workspace_id: workspaceId,
+          title: "Second sheets form",
+          slug: `sheets-form-2-${crypto.randomUUID().slice(0, 8)}`,
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      await supabase.from("form_versions").insert({
+        form_id: form!.id,
+        status: "draft",
+        version_number: 1,
+        schema: testSchema as unknown as Json,
+      });
+      await supabase.rpc("publish_form_version", {
+        target_form_id: form!.id,
+        compiled_schema: testSchema as unknown as Json,
+      });
+      return form!.id;
+    }
+
+    async function logFor(syncId: string) {
+      const { data } = await supabase
+        .from("sheets_sync_log")
+        .select("status, attempt_count, last_error")
+        .eq("id", syncId)
+        .single();
+      return data!;
+    }
+
+    it("writes respondent text as literal cells, never as a formula", async () => {
+      await saveConnection(supabase, workspaceId, formId, goodTokens());
+      await setSpreadsheetId(supabase, formId, "sheet_formula");
+      const responseId = await completed({
+        q_name: '=HYPERLINK("http://evil.example","click")',
+      });
+      const syncId = await enqueueSheetsSync(supabase, formId, responseId);
+      appendedRows.length = 0;
+
+      await dispatchDueSheetsSyncs(supabase, options());
+
+      expect((await logFor(syncId!)).status).toBe("succeeded");
+      const row = appendedRows[appendedRows.length - 1] as string[];
+      expect(row).toContain(`'=HYPERLINK("http://evil.example","click")`);
+      expect(row.some((cell) => cell.startsWith("="))).toBe(false);
+      await disconnectForm(supabase, formId);
+    });
+
+    it("is idempotent, skips spam, and ignores unfinished responses", async () => {
+      await saveConnection(supabase, workspaceId, formId, goodTokens());
+      await setSpreadsheetId(supabase, formId, "sheet_idem");
+      const responseId = await completed({ q_name: "Once" });
+
+      const first = await enqueueSheetsSync(supabase, formId, responseId);
+      const second = await enqueueSheetsSync(supabase, formId, responseId);
+      expect(first).not.toBeNull();
+      expect(second).toBeNull(); // already queued
+      const { count } = await supabase
+        .from("sheets_sync_log")
+        .select("id", { count: "exact", head: true })
+        .eq("response_id", responseId);
+      expect(count).toBe(1);
+
+      const started = await startResponse(supabase, formId);
+      expect(await enqueueSheetsSync(supabase, formId, started.responseId)).toBeNull();
+
+      const spam = await startResponse(supabase, formId);
+      await completeResponse(
+        supabase,
+        spam.responseId,
+        1,
+        "q_name",
+        { q_name: "Bot" },
+        crypto.randomUUID(),
+        { spamSuspected: true },
+      );
+      expect(await enqueueSheetsSync(supabase, formId, spam.responseId)).toBeNull();
+      await disconnectForm(supabase, formId);
+    });
+
+    it("recovers a sync that a failed post-submit callback never created — once", async () => {
+      await saveConnection(supabase, workspaceId, formId, goodTokens());
+      await setSpreadsheetId(supabase, formId, "sheet_recover");
+      const responseId = await completed({ q_name: "Lost enqueue" });
+
+      expect((await recoverMissingSheetsSyncs(supabase)).recovered).toBe(1);
+      expect((await recoverMissingSheetsSyncs(supabase)).recovered).toBe(0);
+      appendedRows.length = 0;
+      await dispatchDueSheetsSyncs(supabase, options());
+      expect(
+        appendedRows.filter((r) => (r as string[]).includes("Lost enqueue")),
+      ).toHaveLength(1);
+      expect(responseId).toBeTruthy();
+      await disconnectForm(supabase, formId);
+    });
+
+    it("overlapping sweeps append each response exactly once", async () => {
+      await saveConnection(supabase, workspaceId, formId, goodTokens());
+      await setSpreadsheetId(supabase, formId, "sheet_parallel");
+      const names = ["p1", "p2", "p3", "p4"];
+      for (const name of names) {
+        const responseId = await completed({ q_name: name });
+        await enqueueSheetsSync(supabase, formId, responseId);
+      }
+      appendedRows.length = 0;
+
+      await Promise.all([
+        dispatchDueSheetsSyncs(supabase, options()),
+        dispatchDueSheetsSyncs(supabase, options()),
+        dispatchDueSheetsSyncs(supabase, options()),
+      ]);
+
+      for (const name of names) {
+        expect(
+          appendedRows.filter((r) => (r as string[]).includes(name)),
+          name,
+        ).toHaveLength(1);
+      }
+      await disconnectForm(supabase, formId);
+    });
+
+    it("a connection that can't be used doesn't block, and a disabled one is retired", async () => {
+      const brokenForm = await secondForm();
+      const broken = await supabase
+        .from("sheets_connections")
+        .insert({
+          workspace_id: workspaceId,
+          form_id: brokenForm,
+          spreadsheet_id: "sheet_broken",
+          // Not a valid encrypted payload: decrypting it throws.
+          encrypted_tokens: { iv: "x", authTag: "x", ciphertext: "x" } as Json,
+        })
+        .select("id")
+        .single();
+      expect(broken.error).toBeNull();
+      const brokenSync = await enqueueSheetsSync(
+        supabase,
+        brokenForm,
+        await completed({ q_name: "Cannot decrypt" }, brokenForm),
+      );
+
+      await saveConnection(supabase, workspaceId, formId, goodTokens());
+      await setSpreadsheetId(supabase, formId, "sheet_after_broken");
+      const goodSync = await enqueueSheetsSync(
+        supabase,
+        formId,
+        await completed({ q_name: "Behind the broken one" }),
+      );
+
+      await dispatchDueSheetsSyncs(supabase, options());
+
+      const brokenLog = await logFor(brokenSync!);
+      expect(brokenLog.status).toBe("failed");
+      expect(brokenLog.attempt_count).toBe(1);
+      expect(brokenLog.last_error).toBeTruthy();
+      expect((await logFor(goodSync!)).status).toBe("succeeded");
+
+      // Disabling retires the backlog for good rather than leaving it
+      // due on every sweep.
+      await setConnectionEnabled(supabase, brokenForm, false);
+      await supabase
+        .from("sheets_sync_log")
+        .update({ next_attempt_at: new Date(Date.now() - 1000).toISOString() })
+        .eq("id", brokenSync!);
+      await dispatchDueSheetsSyncs(supabase, options());
+      const retired = await logFor(brokenSync!);
+      expect(retired.status).toBe("exhausted");
+      expect(retired.last_error).toMatch(/disabled/);
+
+      await disconnectForm(supabase, formId);
+      await disconnectForm(supabase, brokenForm);
+    });
   });
 });

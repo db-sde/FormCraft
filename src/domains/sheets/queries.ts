@@ -121,16 +121,27 @@ export async function listSyncLog(
   }));
 }
 
-/** Enqueues a sync for a just-completed response, only if the form has
- * an enabled connection with a spreadsheet configured. Mirrors
- * enqueueWebhookDeliveries: enqueueing is separate from the actual
- * Sheets API call, so a slow/unreachable Google can never affect the
- * respondent-facing response. */
+/** Enqueues a sync for a completed response, only if the form has an
+ * enabled connection with a spreadsheet configured. Mirrors
+ * enqueueWebhookDeliveries: separate from the actual Sheets API call (so
+ * a slow Google can never affect the respondent) and idempotent — one
+ * row per connection + response, so a retry or the recovery sweep can't
+ * append the same response twice. Spam-flagged and unfinished responses
+ * are skipped. Returns the new row's id, or null if nothing was added. */
 export async function enqueueSheetsSync(
   admin: Client,
   formId: string,
   responseId: string,
 ): Promise<string | null> {
+  const { data: response, error: responseError } = await admin
+    .from("responses")
+    .select("status, spam_suspected")
+    .eq("id", responseId)
+    .maybeSingle();
+  if (responseError) throw responseError;
+  if (!response || response.status !== "completed" || response.spam_suspected)
+    return null;
+
   const { data: connection, error } = await admin
     .from("sheets_connections")
     .select("id, spreadsheet_id, enabled")
@@ -141,12 +152,48 @@ export async function enqueueSheetsSync(
 
   const { data: inserted, error: insertError } = await admin
     .from("sheets_sync_log")
-    .insert({ connection_id: connection.id, response_id: responseId, status: "pending" })
+    .upsert(
+      { connection_id: connection.id, response_id: responseId, status: "pending" },
+      { onConflict: "connection_id,response_id", ignoreDuplicates: true },
+    )
     .select("id")
-    .single();
+    .maybeSingle();
   if (insertError) throw insertError;
 
-  return inserted.id;
+  return inserted?.id ?? null;
+}
+
+const RECOVERY_BATCH = 200;
+
+/** Creates the syncs a completed response should have but doesn't (the
+ * post-response callback failed or was killed). Run by the cron sweep
+ * before dispatching. */
+export async function recoverMissingSheetsSyncs(
+  admin: Client,
+): Promise<{ recovered: number }> {
+  const { data, error } = await admin.rpc("responses_missing_sheets_sync", {
+    p_limit: RECOVERY_BATCH,
+  });
+  if (error) throw error;
+
+  let recovered = 0;
+  for (const row of data ?? []) {
+    const { data: inserted, error: insertError } = await admin
+      .from("sheets_sync_log")
+      .upsert(
+        {
+          connection_id: row.connection_id,
+          response_id: row.response_id,
+          status: "pending",
+        },
+        { onConflict: "connection_id,response_id", ignoreDuplicates: true },
+      )
+      .select("id")
+      .maybeSingle();
+    if (insertError) throw insertError;
+    if (inserted) recovered += 1;
+  }
+  return { recovered };
 }
 
 export type SyncAttemptResult = {
@@ -228,68 +275,92 @@ async function attemptSync(
 }
 
 const DISPATCH_BATCH_SIZE = 20;
+/** See the same constant in the webhooks domain: a claimed job is
+ * reserved for its worker for this long. */
+const CLAIM_LEASE_SECONDS = 120;
+
+async function recordSyncFailure(
+  admin: Client,
+  syncId: string,
+  attemptCount: number,
+  message: string,
+) {
+  const delayMs = nextBackoffDelayMs(attemptCount);
+  await admin
+    .from("sheets_sync_log")
+    .update({
+      status: isExhausted(attemptCount) ? "exhausted" : "failed",
+      attempt_count: attemptCount,
+      last_error: message.slice(0, 500),
+      next_attempt_at: new Date(Date.now() + (delayMs ?? 0)).toISOString(),
+    })
+    .eq("id", syncId);
+}
 
 /** The retry sweep — mirrors dispatchDueDeliveries in
- * @/domains/webhooks/queries.ts (same bounded backoff schedule, same
- * shape), meant to be invoked by an external scheduler via
- * POST /api/cron/sheets/dispatch. */
+ * @/domains/webhooks/queries.ts: jobs are claimed (overlapping sweeps
+ * never share one), each is isolated (a bad token or missing sheet is
+ * recorded and the rest still run), and a connection that's disabled or
+ * gone retires its jobs for good instead of leaving them due forever.
+ * Invoked by /api/cron/sheets/dispatch. */
 export async function dispatchDueSheetsSyncs(
   admin: Client,
   options?: { tokenEndpoint?: string; sheetsApiBase?: string },
 ): Promise<{ processed: number }> {
-  const { data: due, error } = await admin
-    .from("sheets_sync_log")
-    .select("id, connection_id, response_id, attempt_count")
-    .in("status", ["pending", "failed"])
-    .lte("next_attempt_at", new Date().toISOString())
-    .limit(DISPATCH_BATCH_SIZE);
+  const { data: due, error } = await admin.rpc("claim_due_sheets_syncs", {
+    p_limit: DISPATCH_BATCH_SIZE,
+    p_lease_seconds: CLAIM_LEASE_SECONDS,
+  });
   if (error) throw error;
   if (!due || due.length === 0) return { processed: 0 };
 
   for (const sync of due) {
-    if (!sync.response_id) {
-      await admin
-        .from("sheets_sync_log")
-        .update({ status: "failed", last_error: "missing response id" })
-        .eq("id", sync.id);
-      continue;
-    }
-
-    const { data: connection } = await admin
-      .from("sheets_connections")
-      .select("id, form_id, encrypted_tokens, spreadsheet_id, enabled")
-      .eq("id", sync.connection_id)
-      .maybeSingle();
-
-    if (!connection || !connection.enabled) {
-      await admin
-        .from("sheets_sync_log")
-        .update({ status: "failed", last_error: "connection disabled or deleted" })
-        .eq("id", sync.id);
-      continue;
-    }
-
     const attemptCount = sync.attempt_count + 1;
-    const result = await attemptSync(admin, connection, sync.response_id, options);
+    try {
+      if (!sync.response_id) {
+        await admin
+          .from("sheets_sync_log")
+          .update({ status: "exhausted", last_error: "missing response id" })
+          .eq("id", sync.id);
+        continue;
+      }
 
-    if (result.status === "succeeded") {
-      await admin
-        .from("sheets_sync_log")
-        .update({ status: "succeeded", attempt_count: attemptCount, last_error: null })
-        .eq("id", sync.id);
-      continue;
+      const { data: connection } = await admin
+        .from("sheets_connections")
+        .select("id, form_id, encrypted_tokens, spreadsheet_id, enabled")
+        .eq("id", sync.connection_id)
+        .maybeSingle();
+
+      if (!connection || !connection.enabled) {
+        await admin
+          .from("sheets_sync_log")
+          .update({ status: "exhausted", last_error: "connection disabled or deleted" })
+          .eq("id", sync.id);
+        continue;
+      }
+
+      const result = await attemptSync(admin, connection, sync.response_id, options);
+      if (result.status === "succeeded") {
+        await admin
+          .from("sheets_sync_log")
+          .update({ status: "succeeded", attempt_count: attemptCount, last_error: null })
+          .eq("id", sync.id);
+        continue;
+      }
+      await recordSyncFailure(
+        admin,
+        sync.id,
+        attemptCount,
+        result.error ?? "unknown error",
+      );
+    } catch (jobError) {
+      await recordSyncFailure(
+        admin,
+        sync.id,
+        attemptCount,
+        jobError instanceof Error ? jobError.message : "sync failed",
+      );
     }
-
-    const delayMs = nextBackoffDelayMs(attemptCount);
-    await admin
-      .from("sheets_sync_log")
-      .update({
-        status: isExhausted(attemptCount) ? "exhausted" : "failed",
-        attempt_count: attemptCount,
-        last_error: result.error ?? "unknown error",
-        next_attempt_at: new Date(Date.now() + (delayMs ?? 0)).toISOString(),
-      })
-      .eq("id", sync.id);
   }
 
   return { processed: due.length };

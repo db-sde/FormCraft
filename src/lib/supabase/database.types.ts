@@ -721,6 +721,49 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_due_sheets_syncs: {
+        Args: { p_lease_seconds: number; p_limit: number };
+        Returns: {
+          attempt_count: number;
+          connection_id: string;
+          created_at: string;
+          id: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          response_id: string | null;
+          status: Database["public"]["Enums"]["sheets_sync_status"];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "sheets_sync_log";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      claim_due_webhook_deliveries: {
+        Args: { p_lease_seconds: number; p_limit: number };
+        Returns: {
+          attempt_count: number;
+          created_at: string;
+          endpoint_id: string;
+          event_id: string;
+          event_type: string;
+          id: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          response_id: string | null;
+          status: Database["public"]["Enums"]["webhook_delivery_status"];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "webhook_deliveries";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       complete_response_atomic: {
         Args: {
           p_answers: Json;
@@ -797,6 +840,20 @@ export type Database = {
         Returns: {
           question_id: string;
           stopped: number;
+        }[];
+      };
+      responses_missing_sheets_sync: {
+        Args: { p_limit: number };
+        Returns: {
+          connection_id: string;
+          response_id: string;
+        }[];
+      };
+      responses_missing_webhook_delivery: {
+        Args: { p_limit: number };
+        Returns: {
+          endpoint_id: string;
+          response_id: string;
         }[];
       };
       save_response_progress: {

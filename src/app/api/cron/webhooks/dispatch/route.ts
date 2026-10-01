@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { dispatchDueDeliveries } from "@/domains/webhooks";
+import {
+  dispatchDueDeliveries,
+  recoverMissingWebhookDeliveries,
+} from "@/domains/webhooks";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
@@ -21,8 +24,11 @@ import { rejectUnlessCron } from "@/lib/http/cron-auth";
 async function run(request: NextRequest) {
   const rejected = rejectUnlessCron(request);
   if (rejected) return rejected;
-  const result = await dispatchDueDeliveries(createAdminClient());
-  return NextResponse.json(result);
+  const admin = createAdminClient();
+  // Create anything a failed post-submit callback missed, then send.
+  const { recovered } = await recoverMissingWebhookDeliveries(admin);
+  const result = await dispatchDueDeliveries(admin);
+  return NextResponse.json({ ...result, recovered });
 }
 
 // GET for Vercel Cron (vercel.json), POST for other schedulers.

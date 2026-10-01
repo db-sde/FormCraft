@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { dispatchDueSheetsSyncs } from "@/domains/sheets";
+import { dispatchDueSheetsSyncs, recoverMissingSheetsSyncs } from "@/domains/sheets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
@@ -13,8 +13,10 @@ import { rejectUnlessCron } from "@/lib/http/cron-auth";
 async function run(request: NextRequest) {
   const rejected = rejectUnlessCron(request);
   if (rejected) return rejected;
-  const result = await dispatchDueSheetsSyncs(createAdminClient());
-  return NextResponse.json(result);
+  const admin = createAdminClient();
+  const { recovered } = await recoverMissingSheetsSyncs(admin);
+  const result = await dispatchDueSheetsSyncs(admin);
+  return NextResponse.json({ ...result, recovered });
 }
 
 // GET for Vercel Cron (vercel.json), POST for other schedulers.
