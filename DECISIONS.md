@@ -43,6 +43,21 @@ or would need new backend work, the simplest production-safe option won:
 - **Builder below 1024px** shows the "best on a bigger screen" state with
   Preview, Share link and Responses. The board's "Email me a link"
   action isn't built (no such email exists).
+- **Button text on the theme colour.** The handoff picks white unless the
+  primary is very light (luminance > 0.45). That puts white on Sunset
+  orange (≈3.3:1) and Midnight lavender (≈2.2:1), both below WCAG AA for
+  button text, and the accessibility gate caught it. Respondent buttons
+  now use whichever of white or near-black contrasts more, the same rule
+  the dashboard's form previews already used; Classic, Ocean and Forest
+  are unchanged.
+- **Builder side panels** are 280 / 300px, per the README and Part 8's
+  wide-screen rules (the Part 4 board draws 340).
+- **Notification email + Supabase auth emails** share one 600px,
+  table-based layout (`src/domains/notifications/email-layout.ts`).
+  `npm run emails:build` writes the Confirm and Reset templates into
+  `supabase/templates/` (wired in `supabase/config.toml`; they still need
+  pasting into the hosted project). They keep `{{ .ConfirmationURL }}`,
+  so the auth links work exactly as before.
 - **Select values on first load.** Radix only fills a closed select's
   label after its menu has opened once on server-rendered pages; our
   `Select` wrapper now passes the selected item's label to `SelectValue`

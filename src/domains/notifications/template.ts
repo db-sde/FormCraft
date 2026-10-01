@@ -1,20 +1,13 @@
-/** Escapes text for safe interpolation into the HTML email body — form
- * titles and ending titles are creator-supplied free text, not
- * hard-coded strings, so this is a real XSS-in-email guard, not
- * defensive boilerplate. */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import { renderEmailHtml } from "./email-layout";
 
 export type ResponseCompletedEmailInput = {
   formTitle: string;
   submittedAt: string;
   dashboardUrl: string;
+  /** Where the owner turns these emails off (the form's Integrations). */
+  settingsUrl?: string;
+  /** The address it's sent to, shown in the footer. */
+  recipient?: string;
 };
 
 export type EmailContent = { subject: string; html: string; text: string };
@@ -23,33 +16,64 @@ export type EmailContent = { subject: string; html: string; text: string };
  * the form's owner. Links to the dashboard rather than embedding raw
  * answers in the email body — see ARCHITECTURE.md/docs on not sending
  * sensitive respondent content into places outside the canonical
- * response store. */
+ * response store. Creator-supplied text (the form title) is escaped by
+ * the layout, so it can't inject markup into the email. */
 export function buildResponseCompletedEmail(
   input: ResponseCompletedEmailInput,
 ): EmailContent {
-  const formTitle = escapeHtml(input.formTitle || "Untitled form");
+  const formTitle = input.formTitle || "Untitled form";
   // Sent from the server, which doesn't know the recipient's timezone —
   // label the zone explicitly rather than implying local time.
-  const submitted = `${new Date(input.submittedAt).toLocaleString("en-US", {
+  const date = new Date(input.submittedAt);
+  const received = `${date.toLocaleDateString("en-US", {
     dateStyle: "medium",
-    timeStyle: "short",
+    timeZone: "UTC",
+  })} · ${date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
     timeZone: "UTC",
   })} UTC`;
 
-  const subject = `New response: ${input.formTitle || "Untitled form"}`;
+  const subject = `New response: ${formTitle}`;
+  const body =
+    "Someone just finished your form. We keep answers out of email, so open FormCraft to read them.";
+  const fine =
+    "You're getting this because you own this form. Change it in Integrations → Email notifications.";
 
-  const html = `
-    <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2 style="margin-bottom: 4px;">New response received</h2>
-      <p style="color: #555; margin-top: 0;">${formTitle} — ${submitted}</p>
-      <a href="${input.dashboardUrl}"
-         style="display: inline-block; margin-top: 16px; padding: 10px 20px; background: #0f172a; color: #fff; text-decoration: none; border-radius: 6px;">
-        View response
-      </a>
-    </div>
-  `.trim();
+  const html = renderEmailHtml({
+    tag: "New response",
+    tagColor: "#dcf1e3",
+    title: "New response received",
+    body,
+    meta: [
+      { label: "Form", value: formTitle },
+      { label: "Received", value: received },
+    ],
+    button: { label: "View response", href: input.dashboardUrl },
+    fine,
+    sentTo: input.recipient,
+    footerLink: input.settingsUrl
+      ? { label: "Notification settings", href: input.settingsUrl }
+      : undefined,
+  });
 
-  const text = `New response for "${input.formTitle || "Untitled form"}" at ${submitted}.\n\nView it: ${input.dashboardUrl}`;
+  const text = [
+    "FormCraft",
+    "",
+    "NEW RESPONSE RECEIVED",
+    "",
+    body,
+    "",
+    `Form:     ${formTitle}`,
+    `Received: ${received}`,
+    "",
+    "View response:",
+    input.dashboardUrl,
+    "",
+    "—",
+    "You're getting this because you own this form.",
+    ...(input.settingsUrl ? [`Change it: ${input.settingsUrl}`] : []),
+  ].join("\n");
 
   return { subject, html, text };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { setNotificationsAction } from "@/app/(form)/forms/[id]/(sections)/settings/actions";
 import { Switch } from "@/components/ui/switch";
 

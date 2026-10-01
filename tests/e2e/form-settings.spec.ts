@@ -54,7 +54,7 @@ test("turning off saving keeps unfinished answers off the server; the link can b
       page.getByText(/nothing is stored until someone submits/i),
     ).toBeVisible();
     // Wait for the server to confirm, not just the optimistic switch.
-    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await expect
       .poll(
         async () =>

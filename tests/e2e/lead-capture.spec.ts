@@ -10,7 +10,7 @@ import {
 /**
  * The point of lead capture: contact details entered before the last
  * question are kept even when the respondent never submits — and they
- * show up for the creator under Leads and Responses → Incomplete.
+ * show up for the creator under Leads and Responses → unfinished sessions.
  */
 const schema: FormSchemaV1 = {
   schemaVersion: 1,
@@ -77,8 +77,14 @@ test("a respondent who leaves before the last question is still a lead", async (
     await expect(row).toContainText("In progress");
 
     await page.goto(`/forms/${formId}/responses?view=incomplete`);
-    await expect(page.getByRole("link", { name: /Incomplete\s*1/ })).toBeVisible();
-    await expect(page.getByText("What do you need?").last()).toBeVisible();
+    await expect(page.getByText("1 unfinished session", { exact: true })).toBeVisible();
+    // Where they stopped: a table column on desktop, the card on phones.
+    await expect(
+      page
+        .getByText(/What do you need\?/)
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible();
   } finally {
     await deleteUser(user.userId);
   }

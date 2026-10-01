@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 /**
  * The form's name, editable in place. Commits on blur or Enter; Escape

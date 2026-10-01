@@ -36,6 +36,22 @@ export function AddQuestionMenu({
         align="start"
         sideOffset={18}
         className="shadow-lift grid w-[560px] max-w-[calc(100vw-32px)] grid-cols-2 gap-x-3.5 gap-y-1 rounded-lg p-3.5"
+        onKeyDown={(e) => {
+          // Arrow keys step through the types, like the menu this replaced.
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+          const items = Array.from(
+            e.currentTarget.querySelectorAll<HTMLButtonElement>("button[data-type]"),
+          );
+          const at = items.indexOf(document.activeElement as HTMLButtonElement);
+          const next =
+            e.key === "Home"
+              ? 0
+              : e.key === "End"
+                ? items.length - 1
+                : (at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+          e.preventDefault();
+          items[next]?.focus();
+        }}
       >
         {ADD_GROUPS.map((group) => {
           const types = group.types.filter(
@@ -52,6 +68,7 @@ export function AddQuestionMenu({
                   <button
                     key={type}
                     type="button"
+                    data-type={type}
                     onClick={() => {
                       onAdd(type);
                       setOpen(false);

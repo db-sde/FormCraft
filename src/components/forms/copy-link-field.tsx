@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { publicFormUrl } from "./live-link-actions";
 import { cn } from "cn";
 

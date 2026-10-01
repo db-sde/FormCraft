@@ -1,23 +1,48 @@
 import { test, expect, type Browser } from "@playwright/test";
-import {
-  createConfirmedUser,
-  deleteUser,
-  loginViaUI,
-  publishFromBuilder,
-} from "./helpers";
+import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
+import { createConfirmedUser, createPublishedForm, deleteUser } from "./helpers";
+
+/** Like the builder's starter form: a welcome screen and one question.
+ * Published directly — on phones the builder shows its "bigger screen"
+ * state, and publishing through it is covered by publish-and-respond. */
+const schema: FormSchemaV1 = {
+  schemaVersion: 1,
+  meta: { title: "Resume me" },
+  theme: {
+    primaryColor: "#1f1f1f",
+    backgroundColor: "#ffffff",
+    fontFamily: "inter",
+    buttonStyle: "rounded",
+  },
+  endings: [{ id: "end", title: "Thanks!", isDefault: true }],
+  questions: [
+    {
+      id: "q_welcome",
+      type: "welcome_screen",
+      order: 0,
+      label: "Hello",
+      required: false,
+      settings: {},
+    },
+    {
+      id: "q_name",
+      type: "short_text",
+      order: 1,
+      label: "What's your name?",
+      required: true,
+      settings: {},
+    },
+  ],
+  logic: [],
+};
 
 test.describe("partial response resume", () => {
   let user: Awaited<ReturnType<typeof createConfirmedUser>>;
   let liveLink: string;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     user = await createConfirmedUser("e2e-resume");
-    await loginViaUI(page, user.email, user.password);
-
-    await page.getByRole("button", { name: "Start from scratch" }).click();
-    await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
-
-    liveLink = await publishFromBuilder(page);
+    ({ liveLink } = await createPublishedForm(user, schema));
   });
 
   test.afterEach(async () => {

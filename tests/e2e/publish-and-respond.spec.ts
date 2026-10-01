@@ -4,6 +4,7 @@ import {
   deleteUser,
   loginViaUI,
   publishFromBuilder,
+  startFromScratch,
 } from "./helpers";
 
 test.describe("publish and respond", () => {
@@ -25,7 +26,7 @@ test.describe("publish and respond", () => {
     page: Page;
     browser: Browser;
   }) => {
-    await page.getByRole("button", { name: "Start from scratch" }).click();
+    await startFromScratch(page);
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
     const formId = page.url().split("/forms/")[1];
 
@@ -53,7 +54,7 @@ test.describe("publish and respond", () => {
 
     // Back as the creator: one completed response, and the lead.
     await page.goto(`/forms/${formId}/responses`);
-    await expect(page.getByRole("link", { name: /Completed\s*1/ })).toBeVisible({
+    await expect(page.getByText("1 response", { exact: true })).toBeVisible({
       timeout: 10000,
     });
     await page.goto("/leads");

@@ -117,7 +117,7 @@ function GettingStarted({ steps }: { steps: OnboardingStep[] }) {
 
   return (
     <div className="border-ink bg-background relative flex flex-col gap-2.5 rounded-lg border-[1.5px] border-dashed p-3.5">
-      <div className="dark:text-primary text-[11px] leading-none font-bold tracking-[0.1em] text-[#9a6a0c] uppercase">
+      <div className="dark:text-primary text-[11px] leading-none font-bold tracking-[0.1em] text-[var(--chip-draft-fg)] uppercase">
         Getting started · {done} of {steps.length}
       </div>
       <div className="font-heading text-base leading-[1.2] font-bold">

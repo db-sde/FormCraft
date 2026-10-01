@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { publishAction } from "@/app/(form)/forms/[id]/actions";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 

@@ -76,9 +76,8 @@ test("an uploaded file survives a refresh and ends up attached to the submission
     // Let the autosave record the answer, then reload mid-form.
     await page.waitForTimeout(1500);
     await page.reload();
-    await expect(
-      page.getByText("File uploaded — choose another to replace it"),
-    ).toBeVisible();
+    await expect(page.getByText("File uploaded")).toBeVisible();
+    await expect(page.getByText("Choose another to replace it")).toBeVisible();
 
     // The required question counts as answered without picking the file again.
     await page.getByRole("button", { name: "OK" }).click();
@@ -128,9 +127,7 @@ test("a file that isn't really a PNG is refused and can't satisfy the question",
       mimeType: "image/png",
       buffer: Buffer.from("#!/bin/sh\necho not an image\n"),
     });
-    await expect(
-      page.getByText("Upload failed — please try a different file."),
-    ).toBeVisible();
+    await expect(page.getByText("The upload failed. Try again.")).toBeVisible();
 
     await page.getByRole("button", { name: "OK" }).click();
     // Still on the same question: nothing valid was attached.

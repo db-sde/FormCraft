@@ -49,7 +49,7 @@ import {
   describeSchemaProblem,
   type SchemaProblem,
 } from "@/domains/forms/schema/validate";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   trackBuilderEventAction,
   type SaveDraftResult,
@@ -786,7 +786,7 @@ export function FormBuilder({
           "grid min-h-0 flex-1",
           selection.kind === "logic"
             ? "grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-[248px_minmax(0,1fr)]"
-            : "grid-cols-[280px_minmax(0,1fr)_340px] max-xl:grid-cols-[248px_minmax(0,1fr)_300px]",
+            : "grid-cols-[280px_minmax(0,1fr)_300px] max-xl:grid-cols-[248px_minmax(0,1fr)_300px]",
         )}
       >
         <aside className="border-ink bg-card flex min-h-0 flex-col border-r-[1.5px]">
@@ -796,7 +796,7 @@ export function FormBuilder({
                 <span className="text-muted-foreground text-[11.5px] font-bold tracking-[0.1em] uppercase">
                   Questions · {stepCount}
                 </span>
-                <span className="text-subtle-foreground text-[11.5px]">
+                <span className="text-muted-foreground text-[11.5px]">
                   Drag to reorder
                 </span>
               </div>

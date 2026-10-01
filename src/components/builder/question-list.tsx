@@ -127,13 +127,15 @@ export function QuestionList({
               </span>
             )}
 
-            {/* Shown on the selected row; on others they appear on hover or
-                when the row has keyboard focus (Tab from the row reaches
-                them), so long labels keep their room otherwise. */}
+            {/* Shown on the selected row; on others they collapse to zero
+                width (still focusable and announced) and open on hover or
+                when anything in the row has focus, so long labels keep
+                their room the rest of the time. */}
             <span
               className={cn(
-                "relative shrink-0 gap-px",
-                selected ? "flex" : "hidden group-focus-within:flex group-hover:flex",
+                "relative flex shrink-0 gap-px",
+                !selected &&
+                  "max-w-0 overflow-hidden opacity-0 group-focus-within:max-w-28 group-focus-within:opacity-100 group-hover:max-w-28 group-hover:opacity-100",
               )}
             >
               {!pinned && (

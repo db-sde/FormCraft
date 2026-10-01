@@ -36,7 +36,7 @@ export function LogicValueControl({
   ) {
     return (
       <Select value={typeof value === "string" ? value : ""} onValueChange={onChange}>
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="h-9 w-44" aria-label="Comparison value">
           <SelectValue placeholder="Choose option" />
         </SelectTrigger>
         <SelectContent>
@@ -56,7 +56,7 @@ export function LogicValueControl({
         value={value === true ? "yes" : value === false ? "no" : ""}
         onValueChange={(v) => onChange(v === "yes")}
       >
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="h-9 w-44" aria-label="Comparison value">
           <SelectValue placeholder="Choose" />
         </SelectTrigger>
         <SelectContent>
@@ -79,7 +79,7 @@ export function LogicValueControl({
         onChange={(e) =>
           onChange(e.target.value === "" ? undefined : Number(e.target.value))
         }
-        className="w-28"
+        className="h-9 w-28"
         aria-label="Comparison value"
       />
     );
@@ -90,7 +90,7 @@ export function LogicValueControl({
       value={typeof value === "string" ? value : ""}
       onChange={(e) => onChange(e.target.value)}
       placeholder="Value"
-      className="w-40"
+      className="h-9 w-44"
       aria-label="Comparison value"
     />
   );

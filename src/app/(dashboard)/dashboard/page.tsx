@@ -9,7 +9,10 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormsBrowser } from "@/components/dashboard/forms-browser";
 import { OnboardingDialog } from "@/components/dashboard/onboarding-dialog";
 
-export const metadata: Metadata = { title: "Forms" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { workspace } = await getCurrentWorkspace();
+  return { title: `Forms · ${workspace.name}` };
+}
 
 export default async function DashboardPage() {
   const { supabase, workspace, user } = await getCurrentWorkspace();

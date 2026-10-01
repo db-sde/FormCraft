@@ -524,7 +524,11 @@ export default async function ResponsesPage({
                           />
                           {completed
                             ? item.endingTitle && ` · ${item.endingTitle}`
-                            : ` · ${item.progress.answered} of ${item.progress.total} answered`}
+                            : ` · ${item.progress.answered} of ${item.progress.total} answered${
+                                item.lastQuestionLabel
+                                  ? ` · stopped at ${item.lastQuestionLabel}`
+                                  : ""
+                              }`}
                         </span>
                       </li>
                     );

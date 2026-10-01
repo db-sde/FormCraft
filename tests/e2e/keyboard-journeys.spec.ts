@@ -98,7 +98,7 @@ test("a respondent can finish a form without touching the mouse", async ({ page 
     // pick option A.)
     await tabTo(page, /Option A/);
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("radio", { name: "Option B" })).toBeFocused();
+    await expect(page.getByRole("radio", { name: /Option B/ })).toBeFocused();
     await page.keyboard.press("Space");
 
     await expect(page.getByText("Anything else?")).toBeVisible();

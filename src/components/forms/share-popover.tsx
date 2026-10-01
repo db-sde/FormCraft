@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { Check, Copy, ExternalLink, Share2, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { buildEmbedSnippet } from "@/domains/forms/embed";
 import {
   Popover,

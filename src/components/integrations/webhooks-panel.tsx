@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Check, Copy, KeyRound, Trash2, Webhook } from "lucide-react";
 import type { WebhookEndpoint, DeliveryLogEntry } from "@/domains/webhooks";
 import {

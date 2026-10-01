@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI, logOutViaUI } from "./helpers";
+import {
+  createConfirmedUser,
+  deleteUser,
+  loginViaUI,
+  logOutViaUI,
+  skipWelcomeDialog,
+} from "./helpers";
 
 /**
  * The whole emailed-link journey, through local Supabase's mail catcher
@@ -31,6 +37,7 @@ test.describe("password reset", () => {
     page,
   }) => {
     const user = await createConfirmedUser("e2e-reset");
+    await skipWelcomeDialog(page);
     try {
       await page.goto("/forgot-password");
       await page.getByLabel("Email").fill(user.email);

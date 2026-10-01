@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import {
+  addQuestion,
+  createConfirmedUser,
+  deleteUser,
+  loginViaUI,
+  waitForSaved,
+} from "./helpers";
 
 test.describe("templates", () => {
   let user: Awaited<ReturnType<typeof createConfirmedUser>>;
@@ -17,7 +23,7 @@ test.describe("templates", () => {
     page,
   }) => {
     await page.goto("/templates");
-    await expect(page.getByRole("heading", { name: "Templates" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Choose a template" })).toBeVisible();
 
     await page.getByRole("button", { name: "Use this template" }).first().click();
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
@@ -26,11 +32,10 @@ test.describe("templates", () => {
     // blank starter — confirm there's more than one question and add
     // one more, whose edit must never write back to the shared
     // `templates` row.
-    await page.getByRole("button", { name: "Add question" }).click();
-    await page.getByRole("menuitem", { name: "Short text" }).click();
+    await addQuestion(page, "Short text");
     const questionTextInput = page.getByLabel("Question text");
     await questionTextInput.fill("A question only this form has");
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
+    await waitForSaved(page);
 
     // Using the same template again must produce a form that does NOT
     // have the edit made above — proof the template itself is a
@@ -38,6 +43,6 @@ test.describe("templates", () => {
     await page.goto("/templates");
     await page.getByRole("button", { name: "Use this template" }).first().click();
     await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
-    await expect(page.getByText("A question only this form has")).not.toBeVisible();
+    await expect(page.getByText("A question only this form has")).toHaveCount(0);
   });
 });

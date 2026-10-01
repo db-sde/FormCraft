@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { deleteResponseAction } from "@/app/(form)/forms/[id]/(sections)/responses/actions";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 import {

@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { createConfirmedUser, deleteUser, loginViaUI } from "./helpers";
+import {
+  addQuestion,
+  createConfirmedUser,
+  deleteUser,
+  loginViaUI,
+  startFromScratch,
+  waitForSaved,
+} from "./helpers";
 
 test.describe("form builder", () => {
   let user: Awaited<ReturnType<typeof createConfirmedUser>>;
@@ -13,46 +20,56 @@ test.describe("form builder", () => {
     await deleteUser(user.userId);
   });
 
-  test("dashboard empty state creates a form and lands in the builder", async ({
-    page,
+  test("first sign-in: the welcome dialog creates a blank form and lands in the builder", async ({
+    browser,
   }) => {
-    await expect(
-      page.getByRole("heading", { name: "Welcome to FormCraft" }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Start from scratch" }).click();
+    // A browser that has never seen the dialog.
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await loginViaUI(page, user.email, user.password, { welcome: true });
+      const dialog = page.getByRole("dialog", { name: "How do you want to start?" });
+      await expect(dialog).toBeVisible();
+      await startFromScratch(page);
 
-    await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
-    // The starter schema's welcome screen question is selected by default.
-    await expect(page.getByText("Welcome screen", { exact: true })).toBeVisible();
+      // The starter schema's welcome screen question is selected by default.
+      await expect(page.getByText("Always shown first")).toBeVisible();
+    } finally {
+      await context.close();
+    }
   });
 
   test("add, edit, and delete a question, with autosave confirming the write persisted", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Start from scratch" }).click();
-    await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
+    await startFromScratch(page);
 
-    await page.getByRole("button", { name: "Add question" }).click();
-    await page.getByRole("menuitem", { name: "Short text" }).click();
+    await addQuestion(page, "Short text");
 
     const questionTextInput = page.getByLabel("Question text");
     await expect(questionTextInput).toBeVisible();
     await questionTextInput.fill("What's your favorite color?");
 
     // Wait for the debounced autosave to actually round-trip.
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
+    await waitForSaved(page);
 
     await page.reload();
-    await expect(page.getByText("What's your favorite color?")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /What's your favorite color\?/ }).first(),
+    ).toBeVisible();
 
     // Delete the question we just added (its delete button is scoped to
     // its row in the question list sidebar).
     await page
+      .getByRole("button", { name: /What's your favorite color\?/ })
+      .first()
+      .click();
+    await page
       .getByRole("button", { name: 'Delete "What\'s your favorite color?"' })
       .click();
-    await expect(page.getByText("Saved")).toBeVisible({ timeout: 15000 });
+    await waitForSaved(page);
 
     await page.reload();
-    await expect(page.getByText("What's your favorite color?")).not.toBeVisible();
+    await expect(page.getByText("What's your favorite color?")).toHaveCount(0);
   });
 });

@@ -2,7 +2,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 
@@ -82,7 +82,28 @@ export async function deleteUser(userId: string) {
   }
 }
 
-export async function loginViaUI(page: Page, email: string, password: string) {
+/** Marks the first-run welcome dialog as seen for this page. It's modal,
+ * so left open it hides the rest of the dashboard from assertions. */
+export async function skipWelcomeDialog(page: Page) {
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem("fc-welcome-seen", "1");
+    } catch {
+      // Storage can be unavailable; the dialog then just shows.
+    }
+  });
+}
+
+/** Logs in through the form. The first-run welcome dialog is marked seen
+ * (it's modal, so it would hide the page from every later assertion)
+ * unless `welcome: true` asks to see it. */
+export async function loginViaUI(
+  page: Page,
+  email: string,
+  password: string,
+  { welcome = false }: { welcome?: boolean } = {},
+) {
+  if (!welcome) await skipWelcomeDialog(page);
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
@@ -147,16 +168,42 @@ export async function createPublishedForm(
   return { formId: form.id, liveLink: `/f/${slug}` };
 }
 
-/** Clicks Publish in the builder and returns the live link from the
- * "Your form is live" dialog (then closes it). */
+/** Clicks Publish in the builder, waits for the "Published." toast and
+ * returns the live link from the Share popover (then closes it). */
 export async function publishFromBuilder(page: Page): Promise<string> {
   await page.getByRole("button", { name: "Publish", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: /your form is live/i });
-  await dialog.waitFor({ timeout: 15000 });
-  const href = await dialog.getByRole("link", { name: "Open" }).getAttribute("href");
+  await page.getByText("Published.", { exact: true }).waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: "Share" }).click();
+  const href = await page
+    .getByRole("link", { name: "Open live form" })
+    .getAttribute("href");
   await page.keyboard.press("Escape");
-  if (!href) throw new Error("no live link in the publish dialog");
+  if (!href) throw new Error("no live link in the Share popover");
   return href;
+}
+
+/** From the empty dashboard: "Start from scratch", through the welcome
+ * dialog when it's open, and into the builder. */
+export async function startFromScratch(page: Page) {
+  const dialog = page.getByRole("dialog", { name: "How do you want to start?" });
+  if (await dialog.isVisible()) {
+    await dialog.getByRole("radio", { name: /Start from scratch/ }).click();
+    await dialog.getByRole("button", { name: "Create blank form" }).click();
+  } else {
+    await page.getByRole("button", { name: "Start from scratch" }).click();
+  }
+  await page.waitForURL(/\/forms\/[0-9a-f-]{36}$/);
+}
+
+/** Waits for the builder's autosave to finish a real round trip. */
+export async function waitForSaved(page: Page) {
+  await expect(page.locator('[data-save-state="saved"]')).toBeVisible({ timeout: 15000 });
+}
+
+/** Adds a question from the builder's Add question menu. */
+export async function addQuestion(page: Page, type: string) {
+  await page.getByRole("button", { name: "Add question" }).click();
+  await page.getByRole("button", { name: new RegExp(`^${type}`) }).click();
 }
 
 export async function logOutViaUI(page: Page) {

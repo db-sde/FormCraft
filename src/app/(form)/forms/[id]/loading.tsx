@@ -10,7 +10,7 @@ export default function BuilderLoading() {
         <span className={`${bar} mx-auto hidden h-9 w-80 lg:block`} />
         <span className={`${bar} ml-auto h-9 w-28`} />
       </div>
-      <div className="grid min-h-0 flex-1 animate-pulse lg:grid-cols-[280px_minmax(0,1fr)_340px]">
+      <div className="grid min-h-0 flex-1 animate-pulse lg:grid-cols-[280px_minmax(0,1fr)_300px]">
         <div className="border-ink bg-card hidden flex-col gap-2 border-r-[1.5px] px-3.5 py-[18px] lg:flex">
           {Array.from({ length: 8 }, (_, i) => (
             <span key={i} className={`${bar} h-9`} />

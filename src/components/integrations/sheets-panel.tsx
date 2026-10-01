@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Sheet, Unplug } from "lucide-react";
 import type { SheetsConnection, SyncLogEntry } from "@/domains/sheets";
 import {

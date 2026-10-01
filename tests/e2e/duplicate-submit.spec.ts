@@ -87,7 +87,7 @@ test.describe("duplicate submit protection", () => {
     expect(secondBody.endingId).toBe(firstBody.endingId);
 
     await page.goto(`/forms/${formId}/responses`);
-    await expect(page.getByRole("link", { name: /Completed\s*1/ })).toBeVisible({
+    await expect(page.getByText("1 response", { exact: true })).toBeVisible({
       timeout: 10000,
     });
   });

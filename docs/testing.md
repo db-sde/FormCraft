@@ -188,6 +188,20 @@ looks a form up by slug alone (fixed in migration 00000000000012).
 Run: `npm run e2e` (headless), `npm run e2e:ui` for the Playwright UI.
 Requires `supabase start` running locally (same as integration tests).
 
+If port 3000 is taken by something else, run the production build on
+another port — the web-server check follows `PLAYWRIGHT_BASE_URL`, so it
+never "reuses" an unrelated app:
+
+```bash
+PORT=3002 NEXT_PUBLIC_APP_URL=http://localhost:3002 PLAYWRIGHT_BASE_URL=http://localhost:3002 npm run e2e
+```
+
+`loginViaUI` (or `skipWelcomeDialog`) marks the first-run welcome dialog as seen (it is modal and
+would hide the page from later assertions); pass `{ welcome: true }` to
+test the dialog itself. Wait for autosave with `waitForSaved` (the save
+pill's `data-save-state="saved"`), not the "Saved" text, which also shows
+before any edit.
+
 ## Security tests
 
 Cross-cutting, live alongside integration + E2E depending on the

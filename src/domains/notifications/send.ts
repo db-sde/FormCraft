@@ -61,6 +61,8 @@ export async function notifyFormOwnerOfCompletedResponse(
       formTitle: form.title,
       submittedAt: new Date().toISOString(),
       dashboardUrl: `${appUrl}/forms/${formId}/responses/${responseId}`,
+      settingsUrl: `${appUrl}/forms/${formId}/integrations`,
+      recipient: ownerEmail,
     });
 
     const resend = new Resend(apiKey);

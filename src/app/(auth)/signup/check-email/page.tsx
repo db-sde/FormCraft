@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { MailCheck } from "lucide-react";
 import { AuthCard, AuthFooter, AuthNotice } from "@/components/auth/auth-ui";
+
+export const metadata: Metadata = { title: "Check your inbox" };
 
 export default function CheckEmailPage() {
   return (

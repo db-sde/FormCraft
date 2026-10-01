@@ -24,6 +24,7 @@ export function SaveStatus({
       return (
         <span
           role="status"
+          data-save-state={state}
           className={cn(PILL, "text-muted-foreground border-transparent")}
         >
           <span className="size-[11px] animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -35,6 +36,7 @@ export function SaveStatus({
       return (
         <span
           role="status"
+          data-save-state={state}
           className={cn(PILL, "text-muted-foreground border-transparent")}
         >
           <Check className="size-[13px]" /> Saved
@@ -46,6 +48,7 @@ export function SaveStatus({
           <TooltipTrigger asChild>
             <span
               role="status"
+              data-save-state={state}
               tabIndex={0}
               className={cn(
                 PILL,
@@ -68,6 +71,7 @@ export function SaveStatus({
             <button
               type="button"
               role="status"
+              data-save-state={state}
               onClick={onProblemClick}
               className={cn(
                 PILL,
@@ -89,6 +93,7 @@ export function SaveStatus({
           <TooltipTrigger asChild>
             <span
               role="status"
+              data-save-state={state}
               tabIndex={0}
               className={cn(
                 PILL,

@@ -56,6 +56,16 @@ const schema: FormSchemaV1 = {
 };
 
 async function audit(page: Page, name: string) {
+  // Let entrance animations (e.g. a question fading in) finish first:
+  // axe measures contrast through opacity, so a half-faded heading would
+  // read as low contrast. Endless ones (spinners) are ignored.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity,
+      ),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();

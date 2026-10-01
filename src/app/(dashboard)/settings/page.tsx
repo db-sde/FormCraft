@@ -8,7 +8,20 @@ import {
 } from "@/components/dashboard/account-settings";
 import { cn } from "cn";
 
-export const metadata: Metadata = { title: "Settings" };
+const TITLES = {
+  account: "Account settings",
+  workspace: "Workspace settings",
+  members: "Members",
+};
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}): Promise<Metadata> {
+  const { tab } = await searchParams;
+  return { title: TITLES[tab as keyof typeof TITLES] ?? TITLES.account };
+}
 
 const TABS = [
   ["account", "Account"],

@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { useTheme } from "next-themes";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   deleteAccountAction,
   renameWorkspaceAction,

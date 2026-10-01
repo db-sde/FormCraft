@@ -23,9 +23,15 @@ export function stageTextColor(theme: ThemeV1): string {
   );
 }
 
-/** Readable text on the primary colour. */
+/** Readable text on the primary colour: whichever of white or near-black
+ * contrasts more with it (WCAG ratio), so mid-tone primaries such as
+ * Sunset orange or Midnight lavender get dark text instead of an
+ * unreadable white. */
 export function onPrimaryColor(theme: ThemeV1): string {
-  return luminance(theme.primaryColor) > 0.45 ? "#141414" : "#ffffff";
+  const l = luminance(theme.primaryColor);
+  const onWhite = 1.05 / (l + 0.05);
+  const onDark = (l + 0.05) / (luminance("#141414") + 0.05);
+  return onDark > onWhite ? "#141414" : "#ffffff";
 }
 
 /**

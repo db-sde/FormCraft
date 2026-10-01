@@ -1,8 +1,31 @@
 # Project Status
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## Current milestone
+
+**NEW UI — "Index Card" design handoff** (2026-10-01 → 10-02) — every
+page restyled to the handoff (`design_handoff_formcraft`, Parts 1–8),
+light and dark. Where a board shows something the product doesn't do,
+the simplest safe option won; each case is in `DECISIONS.md`
+(2026-10-02).
+
+- Part 1: design tokens (light/dark), components, status chips, icons.
+- Parts 2–3: landing, auth, app shell, dashboard, templates, settings,
+  first-run welcome dialog, getting-started checklist.
+- Part 4: builder — tile question list with drag reorder, Add question
+  menu, in-place canvas on the respondent stage, settings / Design /
+  ending panels, Logic rules + map, save-state pill, Share popover (link,
+  QR, embed), Preview dialog, small-screen state.
+- Part 5: form sections in the app frame — Responses (filters in the URL,
+  also applied to CSV export; Summary charts), response detail,
+  Integrations (webhooks, Sheets, email notifications), Settings, Share.
+- Part 6: one respondent renderer (stage) for the public form, Preview
+  and the builder canvas.
+- Parts 7–8: system pages, shared email layout (notification + Supabase
+  Confirm/Reset templates), tab titles, wide-screen rules.
+- Not built from the boards (see DECISIONS): answer search, Popup embed,
+  extra notification recipients / daily digest, "Email me a link".
 
 **HARDENING + REGRESSION GUARD RAILS** (2026-10-01) — a creator/
 respondent walkthrough, two independent reviews and a reported bug
@@ -28,7 +51,7 @@ fail). Full list and reasoning: `DECISIONS.md` (2026-10-01).
 - **Abuse:** client address no longer trusts visitor-written
   `X-Forwarded-For`; `/start` limit sized for shared networks.
 
-Checks: 237 unit + 100 integration tests, plus the Playwright suite on
+Checks: 245 unit + 100 integration tests, plus the Playwright suite on
 desktop and phone (see `docs/testing.md` for what each covers); CI also
 lints database functions and pins the Supabase CLI.
 

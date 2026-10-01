@@ -89,7 +89,7 @@ export function OnboardingDialog({ firstName }: { firstName: string }) {
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
       <DialogContent showCloseButton={false} className="gap-[22px] p-8 sm:max-w-[720px]">
         <div className="flex flex-col gap-2">
-          <span className="dark:text-primary text-[11.5px] font-bold tracking-[0.1em] text-[#9a6a0c] uppercase">
+          <span className="dark:text-primary text-[11.5px] font-bold tracking-[0.1em] text-[var(--chip-draft-fg)] uppercase">
             Welcome to FormCraft{firstName ? `, ${firstName}` : ""}
           </span>
           <DialogTitle className="text-[34px] leading-[1.05] tracking-[-0.03em]">

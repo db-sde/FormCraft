@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Choose a new password</title>
+</head>
+<body style="margin:0;padding:0;background:#f5efe4;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5efe4;">
+  <tr><td align="center" style="padding:24px 12px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
+      <tr><td style="padding:0 8px 16px 8px;font-family:Arial, Helvetica, sans-serif;font-size:18px;font-weight:bold;letter-spacing:-0.02em;color:#2b2118;">
+        <span style="display:inline-block;width:15px;height:15px;background:#f2b233;border:1.5px solid #2b2118;border-radius:4px;vertical-align:-2px;"></span>&nbsp;FormCraft
+      </td></tr>
+      <tr><td style="background:#fffaf1;border:1.5px solid #2b2118;border-radius:10px;padding:32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td style="font-family:Arial, Helvetica, sans-serif;">
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#dbe8f7;font-size:12px;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;color:#2b2118;">Password reset</span>
+          </td></tr>
+          <tr><td style="padding:16px 0 10px 0;font-family:Arial, Helvetica, sans-serif;font-size:28px;line-height:1.15;font-weight:bold;letter-spacing:-0.02em;color:#2b2118;">Choose a new password</td></tr>
+          <tr><td style="padding:0 0 20px 0;font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:1.55;color:#4a3f35;">Someone (hopefully you) asked to reset the password for this account. The link works once and expires in 1 hour.</td></tr>
+          
+          <tr><td>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr><td bgcolor="#f2b233" style="border:1.5px solid #2b2118;border-radius:6px;">
+                <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:14px 24px;font-family:Arial, Helvetica, sans-serif;font-size:16px;font-weight:bold;color:#2b2118;text-decoration:none;">Reset password</a>
+              </td></tr>
+            </table>
+          </td></tr>
+          <tr><td style="padding:24px 0 0 0;font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:1.5;color:#6f6254;">Didn&#39;t ask for this? Ignore this email. Your password won&#39;t change.</td></tr>
+        </table>
+      </td></tr>
+      <tr><td style="padding:18px 8px 0 8px;font-family:Arial, Helvetica, sans-serif;font-size:12px;line-height:1.6;color:#6f6254;">
+        Sent to {{ .Email }}.<br>FormCraft
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -93,7 +94,7 @@ function HeroArt() {
             </span>
           ))}
         </div>
-        <span className="self-start rounded-full bg-[#e05d36] px-[22px] py-2.5 text-sm font-semibold text-white">
+        <span className="self-start rounded-full bg-[#e05d36] px-[22px] py-2.5 text-sm font-semibold text-[#141414]">
           OK ✓
         </span>
       </div>
@@ -108,6 +109,10 @@ function HeroArt() {
 
 const FEATURE_CARD =
   "flex flex-col overflow-hidden rounded-xl border-[1.5px] border-ink bg-background shadow-lift";
+
+export const metadata: Metadata = {
+  title: { absolute: "FormCraft — Forms people enjoy filling out" },
+};
 
 export default async function Home({
   searchParams,
