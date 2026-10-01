@@ -289,6 +289,7 @@ export type Database = {
           last_active_at: string;
           last_question_id: string | null;
           referrer: string | null;
+          spam_suspected: boolean;
           started_at: string;
           status: Database["public"]["Enums"]["response_status"];
           utm_campaign: string | null;
@@ -311,6 +312,7 @@ export type Database = {
           last_active_at?: string;
           last_question_id?: string | null;
           referrer?: string | null;
+          spam_suspected?: boolean;
           started_at?: string;
           status?: Database["public"]["Enums"]["response_status"];
           utm_campaign?: string | null;
@@ -333,6 +335,7 @@ export type Database = {
           last_active_at?: string;
           last_question_id?: string | null;
           referrer?: string | null;
+          spam_suspected?: boolean;
           started_at?: string;
           status?: Database["public"]["Enums"]["response_status"];
           utm_campaign?: string | null;
@@ -396,6 +399,13 @@ export type Database = {
             isOneToOne: true;
             referencedRelation: "forms";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sheets_connections_form_workspace_fkey";
+            columns: ["form_id", "workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id", "workspace_id"];
           },
           {
             foreignKeyName: "sheets_connections_workspace_id_fkey";
@@ -711,6 +721,32 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      complete_response_atomic: {
+        Args: {
+          p_answers: Json;
+          p_ending_id: string;
+          p_idempotency_key: string;
+          p_last_question_id: string;
+          p_response_id: string;
+          p_revision: number;
+          p_spam?: boolean;
+        };
+        Returns: {
+          ending_id: string;
+          form_id: string;
+          outcome: string;
+        }[];
+      };
+      create_form_with_draft: {
+        Args: {
+          p_created_by?: string;
+          p_schema: Json;
+          p_slug: string;
+          p_title: string;
+          p_workspace_id: string;
+        };
+        Returns: string;
+      };
       create_workspace_with_owner: {
         Args: { workspace_name: string; workspace_slug: string };
         Returns: {
@@ -763,6 +799,21 @@ export type Database = {
           stopped: number;
         }[];
       };
+      save_response_progress: {
+        Args: {
+          p_answers: Json;
+          p_has_answer: boolean;
+          p_last_question_id: string;
+          p_response_id: string;
+          p_revision: number;
+        };
+        Returns: {
+          client_revision: number;
+          outcome: string;
+          status: Database["public"]["Enums"]["response_status"];
+        }[];
+      };
+      unpublish_form: { Args: { target_form_id: string }; Returns: undefined };
       workspace_role_for: {
         Args: { target_workspace_id: string };
         Returns: Database["public"]["Enums"]["workspace_role"];

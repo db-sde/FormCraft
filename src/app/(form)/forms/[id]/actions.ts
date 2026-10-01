@@ -12,6 +12,7 @@ import {
 } from "@/domains/forms";
 import type { FormSchemaV1 } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/analytics/track";
 
 export async function renameFormAction(
@@ -90,7 +91,7 @@ export async function publishAction(formId: string): Promise<PublishResult> {
   const { supabase, user } = await getCurrentWorkspace();
 
   try {
-    const result = await publishForm(supabase, formId);
+    const result = await publishForm(supabase, formId, createAdminClient());
     revalidatePath(`/forms/${formId}`);
     trackEvent({
       formId,

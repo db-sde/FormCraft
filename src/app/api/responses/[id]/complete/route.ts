@@ -16,8 +16,11 @@ const CompleteBody = z.object({
   lastQuestionId: z.string().min(1).max(64),
   answers: z.record(z.string(), z.unknown()),
   idempotencyKey: z.string().uuid(),
-  /** Hidden spam-trap field — people never see it, bots fill it. */
-  website: z.string().max(2000).optional(),
+  /** Hidden spam-trap field — people never see it, bots fill it. A
+   * filled trap flags the response (it is never discarded: password
+   * managers and browser autofill sometimes fill hidden fields, and a
+   * real person must not lose their submission to that). */
+  trap: z.string().max(2000).optional(),
 });
 
 export async function POST(
@@ -47,13 +50,6 @@ export async function POST(
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }
 
-  if (parsed.data.website) {
-    // Looks like success to the bot (so it doesn't adapt), but nothing
-    // is completed, notified, or delivered. The unfinished row is left
-    // for retention cleanup.
-    return NextResponse.json({ endingId: "", alreadyCompleted: false });
-  }
-
   try {
     const admin = createAdminClient();
     const result = await completeResponse(
@@ -63,6 +59,7 @@ export async function POST(
       parsed.data.lastQuestionId,
       parsed.data.answers,
       parsed.data.idempotencyKey,
+      { spamSuspected: Boolean(parsed.data.trap) },
     );
 
     if (!result.ok) {
@@ -82,7 +79,9 @@ export async function POST(
       );
     }
 
-    if (!result.alreadyCompleted) {
+    // Suspected spam is kept but quiet: no email, webhook, Sheets row, or
+    // funnel event.
+    if (!result.alreadyCompleted && !parsed.data.trap) {
       // Runs after the response has been sent to the respondent —
       // next/server's after() keeps the serverless function alive for
       // this, unlike a bare unawaited promise, which can be killed

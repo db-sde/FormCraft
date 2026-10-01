@@ -3,6 +3,9 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   recordUpload,
+  prepareUpload,
+  ResponseCompletedError,
+  type PreparedUpload,
   ResponseNotFoundError,
   QuestionNotFoundError,
   UnsupportedFileTypeError,
@@ -36,6 +39,29 @@ export async function POST(
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }
 
+  // Decide everything that doesn't need the file first — including how
+  // big it may be — so an oversized body is refused before it's read
+  // into memory.
+  const admin = createAdminClient();
+  let prepared: PreparedUpload;
+  try {
+    prepared = await prepareUpload(admin, id, questionId);
+  } catch (error) {
+    return uploadErrorResponse(error);
+  }
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (!Number.isFinite(declaredLength) || declaredLength <= 0) {
+    return apiError("length_required", "Content-Length is required.", 411);
+  }
+  // Multipart framing adds a little on top of the file itself.
+  if (declaredLength > prepared.maxBytes + 64 * 1024) {
+    return apiError(
+      "too_large",
+      `file exceeds the ${Math.floor(prepared.maxBytes / (1024 * 1024))}MB limit`,
+      413,
+    );
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -50,25 +76,34 @@ export async function POST(
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const admin = createAdminClient();
-    const result = await recordUpload(admin, id, questionId, {
-      bytes,
-      originalFilename: file.name || "upload",
-    });
+    const result = await recordUpload(
+      admin,
+      id,
+      questionId,
+      { bytes, originalFilename: file.name || "upload" },
+      prepared,
+    );
     return NextResponse.json({ uploadId: result.uploadId });
   } catch (error) {
-    if (error instanceof ResponseNotFoundError) {
-      return apiError("not_found", "Response not found.", 404);
-    }
-    if (error instanceof QuestionNotFoundError) {
-      return apiError("invalid_body", "Invalid question for this form.", 400);
-    }
-    if (error instanceof UnsupportedFileTypeError) {
-      return apiError("unsupported_type", "This file type isn't supported.", 400);
-    }
-    if (error instanceof FileTooLargeError) {
-      return apiError("too_large", error.message, 413);
-    }
-    return apiError("unknown", "Upload failed. Please try again.", 500);
+    return uploadErrorResponse(error);
   }
+}
+
+function uploadErrorResponse(error: unknown) {
+  if (error instanceof ResponseNotFoundError) {
+    return apiError("not_found", "Response not found.", 404);
+  }
+  if (error instanceof ResponseCompletedError) {
+    return apiError("already_submitted", "This response was already submitted.", 409);
+  }
+  if (error instanceof QuestionNotFoundError) {
+    return apiError("invalid_body", "Invalid question for this form.", 400);
+  }
+  if (error instanceof UnsupportedFileTypeError) {
+    return apiError("unsupported_type", "This file type isn't supported.", 400);
+  }
+  if (error instanceof FileTooLargeError) {
+    return apiError("too_large", error.message, 413);
+  }
+  return apiError("unknown", "Upload failed. Please try again.", 500);
 }

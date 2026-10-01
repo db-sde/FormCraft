@@ -156,26 +156,21 @@ export async function createFormWithDraft(
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const slug = `${baseSlug}-${slugSuffix()}`;
-    const { data: form, error: formError } = await supabase
-      .from("forms")
-      .insert({ workspace_id: workspaceId, title, slug, created_by: userId })
-      .select("id")
-      .single();
-
-    if (formError) {
-      if (formError.message.includes("duplicate key")) continue;
-      throw formError;
-    }
-
-    const { error: versionError } = await supabase.from("form_versions").insert({
-      form_id: form.id,
-      status: "draft",
-      version_number: 1,
-      schema: toJson(initialSchema ?? starterFormSchema(title)),
+    // One transaction: the form and its first draft exist together or
+    // not at all (a failure can't leave a draft-less form behind).
+    const { data: formId, error } = await supabase.rpc("create_form_with_draft", {
+      p_workspace_id: workspaceId,
+      p_title: title,
+      p_slug: slug,
+      p_schema: toJson(initialSchema ?? starterFormSchema(title)),
+      p_created_by: userId,
     });
-    if (versionError) throw versionError;
 
-    return { id: form.id };
+    if (error) {
+      if (error.code === "23505") continue; // slug taken — try another suffix
+      throw error;
+    }
+    return { id: formId };
   }
 
   throw new Error("failed to allocate a unique form slug after 5 attempts");
@@ -340,6 +335,10 @@ export type PublishResult = {
 export async function publishForm(
   supabase: Client,
   formId: string,
+  /** Service-role client. Publishing isn't available to end users'
+   * sessions (they could publish arbitrary JSON); the caller's own
+   * client is only used to prove they can read this form's draft. */
+  admin: Client,
 ): Promise<PublishResult> {
   const { data: draft, error: draftError } = await supabase
     .from("form_versions")
@@ -353,7 +352,7 @@ export async function publishForm(
   validateSemantics(parsed);
   const compiled = compileFormSchema(parsed);
 
-  const { data, error } = await supabase.rpc("publish_form_version", {
+  const { data, error } = await admin.rpc("publish_form_version", {
     target_form_id: formId,
     compiled_schema: toJson(compiled.schema),
   });
@@ -372,11 +371,7 @@ export async function publishForm(
  * unavailable (no `published` row to read) rather than deleting
  * anything. */
 export async function unpublishForm(supabase: Client, formId: string): Promise<void> {
-  const { error } = await supabase
-    .from("form_versions")
-    .update({ status: "archived" })
-    .eq("form_id", formId)
-    .eq("status", "published");
+  const { error } = await supabase.rpc("unpublish_form", { target_form_id: formId });
   if (error) throw error;
 }
 

@@ -32,6 +32,14 @@ const schema: FormSchemaV1 = {
       required: true,
       settings: {},
     },
+    {
+      id: "q_file",
+      type: "file_upload",
+      order: 1,
+      label: "Photo",
+      required: false,
+      settings: { acceptedMimeTypes: ["image/*"], maxSizeMb: 1 },
+    },
   ],
   logic: [],
 };
@@ -108,22 +116,84 @@ test("complete: per-question errors, idempotent success, and the spam trap", asy
   const body = await invalid.json();
   expect(body.error.errors[0]).toMatchObject({ questionId: "q_email" });
 
-  // A filled honeypot looks successful but completes nothing.
-  const trapped = await complete(
-    { q_email: "bot@example.com" },
-    { website: "http://spam" },
-  );
+  // A filled spam trap never loses the submission: it completes, but
+  // flagged — autofill can fill hidden fields in a real person's browser.
+  const trapped = await complete({ q_email: "bot@example.com" }, { trap: "http://spam" });
   expect(trapped.status()).toBe(200);
   const { data: afterTrap } = await adminClient()
     .from("responses")
-    .select("status")
+    .select("status, spam_suspected")
     .eq("id", responseId)
     .single();
-  expect(afterTrap?.status).not.toBe("completed");
+  expect(afterTrap).toEqual({ status: "completed", spam_suspected: true });
 
-  const ok = await complete({ q_email: "real@example.com" });
+  // Retrying a completed response is idempotent, not an error.
+  const again = await complete({ q_email: "real@example.com" });
+  expect(again.status()).toBe(200);
+  expect((await again.json()).endingId).toBe("end");
+});
+
+test("complete: a normal submission is stored on the path taken and not flagged", async ({
+  request,
+}) => {
+  const { responseId } = await start(request);
+  const ok = await request.post(`/api/responses/${responseId}/complete`, {
+    data: {
+      clientRevision: 1,
+      lastQuestionId: "q_email",
+      answers: { q_email: "real@example.com", not_a_question: "ignored" },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
   expect(ok.status()).toBe(200);
-  expect((await ok.json()).endingId).toBe("end");
+  const admin = adminClient();
+  const { data: row } = await admin
+    .from("responses")
+    .select("status, spam_suspected, ending_id")
+    .eq("id", responseId)
+    .single();
+  expect(row).toEqual({ status: "completed", spam_suspected: false, ending_id: "end" });
+  const { data: answers } = await admin
+    .from("answers")
+    .select("question_id")
+    .eq("response_id", responseId);
+  expect(answers).toEqual([{ question_id: "q_email" }]);
+});
+
+test("uploads: size checked before the body is read, and never after submit", async ({
+  request,
+}) => {
+  const png = (size: number) => {
+    const bytes = Buffer.alloc(size);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+    return bytes;
+  };
+  const upload = (responseId: string, size: number) =>
+    request.post(`/api/responses/${responseId}/uploads/q_file`, {
+      multipart: { file: { name: "a.png", mimeType: "image/png", buffer: png(size) } },
+    });
+
+  const { responseId } = await start(request);
+  const tooBig = await upload(responseId, 2 * 1024 * 1024);
+  expect(tooBig.status()).toBe(413);
+  expect((await tooBig.json()).error.code).toBe("too_large");
+
+  const fine = await upload(responseId, 1024);
+  expect(fine.status()).toBe(200);
+  expect((await fine.json()).uploadId).toMatch(/^[0-9a-f-]{36}$/);
+
+  const submit = await request.post(`/api/responses/${responseId}/complete`, {
+    data: {
+      clientRevision: 1,
+      lastQuestionId: "q_file",
+      answers: { q_email: "files@example.com" },
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(submit.status()).toBe(200);
+  const late = await upload(responseId, 1024);
+  expect(late.status()).toBe(409);
+  expect((await late.json()).error.code).toBe("already_submitted");
 });
 
 test("uploads and events: validate input", async ({ request }) => {

@@ -163,36 +163,42 @@ describe("public form access (real RLS, not bypassed)", () => {
     if (unrelatedUserId) await supabaseAdmin.auth.admin.deleteUser(unrelatedUserId);
   });
 
-  it("an anonymous (logged-out) visitor can read the published form", async () => {
-    const anon = anonClient();
-    const result = await getPublicFormBySlug(anon, `public-access-form-${testRunId}`);
+  // The public page resolves forms through the server (service role).
+  // Visitors — anonymous or signed in — have no direct read access to
+  // forms at all; that's pinned in rls-isolation.test.ts.
+  it("the server resolves a published form by slug", async () => {
+    const result = await getPublicFormBySlug(
+      supabaseAdmin,
+      `public-access-form-${testRunId}`,
+    );
     expect(result).not.toBeNull();
     expect(result?.formId).toBe(formId);
   });
 
-  it("a signed-in user with no relationship to this form can still read it — the regression this migration fixes", async () => {
-    const visitor = anonClient();
-    const { error: signInError } = await visitor.auth.signInWithPassword({
-      email: unrelatedUserEmail,
-      password: unrelatedUserPassword,
-    });
-    expect(signInError).toBeNull();
-
-    const result = await getPublicFormBySlug(visitor, `public-access-form-${testRunId}`);
-    expect(result).not.toBeNull();
-    expect(result?.formId).toBe(formId);
+  it("a draft-only (unpublished) form is not served", async () => {
+    expect(
+      await getPublicFormBySlug(supabaseAdmin, `draft-only-form-${testRunId}`),
+    ).toBeNull();
   });
 
-  it("neither an anonymous nor a signed-in stranger can read a draft-only (unpublished) form", async () => {
+  it("neither an anonymous nor a signed-in stranger can query forms directly", async () => {
     const anon = anonClient();
-    expect(await getPublicFormBySlug(anon, `draft-only-form-${testRunId}`)).toBeNull();
+    const direct = await anon
+      .from("forms")
+      .select("id")
+      .eq("slug", `public-access-form-${testRunId}`);
+    expect(direct.data ?? []).toEqual([]);
 
     const visitor = anonClient();
     await visitor.auth.signInWithPassword({
       email: unrelatedUserEmail,
       password: unrelatedUserPassword,
     });
-    expect(await getPublicFormBySlug(visitor, `draft-only-form-${testRunId}`)).toBeNull();
+    const asStranger = await visitor
+      .from("forms")
+      .select("id")
+      .eq("slug", `public-access-form-${testRunId}`);
+    expect(asStranger.data ?? []).toEqual([]);
   });
 });
 

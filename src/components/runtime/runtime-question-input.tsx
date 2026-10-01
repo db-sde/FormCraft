@@ -387,6 +387,9 @@ function describeAccepted(mimeTypes: string[]): string {
   return labels.join(", ");
 }
 
+const UPLOAD_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function FileUploadInput({
   question,
   value,
@@ -398,9 +401,12 @@ function FileUploadInput({
   onChange: (value: unknown) => void;
   getResponseId?: () => Promise<string>;
 }) {
+  // After a refresh the answer is just the upload's id (the browser
+  // doesn't have the file any more), so never show that as a "name".
   const [fileName, setFileName] = useState<string | null>(
-    typeof value === "string" ? value : null,
+    typeof value === "string" && !UPLOAD_ID_PATTERN.test(value) ? value : null,
   );
+  const hasStoredFile = typeof value === "string" && value.length > 0;
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
 
   async function handleFile(file: File | undefined) {
@@ -425,8 +431,11 @@ function FileUploadInput({
         body,
       });
       if (!res.ok) {
+        // Keep an earlier successful upload as the answer; only a field
+        // with nothing valid in it goes back to empty.
         setStatus("error");
-        onChange(undefined);
+        if (!hasStoredFile) onChange(undefined);
+        setFileName(null);
         return;
       }
       const data = (await res.json()) as { uploadId: string };
@@ -436,7 +445,8 @@ function FileUploadInput({
       onChange(data.uploadId);
     } catch {
       setStatus("error");
-      onChange(undefined);
+      if (!hasStoredFile) onChange(undefined);
+      setFileName(null);
     }
   }
 
@@ -448,7 +458,9 @@ function FileUploadInput({
             ? "Uploading…"
             : fileName
               ? fileName
-              : "Click to choose a file"}
+              : hasStoredFile
+                ? "File uploaded — choose another to replace it"
+                : "Click to choose a file"}
         </span>
         <span className="text-muted-foreground text-xs">
           {describeAccepted(question.settings.acceptedMimeTypes)} · up to{" "}

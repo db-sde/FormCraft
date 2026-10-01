@@ -122,35 +122,26 @@ function filterAnswersToKnownQuestions(
   );
 }
 
-async function upsertAnswers(
-  admin: Client,
-  responseId: string,
-  answers: AnswerMap,
-): Promise<void> {
-  const rows = Object.entries(answers)
-    .filter(([, value]) => value !== undefined)
-    .map(([questionId, value]) => ({
-      response_id: responseId,
-      question_id: questionId,
-      value: value as Json,
-      updated_at: new Date().toISOString(),
-    }));
-  if (rows.length === 0) return;
-
-  const { error } = await admin
-    .from("answers")
-    .upsert(rows, { onConflict: "response_id,question_id" });
-  if (error) throw error;
+/** Only defined values, as plain JSON for the database functions. */
+function toAnswersJson(answers: AnswerMap): Json {
+  return Object.fromEntries(
+    Object.entries(answers).filter(([, value]) => value !== undefined),
+  ) as Json;
 }
 
 /**
- * Debounced autosave. The UPDATE's WHERE clause — not a separate
- * pre-check — is the actual compare-and-set guard (status not already
- * completed, incoming revision strictly greater than what's stored),
- * so a genuine race between two concurrent writes resolves atomically
- * rather than via a read-then-write gap. The 0-rows-affected path only
- * runs a follow-up read to produce a precise error/short-circuit, not
- * to make the decision.
+ * Debounced autosave — one database transaction (save_response_progress)
+ * that locks the response row, rejects a revision that isn't newer, and
+ * writes the revision and the answers together. Concurrent saves are
+ * therefore serialised: the stored answers always belong to the stored
+ * revision (they used to be separate statements, so an older answer
+ * could end up under a newer revision).
+ *
+ * Whether the save contains a real answer decides the status: only a
+ * response with at least one answer is "partial"; one that has only
+ * moved past the welcome screen stays in_progress. A form whose creator
+ * turned off saving unfinished answers stores nothing (enforced inside
+ * the function, not just by the runtime not sending them).
  */
 export async function saveResponseAnswers(
   admin: Client,
@@ -159,74 +150,44 @@ export async function saveResponseAnswers(
   lastQuestionId: string,
   answers: AnswerMap,
 ): Promise<{ status: ResponseStatus; revision: number }> {
-  // Schema first: whether this save contains a real answer decides the
-  // status. Only a response with at least one answer is "partial"; one
-  // that has only moved past the welcome screen stays in_progress (it
-  // still shows up in drop-off, but not as an incomplete response with
-  // nothing in it).
-  const { data: current, error: currentError } = await admin
+  const { data: response, error: responseError } = await admin
     .from("responses")
-    .select("status, client_revision, form_version_id, forms(save_partial_responses)")
+    .select("form_version_id")
     .eq("id", responseId)
     .maybeSingle();
-  if (currentError) throw currentError;
-  if (!current) throw new ResponseNotFoundError();
-  if (current.status === "completed") {
-    // A late autosave arriving after the respondent already submitted
-    // is a benign race (e.g. a debounced save that was in flight when
-    // Enter completed the form) — accept it as a no-op.
-    return { status: "completed", revision: current.client_revision };
-  }
-
-  if (current.forms?.save_partial_responses === false) {
-    // The creator opted out of keeping unfinished answers (enforced
-    // here, not just by the runtime not sending them): nothing is
-    // stored until the final submit.
-    return { status: current.status, revision: current.client_revision };
-  }
+  if (responseError) throw responseError;
+  if (!response) throw new ResponseNotFoundError();
 
   const { data: versionRow, error: versionError } = await admin
     .from("form_versions")
     .select("schema")
-    .eq("id", current.form_version_id)
+    .eq("id", response.form_version_id)
     .single();
   if (versionError) throw versionError;
-  const schema = parseFormSchema(versionRow.schema);
-  const known = filterAnswersToKnownQuestions(schema, answers);
-  const hasAnyAnswer = Object.values(known).some(isAnswered);
+  const known = filterAnswersToKnownQuestions(
+    parseFormSchema(versionRow.schema),
+    answers,
+  );
 
-  const { data: updated, error } = await admin
-    .from("responses")
-    .update({
-      ...(hasAnyAnswer ? { status: "partial" as const } : {}),
-      client_revision: expectedRevision,
-      last_question_id: lastQuestionId,
-      last_active_at: new Date().toISOString(),
-    })
-    .eq("id", responseId)
-    .neq("status", "completed")
-    .lt("client_revision", expectedRevision)
-    .select("status, client_revision")
-    .maybeSingle();
+  const { data, error } = await admin.rpc("save_response_progress", {
+    p_response_id: responseId,
+    p_revision: expectedRevision,
+    p_last_question_id: lastQuestionId,
+    p_answers: toAnswersJson(known),
+    p_has_answer: Object.values(known).some(isAnswered),
+  });
   if (error) throw error;
 
-  if (!updated) {
-    const { data: latest, error: fetchError } = await admin
-      .from("responses")
-      .select("status, client_revision")
-      .eq("id", responseId)
-      .maybeSingle();
-    if (fetchError) throw fetchError;
-    if (!latest) throw new ResponseNotFoundError();
-    if (latest.status === "completed") {
-      return { status: "completed", revision: latest.client_revision };
-    }
-    throw new StaleResponseWriteError(latest.client_revision);
+  const result = data?.[0];
+  if (!result || result.outcome === "not_found") throw new ResponseNotFoundError();
+  if (result.outcome === "stale") {
+    throw new StaleResponseWriteError(Number(result.client_revision));
   }
-
-  await upsertAnswers(admin, responseId, known);
-
-  return { status: updated.status, revision: updated.client_revision };
+  // "ok" or "completed" (a late autosave after submit is a harmless no-op).
+  return {
+    status: result.status as ResponseStatus,
+    revision: Number(result.client_revision),
+  };
 }
 
 export type CompleteResult =
@@ -247,10 +208,17 @@ export type CompleteResult =
  * retry must never surface an error for something that already
  * succeeded.
  *
+ * Validation happens first and writes nothing: a rejected submission
+ * leaves no trace of its answers (they used to be saved before being
+ * checked, including on forms that opted out of keeping unfinished
+ * answers). Only then does one database transaction
+ * (complete_response_atomic) store the answers on the path actually
+ * taken, discard ones left on abandoned branches, and mark the response
+ * completed.
+ *
  * The ending is computed server-side via the same `walkForm` used by
- * the logic engine everywhere else, from the merged answers — never
- * trusted from the client. Required-but-unreached questions (per the
- * actual logic path taken) are correctly excluded from validation.
+ * the logic engine everywhere else — never trusted from the client.
+ * Required-but-unreached questions are correctly excluded.
  */
 export async function completeResponse(
   admin: Client,
@@ -259,10 +227,11 @@ export async function completeResponse(
   lastQuestionId: string,
   answers: AnswerMap,
   idempotencyKey: string,
+  options: { spamSuspected?: boolean } = {},
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
-    .select("status, form_id, form_version_id, ending_id, client_revision")
+    .select("status, form_id, form_version_id, ending_id")
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
@@ -286,19 +255,46 @@ export async function completeResponse(
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
   const knownAnswers = filterAnswersToKnownQuestions(compiled.schema, answers);
 
-  await upsertAnswers(admin, responseId, knownAnswers);
-
   const walk = walkForm(compiled, knownAnswers);
   const reached = new Set(walk.visitedQuestionIds);
   // Only questions on the path actually taken are validated: an answer
   // left behind on a branch the respondent later logic-jumped away
   // from is irrelevant to this submission.
-  const errors = compiled.schema.questions
-    .filter((q) => reached.has(q.id))
-    .flatMap((q) => {
-      const result = validateAnswer(q, knownAnswers[q.id]);
-      return result.ok ? [] : [{ questionId: q.id, message: result.message }];
-    });
+  const pathQuestions = compiled.schema.questions.filter((q) => reached.has(q.id));
+  const errors = pathQuestions.flatMap((q) => {
+    const result = validateAnswer(q, knownAnswers[q.id]);
+    return result.ok ? [] : [{ questionId: q.id, message: result.message }];
+  });
+
+  // A file answer is an upload id; it must be a real upload of *this*
+  // response for *this* question, not any string the client sent.
+  const fileQuestions = pathQuestions.filter(
+    (q) => q.type === "file_upload" && hasAnswer(q, knownAnswers[q.id]),
+  );
+  if (fileQuestions.length > 0) {
+    const { data: uploads, error: uploadsError } = await admin
+      .from("uploads")
+      .select("id, question_id, status")
+      .eq("response_id", responseId);
+    if (uploadsError) throw uploadsError;
+    for (const q of fileQuestions) {
+      const value = knownAnswers[q.id];
+      const valid = (uploads ?? []).some(
+        (u) =>
+          u.id === value &&
+          u.question_id === q.id &&
+          u.status !== "quarantined" &&
+          u.status !== "deleted",
+      );
+      if (!valid && !errors.some((e) => e.questionId === q.id)) {
+        errors.push({
+          questionId: q.id,
+          message: "That file isn't available — upload it again.",
+        });
+      }
+    }
+  }
+
   if (errors.length > 0) {
     const onlyMissing = errors.every((e) => {
       const q = compiled.schema.questions.find((x) => x.id === e.questionId);
@@ -312,48 +308,27 @@ export async function completeResponse(
     };
   }
 
-  const { data: updated, error: updateError } = await admin
-    .from("responses")
-    .update({
-      status: "completed",
-      // Never move the revision backwards (a DB trigger rejects that):
-      // submitting is final, so a client whose revision lags an earlier
-      // autosave must still be able to finish.
-      client_revision: Math.max(expectedRevision, response.client_revision + 1),
-      last_question_id: lastQuestionId,
-      last_active_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-      ending_id: walk.endingId,
-      idempotency_key: idempotencyKey,
-    })
-    .eq("id", responseId)
-    .neq("status", "completed")
-    .select("status")
-    .maybeSingle();
-  if (updateError) throw updateError;
+  const pathAnswers = Object.fromEntries(
+    Object.entries(knownAnswers).filter(([questionId]) => reached.has(questionId)),
+  );
+  const { data, error: completeError } = await admin.rpc("complete_response_atomic", {
+    p_response_id: responseId,
+    p_revision: expectedRevision,
+    p_last_question_id: lastQuestionId,
+    p_answers: toAnswersJson(pathAnswers),
+    p_ending_id: walk.endingId,
+    p_idempotency_key: idempotencyKey,
+    p_spam: options.spamSuspected ?? false,
+  });
+  if (completeError) throw completeError;
 
-  if (!updated) {
-    // Raced with a concurrent completion of the same response (e.g. two
-    // tabs both submitting at once) — the other request won; report its
-    // recorded ending rather than erroring.
-    const { data: raced, error: racedError } = await admin
-      .from("responses")
-      .select("ending_id")
-      .eq("id", responseId)
-      .single();
-    if (racedError) throw racedError;
-    return {
-      ok: true,
-      endingId: raced.ending_id ?? walk.endingId,
-      formId: response.form_id,
-      alreadyCompleted: true,
-    };
-  }
-
+  const result = data?.[0];
+  if (!result || result.outcome === "not_found") throw new ResponseNotFoundError();
   return {
     ok: true,
-    endingId: walk.endingId,
-    formId: response.form_id,
-    alreadyCompleted: false,
+    endingId: result.ending_id ?? walk.endingId,
+    formId: result.form_id ?? response.form_id,
+    // "already": another request completed it first; its ending stands.
+    alreadyCompleted: result.outcome === "already",
   };
 }

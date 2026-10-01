@@ -33,34 +33,43 @@ export class FileTooLargeError extends Error {
   }
 }
 
+export class ResponseCompletedError extends Error {
+  constructor() {
+    super("this response was already submitted");
+    this.name = "ResponseCompletedError";
+  }
+}
+
 const HARD_MAX_BYTES = 100 * 1024 * 1024; // absolute ceiling regardless of question config
 
+export type PreparedUpload = {
+  responseId: string;
+  questionId: string;
+  maxBytes: number;
+  acceptedMimeTypes: string[];
+};
+
 /**
- * Validates and stores a respondent file upload. The response must
- * already exist and be non-completed (uploads only ever happen while
- * filling out the form); the question's own `acceptedMimeTypes`/
- * `maxSizeMb` settings (from the published schema, never the client)
- * are the source of truth for limits. Content type is sniffed from the
- * actual bytes, not trusted from the browser's declared type — see
- * sniff.ts.
+ * Everything that can be decided before reading a single byte of the
+ * file: the response exists and is still being filled in (a submitted
+ * response must not gain files), the question is a file question of
+ * its form, and what its size and type limits are. The route uses
+ * `maxBytes` to refuse an oversized body up front, before it's buffered
+ * into memory.
  */
-export async function recordUpload(
+export async function prepareUpload(
   admin: Client,
   responseId: string,
   questionId: string,
-  file: { bytes: Uint8Array; originalFilename: string },
-): Promise<{ uploadId: string }> {
-  if (file.bytes.byteLength > HARD_MAX_BYTES) {
-    throw new FileTooLargeError(HARD_MAX_BYTES / (1024 * 1024));
-  }
-
+): Promise<PreparedUpload> {
   const { data: response, error: responseError } = await admin
     .from("responses")
-    .select("form_version_id")
+    .select("form_version_id, status")
     .eq("id", responseId)
     .maybeSingle();
   if (responseError) throw responseError;
   if (!response) throw new ResponseNotFoundError();
+  if (response.status === "completed") throw new ResponseCompletedError();
 
   const { data: versionRow, error: versionError } = await admin
     .from("form_versions")
@@ -73,15 +82,42 @@ export async function recordUpload(
   const question = compiled.schema.questions.find((q) => q.id === questionId);
   if (!question || question.type !== "file_upload") throw new QuestionNotFoundError();
 
-  if (file.bytes.byteLength > question.settings.maxSizeMb * 1024 * 1024) {
-    throw new FileTooLargeError(question.settings.maxSizeMb);
+  return {
+    responseId,
+    questionId,
+    maxBytes: Math.min(question.settings.maxSizeMb * 1024 * 1024, HARD_MAX_BYTES),
+    acceptedMimeTypes: question.settings.acceptedMimeTypes,
+  };
+}
+
+/**
+ * Validates and stores a respondent file upload against a prepared
+ * context. The question's own `acceptedMimeTypes`/`maxSizeMb` settings
+ * (from the published schema, never the client) are the source of
+ * truth for limits. Content type is sniffed from the actual bytes, not
+ * trusted from the browser's declared type — see sniff.ts. A new file
+ * for the same question replaces the previous one (rows and storage
+ * objects), so resuming and re-uploading doesn't accumulate files.
+ *
+ * Files are recorded as "clean" without a malware scan — see
+ * DECISIONS.md; a scanner must sit between this and "clean" before
+ * accepting untrusted uploads at scale.
+ */
+export async function recordUpload(
+  admin: Client,
+  responseId: string,
+  questionId: string,
+  file: { bytes: Uint8Array; originalFilename: string },
+  prepared?: PreparedUpload,
+): Promise<{ uploadId: string }> {
+  const context = prepared ?? (await prepareUpload(admin, responseId, questionId));
+
+  if (file.bytes.byteLength > context.maxBytes) {
+    throw new FileTooLargeError(Math.floor(context.maxBytes / (1024 * 1024)));
   }
 
   const sniffed = sniffContentType(file.bytes);
-  if (
-    !sniffed ||
-    !matchesAcceptedTypes(sniffed.mimeType, question.settings.acceptedMimeTypes)
-  ) {
+  if (!sniffed || !matchesAcceptedTypes(sniffed.mimeType, context.acceptedMimeTypes)) {
     throw new UnsupportedFileTypeError();
   }
 
@@ -105,7 +141,30 @@ export async function recordUpload(
     })
     .select("id")
     .single();
-  if (insertError) throw insertError;
+  if (insertError) {
+    await admin.storage.from("response-uploads").remove([storagePath]);
+    throw insertError;
+  }
+
+  // Replace any earlier file for this question.
+  const { data: previous } = await admin
+    .from("uploads")
+    .select("id, storage_path")
+    .eq("response_id", responseId)
+    .eq("question_id", questionId)
+    .neq("id", row.id);
+  if (previous?.length) {
+    await admin.storage
+      .from("response-uploads")
+      .remove(previous.map((u) => u.storage_path));
+    await admin
+      .from("uploads")
+      .delete()
+      .in(
+        "id",
+        previous.map((u) => u.id),
+      );
+  }
 
   return { uploadId: row.id };
 }

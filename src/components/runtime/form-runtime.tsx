@@ -332,14 +332,23 @@ export function FormRuntime({
       )}
       style={containerStyle}
     >
-      {/* Spam trap: invisible to people and skipped by keyboard/screen
-          readers; bots that fill every field reveal themselves. */}
+      {/* Spam trap: invisible to people and skipped by keyboard and screen
+          readers; bots that fill every field reveal themselves. The name
+          is deliberately meaningless — browsers and password managers
+          autofill fields called "website", "url" and the like, which once
+          flagged a real person's submission. Autofill hints are switched
+          off for the managers that honour them. A filled trap only flags
+          the response; it is never discarded. */}
       <input
         type="text"
-        name="website"
+        name="zq7_hp"
         tabIndex={-1}
         autoComplete="off"
         aria-hidden="true"
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-bwignore="true"
+        data-form-type="other"
         className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
       />
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-5">

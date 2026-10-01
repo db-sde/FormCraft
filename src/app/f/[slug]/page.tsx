@@ -5,14 +5,15 @@ import { after } from "next/server";
 import { getPublicFormBySlug } from "@/domains/forms";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PublicFormRuntime } from "./public-form-runtime";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
-  const supabase = await createServerSupabaseClient();
-  return getPublicFormBySlug(supabase, slug);
+  // Read through the server: forms and versions aren't readable by
+  // anonymous or other signed-in users at all (row-level security), so
+  // a stranger can't enumerate drafts or other tenants' form ids.
+  return getPublicFormBySlug(createAdminClient(), slug);
 });
 
 // The public respondent runtime: no auth, reads only the currently

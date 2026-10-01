@@ -18,14 +18,24 @@ export type WorkspaceSummary = {
  * first entry (what the app treats as "current") is the user's own
  * default workspace and stays put, rather than silently switching to
  * whichever workspace they were most recently added to.
- * Relies on RLS (`is_workspace_member`) to scope results — never pass
- * a userId filter here, the session's own identity is the boundary. */
+ *
+ * Row-level security lets a member read the whole roster of their
+ * workspaces (so teammates can be listed), which means this must filter
+ * to the caller's *own* membership rows: without that, a shared
+ * workspace yields one entry per teammate, each wearing the caller's
+ * role. The identity comes from the session, never from an argument. */
 export async function listWorkspacesForCurrentUser(
   supabase: Client,
 ): Promise<WorkspaceSummary[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const { data, error } = await supabase
     .from("workspace_members")
     .select("role, workspaces(id, name, slug)")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
   if (error) throw error;

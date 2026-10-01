@@ -347,7 +347,7 @@ export function PublicFormRuntime({
           // in transit is recognised server-side, never duplicated.
           idempotencyKey: current.idempotencyKey,
           // Spam trap (see FormRuntime): real respondents never fill it.
-          website: honeypotValue(),
+          trap: honeypotValue(),
         }),
       });
 
@@ -433,6 +433,6 @@ export function PublicFormRuntime({
 
 /** Reads the hidden spam-trap field FormRuntime renders. */
 function honeypotValue(): string | undefined {
-  const field = document.querySelector<HTMLInputElement>('input[name="website"]');
+  const field = document.querySelector<HTMLInputElement>('input[name="zq7_hp"]');
   return field?.value || undefined;
 }

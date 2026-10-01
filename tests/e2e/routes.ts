@@ -29,7 +29,8 @@ export const PAGE_ROUTES = [
 export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/start": "api-contract.spec.ts, form-starts.spec.ts",
   "/api/responses/[id]/answers": "api-contract.spec.ts, autosave-race.spec.ts",
-  "/api/responses/[id]/complete": "api-contract.spec.ts, duplicate-submit.spec.ts",
+  "/api/responses/[id]/complete":
+    "api-contract.spec.ts, duplicate-submit.spec.ts, submission-integrity.spec.ts",
   "/api/responses/[id]/uploads/[questionId]": "api-contract.spec.ts",
   "/api/responses/events": "api-contract.spec.ts",
   "/api/forms/[id]/export.csv": "access-control.spec.ts",
