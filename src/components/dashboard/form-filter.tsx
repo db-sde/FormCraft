@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,8 @@ import {
 
 const ALL = "__all__";
 
-/** Narrows a list to one form via `?form=<id>`. */
+/** Narrows a list to one form via `?form=<id>`, keeping any other
+ * filters (like a search) and starting back on the first page. */
 export function FormFilter({
   forms,
   value,
@@ -21,12 +22,18 @@ export function FormFilter({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   return (
     <Select
       value={value ?? ALL}
-      onValueChange={(next) =>
-        router.push(next === ALL ? pathname : `${pathname}?form=${next}`)
-      }
+      onValueChange={(next) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("page");
+        if (next === ALL) params.delete("form");
+        else params.set("form", next);
+        const query = params.toString();
+        router.push(query ? `${pathname}?${query}` : pathname);
+      }}
     >
       <SelectTrigger className="w-full sm:w-64" aria-label="Filter by form">
         <SelectValue />

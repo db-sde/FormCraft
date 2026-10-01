@@ -1,17 +1,11 @@
 import "server-only";
 import { headers } from "next/headers";
+import { resolveClientIp } from "./ip";
 
-/** Same best-effort IP extraction as
- * @/app/api/responses/shared.ts's getClientIp, for the Server Actions
- * (auth forms) that have no NextRequest to read headers from directly
- * — next/headers is the Server Action equivalent. Not spoof-proof
- * behind an untrusted proxy; good enough for a bounded rate limiter,
- * not a security boundary on its own. */
+/** The client address for Server Actions (auth forms), which have no
+ * NextRequest to read headers from — next/headers is their equivalent.
+ * See ./ip.ts for how the address is chosen and why. */
 export async function getClientIpFromHeaders(): Promise<string> {
   const h = await headers();
-  const forwardedFor = h.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0].trim();
-  const realIp = h.get("x-real-ip");
-  if (realIp) return realIp;
-  return "unknown";
+  return resolveClientIp((name) => h.get(name));
 }

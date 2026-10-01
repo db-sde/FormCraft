@@ -126,8 +126,13 @@ export async function setSheetsEnabledAction(
   revalidatePath(`/forms/${formId}/integrations`);
 }
 
-export async function disconnectSheetsAction(formId: string): Promise<void> {
+export async function disconnectSheetsAction(formId: string): Promise<{ ok: boolean }> {
   const { supabase } = await getCurrentWorkspace();
-  await disconnectForm(supabase, formId);
+  try {
+    await disconnectForm(supabase, formId);
+  } catch {
+    return { ok: false };
+  }
   revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
 }

@@ -15,6 +15,16 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { LocalTime } from "@/components/local-time";
 
 const STATUS_VARIANT: Record<
@@ -46,6 +56,7 @@ export function SheetsPanel({
   );
   const [enabled, setEnabled] = useState(connection?.enabled ?? true);
   const [pending, startTransition] = useTransition();
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   function handleSaveSpreadsheetId() {
     startTransition(async () => {
@@ -64,8 +75,10 @@ export function SheetsPanel({
 
   function handleDisconnect() {
     startTransition(async () => {
-      await disconnectSheetsAction(formId);
-      toast.success("Disconnected from Google Sheets");
+      const result = await disconnectSheetsAction(formId);
+      setConfirmingDisconnect(false);
+      if (result.ok) toast.success("Disconnected from Google Sheets");
+      else toast.error("Couldn't disconnect. Please try again.");
     });
   }
 
@@ -116,7 +129,7 @@ export function SheetsPanel({
               variant="ghost"
               size="icon-sm"
               className="text-destructive hover:text-destructive"
-              onClick={handleDisconnect}
+              onClick={() => setConfirmingDisconnect(true)}
               disabled={pending}
               aria-label="Disconnect Google Sheets"
             >
@@ -139,6 +152,25 @@ export function SheetsPanel({
           </Button>
         </CardContent>
       </Card>
+
+      <AlertDialog open={confirmingDisconnect} onOpenChange={setConfirmingDisconnect}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect Google Sheets?</AlertDialogTitle>
+            <AlertDialogDescription>
+              New responses will stop being added to your spreadsheet. Rows already there
+              stay put. To start again you&apos;ll need to reconnect and sign in with
+              Google.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Keep connected</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisconnect} disabled={pending}>
+              {pending ? "Disconnecting…" : "Disconnect"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div>
         <h3 className="mb-2 text-sm font-medium">Sync log</h3>

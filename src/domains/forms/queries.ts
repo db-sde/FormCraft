@@ -370,6 +370,22 @@ export async function publishForm(
   };
 }
 
+/** The schema respondents are currently being served, or null when the
+ * form isn't live. */
+export async function getPublishedSchema(
+  supabase: Client,
+  formId: string,
+): Promise<FormSchemaV1 | null> {
+  const { data, error } = await supabase
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .eq("status", "published")
+    .maybeSingle();
+  if (error) throw error;
+  return data ? parseFormSchema(data.schema) : null;
+}
+
 /** Unpublish = archive the currently published version, no
  * replacement. The public runtime treats an unpublished form as
  * unavailable (no `published` row to read) rather than deleting

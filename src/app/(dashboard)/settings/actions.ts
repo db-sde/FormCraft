@@ -36,7 +36,10 @@ export async function updateEmailAction(email: string): Promise<AccountResult> {
     return { ok: false, message: error.message || "Couldn't change your email." };
   return {
     ok: true,
-    message: `We sent a confirmation link to ${parsed.data}. Your email changes once you click it.`,
+    // Supabase is configured to confirm email changes from both
+    // inboxes (double_confirm_changes), so say so — otherwise people click
+    // one link, nothing changes, and it looks broken.
+    message: `We sent a confirmation link to your current address and one to ${parsed.data}. Your email changes once you've clicked both.`,
   };
 }
 

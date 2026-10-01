@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
   const rateLimit = await hitRateLimit(
     createAdminClient(),
     rateLimitKey,
-    20,
+    // Generous: a school, office or event shares one address, and each
+    // respondent starts a form exactly once.
+    120,
     10 * 60 * 1000,
   );
   if (!rateLimit.allowed) {

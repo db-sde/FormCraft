@@ -1,21 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { resolveClientIp } from "@/lib/http/ip";
 
 /** Consistent error shape across every route handler — see docs/api.md. */
 export function apiError(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
-/** Best-effort client IP for rate-limit keying. Not spoof-proof behind
- * an untrusted proxy, but this deployment sits behind a single known
- * reverse proxy (or none, locally) — good enough for a bounded
- * single-instance limiter, not a security boundary on its own. */
+/** The client address for rate-limit keying — see @/lib/http/ip for how
+ * it is chosen and why the first X-Forwarded-For entry isn't trusted. */
 export function getClientIp(request: NextRequest): string {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0].trim();
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return realIp;
-  return "unknown";
+  return resolveClientIp((name) => request.headers.get(name));
 }
 
 const MAX_BODY_BYTES = 200_000;

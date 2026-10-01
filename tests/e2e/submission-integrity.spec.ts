@@ -147,3 +147,35 @@ test("submitting while slow autosaves are still in flight completes", async ({
     await deleteUser(user.userId);
   }
 });
+
+test("a failing start isn't retried on every keystroke, and submitting still gets through", async ({
+  page,
+}) => {
+  const user = await createConfirmedUser("e2e-start-fail");
+  try {
+    const { formId, liveLink } = await createPublishedForm(user, schema);
+    let starts = 0;
+    await page.route("**/api/responses/start", async (route) => {
+      starts += 1;
+      // The server is struggling for the first request only.
+      if (starts === 1) return route.fulfill({ status: 500, body: "{}" });
+      return route.continue();
+    });
+
+    await page.goto(liveLink);
+    await page.getByLabel("Name").pressSequentially("Ada Lovelace", { delay: 20 });
+    await page.getByLabel("Email").pressSequentially("ada@example.com", { delay: 20 });
+    // Many answer changes later, the server was asked once — not once each.
+    expect(starts).toBe(1);
+
+    await page.getByRole("button", { name: "OK" }).click();
+    await page.getByRole("textbox").fill("done");
+    await page.getByRole("button", { name: "Submit" }).click();
+    await expect(page.getByText("Thanks!")).toBeVisible();
+    await expect
+      .poll(() => statusFor(formId))
+      .toEqual([{ status: "completed", spam_suspected: false }]);
+  } finally {
+    await deleteUser(user.userId);
+  }
+});

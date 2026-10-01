@@ -87,6 +87,8 @@ async function startSession(formId: string): Promise<{
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 600;
+/** How long to leave the server alone after a failed start. */
+const START_RETRY_COOLDOWN_MS = 5000;
 
 /**
  * Owns the network/localStorage side of the public response lifecycle
@@ -145,6 +147,7 @@ export function PublicFormRuntime({
   // both runs share one localStorage read and one /start request.
   const resumeCheckRef = useRef<Promise<StoredResponse | null> | null>(null);
   const startPromiseRef = useRef<Promise<StoredResponse> | null>(null);
+  const startFailedAtRef = useRef(0);
 
   const theme = compiled.schema.theme;
 
@@ -207,8 +210,17 @@ export function PublicFormRuntime({
   /** The response row, created on first need and shared by everyone
    * who asks while it's being created. A failed start is retried on the
    * next call. */
-  function ensureSession(): Promise<StoredResponse> {
+  function ensureSession(options?: { force?: boolean }): Promise<StoredResponse> {
     if (sessionRef.current) return Promise.resolve(sessionRef.current);
+    // After a failure, don't re-ask on every answer (that would hammer a
+    // struggling server and eat the rate limit). Submitting always tries.
+    if (
+      !options?.force &&
+      !startPromiseRef.current &&
+      Date.now() - startFailedAtRef.current < START_RETRY_COOLDOWN_MS
+    ) {
+      return Promise.reject(new Error("start recently failed"));
+    }
     if (!startPromiseRef.current) {
       startPromiseRef.current = startSession(formId).then(
         (data) => {
@@ -225,6 +237,7 @@ export function PublicFormRuntime({
         },
         (error: unknown) => {
           startPromiseRef.current = null;
+          startFailedAtRef.current = Date.now();
           throw error;
         },
       );
@@ -315,7 +328,7 @@ export function PublicFormRuntime({
     progressRef.current = { ...progressRef.current, answers };
     let session: StoredResponse;
     try {
-      session = await ensureSession();
+      session = await ensureSession({ force: true });
     } catch {
       return {
         ok: false,

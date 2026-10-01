@@ -10,7 +10,14 @@ import {
   Rocket,
   AtSign,
 } from "lucide-react";
-import { getDraftForEdit } from "@/domains/forms";
+import {
+  buildEmbedSnippet,
+  getDraftForEdit,
+  getFormSettings,
+  getPublishedSchema,
+  hasLeadCapture,
+} from "@/domains/forms";
+import { leadCaptureStatus } from "@/domains/leads";
 import { FormTopBar, FormTitle } from "@/components/forms/form-top-bar";
 import { FormStatusBadge } from "@/components/forms/form-status-badge";
 import {
@@ -53,22 +60,22 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   const { id: formId } = await params;
   const { supabase, workspace, form, isLive, hasUnpublishedChanges, publishState } =
     await loadFormForPage(formId);
-  const draft = await getDraftForEdit(supabase, formId, workspace.id);
-  const hasLeadCapture =
-    draft?.schema.questions.some((q) => q.type === "contact_info") ?? false;
+  const [draft, published, settings] = await Promise.all([
+    getDraftForEdit(supabase, formId, workspace.id),
+    getPublishedSchema(supabase, formId),
+    getFormSettings(supabase, formId, workspace.id),
+  ]);
+  const leadCapture = leadCaptureStatus({
+    draftHasContactStep: hasLeadCapture(draft?.schema.questions ?? []),
+    publishedHasContactStep: hasLeadCapture(published?.questions ?? []),
+    isLive,
+    savesUnfinished: settings?.savePartialResponses ?? true,
+  });
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const url = `${appUrl}/f/${form.slug}`;
   const shareText = encodeURIComponent(`${form.title} — ${url}`);
-  const embedOrigin = appUrl || "";
-  const title = form.title.replace(/"/g, "&quot;");
-  // The form reports its height (postMessage) and this snippet resizes
-  // the iframe to match — only for messages from our own origin and
-  // only for the iframe that sent them.
-  const embed = [
-    `<iframe src="${url}?embed=1" data-formcraft="${form.id}" width="100%" height="600" style="border:0;border-radius:12px;width:100%" title="${title}"></iframe>`,
-    `<script>window.addEventListener("message",function(e){if(e.origin!==${JSON.stringify(embedOrigin)}||!e.data||e.data.type!=="formcraft:height")return;document.querySelectorAll('iframe[data-formcraft="${form.id}"]').forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+"px"})});</script>`,
-  ].join("\n");
+  const embed = buildEmbedSnippet({ formUrl: url, formId: form.id, title: form.title });
 
   return (
     <>
@@ -190,20 +197,24 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
 
         <Section
           icon={Contact}
-          title={hasLeadCapture ? "Lead capture is on" : "Lead capture is off"}
-          description={
-            hasLeadCapture
-              ? "Contact details are saved the moment a respondent passes that step — even if they never submit. You'll find them under Leads."
-              : "Add a Contact info step before your last question to keep the details of people who don't finish."
-          }
+          title={leadCapture.title}
+          description={leadCapture.description}
         >
-          {hasLeadCapture ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/leads?form=${formId}`}>View leads</Link>
-            </Button>
-          ) : (
+          {leadCapture.state === "off" ? (
             <Button asChild size="sm">
               <Link href={`/forms/${formId}?leadCapture=1`}>Add lead capture</Link>
+            </Button>
+          ) : leadCapture.state === "paused" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/forms/${formId}/settings`}>Open settings</Link>
+            </Button>
+          ) : leadCapture.state === "needs_publish" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/forms/${formId}`}>Open in builder</Link>
+            </Button>
+          ) : (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/leads?form=${formId}`}>View leads</Link>
             </Button>
           )}
         </Section>

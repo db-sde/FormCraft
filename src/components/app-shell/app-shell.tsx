@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "cn";
+import { Dialog } from "radix-ui";
 import { createFormAction } from "@/app/(dashboard)/actions";
 import { logOutAction } from "@/app/(auth)/actions";
 import { SubmitButton } from "@/components/submit-button";
@@ -179,6 +180,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebar = (
     <SidebarContent
       workspaceName={workspaceName}
@@ -194,32 +196,41 @@ export function AppShell({
         {sidebar}
       </aside>
 
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Close menu"
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside className="bg-sidebar absolute inset-y-0 left-0 w-72 border-r shadow-xl">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-3 right-3"
-              aria-label="Close menu"
-              onClick={() => setMobileOpen(false)}
-            >
-              <X />
-            </Button>
+      {/* A real modal dialog, so Escape closes it, Tab stays inside it,
+          and focus goes back to the menu button afterwards. */}
+      <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 md:hidden" />
+          <Dialog.Content
+            className="bg-sidebar fixed inset-y-0 left-0 z-50 w-72 border-r shadow-xl outline-none md:hidden"
+            aria-describedby={undefined}
+            onCloseAutoFocus={(event) => {
+              // There's no Dialog.Trigger (the button lives in the top
+              // bar), so say where focus goes back to.
+              event.preventDefault();
+              menuButtonRef.current?.focus();
+            }}
+          >
+            <Dialog.Title className="sr-only">Menu</Dialog.Title>
+            <Dialog.Close asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="absolute top-3 right-3"
+                aria-label="Close menu"
+              >
+                <X />
+              </Button>
+            </Dialog.Close>
             {sidebar}
-          </aside>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="bg-background sticky top-0 z-30 flex h-14 items-center gap-2 border-b px-3 md:hidden">
           <Button
+            ref={menuButtonRef}
             variant="ghost"
             size="icon"
             aria-label="Open menu"
