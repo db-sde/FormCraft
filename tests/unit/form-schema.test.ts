@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseFormSchema,
   validateSemantics,
+  validateForPublish,
   compileFormSchema,
   FormSchemaError,
   describeSchemaProblem,
@@ -108,7 +109,7 @@ describe("compileFormSchema", () => {
     expect(compiled.defaultEndingId).toBe("end1");
   });
 
-  it("allows a backward jump (go-back logic) because the default forward edge is always a possible escape", () => {
+  it("still compiles a form published with a backward jump, so it keeps being served", () => {
     const schema = baseSchema();
     schema.questions.push({
       id: "q3",
@@ -118,10 +119,8 @@ describe("compileFormSchema", () => {
       required: false,
       settings: {},
     });
-    // q3 can conditionally jump back to q2, but q3's unconditional
-    // default edge (used whenever the condition doesn't match) always
-    // reaches the ending, so the compiler must not flag this as an
-    // inescapable loop.
+    // The builder no longer lets a creator save this (see validateSemantics
+    // below), but forms published before that rule must not stop loading.
     schema.logic.push({
       id: "l1",
       questionId: "q3",
@@ -224,6 +223,156 @@ describe("describeSchemaProblem", () => {
         action: { type: "jump_to_question", questionId: "gone" },
       },
     ];
-    expect(describeSchemaProblem(schema)?.message).toMatch(/^Logic:/);
+    expect(describeSchemaProblem(schema)?.message).toMatch(/^Logic rule 1:/);
+  });
+});
+
+describe("forward-only jumps", () => {
+  function withRule(rule: Record<string, unknown>) {
+    const schema = baseSchema();
+    schema.questions.push({
+      id: "q3",
+      type: "short_text",
+      order: 2,
+      label: "Third",
+      required: false,
+      settings: {},
+    });
+    schema.logic.push(rule as never);
+    return parseFormSchema(schema);
+  }
+  const jump = (from: string, to: string) => ({
+    id: "l1",
+    questionId: from,
+    operator: "is_answered",
+    action: { type: "jump_to_question", questionId: to },
+  });
+
+  it("accepts a jump to a later question", () => {
+    expect(() => validateSemantics(withRule(jump("q1", "q3")))).not.toThrow();
+  });
+
+  it("rejects a jump back to an earlier question", () => {
+    expect(() => validateSemantics(withRule(jump("q3", "q2")))).toThrow(
+      expect.objectContaining({ code: "backward_jump" }),
+    );
+  });
+
+  it("rejects a jump to the question itself", () => {
+    expect(() => validateSemantics(withRule(jump("q2", "q2")))).toThrow(
+      expect.objectContaining({ code: "backward_jump" }),
+    );
+  });
+
+  it("measures 'earlier' by the order respondents see, not array position", () => {
+    const schema = baseSchema();
+    schema.questions.reverse(); // array order q2, q1 — but q1.order is 0
+    schema.logic.push(jump("q1", "q2") as never);
+    expect(() => validateSemantics(parseFormSchema(schema))).not.toThrow();
+  });
+
+  it("says which rule is wrong and why, in the creator's terms", () => {
+    const schema = baseSchema();
+    schema.questions.push({
+      id: "q3",
+      type: "short_text",
+      order: 2,
+      label: "Third",
+      required: false,
+      settings: {},
+    });
+    schema.logic.push(
+      {
+        id: "ok",
+        questionId: "q1",
+        operator: "is_answered",
+        action: { type: "jump_to_ending", endingId: "end1" },
+      },
+      jump("q3", "q1") as never,
+    );
+    const problem = describeSchemaProblem(schema);
+    expect(problem?.message).toMatch(/^Logic rule 2: jumps back/);
+    expect(problem?.message).not.toMatch(/q3|q1|rule_/);
+  });
+});
+
+describe("option references in logic", () => {
+  function choice(options: { id: string; label: string }[]) {
+    const schema = baseSchema();
+    schema.questions.push({
+      id: "q_pick",
+      type: "single_select",
+      order: 2,
+      label: "Pick",
+      required: false,
+      settings: { options },
+    } as never);
+    return schema;
+  }
+  const rule = (operator: string, value: unknown) => ({
+    id: "r1",
+    questionId: "q_pick",
+    operator,
+    value,
+    action: { type: "jump_to_ending", endingId: "end1" },
+  });
+
+  it("accepts a rule that checks an option the question has", () => {
+    const schema = choice([{ id: "a", label: "A" }]);
+    schema.logic.push(rule("equals", "a") as never);
+    expect(() => validateSemantics(parseFormSchema(schema))).not.toThrow();
+  });
+
+  it("rejects a rule that checks an option that was deleted", () => {
+    const schema = choice([{ id: "a", label: "A" }]);
+    schema.logic.push(rule("equals", "deleted") as never);
+    expect(() => validateSemantics(parseFormSchema(schema))).toThrow(
+      expect.objectContaining({ code: "dangling_logic_option" }),
+    );
+  });
+
+  it("does not check the value of is_answered", () => {
+    const schema = choice([{ id: "a", label: "A" }]);
+    schema.logic.push(rule("is_answered", undefined) as never);
+    expect(() => validateSemantics(parseFormSchema(schema))).not.toThrow();
+  });
+
+  it("rejects two options sharing an id", () => {
+    const schema = choice([
+      { id: "a", label: "A" },
+      { id: "a", label: "A again" },
+    ]);
+    expect(() => validateSemantics(parseFormSchema(schema))).toThrow(
+      expect.objectContaining({ code: "duplicate_option_id" }),
+    );
+  });
+});
+
+describe("validateForPublish", () => {
+  it("lets a half-built rule be saved as a draft but not published", () => {
+    const schema = baseSchema();
+    schema.logic.push({
+      id: "r1",
+      questionId: "q1",
+      operator: "equals",
+      action: { type: "jump_to_ending", endingId: "end1" },
+    });
+    const parsed = parseFormSchema(schema);
+    expect(() => validateSemantics(parsed)).not.toThrow();
+    expect(() => validateForPublish(parsed)).toThrow(
+      expect.objectContaining({ code: "incomplete_logic_rule" }),
+    );
+  });
+
+  it("publishes a complete rule", () => {
+    const schema = baseSchema();
+    schema.logic.push({
+      id: "r1",
+      questionId: "q1",
+      operator: "equals",
+      value: "yes",
+      action: { type: "jump_to_ending", endingId: "end1" },
+    });
+    expect(() => validateForPublish(parseFormSchema(schema))).not.toThrow();
   });
 });

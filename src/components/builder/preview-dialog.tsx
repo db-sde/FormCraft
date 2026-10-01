@@ -8,6 +8,7 @@ import {
   validateSemantics,
   compileFormSchema,
   FormSchemaError,
+  schemaErrorMessage,
 } from "@/domains/forms/schema";
 import { FormRuntime } from "@/components/runtime/form-runtime";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -42,7 +43,9 @@ export function PreviewDialog({
       return { ok: true as const, compiled: compileFormSchema(parsed) };
     } catch (error) {
       const message =
-        error instanceof FormSchemaError ? error.message : "Unable to preview this form.";
+        error instanceof FormSchemaError
+          ? schemaErrorMessage(error)
+          : "Unable to preview this form.";
       return { ok: false as const, message };
     }
   }, [schema]);

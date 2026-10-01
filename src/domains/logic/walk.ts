@@ -21,16 +21,15 @@ export function walkForm(compiled: CompiledFormV1, answers: AnswerMap): WalkResu
   let currentId: string | undefined = compiled.orderedQuestionIds[0];
   while (currentId) {
     if (seen.has(currentId)) {
-      // Defensive: the publish-time compiler already rejects inescapable
-      // loops, so this should be unreachable in practice. If it ever
-      // happens (e.g. future schema evolution loosens that guarantee),
-      // fail closed to the form's default ending rather than looping.
+      // Defensive: evaluateNextStep never steps onto a question already
+      // visited, so this should be unreachable. If a future change breaks
+      // that, fail closed to the form's default ending rather than looping.
       return { visitedQuestionIds: visited, endingId: compiled.defaultEndingId };
     }
     seen.add(currentId);
     visited.push(currentId);
 
-    const next = evaluateNextStep(compiled, currentId, answers);
+    const next = evaluateNextStep(compiled, currentId, answers, seen);
     if (next.type === "ending") {
       return { visitedQuestionIds: visited, endingId: next.endingId };
     }

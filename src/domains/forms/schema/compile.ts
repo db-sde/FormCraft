@@ -113,7 +113,9 @@ export function compileFormSchema(schema: FormSchemaV1): CompiledFormV1 {
   const ordered = [...schema.questions].sort((a, b) => a.order - b.order);
   const defaultEnding = schema.endings.find((e) => e.isDefault);
   if (!defaultEnding) {
-    throw new FormSchemaError("no default ending set", "missing_default_ending");
+    throw new FormSchemaError("no default ending set", "missing_default_ending", {
+      message: "Endings: exactly one ending must be the default.",
+    });
   }
 
   const graph = buildGraph(schema);
@@ -122,6 +124,12 @@ export function compileFormSchema(schema: FormSchemaV1): CompiledFormV1 {
     throw new FormSchemaError(
       `inescapable logic loop detected among questions: ${inescapable.map((c) => c.join(" -> ")).join(", ")}`,
       "inescapable_loop",
+      {
+        message: `Logic: questions ${inescapable[0]
+          .map((id) => ordered.findIndex((q) => q.id === id) + 1)
+          .sort((a, b) => a - b)
+          .join(", ")} send respondents round in a circle they can never leave.`,
+      },
     );
   }
 
@@ -143,6 +151,10 @@ export function compileFormSchema(schema: FormSchemaV1): CompiledFormV1 {
     throw new FormSchemaError(
       `unreachable questions: ${unreachable.map((q) => q.id).join(", ")}`,
       "unreachable_question",
+      {
+        message: `Question ${ordered.indexOf(unreachable[0]) + 1} can never be reached, so respondents would never see it.`,
+        questionId: unreachable[0].id,
+      },
     );
   }
 

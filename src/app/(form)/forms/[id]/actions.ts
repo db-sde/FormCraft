@@ -8,6 +8,7 @@ import {
   renameForm,
   StaleDraftError,
   FormSchemaError,
+  schemaErrorMessage,
   MAX_FORM_TITLE_LENGTH,
 } from "@/domains/forms";
 import type { FormSchemaV1 } from "@/domains/forms";
@@ -70,7 +71,7 @@ export async function saveDraftAction(
       return { ok: false, code: "stale", message: error.message };
     }
     if (error instanceof FormSchemaError) {
-      return { ok: false, code: "invalid", message: error.message };
+      return { ok: false, code: "invalid", message: schemaErrorMessage(error) };
     }
     return { ok: false, code: "unknown", message: "Failed to save. Please try again." };
   }
@@ -102,7 +103,7 @@ export async function publishAction(formId: string): Promise<PublishResult> {
     return { ok: true, publishedVersionNumber: result.versionNumber };
   } catch (error) {
     if (error instanceof FormSchemaError) {
-      return { ok: false, code: "invalid", message: error.message };
+      return { ok: false, code: "invalid", message: schemaErrorMessage(error) };
     }
     return {
       ok: false,

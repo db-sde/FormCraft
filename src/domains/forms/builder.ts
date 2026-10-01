@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type { QuestionType, LogicOperator } from "./schema/question-types";
+import { backwardJumpRules } from "./schema/validate";
 import type {
   QuestionV1,
   OptionV1,
@@ -284,17 +285,62 @@ const NUMERIC_TYPES: QuestionType[] = ["number", "rating", "opinion_scale"];
  * "contains" on non-option types — gt/lt on a text question is
  * structurally valid, just never useful), kept here rather than in the
  * schema module since it's a builder UX concern, not a data-integrity
- * rule. */
+ * rule. Only operators that can actually match are offered: a
+ * multi-select answer is a list, so "is" could never be true, and a
+ * contact block or an uploaded file has no single value to compare. */
 export function availableOperators(type: QuestionType): LogicOperator[] {
-  const base: LogicOperator[] = [
-    "is_answered",
-    "is_not_answered",
-    "equals",
-    "not_equals",
-  ];
+  const answered: LogicOperator[] = ["is_answered", "is_not_answered"];
+  if (type === "contact_info" || type === "file_upload") return answered;
+  if (type === "multi_select") return [...answered, "contains"];
+  const base: LogicOperator[] = [...answered, "equals", "not_equals"];
   if (OPTION_BEARING.includes(type)) return [...base, "contains"];
   if (NUMERIC_TYPES.includes(type)) return [...base, "gt", "lt"];
   return base;
+}
+
+/** Questions a rule on `questionId` may jump to: only ones further on.
+ * Jumping back can trap a respondent in a loop (see backwardJumpRules). */
+export function questionsAfter(
+  questions: QuestionV1[],
+  questionId: string,
+): QuestionV1[] {
+  const ordered = [...questions].sort((a, b) => a.order - b.order);
+  const index = ordered.findIndex((q) => q.id === questionId);
+  return index === -1 ? [] : ordered.slice(index + 1);
+}
+
+/** Rules on `questionId` that compare against an option no longer in
+ * `remainingOptionIds` — deleting an option leaves them pointing at
+ * nothing, so they'd silently stop matching. */
+export function rulesBrokenByOptionRemoval(
+  logic: LogicRuleV1[],
+  questionId: string,
+  remainingOptionIds: ReadonlySet<string>,
+): LogicRuleV1[] {
+  return logic.filter(
+    (rule) =>
+      rule.questionId === questionId &&
+      (rule.operator === "equals" ||
+        rule.operator === "not_equals" ||
+        rule.operator === "contains") &&
+      typeof rule.value === "string" &&
+      !remainingOptionIds.has(rule.value),
+  );
+}
+
+/** Rules that start jumping backwards once the questions are arranged
+ * as `next` — a reorder that would create them is refused. */
+export function rulesBrokenByReorder(
+  logic: LogicRuleV1[],
+  before: QuestionV1[],
+  next: QuestionV1[],
+): LogicRuleV1[] {
+  const alreadyBackward = new Set(
+    backwardJumpRules({ questions: before, logic }).map((r) => r.id),
+  );
+  return backwardJumpRules({ questions: next, logic }).filter(
+    (r) => !alreadyBackward.has(r.id),
+  );
 }
 
 // --- changing a question's type ------------------------------------------

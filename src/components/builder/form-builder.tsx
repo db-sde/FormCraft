@@ -41,6 +41,8 @@ import {
   insertLeadCapture,
   convertQuestion,
   rulesBrokenByTypeChange,
+  rulesBrokenByOptionRemoval,
+  rulesBrokenByReorder,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
@@ -309,6 +311,31 @@ export function FormBuilder({
   }, [schema]);
 
   function updateQuestion(next: QuestionV1) {
+    // Deleting an option a logic rule checks would leave the rule
+    // pointing at nothing, so those rules go with it (and we say so).
+    const remaining = (next.settings as { options?: { id: string }[] }).options;
+    const removed = remaining
+      ? rulesBrokenByOptionRemoval(
+          schema.logic,
+          next.id,
+          new Set(remaining.map((o) => o.id)),
+        )
+      : [];
+    if (removed.length > 0) {
+      const gone = new Set(removed.map((r) => r.id));
+      toast(
+        removed.length === 1
+          ? "1 logic rule removed"
+          : `${removed.length} logic rules removed`,
+        { description: "They checked an option you just deleted." },
+      );
+      setSchema((s) => ({
+        ...s,
+        questions: s.questions.map((q) => (q.id === next.id ? next : q)),
+        logic: s.logic.filter((r) => !gone.has(r.id)),
+      }));
+      return;
+    }
     setSchema((s) => ({
       ...s,
       questions: s.questions.map((q) => (q.id === next.id ? next : q)),
@@ -458,6 +485,17 @@ export function FormBuilder({
   }
 
   function handleMove(id: string, direction: "up" | "down") {
+    const moved = moveQuestionAt(schema.questions, id, direction);
+    // A rule may only jump forward. If this move would turn one into a
+    // jump back, refuse rather than quietly rewriting the creator's logic.
+    const broken = rulesBrokenByReorder(schema.logic, schema.questions, moved);
+    if (broken.length > 0) {
+      toast.error("Can't move it there", {
+        description:
+          "A logic rule would then jump back to an earlier question. Change that rule first.",
+      });
+      return;
+    }
     setSchema((s) => ({ ...s, questions: moveQuestionAt(s.questions, id, direction) }));
   }
 

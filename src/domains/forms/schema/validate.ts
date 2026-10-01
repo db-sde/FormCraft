@@ -2,17 +2,80 @@ import {
   FormSchemaV1,
   OPTION_BEARING_TYPES,
   type FormSchemaV1 as FormSchemaV1Type,
+  type LogicRuleV1,
+  type QuestionV1,
 } from "./v1";
+
+export interface SchemaProblem {
+  /** Creator-facing explanation, prefixed with where the problem is. */
+  message: string;
+  /** Set when the problem belongs to one question / ending, so the
+   * builder can show it next to that item's settings. */
+  questionId?: string;
+  endingId?: string;
+}
 
 export class FormSchemaError extends Error {
   constructor(
     message: string,
     public readonly code: string,
+    /** What to tell the creator — `message` is for logs and tests and
+     * may name raw ids. */
+    public readonly problem?: SchemaProblem,
   ) {
     super(message);
     this.name = "FormSchemaError";
   }
 }
+
+/** The wording to show a creator for a rejected draft. */
+export function schemaErrorMessage(error: FormSchemaError): string {
+  return error.problem?.message ?? error.message;
+}
+
+/** Questions in the order respondents see them — the same sort the
+ * publish compiler uses, so "earlier" and "later" mean the same thing
+ * everywhere. */
+function sortedQuestions(questions: readonly QuestionV1[]): QuestionV1[] {
+  return [...questions].sort((a, b) => a.order - b.order);
+}
+
+/** Rules whose "jump to question" lands on the source question itself
+ * or on one before it. Going backwards can trap a respondent: the rule
+ * that sent them back matches again on the way past, forever. Forward
+ * jumps cannot loop, so that is the only direction the builder allows. */
+export function backwardJumpRules(
+  schema: Pick<FormSchemaV1Type, "questions" | "logic">,
+): LogicRuleV1[] {
+  const position = new Map(sortedQuestions(schema.questions).map((q, i) => [q.id, i]));
+  return schema.logic.filter((rule) => {
+    if (rule.action.type !== "jump_to_question") return false;
+    const from = position.get(rule.questionId);
+    const to = position.get(rule.action.questionId);
+    return from !== undefined && to !== undefined && to <= from;
+  });
+}
+
+/** Option ids a choice question offers; null for other question types. */
+export function optionIdsOf(question: QuestionV1): Set<string> | null {
+  if (!OPTION_BEARING_TYPES.has(question.type)) return null;
+  const settings = question.settings as { options?: { id: string }[] };
+  return new Set((settings.options ?? []).map((o) => o.id));
+}
+
+function ruleNumber(schema: FormSchemaV1Type, rule: LogicRuleV1): number {
+  return schema.logic.findIndex((r) => r.id === rule.id) + 1;
+}
+
+function questionNumber(schema: FormSchemaV1Type, questionId: string): number {
+  return sortedQuestions(schema.questions).findIndex((q) => q.id === questionId) + 1;
+}
+
+function ruleProblem(schema: FormSchemaV1Type, rule: LogicRuleV1, text: string) {
+  return { message: `Logic rule ${ruleNumber(schema, rule)}: ${text}` };
+}
+
+const OPERATORS_NEEDING_VALUE = new Set(["equals", "not_equals", "contains", "gt", "lt"]);
 
 /** Stage 1+2: transport decode + structural validation. */
 export function parseFormSchema(raw: unknown): FormSchemaV1Type {
@@ -38,16 +101,35 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
       throw new FormSchemaError(
         `duplicate question id: ${q.id}`,
         "duplicate_question_id",
+        { message: "Two questions share the same id. Delete one and add it again." },
       );
     }
     questionIds.add(q.id);
+
+    const optionIds = new Set<string>();
+    const options = (q.settings as { options?: { id: string }[] }).options ?? [];
+    for (const option of options) {
+      if (optionIds.has(option.id)) {
+        throw new FormSchemaError(
+          `question ${q.id} has duplicate option id: ${option.id}`,
+          "duplicate_option_id",
+          {
+            message: `Question ${questionNumber(schema, q.id)}: two options share the same id. Delete one and add it again.`,
+            questionId: q.id,
+          },
+        );
+      }
+      optionIds.add(option.id);
+    }
   }
 
   const endingIds = new Set<string>();
   let defaultCount = 0;
   for (const e of schema.endings) {
     if (endingIds.has(e.id)) {
-      throw new FormSchemaError(`duplicate ending id: ${e.id}`, "duplicate_ending_id");
+      throw new FormSchemaError(`duplicate ending id: ${e.id}`, "duplicate_ending_id", {
+        message: "Two endings share the same id. Delete one and add it again.",
+      });
     }
     endingIds.add(e.id);
     if (e.isDefault) defaultCount += 1;
@@ -56,6 +138,7 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
     throw new FormSchemaError(
       `exactly one ending must be marked isDefault (found ${defaultCount})`,
       "invalid_default_ending",
+      { message: "Endings: exactly one ending must be the default." },
     );
   }
 
@@ -65,6 +148,7 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
       throw new FormSchemaError(
         `duplicate logic rule id: ${rule.id}`,
         "duplicate_logic_id",
+        { message: "Two logic rules share the same id. Delete one and add it again." },
       );
     }
     logicIds.add(rule.id);
@@ -74,6 +158,11 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
       throw new FormSchemaError(
         `logic rule ${rule.id} references unknown question ${rule.questionId}`,
         "dangling_logic_source",
+        ruleProblem(
+          schema,
+          rule,
+          "the question it checks was deleted. Pick another question or delete the rule.",
+        ),
       );
     }
 
@@ -81,6 +170,28 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
       throw new FormSchemaError(
         `logic rule ${rule.id} uses "contains" against non-option question ${rule.questionId}`,
         "invalid_operator_for_type",
+        ruleProblem(schema, rule, "“contains” only works on choice questions."),
+      );
+    }
+
+    const optionIds = optionIdsOf(sourceQuestion);
+    if (
+      optionIds &&
+      (rule.operator === "equals" ||
+        rule.operator === "not_equals" ||
+        rule.operator === "contains") &&
+      rule.value !== undefined &&
+      rule.value !== null &&
+      (typeof rule.value !== "string" || !optionIds.has(rule.value))
+    ) {
+      throw new FormSchemaError(
+        `logic rule ${rule.id} compares against an option that ${rule.questionId} does not have`,
+        "dangling_logic_option",
+        ruleProblem(
+          schema,
+          rule,
+          "the option it checks no longer exists. Choose an option again.",
+        ),
       );
     }
 
@@ -91,12 +202,55 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
       throw new FormSchemaError(
         `logic rule ${rule.id} jumps to unknown question ${rule.action.questionId}`,
         "dangling_logic_target",
+        ruleProblem(
+          schema,
+          rule,
+          "the question it jumps to was deleted. Pick another question.",
+        ),
       );
     }
     if (rule.action.type === "jump_to_ending" && !endingIds.has(rule.action.endingId)) {
       throw new FormSchemaError(
         `logic rule ${rule.id} jumps to unknown ending ${rule.action.endingId}`,
         "dangling_logic_target",
+        ruleProblem(
+          schema,
+          rule,
+          "the ending it jumps to was deleted. Pick another ending.",
+        ),
+      );
+    }
+  }
+
+  const backward = backwardJumpRules(schema)[0];
+  if (backward) {
+    throw new FormSchemaError(
+      `logic rule ${backward.id} jumps back to question ${(backward.action as { questionId: string }).questionId}`,
+      "backward_jump",
+      ruleProblem(
+        schema,
+        backward,
+        "jumps back to an earlier question, which could trap respondents in a loop. Jump to a later question or an ending instead.",
+      ),
+    );
+  }
+}
+
+/**
+ * Everything validateSemantics checks, plus what only matters once a
+ * form goes live: a rule still waiting for its comparison value would
+ * quietly never match ("is" an unset option) or always match ("is not"
+ * an unset option), so publishing is refused until it's filled in.
+ */
+export function validateForPublish(schema: FormSchemaV1Type): void {
+  validateSemantics(schema);
+  for (const rule of schema.logic) {
+    if (!OPERATORS_NEEDING_VALUE.has(rule.operator)) continue;
+    if (rule.value === undefined || rule.value === null || rule.value === "") {
+      throw new FormSchemaError(
+        `logic rule ${rule.id} has no value to compare against`,
+        "incomplete_logic_rule",
+        ruleProblem(schema, rule, "choose a value to compare against."),
       );
     }
   }
@@ -127,15 +281,6 @@ const FIELD_PROBLEMS: Record<string, string> = {
   description: "description is too long",
 };
 
-export interface SchemaProblem {
-  /** Creator-facing explanation, prefixed with where the problem is. */
-  message: string;
-  /** Set when the problem belongs to one question / ending, so the
-   * builder can show it next to that item's settings. */
-  questionId?: string;
-  endingId?: string;
-}
-
 /**
  * Explains, in creator-facing language, why a draft can't be saved —
  * or returns null when it's valid. The builder runs this before every
@@ -154,7 +299,7 @@ export function describeSchemaProblem(raw: unknown): SchemaProblem | null {
     validateSemantics(result.data);
   } catch (error) {
     if (error instanceof FormSchemaError) {
-      return { message: "Logic: a rule points at something that no longer exists" };
+      return error.problem ?? { message: error.message };
     }
     throw error;
   }

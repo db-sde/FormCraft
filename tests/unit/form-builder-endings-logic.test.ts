@@ -8,8 +8,12 @@ import {
   removeLogicRule,
   rulesReferencingQuestion,
   rulesReferencingEnding,
+  availableOperators,
+  questionsAfter,
+  rulesBrokenByOptionRemoval,
+  rulesBrokenByReorder,
 } from "@/domains/forms/builder";
-import type { EndingV1, LogicRuleV1 } from "@/domains/forms/schema/v1";
+import type { EndingV1, LogicRuleV1, QuestionV1 } from "@/domains/forms/schema/v1";
 
 function twoEndings(): EndingV1[] {
   return [
@@ -93,5 +97,87 @@ describe("logic rules", () => {
       endingId: "end_y",
     });
     expect(rulesReferencingEnding([targeting, unrelated], "end_x")).toEqual([targeting]);
+  });
+});
+
+function q(id: string, order: number): QuestionV1 {
+  return { id, type: "short_text", order, label: id, required: false, settings: {} };
+}
+
+describe("operators offered per question type", () => {
+  it("only offers 'is answered' checks for a contact block or an uploaded file", () => {
+    expect(availableOperators("contact_info")).toEqual([
+      "is_answered",
+      "is_not_answered",
+    ]);
+    expect(availableOperators("file_upload")).toEqual(["is_answered", "is_not_answered"]);
+  });
+
+  it("offers 'contains' but not 'is' for multi-select, whose answer is a list", () => {
+    const ops = availableOperators("multi_select");
+    expect(ops).toContain("contains");
+    expect(ops).not.toContain("equals");
+  });
+
+  it("still offers comparisons where they can match", () => {
+    expect(availableOperators("single_select")).toEqual(
+      expect.arrayContaining(["equals", "not_equals", "contains"]),
+    );
+    expect(availableOperators("rating")).toEqual(expect.arrayContaining(["gt", "lt"]));
+  });
+});
+
+describe("jump targets", () => {
+  it("offers only questions after the source, in the order respondents see them", () => {
+    const questions = [q("c", 2), q("a", 0), q("b", 1)]; // array order differs
+    expect(questionsAfter(questions, "a").map((x) => x.id)).toEqual(["b", "c"]);
+    expect(questionsAfter(questions, "c")).toEqual([]);
+  });
+});
+
+describe("rules left behind by edits", () => {
+  const rule = (value: unknown, questionId = "q_pick"): LogicRuleV1 => ({
+    id: `r_${String(value)}`,
+    questionId,
+    operator: "equals",
+    value,
+    action: { type: "jump_to_ending", endingId: "e" },
+  });
+
+  it("finds rules checking an option that was deleted, and only those", () => {
+    const logic = [rule("keep"), rule("gone"), rule("gone", "other")];
+    expect(
+      rulesBrokenByOptionRemoval(logic, "q_pick", new Set(["keep"])).map((r) => r.id),
+    ).toEqual(["r_gone"]);
+  });
+
+  it("flags a reorder that turns a forward jump into a backward one", () => {
+    const before = [q("a", 0), q("b", 1), q("c", 2)];
+    const logic: LogicRuleV1[] = [
+      {
+        id: "j",
+        questionId: "a",
+        operator: "is_answered",
+        action: { type: "jump_to_question", questionId: "b" },
+      },
+    ];
+    const swapped = [q("b", 0), q("a", 1), q("c", 2)];
+    expect(rulesBrokenByReorder(logic, before, swapped).map((r) => r.id)).toEqual(["j"]);
+    expect(
+      rulesBrokenByReorder(logic, before, [q("a", 0), q("c", 1), q("b", 2)]),
+    ).toEqual([]);
+  });
+
+  it("does not blame a reorder for a jump that was already backward", () => {
+    const before = [q("a", 0), q("b", 1)];
+    const logic: LogicRuleV1[] = [
+      {
+        id: "old",
+        questionId: "b",
+        operator: "is_answered",
+        action: { type: "jump_to_question", questionId: "a" },
+      },
+    ];
+    expect(rulesBrokenByReorder(logic, before, [q("a", 0), q("b", 1)])).toEqual([]);
   });
 });

@@ -8,7 +8,11 @@ import type {
   LogicActionV1,
 } from "@/domains/forms/schema/v1";
 import type { LogicOperator } from "@/domains/forms/schema/question-types";
-import { createLogicRule, availableOperators } from "@/domains/forms/builder";
+import {
+  createLogicRule,
+  availableOperators,
+  questionsAfter,
+} from "@/domains/forms/builder";
 import { LogicValueControl } from "./logic-value-control";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +63,22 @@ export function LogicEditor({
         endingId: firstEnding.id,
       }),
     ]);
+  }
+
+  const laterIds = (rule: LogicRuleV1) =>
+    new Set(questionsAfter(questions, rule.questionId).map((q) => q.id));
+
+  // Only questions further on — jumping back could loop forever. A rule
+  // saved before that restriction keeps its old target visible (marked)
+  // so the creator can see what to replace.
+  function jumpTargets(rule: LogicRuleV1): QuestionV1[] {
+    const later = questionsAfter(questions, rule.questionId);
+    if (rule.action.type !== "jump_to_question") return later;
+    const current = rule.action.questionId;
+    const stale = later.some((q) => q.id === current)
+      ? undefined
+      : questions.find((q) => q.id === current);
+    return stale ? [stale, ...later] : later;
   }
 
   function removeRule(id: string) {
@@ -170,7 +190,7 @@ export function LogicEditor({
                         ? {
                             type: "jump_to_question",
                             questionId:
-                              answerable.find((q) => q.id !== rule.questionId)?.id ?? "",
+                              questionsAfter(questions, rule.questionId)[0]?.id ?? "",
                           }
                         : {
                             type: "jump_to_ending",
@@ -186,7 +206,12 @@ export function LogicEditor({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="jump_to_question">Jump to question</SelectItem>
+                    <SelectItem
+                      value="jump_to_question"
+                      disabled={questionsAfter(questions, rule.questionId).length === 0}
+                    >
+                      Jump to question
+                    </SelectItem>
                     <SelectItem value="jump_to_ending">Jump to ending</SelectItem>
                   </SelectContent>
                 </Select>
@@ -204,9 +229,12 @@ export function LogicEditor({
                       <SelectValue placeholder="Choose question" />
                     </SelectTrigger>
                     <SelectContent>
-                      {questions.map((q) => (
+                      {jumpTargets(rule).map((q) => (
                         <SelectItem key={q.id} value={q.id}>
                           {q.label || "Untitled question"}
+                          {laterIds(rule).has(q.id)
+                            ? ""
+                            : " (earlier — pick a later one)"}
                         </SelectItem>
                       ))}
                     </SelectContent>

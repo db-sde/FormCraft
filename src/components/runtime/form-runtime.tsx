@@ -108,9 +108,19 @@ export function FormRuntime({
   const theme = compiled.schema.theme;
   const question = compiled.schema.questions.find((q) => q.id === currentId);
   const currentIndex = compiled.orderedQuestionIds.indexOf(currentId);
+  // Where the respondent goes from here, given the questions they have
+  // already been shown (so a form with a legacy backward jump can't
+  // send them round in circles).
+  function stepFrom(questionId: string, from: AnswerMap) {
+    return evaluateNextStep(
+      compiled,
+      questionId,
+      from,
+      new Set([...history, questionId]),
+    );
+  }
   const isLastStep =
-    question !== undefined &&
-    evaluateNextStep(compiled, question.id, answers).type === "ending";
+    question !== undefined && stepFrom(question.id, answers).type === "ending";
 
   async function finish(finalAnswers: AnswerMap, endingId: string) {
     if (!onComplete) {
@@ -157,7 +167,7 @@ export function FormRuntime({
     if (!isEntryScreen(question) && hasAnswer(question, currentAnswers[question.id])) {
       onStepEvent?.("question_answered", question.id);
     }
-    const next = evaluateNextStep(compiled, question.id, currentAnswers);
+    const next = stepFrom(question.id, currentAnswers);
     if (next.type === "ending") {
       void finish(currentAnswers, next.endingId);
     } else {
@@ -178,7 +188,7 @@ export function FormRuntime({
 
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     const isTypingOther = typeof value === "string" && value.startsWith(OTHER_PREFIX);
-    const willEnd = evaluateNextStep(compiled, question.id, next).type === "ending";
+    const willEnd = stepFrom(question.id, next).type === "ending";
     // Never auto-submit: the last step always waits for an explicit
     // click on Submit, so a stray tap can't end the form early.
     if (AUTO_ADVANCE_TYPES.has(question.type) && !isTypingOther && !willEnd) {

@@ -2,7 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { customAlphabet, nanoid } from "nanoid";
 import { slugify } from "@/domains/workspaces";
-import { parseFormSchema, validateSemantics } from "./schema/validate";
+import {
+  parseFormSchema,
+  validateForPublish,
+  validateSemantics,
+} from "./schema/validate";
 import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
 import type { FormSchemaV1 } from "./schema/v1";
 
@@ -349,7 +353,7 @@ export async function publishForm(
   if (draftError) throw draftError;
 
   const parsed = parseFormSchema(draft.schema);
-  validateSemantics(parsed);
+  validateForPublish(parsed);
   const compiled = compileFormSchema(parsed);
 
   const { data, error } = await admin.rpc("publish_form_version", {
@@ -394,7 +398,9 @@ export async function renameForm(
   if (error) throw error;
 }
 
-/** Copies a form's current *draft* into a brand-new, unpublished form.
+/** Copies a form's current *draft* into a brand-new, unpublished form,
+ * along with how it treats unfinished responses (a copy of a form that
+ * deliberately doesn't keep them shouldn't start keeping them).
  * Responses, integrations, and publish state are never copied. */
 export async function duplicateForm(
   supabase: Client,
@@ -405,10 +411,18 @@ export async function duplicateForm(
   const draft = await getDraftForEdit(supabase, formId, workspaceId);
   if (!draft) return null;
   const title = `${draft.formTitle} (copy)`.slice(0, MAX_FORM_TITLE_LENGTH);
-  return createFormWithDraft(supabase, workspaceId, userId, title, {
+  const settings = await getFormSettings(supabase, formId, workspaceId);
+  const copy = await createFormWithDraft(supabase, workspaceId, userId, title, {
     ...draft.schema,
     meta: { ...draft.schema.meta, title },
   });
+  if (copy && settings) {
+    await updatePartialResponseSettings(supabase, copy.id, workspaceId, {
+      savePartialResponses: settings.savePartialResponses,
+      partialRetentionDays: settings.partialRetentionDays,
+    });
+  }
+  return copy;
 }
 
 /**
