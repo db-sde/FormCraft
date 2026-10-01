@@ -34,6 +34,25 @@ Run: `npm run test` / `npm run test:watch`.
 Requires `supabase start` locally (documented in `README.md`). Run:
 `npm run test:integration`.
 
+## Guard rails (run these before and after every change)
+
+- `npm run check` — lint, typecheck, formatting, unit tests (~20 s).
+  Runs automatically on every commit via `.githooks/pre-commit`
+  (installed by `npm install`; bypass only with `--no-verify`).
+- `npm run verify` — check + integration + E2E on desktop and mobile
+  (needs `supabase start`; builds a production server).
+- CI runs both jobs on every push/PR, and also fails if the generated
+  database types drift from the migrations.
+- `tests/e2e/routes.ts` lists every page and API route with the spec
+  that covers it; `tests/unit/route-coverage.test.ts` fails if a route
+  is added or removed without updating it.
+- Broad specs that catch "I broke a page I wasn't looking at":
+  `smoke.spec.ts` (every page renders: no error screen, uncaught
+  error, console error, or sideways scroll on phones),
+  `access-control.spec.ts` (another workspace's data stays invisible;
+  signed-out visitors are bounced), `api-contract.spec.ts` (status
+  codes and error shapes of the public API, spam trap, cron auth).
+
 ## E2E (Playwright) — `tests/e2e`
 
 Critical journeys, one spec file per journey group. Status as of this

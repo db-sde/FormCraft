@@ -73,13 +73,21 @@ jobs:
             --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
             | grep -E '^[A-Z_]+=' | sed -E 's/^([A-Z_]+)="(.*)"$/\1=\2/' >> "$GITHUB_ENV"
 
+      # Generated DB types must match the migrations — catches a schema
+      # change committed without regenerating them.
+      - name: Database types are up to date
+        run: |
+          npm run db:types
+          npx prettier --write src/lib/supabase/database.types.ts
+          git diff --exit-code src/lib/supabase/database.types.ts
+
       - run: npm run test:integration
 
       - run: npx playwright install --with-deps chromium
 
       # webServer in playwright.config.ts runs `npm run build && npm
       # run start` itself against the now-exported Supabase env vars.
-      - run: npx playwright test --project=chromium
+      - run: npx playwright test --project=chromium --project=mobile
 
       - uses: actions/upload-artifact@v4
         if: failure()

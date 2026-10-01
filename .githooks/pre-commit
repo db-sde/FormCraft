@@ -1,0 +1,11 @@
+#!/bin/sh
+# Blocks commits that break lint, types, formatting or unit tests.
+# Installed by `npm install` (package.json "prepare" sets core.hooksPath).
+# Full suite (integration + E2E): `npm run verify`. Bypass in an
+# emergency with `git commit --no-verify`.
+echo "pre-commit: running npm run check…"
+npm run check --silent || {
+  echo ""
+  echo "pre-commit: checks failed — commit blocked. Fix the errors above (or run 'npm run format')."
+  exit 1
+}

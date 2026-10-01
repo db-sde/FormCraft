@@ -17,7 +17,10 @@
     "e2e:ui": "playwright test --ui",
     "db:migrate": "supabase db push",
     "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
-    "db:seed-templates": "tsx scripts/seed-templates.ts"
+    "db:seed-templates": "tsx scripts/seed-templates.ts",
+    "check": "npm run lint && npm run typecheck && npm run format:check && npm run test",
+    "verify": "npm run check && npm run test:integration && playwright test --project=chromium --project=mobile",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

@@ -14,7 +14,18 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile-safari", use: { ...devices["iPhone 14"] } },
+    // Phone-sized Chromium (runs everywhere CI does, unlike WebKit),
+    // limited to the respondent experience and the page smoke test.
+    {
+      name: "mobile",
+      use: { ...devices["Pixel 7"] },
+      testMatch: [
+        "smoke.spec.ts",
+        "lead-capture.spec.ts",
+        "form-starts.spec.ts",
+        "partial-response-resume.spec.ts",
+      ],
+    },
   ],
   webServer: {
     command: "npm run build && npm run start",
