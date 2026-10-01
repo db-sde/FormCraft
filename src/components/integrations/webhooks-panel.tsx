@@ -2,21 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Trash2, Send, Copy } from "lucide-react";
+import { Check, Copy, KeyRound, Trash2, Webhook } from "lucide-react";
 import type { WebhookEndpoint, DeliveryLogEntry } from "@/domains/webhooks";
 import {
   createWebhookEndpointAction,
   setWebhookEnabledAction,
   deleteWebhookEndpointAction,
   sendTestDeliveryAction,
-} from "@/app/(form)/forms/[id]/integrations/actions";
-import { Button } from "@/components/ui/button";
+} from "@/app/(form)/forms/[id]/(sections)/integrations/actions";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LocalTime } from "@/components/local-time";
+import { DeliveryRow } from "./delivery-row";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,19 +23,20 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const STATUS_VARIANT: Record<
-  DeliveryLogEntry["status"],
-  "default" | "secondary" | "destructive"
-> = {
-  succeeded: "default",
-  pending: "secondary",
-  failed: "destructive",
-  exhausted: "destructive",
-};
+function host(url: string) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
 
+/** Webhook endpoints (Part 5 §5.7): add, one-time secret, enable,
+ * test, delete, and each endpoint's last five deliveries. */
 export function WebhooksPanel({
   formId,
   initialEndpoints,
@@ -54,11 +53,14 @@ export function WebhooksPanel({
     endpointId: string;
     secret: string;
   } | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [secretCopied, setSecretCopied] = useState(false);
+  const [adding, startAdding] = useTransition();
+  const [testing, setTesting] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
   const [pendingDelete, setPendingDelete] = useState<WebhookEndpoint | null>(null);
 
   function handleAdd() {
-    startTransition(async () => {
+    startAdding(async () => {
       const result = await createWebhookEndpointAction(formId, url.trim());
       if (result.ok) {
         setUrl("");
@@ -72,8 +74,11 @@ export function WebhooksPanel({
             createdAt: result.createdAt,
           },
         ]);
+        setSecretCopied(false);
         setRevealedSecret({ endpointId: result.id, secret: result.signingSecret });
-        toast.success("Webhook added");
+        toast.success("Webhook added.", {
+          description: "Save the signing secret below.",
+        });
       } else {
         toast.error(result.message);
       }
@@ -91,7 +96,7 @@ export function WebhooksPanel({
         await setWebhookEnabledAction(formId, endpointId, enabled);
       } catch {
         setEnabled(!enabled);
-        toast.error("Couldn't update the webhook. Please try again.");
+        toast.error("Couldn't update the webhook.", { description: "Try again." });
       }
     });
   }
@@ -103,152 +108,188 @@ export function WebhooksPanel({
     startTransition(async () => {
       try {
         await deleteWebhookEndpointAction(formId, endpoint.id);
-        toast("Webhook deleted");
+        toast.success("Webhook deleted.");
       } catch {
         setEndpoints((eps) => [...eps, endpoint]);
-        toast.error("Couldn't delete the webhook. Please try again.");
+        toast.error("Couldn't delete the webhook.", { description: "Try again." });
       }
     });
   }
 
-  function handleTest(endpointId: string) {
-    startTransition(async () => {
+  async function handleTest(endpointId: string) {
+    setTesting(endpointId);
+    try {
       const result = await sendTestDeliveryAction(endpointId);
-      if (result.ok) toast.success("Test delivery succeeded");
-      else toast.error(`Test delivery failed${result.error ? `: ${result.error}` : ""}`);
-    });
+      if (result.ok) toast.success("Test delivery succeeded.");
+      else
+        toast.error("Test delivery failed:", {
+          description: result.error ?? "no response.",
+        });
+    } finally {
+      setTesting(null);
+    }
+  }
+
+  async function copySecret(secret: string) {
+    try {
+      await navigator.clipboard.writeText(secret);
+      setSecretCopied(true);
+    } catch {
+      toast.error("Couldn't copy.", {
+        description: "Select the secret and copy it yourself.",
+      });
+    }
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3.5">
+      <form
+        className="border-ink bg-card flex gap-2.5 rounded-lg border-[1.5px] p-3.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (url.trim()) handleAdd();
+        }}
+      >
+        <Input
+          type="url"
+          inputMode="url"
+          aria-label="Webhook URL"
+          placeholder="https://example.com/webhook"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="font-mono text-[13.5px]"
+        />
+        <Button
+          type="submit"
+          className="h-[42px] px-[18px]"
+          data-loading={adding || undefined}
+          disabled={adding || !url.trim()}
+        >
+          {adding && <ButtonSpinner />}
+          {adding ? "Adding…" : "Add"}
+        </Button>
+      </form>
+
       {revealedSecret && (
-        <Alert>
-          <AlertTitle>Signing secret</AlertTitle>
-          <AlertDescription>
-            <p className="mb-2">
-              Save this now — it won&apos;t be shown again. Use it to verify the{" "}
-              <code>X-FormCraft-Signature</code> header on incoming requests.
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="bg-muted rounded px-2 py-1 text-xs">
-                {revealedSecret.secret}
-              </code>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => {
-                  void navigator.clipboard.writeText(revealedSecret.secret);
-                  toast("Copied");
-                }}
-              >
+        <div className="flex flex-col gap-2.5 rounded-lg border-[1.5px] border-[#2b2118] bg-[#2b2118] px-4 py-3.5 text-[#fffaf1] shadow-[3px_3px_0_#f2b233]">
+          <div className="flex items-center gap-2.5">
+            <KeyRound className="size-[18px] shrink-0 text-[#f2b233]" />
+            <b className="text-[15px]">
+              Signing secret. Save this now, it won&apos;t be shown again.
+            </b>
+          </div>
+          <div className="flex h-[42px] items-center overflow-hidden rounded-sm border-[1.5px] border-[#6f6254]">
+            <code className="min-w-0 flex-1 truncate px-3 font-mono text-[13.5px] text-[#f2b233]">
+              {revealedSecret.secret}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copySecret(revealedSecret.secret)}
+              className={
+                secretCopied
+                  ? "flex h-full items-center gap-1.5 bg-[#dcf1e3] px-3.5 text-[13px] font-bold text-[#1f6b42]"
+                  : "flex h-full items-center gap-1.5 bg-[#f2b233] px-3.5 text-[13px] font-bold text-[#2b2118]"
+              }
+            >
+              {secretCopied ? (
+                <Check className="size-3.5" />
+              ) : (
                 <Copy className="size-3.5" />
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
+              )}
+              {secretCopied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <span className="text-[12.5px] text-[#cdbda4]">
+            Use it to check the <span className="font-mono">X-FormCraft-Signature</span>{" "}
+            header on each request.
+          </span>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add endpoint</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (url.trim()) handleAdd();
-            }}
-          >
-            <Input
-              type="url"
-              inputMode="url"
-              aria-label="Webhook URL"
-              placeholder="https://example.com/webhook"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <Button type="submit" disabled={pending || !url.trim()}>
-              Add
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
       {endpoints.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No webhooks configured. Add one above to have completed responses posted to your
-          own server.
-        </p>
+        <div className="border-ink bg-card flex flex-col items-start gap-1 rounded-lg border-[1.5px] border-dashed p-[18px]">
+          <b className="font-heading text-base">No webhooks configured</b>
+          <span className="text-muted-foreground text-sm">
+            Add an HTTPS endpoint above. We&apos;ll sign each request so you know it came
+            from us.
+          </span>
+        </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {endpoints.map((endpoint) => (
-            <Card key={endpoint.id}>
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <div className="min-w-0">
-                  <CardTitle className="truncate font-mono text-sm font-normal">
-                    {endpoint.url}
-                  </CardTitle>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
+        endpoints.map((endpoint) => {
+          const log = deliveries[endpoint.id] ?? [];
+          return (
+            <div
+              key={endpoint.id}
+              className="border-ink bg-card shadow-card rounded-lg border-[1.5px]"
+            >
+              <div className="border-border flex flex-wrap items-center gap-3 border-b-[1.5px] px-3.5 py-3">
+                <span
+                  className="min-w-0 flex-1 truncate font-mono text-[13.5px]"
+                  title={endpoint.url}
+                >
+                  {endpoint.url}
+                </span>
+                <label className="text-muted-foreground flex items-center gap-2 text-[13px] font-semibold">
+                  {endpoint.enabled ? "Enabled" : "Paused"}
                   <Switch
                     checked={endpoint.enabled}
                     onCheckedChange={(checked) => handleToggle(endpoint.id, checked)}
-                    aria-label="Enabled"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTest(endpoint.id)}
-                    disabled={pending}
-                  >
-                    <Send className="size-3.5" /> Test
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setPendingDelete(endpoint)}
-                    aria-label="Delete webhook"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {(deliveries[endpoint.id]?.length ?? 0) === 0 ? (
-                  <p className="text-muted-foreground text-xs">No deliveries yet.</p>
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-[34px]"
+                  data-loading={testing === endpoint.id || undefined}
+                  onClick={() => void handleTest(endpoint.id)}
+                  disabled={testing !== null}
+                >
+                  {testing === endpoint.id && <ButtonSpinner />}
+                  {testing === endpoint.id ? "Testing…" : "Test"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive size-[34px]"
+                  onClick={() => setPendingDelete(endpoint)}
+                  aria-label={`Delete webhook ${host(endpoint.url)}`}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+              <div className="flex flex-col gap-0.5 px-3.5 pt-2.5 pb-3">
+                <span className="text-muted-foreground pb-1 text-[11px] font-bold tracking-[0.08em] uppercase">
+                  Last 5 deliveries
+                </span>
+                {log.length === 0 ? (
+                  <span className="text-muted-foreground py-2 text-[13.5px]">
+                    No deliveries yet. The next completed response will show up here.
+                  </span>
                 ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {deliveries[endpoint.id]!.slice(0, 5).map((delivery) => (
-                      <div
+                  log
+                    .slice(0, 5)
+                    .map((delivery) => (
+                      <DeliveryRow
                         key={delivery.id}
-                        className="flex items-center justify-between text-xs"
-                      >
-                        <span className="text-muted-foreground">
-                          <LocalTime iso={delivery.createdAt} />
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {delivery.attemptCount > 1 && (
-                            <span className="text-muted-foreground">
-                              attempt {delivery.attemptCount}
-                            </span>
-                          )}
-                          <Badge variant={STATUS_VARIANT[delivery.status]}>
-                            {delivery.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        when={<LocalTime iso={delivery.createdAt} variant="day" />}
+                        detail={
+                          delivery.attemptCount > 1
+                            ? `attempt ${delivery.attemptCount}`
+                            : ""
+                        }
+                        error={
+                          delivery.status !== "succeeded" ? delivery.lastError : null
+                        }
+                        status={delivery.status}
+                      />
+                    ))
                 )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </div>
+            </div>
+          );
+        })
       )}
 
       <AlertDialog
@@ -257,12 +298,14 @@ export function WebhooksPanel({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Webhook />
+            </AlertDialogMedia>
             <AlertDialogTitle>Delete this webhook?</AlertDialogTitle>
             <AlertDialogDescription>
-              Completed responses will stop being sent to{" "}
-              <span className="font-mono break-all">{pendingDelete?.url}</span>. Its
-              signing secret can&apos;t be recovered — adding the URL again creates a new
-              one.
+              Deliveries to {pendingDelete && host(pendingDelete.url)} stop right away,
+              and its signing secret can&apos;t be recovered. You&apos;d need a new
+              endpoint and secret to start again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

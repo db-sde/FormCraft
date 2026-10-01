@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { publicFormUrl } from "./live-link-actions";
+import { CopyLinkField } from "./copy-link-field";
 import { cn } from "cn";
 
 type Tab = "link" | "qr" | "embed";
@@ -96,8 +97,8 @@ export function SharePopover({
               primaryColor={primaryColor}
             />
           )}
-          {tab === "qr" && <QrTab slug={slug} />}
-          {tab === "embed" && <EmbedTab slug={slug} formId={formId} title={title} />}
+          {tab === "qr" && <ShareQr slug={slug} />}
+          {tab === "embed" && <ShareEmbed slug={slug} formId={formId} title={title} />}
           <Link
             href={`/forms/${formId}/share`}
             onClick={() => setOpen(false)}
@@ -142,28 +143,9 @@ function LinkTab({
   description?: string;
   primaryColor: string;
 }) {
-  const url = publicFormUrl(slug);
-  const [copied, copy] = useCopy();
   return (
     <>
-      <div className="border-ink bg-field flex h-[42px] items-center overflow-hidden rounded-sm border-[1.5px]">
-        <span className="min-w-0 flex-1 truncate px-3 font-mono text-[13px]">
-          {url.replace(/^https?:\/\//, "")}
-        </span>
-        <button
-          type="button"
-          onClick={() => void copy(url)}
-          className={cn(
-            "fc-focus border-ink flex h-full items-center gap-1.5 border-l-[1.5px] px-3.5 text-[13px] font-bold",
-            copied
-              ? "bg-[var(--chip-live-bg)] text-[var(--chip-live-fg)]"
-              : "bg-primary text-primary-foreground",
-          )}
-        >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
+      <CopyLinkField slug={slug} />
       <a
         href={`/f/${slug}`}
         target="_blank"
@@ -190,7 +172,8 @@ function LinkTab({
   );
 }
 
-function QrTab({ slug }: { slug: string }) {
+/** The live link as a QR code, with PNG and SVG downloads. */
+export function ShareQr({ slug }: { slug: string }) {
   const url = publicFormUrl(slug);
   const [svg, setSvg] = useState<string | null>(null);
 
@@ -259,7 +242,8 @@ function QrTab({ slug }: { slug: string }) {
   );
 }
 
-function EmbedTab({
+/** Embed code: the standard auto-resizing iframe, or full page. */
+export function ShareEmbed({
   slug,
   formId,
   title,

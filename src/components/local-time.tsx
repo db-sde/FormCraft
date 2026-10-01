@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 const subscribe = () => () => {};
 
-type Variant = "datetime" | "date" | "relative";
+type Variant = "datetime" | "date" | "relative" | "day";
 
 /**
  * Renders a timestamp in the *viewer's* locale and timezone. Server
@@ -42,6 +42,7 @@ export function LocalTime({
 
 function format(date: Date, variant: Variant): string {
   if (variant === "relative") return formatRelative(date);
+  if (variant === "day") return formatDay(date);
   return variant === "date"
     ? date.toLocaleDateString(undefined, { dateStyle: "medium" })
     : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -53,6 +54,23 @@ function formatUtc(date: Date, variant: Variant): string {
       ? { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }
       : { dateStyle: "medium", timeZone: "UTC" };
   return date.toLocaleString("en-US", options);
+}
+
+/** "Today, 2:32 PM" · "Yesterday, 6:48 PM" · "Sep 28, 9:31 AM" (the
+ * year only when it isn't this one). */
+function formatDay(date: Date): string {
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((startOfToday.getTime() - date.getTime()) / 86_400_000) + 1;
+  if (date >= startOfToday) return `Today, ${time}`;
+  if (diffDays === 1) return `Yesterday, ${time}`;
+  const day = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === startOfToday.getFullYear() ? {} : { year: "numeric" }),
+  });
+  return `${day}, ${time}`;
 }
 
 function formatRelative(date: Date): string {

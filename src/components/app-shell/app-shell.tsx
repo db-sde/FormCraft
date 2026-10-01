@@ -500,7 +500,16 @@ export function AppShell({
           </button>
         </header>
         <main className="flex-1">
-          <div className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-10 sm:py-10">
+          <div
+            className={cn(
+              "mx-auto w-full px-4 py-5 sm:px-10 sm:py-8",
+              // The responses table runs full width (Part 8 §2); every
+              // other page keeps a 1200px column.
+              /^\/forms\/[^/]+\/responses\/?$/.test(pathname)
+                ? "max-w-none"
+                : "max-w-[1200px]",
+            )}
+          >
             {children}
           </div>
         </main>

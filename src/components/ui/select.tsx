@@ -5,8 +5,52 @@ import { cn } from "cn";
 import { Select as SelectPrimitive } from "radix-ui";
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
 
-function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+/** The selected item's label, for SelectValue. Radix fills the closed
+ * trigger by portalling the item text in from a hidden copy of the
+ * menu, which doesn't happen for server-rendered selects until the menu
+ * has been opened once — so a page loaded with a value showed an empty
+ * trigger. Reading the label straight from the items avoids that. */
+const SelectedLabelContext = React.createContext<React.ReactNode>(undefined);
+
+function collectLabels(node: React.ReactNode, labels: Map<string, React.ReactNode>) {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement<{ value?: string; children?: React.ReactNode }>(child))
+      return;
+    if (child.type === SelectItem && typeof child.props.value === "string") {
+      labels.set(child.props.value, child.props.children);
+    } else if (child.props.children) {
+      collectLabels(child.props.children, labels);
+    }
+  });
+}
+
+function Select({
+  value,
+  defaultValue,
+  onValueChange,
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const [uncontrolled, setUncontrolled] = React.useState(defaultValue);
+  const current = value ?? uncontrolled;
+  const labels = new Map<string, React.ReactNode>();
+  collectLabels(children, labels);
+  return (
+    <SelectedLabelContext.Provider value={current ? labels.get(current) : undefined}>
+      <SelectPrimitive.Root
+        data-slot="select"
+        value={value}
+        defaultValue={defaultValue}
+        onValueChange={(next) => {
+          setUncontrolled(next);
+          onValueChange?.(next);
+        }}
+        {...props}
+      >
+        {children}
+      </SelectPrimitive.Root>
+    </SelectedLabelContext.Provider>
+  );
 }
 
 function SelectGroup({
@@ -22,8 +66,16 @@ function SelectGroup({
   );
 }
 
-function SelectValue({ ...props }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
+function SelectValue({
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Value>) {
+  const selected = React.useContext(SelectedLabelContext);
+  return (
+    <SelectPrimitive.Value data-slot="select-value" {...props}>
+      {children ?? selected}
+    </SelectPrimitive.Value>
+  );
 }
 
 function SelectTrigger({

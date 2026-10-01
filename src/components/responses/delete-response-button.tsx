@@ -4,8 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteResponseAction } from "@/app/(form)/forms/[id]/responses/actions";
-import { Button } from "@/components/ui/button";
+import { deleteResponseAction } from "@/app/(form)/forms/[id]/(sections)/responses/actions";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -21,9 +21,15 @@ export function DeleteResponseButton({
   formId,
   responseId,
   redirectTo,
+  who,
+  variant = "icon",
 }: {
   formId: string;
   responseId: string;
+  /** Whose answers, for the confirmation ("Maya Rao's answers…"). */
+  who?: string;
+  /** "outline": a bordered 36px tile, for the response detail header. */
+  variant?: "icon" | "outline";
   /** If set, navigates here after a successful delete (used on the
    * detail page, which no longer has anything to show once its own
    * response is gone). Omit on the list page, where the row just
@@ -39,11 +45,13 @@ export function DeleteResponseButton({
       const result = await deleteResponseAction(formId, responseId);
       setOpen(false);
       if (result.ok) {
-        toast("Response deleted");
+        toast.success("Response deleted.");
         if (redirectTo) router.push(redirectTo);
         else router.refresh();
       } else {
-        toast.error("Couldn't delete response");
+        toast.error("Couldn't delete that response.", {
+          description: "Nothing was removed. Try again.",
+        });
       }
     });
   }
@@ -52,26 +60,40 @@ export function DeleteResponseButton({
     <>
       <Button
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="text-destructive hover:text-destructive"
+        variant={variant === "outline" ? "outline" : "ghost"}
+        size={variant === "outline" ? "icon" : "icon-sm"}
+        className={
+          variant === "outline"
+            ? "text-destructive hover:text-destructive size-9"
+            : "text-destructive hover:text-destructive hover:bg-hover-wash-strong size-8"
+        }
         aria-label="Delete response"
         onClick={() => setOpen(true)}
       >
-        <Trash2 className="size-3.5" />
+        <Trash2 className="size-4" />
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this response?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the response and its answers. This can&apos;t be
-              undone.
+              {who ? `${who}'s answers` : "These answers"} will be removed for good,
+              including any uploaded files. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={pending}>
+            <AlertDialogAction
+              variant="destructive"
+              data-loading={pending || undefined}
+              disabled={pending}
+              onClick={(e) => {
+                // Stay open, showing "Deleting…", until the server answers.
+                e.preventDefault();
+                confirmDelete();
+              }}
+            >
+              {pending && <ButtonSpinner />}
               {pending ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>

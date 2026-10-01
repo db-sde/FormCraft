@@ -2,18 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Unlink } from "lucide-react";
+import { Sheet, Unplug } from "lucide-react";
 import type { SheetsConnection, SyncLogEntry } from "@/domains/sheets";
 import {
   setSpreadsheetIdAction,
   setSheetsEnabledAction,
   disconnectSheetsAction,
-} from "@/app/(form)/forms/[id]/integrations/actions";
-import { Button } from "@/components/ui/button";
+} from "@/app/(form)/forms/[id]/(sections)/integrations/actions";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -23,20 +21,20 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { LocalTime } from "@/components/local-time";
+import { DeliveryRow } from "./delivery-row";
 
-const STATUS_VARIANT: Record<
-  SyncLogEntry["status"],
-  "default" | "secondary" | "destructive"
-> = {
-  succeeded: "default",
-  pending: "secondary",
-  failed: "destructive",
-  exhausted: "destructive",
-};
+/** Pasting the whole sheet URL works too: keep the id between /d/ and /edit. */
+function spreadsheetIdFrom(input: string): string {
+  const match = /\/d\/([a-zA-Z0-9_-]+)/.exec(input);
+  return (match ? match[1] : input).trim();
+}
 
+/** Google Sheets (Part 5 §5.8): connect, pick a spreadsheet, enable,
+ * disconnect, and the sync log. */
 export function SheetsPanel({
   formId,
   configured,
@@ -59,10 +57,18 @@ export function SheetsPanel({
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   function handleSaveSpreadsheetId() {
+    const id = spreadsheetIdFrom(spreadsheetId);
+    setSpreadsheetIdInput(id);
     startTransition(async () => {
-      const result = await setSpreadsheetIdAction(formId, spreadsheetId);
-      if (result.ok) toast.success("Spreadsheet connected");
-      else toast.error(result.message ?? "Failed to save spreadsheet ID");
+      const result = await setSpreadsheetIdAction(formId, id);
+      if (result.ok)
+        toast.success("Spreadsheet saved.", {
+          description: "New responses will be added to it.",
+        });
+      else
+        toast.error("Couldn't save the spreadsheet.", {
+          description: result.message ?? "Try again.",
+        });
     });
   }
 
@@ -77,19 +83,18 @@ export function SheetsPanel({
     startTransition(async () => {
       const result = await disconnectSheetsAction(formId);
       setConfirmingDisconnect(false);
-      if (result.ok) toast.success("Disconnected from Google Sheets");
-      else toast.error("Couldn't disconnect. Please try again.");
+      if (result.ok) toast.success("Google Sheets disconnected.");
+      else toast.error("Couldn't disconnect.", { description: "Try again." });
     });
   }
 
   if (!configured) {
     return (
-      <Alert>
-        <AlertTitle>Google Sheets isn&apos;t set up on this deployment</AlertTitle>
+      <Alert variant="info">
+        <AlertTitle>Google Sheets isn&apos;t set up here yet.</AlertTitle>
         <AlertDescription>
-          Connecting Sheets needs a Google Cloud OAuth client. Set
-          `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and
-          `GOOGLE_OAUTH_REDIRECT_URI` (see `.env.example`) at deploy time to enable this.
+          An administrator needs to add Google API credentials to this FormCraft server
+          before anyone can connect.
         </AlertDescription>
       </Alert>
     );
@@ -97,105 +102,127 @@ export function SheetsPanel({
 
   if (!connection) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-between py-6">
-          <p className="text-muted-foreground text-sm">
-            Automatically add a row to a Google Sheet every time someone completes this
-            form.
-          </p>
-          <Button asChild>
-            <a href={`/api/integrations/google/authorize?formId=${formId}`}>
-              Connect Google Sheets
-            </a>
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="border-ink bg-card flex flex-col items-start gap-3 rounded-lg border-[1.5px] p-[18px]">
+        <span className="text-muted-foreground text-sm leading-normal">
+          Connect your Google account and pick a spreadsheet. Each completed response
+          becomes a new row, and the column headers are your questions.
+        </span>
+        <Button asChild className="h-[42px]">
+          <a href={`/api/integrations/google/authorize?formId=${formId}`}>
+            <Sheet /> Connect Google Sheets
+          </a>
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">Connected</CardTitle>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={enabled}
-              onCheckedChange={handleToggle}
-              aria-label="Enabled"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setConfirmingDisconnect(true)}
-              disabled={pending}
-              aria-label="Disconnect Google Sheets"
-            >
-              <Unlink className="size-3.5" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex gap-2">
+    <div className="border-ink bg-card shadow-card rounded-lg border-[1.5px]">
+      <div className="border-border flex flex-wrap items-center gap-3 border-b-[1.5px] p-3.5">
+        <span className="flex flex-1 items-center gap-2">
+          <span className="size-2 rounded-full bg-[var(--chip-live-dot)] shadow-[0_0_0_3px_var(--chip-live-bg)]" />
+          <b className="font-heading text-[17px]">Connected</b>
+        </span>
+        <label className="text-muted-foreground flex items-center gap-2 text-[13px] font-semibold">
+          {enabled ? "Enabled" : "Paused"}
+          <Switch checked={enabled} onCheckedChange={handleToggle} />
+        </label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-[34px]"
+          onClick={() => setConfirmingDisconnect(true)}
+          disabled={pending}
+        >
+          Disconnect
+        </Button>
+      </div>
+      <form
+        className="flex flex-col gap-1.5 p-3.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (spreadsheetId.trim()) handleSaveSpreadsheetId();
+        }}
+      >
+        <label htmlFor="spreadsheet-id" className="text-[13.5px] font-semibold">
+          Spreadsheet ID
+        </label>
+        <div className="flex gap-2">
           <Input
-            placeholder="Spreadsheet ID (from the sheet's URL, between /d/ and /edit)"
+            id="spreadsheet-id"
             value={spreadsheetId}
             onChange={(e) => setSpreadsheetIdInput(e.target.value)}
+            spellCheck={false}
+            className="h-10 font-mono text-[13px]"
           />
           <Button
-            type="button"
-            onClick={handleSaveSpreadsheetId}
-            disabled={pending || !spreadsheetId}
+            type="submit"
+            className="h-10"
+            data-loading={pending || undefined}
+            disabled={pending || !spreadsheetId.trim()}
           >
+            {pending && <ButtonSpinner />}
             Save
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+        <span className="text-muted-foreground text-[12.5px]">
+          It&apos;s in the sheet&apos;s URL, between{" "}
+          <span className="font-mono">/d/</span> and{" "}
+          <span className="font-mono">/edit</span>. Pasting the whole link works too.
+        </span>
+      </form>
+      <div className="flex flex-col gap-0.5 px-3.5 pt-1 pb-3">
+        <span className="text-muted-foreground pb-1 text-[11px] font-bold tracking-[0.08em] uppercase">
+          Sync log
+        </span>
+        {initialSyncLog.length === 0 ? (
+          <span className="text-muted-foreground py-2 text-[13.5px]">
+            No syncs yet. The next completed response will be added to your sheet.
+          </span>
+        ) : (
+          initialSyncLog
+            .slice(0, 5)
+            .map((entry) => (
+              <DeliveryRow
+                key={entry.id}
+                when={<LocalTime iso={entry.createdAt} variant="day" />}
+                detail={`${entry.attemptCount} attempt${entry.attemptCount === 1 ? "" : "s"}`}
+                error={entry.status !== "succeeded" ? entry.lastError : null}
+                status={entry.status}
+              />
+            ))
+        )}
+      </div>
 
       <AlertDialog open={confirmingDisconnect} onOpenChange={setConfirmingDisconnect}>
         <AlertDialogContent>
           <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Unplug />
+            </AlertDialogMedia>
             <AlertDialogTitle>Disconnect Google Sheets?</AlertDialogTitle>
             <AlertDialogDescription>
-              New responses will stop being added to your spreadsheet. Rows already there
-              stay put. To start again you&apos;ll need to reconnect and sign in with
-              Google.
+              New responses won&apos;t be added to your spreadsheet. Rows already there
+              stay put. You can reconnect any time.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Keep connected</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDisconnect} disabled={pending}>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDisconnect();
+              }}
+            >
+              {pending && <ButtonSpinner />}
               {pending ? "Disconnecting…" : "Disconnect"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <div>
-        <h3 className="mb-2 text-sm font-medium">Sync log</h3>
-        {initialSyncLog.length === 0 ? (
-          <p className="text-muted-foreground text-xs">No syncs yet.</p>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            {initialSyncLog.slice(0, 5).map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">
-                  <LocalTime iso={entry.createdAt} />
-                </span>
-                <div className="flex items-center gap-2">
-                  {entry.attemptCount > 1 && (
-                    <span className="text-muted-foreground">
-                      attempt {entry.attemptCount}
-                    </span>
-                  )}
-                  <Badge variant={STATUS_VARIANT[entry.status]}>{entry.status}</Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

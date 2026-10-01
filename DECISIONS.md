@@ -3,6 +3,51 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — New UI ("Index Card" handoff): where we followed it and where we didn't
+
+The design handoff (`design_handoff_formcraft`, Parts 1–8) is the visual
+source of truth. Where a board shows something the product doesn't do,
+or would need new backend work, the simplest production-safe option won:
+
+- **Form sections.** Responses, Integrations, Settings and Share sit in
+  the app frame under a `(sections)` route group; only the builder is
+  full-screen. The boards show Build · Responses · Integrations tabs;
+  **Settings** is kept as a fourth tab (it holds unfinished-response
+  retention and the public link). **Share** is the builder's Share
+  popover (link, QR, embed) plus the existing Share page, reached from
+  the popover and from a Share button on section pages.
+- **Embed modes.** Standard (the existing auto-resizing iframe) and Full
+  page. The board's **Popup** embed is left out: it needs a hosted
+  script we don't ship.
+- **Responses filters.** Date range, ending and "filter by answer" (choice
+  and yes/no questions, matched with jsonb containment on `answers`) are
+  built, live in the URL, and also apply to CSV export so the file
+  matches the table. **"Search answers" is not built**: free-text search
+  over jsonb answer values isn't possible through PostgREST without a
+  schema change (a search column or function), which is out of scope for
+  a UI pass.
+- **Summary view.** Per-question charts over completed responses, read
+  from the newest 2,000 matching responses (the page says so when
+  capped) so one view can't scan an unbounded table.
+- **Email notifications.** Moved to the Integrations page in the board's
+  style. Still the existing owner-only on/off: the board's extra
+  recipients and **Daily digest** would need new storage and a scheduler,
+  so they aren't shown.
+- **File upload types.** The builder offers Images and PDF only — the two
+  types the server can verify from file bytes. The board's "Documents"
+  and "Any file" chips aren't offered. Max size stays 1–100 MB (schema),
+  not the board's 25 MB.
+- **Phone default country.** Kept as a two-letter code field (what the
+  schema stores), not the board's dial-code dropdown.
+- **"Made with FormCraft".** Kept on endings, with a per-ending switch.
+- **Builder below 1024px** shows the "best on a bigger screen" state with
+  Preview, Share link and Responses. The board's "Email me a link"
+  action isn't built (no such email exists).
+- **Select values on first load.** Radix only fills a closed select's
+  label after its menu has opened once on server-rendered pages; our
+  `Select` wrapper now passes the selected item's label to `SelectValue`
+  so a page loaded with a value shows it.
+
 ## 2026-10-01 — Hardening round: what was decided and why
 
 Found by a creator/respondent walkthrough plus two independent reviews;

@@ -1,58 +1,82 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChevronRight } from "lucide-react";
+import type { PublishState } from "@/domains/forms";
+import { FormStatusBadge } from "./form-status-badge";
 import { FormTabs, type FormTab } from "./form-tabs";
 
 /**
- * The header of every page inside a form: back to all forms, the form's
- * name, the Build · Share · Responses · Integrations tabs, and
- * page-specific actions on the right. Tabs sit centred on wide screens
- * and move to their own scrollable row on narrow ones.
+ * The top of a form's Responses / Integrations / Settings / Share pages
+ * (Part 5): breadcrumb, the form's name, its publish state and the
+ * section tabs, over an ink rule.
  */
-export function FormTopBar({
+export function FormSectionHeader({
   formId,
-  active,
   title,
+  active,
+  state,
+  hasChanges = false,
+  crumbs = [],
   actions,
 }: {
   formId: string;
+  title: string;
   active: FormTab;
-  /** Title area — plain text, or the builder's editable title + save state. */
-  title: React.ReactNode;
+  state: PublishState;
+  hasChanges?: boolean;
+  /** Extra breadcrumb steps after the form, e.g. a response. */
+  crumbs?: { label: string; href?: string }[];
   actions?: React.ReactNode;
 }) {
+  const trail = [{ label: title, href: `/forms/${formId}/responses` }, ...crumbs];
   return (
-    <header className="bg-background sticky top-0 z-30 border-b">
-      <div className="flex h-14 items-center gap-2 px-2 sm:px-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-4">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button asChild variant="ghost" size="icon" aria-label="All forms">
-                <Link href="/dashboard">
-                  <ArrowLeft />
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
+        <Link
+          href="/dashboard"
+          className="text-muted-foreground hover:text-foreground shrink-0"
+        >
+          Forms
+        </Link>
+        {trail.map((step, i) => {
+          const last = i === trail.length - 1;
+          return (
+            <span key={i} className="flex min-w-0 items-center gap-2">
+              <ChevronRight
+                aria-hidden
+                className="text-subtle-foreground size-3.5 shrink-0"
+              />
+              {last || !step.href ? (
+                <b aria-current={last ? "page" : undefined} className="truncate">
+                  {step.label}
+                </b>
+              ) : (
+                <Link
+                  href={step.href}
+                  className="text-muted-foreground hover:text-foreground truncate"
+                >
+                  {step.label}
                 </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>All forms</TooltipContent>
-          </Tooltip>
-          <div className="flex min-w-0 items-center gap-2">{title}</div>
+              )}
+            </span>
+          );
+        })}
+      </nav>
+      <div className="border-ink flex flex-col gap-4 border-b-[1.5px] pb-3.5 lg:flex-row lg:items-end lg:justify-between lg:gap-5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="font-heading min-w-0 text-[30px] leading-[1.05] font-bold tracking-[-0.03em] break-words sm:text-[44px] sm:leading-none">
+            {title}
+          </h1>
+          <FormStatusBadge state={state} hasChanges={hasChanges} />
         </div>
-        <FormTabs formId={formId} active={active} className="hidden lg:flex" />
-        <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
           {actions}
+          <FormTabs
+            formId={formId}
+            active={active}
+            className="max-w-full overflow-x-auto"
+          />
         </div>
       </div>
-      <FormTabs
-        formId={formId}
-        active={active}
-        className="overflow-x-auto border-t px-2 py-1.5 lg:hidden"
-      />
-    </header>
+    </div>
   );
-}
-
-/** Plain title for form pages other than the builder. */
-export function FormTitle({ children }: { children: React.ReactNode }) {
-  return <h1 className="truncate text-sm font-semibold sm:text-base">{children}</h1>;
 }

@@ -26,6 +26,50 @@ const ID_BATCH = 100;
 
 export type ResponseView = "completed" | "incomplete";
 
+/** "Responses whose answer to this choice question includes this value"
+ * — an option id, or true/false for a yes/no question. */
+export type AnswerFilter = { questionId: string; value: string | boolean };
+
+/** Date ranges offered on the responses page (`?period=`). */
+export const RESPONSE_PERIODS = [
+  { id: "7d", label: "Last 7 days", days: 7 },
+  { id: "30d", label: "Last 30 days", days: 30 },
+  { id: "90d", label: "Last 90 days", days: 90 },
+  { id: "all", label: "Any time", days: 0 },
+] as const;
+
+/** The responses page's filters from its URL (`period`, `ending`, `q` +
+ * `a`) — shared with CSV export so it exports exactly what's shown.
+ * Unknown ids simply match nothing; access is still scoped by RLS. */
+export function filtersFromParams(params: {
+  period?: string | null;
+  ending?: string | null;
+  q?: string | null;
+  a?: string | null;
+}): ResponseFilters {
+  const period = RESPONSE_PERIODS.find((p) => p.id === params.period);
+  return {
+    since: period?.days ? new Date(Date.now() - period.days * 86_400_000) : undefined,
+    endingId: params.ending || undefined,
+    answer:
+      params.q && params.a
+        ? {
+            questionId: params.q,
+            value: params.a === "true" ? true : params.a === "false" ? false : params.a,
+          }
+        : undefined,
+  };
+}
+
+/** Filters shared by the response table and the summary charts. */
+export type ResponseFilters = {
+  /** Submitted (completed) or last active (incomplete) on/after this. */
+  since?: Date;
+  /** Completed responses that reached this ending. */
+  endingId?: string;
+  answer?: AnswerFilter;
+};
+
 export type ResponseListItem = {
   id: string;
   status: "in_progress" | "partial" | "completed";
@@ -66,7 +110,7 @@ function isAnswerable(q: QuestionV1): boolean {
   return q.type !== "welcome_screen" && q.type !== "statement";
 }
 
-async function getLatestSchema(
+export async function getLatestSchema(
   supabase: Client,
   formId: string,
 ): Promise<FormSchemaV1 | null> {
@@ -92,6 +136,59 @@ function pickPreviewQuestions(schema: FormSchemaV1 | null): QuestionV1[] {
 }
 
 /**
+ * The base query for a form's completed or unfinished responses with
+ * the shared filters applied. An answer filter joins `answers`
+ * (inner, so only matching responses remain) and uses jsonb
+ * containment, which matches a single-choice option id, an option id
+ * inside a multi-choice array, and a yes/no boolean alike.
+ */
+function filteredResponses<Row = ResponseRow>(
+  supabase: Client,
+  formId: string,
+  view: ResponseView,
+  filters: ResponseFilters,
+  columns: string,
+  count: "exact" | undefined = "exact",
+) {
+  const select = filters.answer
+    ? `${columns}, answer_match:answers!inner(question_id)`
+    : columns;
+  let query = supabase
+    .from("responses")
+    .select(select, count ? { count } : undefined)
+    .eq("form_id", formId)
+    .eq("status", view === "completed" ? "completed" : "partial");
+  if (filters.since) {
+    query = query.gte(
+      view === "completed" ? "completed_at" : "last_active_at",
+      filters.since.toISOString(),
+    );
+  }
+  if (filters.endingId && view === "completed") {
+    query = query.eq("ending_id", filters.endingId);
+  }
+  if (filters.answer) {
+    query = query
+      .eq("answer_match.question_id", filters.answer.questionId)
+      .contains("answer_match.value", JSON.stringify(filters.answer.value));
+  }
+  return query.returns<Row[]>();
+}
+
+type ResponseRow = {
+  id: string;
+  status: "in_progress" | "partial" | "completed";
+  started_at: string;
+  completed_at: string | null;
+  last_active_at: string;
+  last_question_id: string | null;
+  ending_id: string | null;
+  form_version_id: string;
+  referrer: string | null;
+  utm_source: string | null;
+};
+
+/**
  * Creator-facing response list — always scoped by the caller's own
  * session (RLS via `responses: members can read via form`), never the
  * admin client. Bounded pagination — never an unbounded fetch (spec).
@@ -105,28 +202,26 @@ function pickPreviewQuestions(schema: FormSchemaV1 | null): QuestionV1[] {
 export async function listResponses(
   supabase: Client,
   formId: string,
-  options: { page?: number; view?: ResponseView } = {},
+  options: { page?: number; view?: ResponseView } & ResponseFilters = {},
 ): Promise<ResponseListPage> {
   const page = Math.max(1, options.page ?? 1);
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
   const view = options.view ?? "completed";
 
-  let query = supabase
-    .from("responses")
-    .select(
-      "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source",
-      { count: "exact" },
-    )
-    .eq("form_id", formId);
+  let query = filteredResponses(
+    supabase,
+    formId,
+    view,
+    options,
+    "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source",
+  );
   query =
     view === "completed"
       ? query
-          .eq("status", "completed")
           .order("completed_at", { ascending: false })
           .order("id", { ascending: false })
       : query
-          .eq("status", "partial")
           .order("last_active_at", { ascending: false })
           .order("id", { ascending: false });
 
@@ -462,6 +557,7 @@ export async function buildResponsesCsv(
   supabase: Client,
   formId: string,
   view: ResponseView = "completed",
+  filters: ResponseFilters = {},
 ): Promise<string> {
   const { data: latestVersion, error: latestVersionError } = await supabase
     .from("form_versions")
@@ -495,13 +591,14 @@ export async function buildResponsesCsv(
     utm_content: string | null;
   }[] = [];
   for (let from = 0; ; from += FETCH_PAGE) {
-    const { data, error } = await supabase
-      .from("responses")
-      .select(
-        "id, completed_at, last_active_at, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content",
-      )
-      .eq("form_id", formId)
-      .eq("status", view === "completed" ? "completed" : "partial")
+    const { data, error } = await filteredResponses<(typeof responses)[number]>(
+      supabase,
+      formId,
+      view,
+      filters,
+      "id, completed_at, last_active_at, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content",
+      undefined,
+    )
       .order(view === "completed" ? "completed_at" : "last_active_at", {
         ascending: true,
       })

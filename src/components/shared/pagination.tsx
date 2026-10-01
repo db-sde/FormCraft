@@ -34,14 +34,41 @@ export function Pagination({
   page,
   pageCount,
   hrefFor,
+  summary,
+}: {
+  page: number;
+  pageCount: number;
+  hrefFor: (page: number) => string;
+  /** Left-hand "Showing 1–25 of 248"; shown even on a single page. */
+  summary?: React.ReactNode;
+}) {
+  if (summary) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <span className="text-muted-foreground">{summary}</span>
+        {pageCount > 1 && <Pager page={page} pageCount={pageCount} hrefFor={hrefFor} />}
+      </div>
+    );
+  }
+  if (pageCount <= 1) return null;
+  return (
+    <div className="mt-5 flex justify-center">
+      <Pager page={page} pageCount={pageCount} hrefFor={hrefFor} />
+    </div>
+  );
+}
+
+function Pager({
+  page,
+  pageCount,
+  hrefFor,
 }: {
   page: number;
   pageCount: number;
   hrefFor: (page: number) => string;
 }) {
-  if (pageCount <= 1) return null;
   return (
-    <div className="mt-5 flex items-center justify-center gap-3 text-sm">
+    <div className="flex items-center gap-3 text-sm">
       <PageLink href={hrefFor(page - 1)} disabled={page <= 1}>
         <ArrowLeft className="size-3.5" />
         Previous

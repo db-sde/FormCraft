@@ -1,21 +1,16 @@
-import { CopyLinkButton, OpenLiveButton } from "./live-link-actions";
+import Link from "next/link";
+import { Share2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PublishButton } from "./publish-button";
 
-/** Right-hand header actions on non-builder form pages. */
-export function FormPageActions({
-  formId,
-  slug,
-  isLive,
-}: {
-  formId: string;
-  slug: string;
-  isLive: boolean;
-}) {
+/** Next to the section tabs: Share once the form is live, Publish before. */
+export function FormPageActions({ formId, isLive }: { formId: string; isLive: boolean }) {
   if (!isLive) return <PublishButton formId={formId} />;
   return (
-    <>
-      <CopyLinkButton slug={slug} />
-      <OpenLiveButton slug={slug} />
-    </>
+    <Button asChild variant="outline" className="h-[38px]">
+      <Link href={`/forms/${formId}/share`}>
+        <Share2 /> Share
+      </Link>
+    </Button>
   );
 }
