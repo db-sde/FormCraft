@@ -3,6 +3,106 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-01 — Hardening round: what was decided and why
+
+Found by a creator/respondent walkthrough plus two independent reviews;
+each item below was reproduced (or proven by a failing test) before it
+was fixed. Anything here that contradicts an older entry replaces it.
+
+**Respondent data**
+
+- **Unfinished-looking submissions (a reported bug).** The spam trap was
+  named like a real field and autofilled; the server then "succeeded"
+  without completing. Now: the trap is meaningless-named and excluded
+  from autofill, and a filled trap **flags** the response
+  (`spam_suspected`, no notifications/webhooks/Sheets) but keeps it.
+  _Replaces the 09-30 "fake success and nothing completed" rule._ The
+  root cause for the reporter was inferred from the data and mechanism,
+  not observed; the E2E test reproduces it.
+- **Writes are atomic and validate-first.** Autosave and completion are
+  single database functions; a rejected submission writes nothing, even
+  on forms that don't keep unfinished answers. File answers must be real
+  clean uploads of that response and question; only the upload id is
+  stored.
+- **Cleared answers are deleted**, not stored as empty values, so
+  "answered" means the same everywhere (logic, exports, drop-off).
+- **Funnel:** views come from events, starts and completions from
+  `responses` (by start date), so the three numbers describe one cohort.
+  Bots and the form's own workspace members don't count as views.
+
+**Tenancy and abuse**
+
+- Tenant-takeover paths closed (self-granted owner row, public reads,
+  client-callable publish); see migration 18 and `rls-isolation.test.ts`.
+- **Client address:** the first `X-Forwarded-For` entry is visitor-
+  written, so it is never trusted. `CLIENT_IP_HEADER` or the
+  `TRUSTED_PROXY_HOPS`-th entry from the right is used (`src/lib/http/ip.ts`).
+- `/start` allows 120 per 10 minutes per address + form: a school or
+  office shares an address and each respondent starts once.
+- A failed start isn't retried on every answer (5 s cooldown); submitting
+  always retries.
+- Google OAuth `state` is signed and bound to user, form and a cookie.
+  Spreadsheet cells that start with `= + - @` are neutralised.
+
+**Integrations**
+
+- Webhook and Sheets jobs are created idempotently (unique per
+  endpoint/connection + response), claimed with `FOR UPDATE SKIP LOCKED`
+  and a lease, isolated per job, and recovered by a 24-hour sweep if the
+  post-submit callback died. A disabled endpoint's jobs end as
+  `exhausted`, never silently pending.
+- **`/api/cron/health`** reports overdue jobs and stuck uploads for an
+  external monitor. Jobs that gave up are reported but **don't** make the
+  status "degraded": a creator's endpoint being down is theirs to fix;
+  overdue jobs mean our workers stopped.
+
+**Forms and logic**
+
+- **Jumps only go forward.** Back-jumps loop (the old static check
+  accepted them). Enforced in the builder and server-side; forms
+  published earlier are protected by a runtime visited-set instead of
+  being unpublished. Details in `docs/form-schema.md`.
+- Rules must name real options; deleting an option deletes the rules
+  that checked it (with a notice); a reorder that would create a
+  back-jump is refused rather than rewriting the creator's logic.
+- A half-built rule can be saved as a draft but not published.
+- Contact blocks and uploads only offer "is answered"; multi-select
+  offers "contains" (its answer is a list, so "is" could never match).
+- Duplicating a form keeps its unfinished-response settings.
+
+**Creator surfaces**
+
+- **Share page lead capture** says what respondents get — live version,
+  and whether unfinished responses are saved — not just whether the
+  draft has a contact step.
+- Phone menu is a real modal dialog (Escape, focus trap, focus return).
+- When a question changes, focus moves to its heading unless a text box
+  took it, so keyboard and screen-reader users aren't dropped at the top
+  of the page.
+- Embed snippet trusts only messages from its own iframe about its own
+  form and clamps the height; it no longer compares origins.
+- Colour tokens `--muted-foreground` and `--destructive` darkened to pass
+  WCAG AA on tinted backgrounds (axe found them).
+- Email change: Supabase confirms from **both** inboxes
+  (`double_confirm_changes = true`), and the message says so. If a
+  deployment turns that off, change the wording in
+  `settings/actions.ts`.
+
+**Data lifecycle**
+
+- Storage cleanup (retention, response delete, account delete, form
+  purge) pages through every file; PostgREST silently stops at 1000 rows.
+- Leads are listed, searched and counted in SQL (`list_leads`) so totals
+  are exact and each lead appears once; export is capped at 10,000 rows.
+
+**Deliberately not done**
+
+- No malware scanner (needs a service); uploads are type-sniffed, size-
+  capped, private and never served inline.
+- No automated Google Sheets reconnect E2E: it needs a real Google OAuth
+  client. The pieces around it (state, formula neutralisation, workers)
+  are tested.
+
 ## 2026-09-30 — PRD gap closure: definitions and defaults
 
 Decisions made while aligning v0 with the PRD (Phase 1 + P2.7):

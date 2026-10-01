@@ -269,7 +269,7 @@ export default async function Home({
             <h2 className="text-3xl font-semibold tracking-tight">
               Your next lead is one form away
             </h2>
-            <p className="mx-auto mt-3 max-w-xl opacity-80">
+            <p className="mx-auto mt-3 max-w-xl opacity-90">
               Create your first form in under five minutes. Free while you get started.
             </p>
             <Button asChild size="lg" variant="secondary" className="mt-8 h-11 px-6">

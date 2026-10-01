@@ -54,7 +54,7 @@ describe("embed snippet", () => {
 
   it("works whatever origin the form is served from", () => {
     // No origin comparison: a form on www. or a custom domain still resizes.
-    const { frame, send } = install();
+    const { frame } = install();
     window.dispatchEvent(
       new MessageEvent("message", {
         data: { type: "formcraft:height", formId: "form_1", height: 700 },

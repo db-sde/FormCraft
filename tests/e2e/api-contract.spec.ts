@@ -225,3 +225,26 @@ test("cron routes require the shared secret", async ({ request }) => {
     expect(authed.status(), path).toBe(200);
   }
 });
+
+test("the health check reports on the background jobs, and only to the cron secret", async ({
+  request,
+}) => {
+  const secret = process.env.CRON_SECRET;
+  test.skip(!secret, "CRON_SECRET not set");
+  expect((await request.get("/api/cron/health")).status()).toBe(401);
+
+  const res = await request.get("/api/cron/health", {
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  // 200 healthy / 503 degraded — either way the body says why.
+  expect([200, 503]).toContain(res.status());
+  const body = await res.json();
+  expect(body).toMatchObject({
+    status: expect.stringMatching(/^(ok|degraded)$/),
+    problems: expect.any(Array),
+    webhooks: { overdue: expect.any(Number), exhaustedLast24h: expect.any(Number) },
+    sheets: { overdue: expect.any(Number), exhaustedLast24h: expect.any(Number) },
+    stuckUploads: expect.any(Number),
+  });
+  expect(res.status()).toBe(body.status === "ok" ? 200 : 503);
+});

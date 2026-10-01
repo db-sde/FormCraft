@@ -15,6 +15,17 @@ Pure logic, no network/DB:
 - Idempotency-key / revision comparison helpers
 - Analytics calculations (completion rate, preview filtering)
 - CSV serialization (escaping, formula-injection guarding)
+- Logic engine **property tests** (`logic-properties.test.ts`): thousands
+  of random forms from a fixed seed — forward-only forms always
+  validate, compile and finish in order; forms published with
+  back-jumps still can't trap a respondent; the browser's step-by-step
+  walk and the server's `walkForm` agree on path and ending. A failure
+  prints the seed and form number so it reproduces.
+- Client-address resolution (`client-ip.test.ts`), embed snippet run in
+  jsdom (`embed-snippet.test.ts`), lead-capture status, health verdicts,
+  OAuth state, and static migration guards (`migrations.test.ts`: every
+  table has RLS, security-definer functions pin `search_path`, numbering
+  has no gaps or clashes).
 
 Run: `npm run test` / `npm run test:watch`.
 
@@ -30,6 +41,24 @@ Run: `npm run test` / `npm run test:watch`.
   rejected.
 - Webhook delivery record lifecycle (pending → succeeded/failed/
   exhausted) and retry scheduling.
+- **Concurrency** (`response-concurrency.test.ts`): 40 shuffled
+  simultaneous autosaves keep answers and revision together; racing
+  completions complete once; a rejected submission writes nothing.
+  Written to fail if the row lock is removed (checked by mutation).
+- **Workers** (`webhook-workers.test.ts`, the workers block of
+  `sheets.test.ts`): claims never overlap, a crashed worker's lease
+  expires and the job is retried, one bad job doesn't stop the rest,
+  missing jobs are recovered.
+- **Tenant isolation** (`rls-isolation.test.ts`): attacks through the
+  Data API as a second user and as anon (self-granted ownership,
+  reading others' forms/versions, calling publish).
+- **Data lifecycle** (`data-lifecycle.test.ts`, `uploads.test.ts`,
+  `health.test.ts`, `form-duplication.test.ts`): storage cleanup past
+  1000 rows, leads at scale, funnel consistency, upload replacement,
+  overdue-job detection.
+
+Integration files share one database and run concurrently, so they
+assert deltas or use their own rows, never absolute totals.
 
 Requires `supabase start` locally (documented in `README.md`). Run:
 `npm run test:integration`.
@@ -41,8 +70,9 @@ Requires `supabase start` locally (documented in `README.md`). Run:
   (installed by `npm install`; bypass only with `--no-verify`).
 - `npm run verify` — check + integration + E2E on desktop and mobile
   (needs `supabase start`; builds a production server).
-- CI runs both jobs on every push/PR, and also fails if the generated
-  database types drift from the migrations.
+- CI runs both jobs on every push/PR, pins the Supabase CLI version, runs
+  `supabase db lint` (plpgsql_check over every function), and fails if the
+  generated database types drift from the migrations.
 - `tests/e2e/routes.ts` lists every page and API route with the spec
   that covers it; `tests/unit/route-coverage.test.ts` fails if a route
   is added or removed without updating it.
@@ -93,7 +123,8 @@ writing:
     local Supabase's mail catcher; also covers the invalid-link notice)
 
 16. Lead capture: a respondent who fills the contact step and leaves
-    before the last question appears under Leads ("Didn't finish") and
+    before the last question appears under Leads ("In progress" until 30
+    minutes pass, then "Abandoned") and
     Responses → Incomplete — **done** (`lead-capture.spec.ts`; the
     completed path is in `publish-and-respond.spec.ts`)
 17. Autosave under slow network never restarts the form — **done**
@@ -105,6 +136,33 @@ writing:
 19. Form settings: saving unfinished answers off stores nothing before
     submit (and hides the respondent notice); renaming the public link
     moves the form — **done** (`form-settings.spec.ts`)
+
+20. **Submission integrity** — **done** (`submission-integrity.spec.ts`):
+    an autofilled hidden field never costs a submission; idling 45
+    minutes (browser clock fast-forwarded) still completes; submitting
+    while slow autosaves are in flight; a failing start isn't retried
+    on every keystroke yet submit still gets through.
+21. **Creator experience** — **done** (`creator-experience.spec.ts`):
+    Share page lead-capture status (on / limited / draft-only), the
+    leads filter keeping the search, the phone menu (Escape, focus trap,
+    focus return), logic targets limited to later questions, a legacy
+    back-jump explained on save.
+22. **Accessibility** — **done** (`accessibility.spec.ts`): axe-core
+    (WCAG 2.0/2.1 A + AA) over public, auth, dashboard, builder, share,
+    responses, integrations and settings pages and the public form's
+    steps. Serious/critical findings fail; lesser ones are logged. Found
+    real contrast and labelling bugs the first time it ran.
+23. **Keyboard-only journeys** — **done** (`keyboard-journeys.spec.ts`):
+    a respondent finishes a form with no mouse (focus lands on each new
+    question; arrows and Space on choices); a creator reorders and adds
+    questions from the keyboard.
+24. **File upload** — **done** (`file-upload.spec.ts`): upload, refresh
+    (the browser forgets the file; the server mustn't), submit, the
+    answer is the stored upload's id and the bytes round-trip; a file
+    that isn't the type it claims is refused.
+25. **Google Sheets reconnect** — **not automated**: it needs a real
+    Google OAuth client. Covered in pieces (state signing, formula
+    neutralisation, claim/lease workers, disconnect confirmation).
 
 Integration: shared rate limit (`rate-limit.test.ts`), account deletion
 (`account-deletion.test.ts`), partial-status rule, drop-off and

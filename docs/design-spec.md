@@ -167,7 +167,7 @@ dashboard` button.
 for free` (signed in: `Go to dashboard`) and `Browse templates`;
   trust line "Free to start · No credit card".
 - **Product illustration**: a form screen (contact step) beside a
-  Leads list showing "Completed" and "Didn't finish" leads. Currently
+  Leads list showing "Completed" and "Abandoned" leads. Currently
   drawn with HTML; replace with real product art if wanted.
 - **Features** (6 cards): one question at a time · lead capture that
   sticks · see who didn't finish · logic & branching · on-brand design
@@ -257,7 +257,9 @@ sits inside it.
   - bottom: **account button** (initials avatar, name, email) →
     menu with "Signed in as …", `Account settings`, `Log out`
 - **Phones**: a top bar with a menu button and the logo; the sidebar
-  opens as a slide-over drawer with a scrim and close button.
+  opens as a slide-over drawer with a scrim and close button. It is a
+  real modal dialog (titled "Menu"): Escape closes it, Tab stays inside
+  it, and focus returns to the menu button.
 - Content area: light canvas background, white cards, max width ~1150px.
 - **Page header** pattern on every workspace page: title, one-line
   description, actions on the right.
@@ -438,9 +440,20 @@ style), so the creator edits exactly what respondents see.
   - number
   - row 1: "If" [question ▾] [operator ▾] [value control] 🗑
   - row 2: "Then →" [Go to question / Go to ending ▾] [target ▾]
+- **Jumps only go forward**: the question target list offers only
+  questions after the rule's own question (a back-jump could loop
+  forever), and "Jump to question" is disabled on the last question. A
+  rule saved before this limit keeps its old target shown as "(earlier —
+  pick a later one)", and the save bar explains it ("Logic rule 2: jumps
+  back to an earlier question…") until it's changed.
 - Operators: is · is not · contains · is greater than · is less than ·
   is answered · is not answered. Which ones appear depends on the
-  question type.
+  question type: contact blocks and file uploads only offer the two
+  "answered" checks; multi-select offers "contains" (not "is").
+- Deleting an option removes the rules that checked it, with a toast
+  ("1 logic rule removed — they checked an option you just deleted").
+  Moving a question is refused (toast) if it would turn a jump into a
+  jump back.
 - The value control changes with the question: an option picker for
   choice questions, a number field, a text field, yes/no, or none for
   "is answered".
@@ -535,8 +548,17 @@ changes`
   - **Embed** card: snippet + `Copy embed code`; copy explains the
     embed resizes to fit each question and embedded visits are tracked
     separately
-- **Lead capture** card: on ("…saved the moment a respondent passes
-  that step…" + `View leads`) or off (+ `Add lead capture`).
+- **Lead capture** card — says what respondents actually get (the
+  live version, and whether unfinished responses are saved), one of:
+  - **on** ("…saved the moment a respondent passes that step…" +
+    `View leads`);
+  - **limited** (live form has the step but "Save unfinished responses"
+    is off, so only people who submit are captured) + `Open settings`;
+  - **set up, but not live yet** (the contact step is only in the draft)
+    - `Open in builder`;
+  - **off** + `Add lead capture`.
+- The embed snippet's script only resizes the iframe it belongs to, for
+  its own form, within 200–20,000 px.
 - **(not built)**: QR code.
 
 ### 5.5b Responses — `/forms/{id}/responses`
@@ -630,11 +652,14 @@ an icon tile, title and description.
   - declined: "…access was declined."
   - failed: "…couldn't be connected. Please try again."
 - **Connected** card:
-  - "Connected" title, Enabled switch, `Disconnect` button
+  - "Connected" title, Enabled switch, `Disconnect` button (asks first:
+    "Disconnect Google Sheets? New responses will stop being added…
+    Rows already there stay put." · `Keep connected` / `Disconnect`)
   - Spreadsheet ID field (hint: "from the sheet's URL, between /d/ and
     /edit") + save button
   - **Sync log**: time, attempts, status badge. Empty: "No syncs yet."
-- Toasts: spreadsheet connected, disconnected, failed to save.
+- Toasts: spreadsheet connected, disconnected, failed to disconnect,
+  failed to save.
 
 ### 5.8 Form settings — `/forms/{id}/settings`
 
@@ -776,9 +801,18 @@ shrinks to fit each question, so design for content-height layouts too.
 
 - Enter = next/submit; Shift+Enter = new line in long text.
 - Full keyboard navigation of the choice tiles and stars.
-- Screen-reader labels (required fields announced, errors announced).
-  The designer should keep the focus order and contrast workable for
-  any creator theme.
+- **Focus follows the question.** When a new question or the ending
+  appears, focus goes to its heading unless a text box already took it
+  (Tab then moves into the options). Without this, focus is left on the
+  page body and nothing is announced. The heading is focusable but not
+  in the Tab order and shows no ring.
+- Screen-reader labels (required fields announced, errors announced —
+  including a failed file upload).
+- Hint text ("press Enter", "Your answers are saved as you go") sits at
+  70% opacity so it stays above AA contrast on a white theme; the app's
+  muted text and destructive colours were darkened for the same reason
+  (checked automatically by `accessibility.spec.ts`). The designer should
+  keep the focus order and contrast workable for any creator theme.
 
 ---
 
@@ -821,8 +855,7 @@ for all three.
 - **Every destructive action** needs a confirmation dialog: delete
   form, delete response, delete question (when logic uses it), delete
   ending (when logic uses it), lossy question-type change, delete
-  webhook, delete account, disconnect Sheets (recommended; there is no
-  dialog today).
+  webhook, delete account, disconnect Sheets.
 - **Empty states**: no forms, no templates, no responses (unpublished
   vs published), no logic rules, no webhooks, no deliveries, no
   syncs.

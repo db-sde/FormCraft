@@ -104,6 +104,11 @@ export function FormRuntime({
   const [submitting, setSubmitting] = useState(false);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const questionHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const endingHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  // Which step focus was last placed for, so the first screen (and
+  // Strict Mode's repeat effect run) never grabs focus on page load.
+  const focusedStepRef = useRef(currentId);
 
   const theme = compiled.schema.theme;
   const question = compiled.schema.questions.find((q) => q.id === currentId);
@@ -216,6 +221,22 @@ export function FormRuntime({
     onStepEvent("question_viewed", currentId);
   }, [currentId, ending, onStepEvent]);
 
+  // When the step changes, keep keyboard and screen-reader users where
+  // the form is. A text field takes focus itself (autoFocus); for every
+  // other kind of question — choices, ratings, yes/no — the old field
+  // just unmounted, which would leave focus on <body>: nothing is read
+  // out and Tab starts again from the top of the page. Land on the new
+  // question's heading instead (Tab then moves into its options).
+  useEffect(() => {
+    const step = ending ? `ending:${ending.id}` : currentId;
+    if (focusedStepRef.current === step) return;
+    focusedStepRef.current = step;
+    const heading = ending ? endingHeadingRef.current : questionHeadingRef.current;
+    const active = document.activeElement;
+    const focusIsLost = !active || active === document.body;
+    if (heading && (ending || focusIsLost)) heading.focus({ preventScroll: true });
+  }, [currentId, ending]);
+
   // Latest goNext for the document-level listener below, which is
   // registered once rather than on every render.
   const goNextRef = useRef(goNext);
@@ -300,7 +321,13 @@ export function FormRuntime({
           // eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL
           <img src={theme.logoUrl} alt="" className="h-10 object-contain" />
         )}
-        <h2 className="text-2xl font-semibold">{ending.title}</h2>
+        <h2
+          ref={endingHeadingRef}
+          tabIndex={-1}
+          className="text-2xl font-semibold outline-none"
+        >
+          {ending.title}
+        </h2>
         {ending.description && (
           <p className="max-w-md opacity-80">{ending.description}</p>
         )}
@@ -375,7 +402,11 @@ export function FormRuntime({
           />
         )}
         <div>
-          <h2 className="text-xl font-semibold sm:text-2xl">
+          <h2
+            ref={questionHeadingRef}
+            tabIndex={-1}
+            className="text-xl font-semibold outline-none sm:text-2xl"
+          >
             {question.label}
             {question.required && !entry && question.type !== "contact_info" && (
               <span aria-hidden className="ml-1" style={{ color: theme.primaryColor }}>
@@ -440,7 +471,7 @@ export function FormRuntime({
             )}
           </Button>
           {!submitting && (
-            <span className="hidden text-xs opacity-50 sm:inline">
+            <span className="hidden text-xs opacity-70 sm:inline">
               {question.type === "long_text"
                 ? "Shift ⇧ + Enter ↵ for a new line"
                 : "press Enter ↵"}
@@ -450,7 +481,7 @@ export function FormRuntime({
       </div>
 
       {savesProgress && currentIndex >= 0 && (
-        <p className="mx-auto -mb-3 w-full max-w-xl text-xs opacity-50">
+        <p className="mx-auto -mb-3 w-full max-w-xl text-xs opacity-70">
           {question.type === "contact_info"
             ? "Your details are saved when you continue, even if you don't finish."
             : "Your answers are saved as you go."}

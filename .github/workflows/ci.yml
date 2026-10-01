@@ -48,9 +48,12 @@ jobs:
 
       - run: npm ci
 
+      # Pinned: `latest` lets a CLI release change the generated types or
+      # the local stack's behaviour under an unrelated change. Bump it
+      # deliberately (and regenerate `npm run db:types`) when upgrading.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.107.0
 
       # Starts the same local Postgres/Auth/Storage/Data-API stack
       # `supabase start` gives every contributor locally, applying all
@@ -80,6 +83,12 @@ jobs:
           npm run db:types
           npx prettier --write src/lib/supabase/database.types.ts
           git diff --exit-code src/lib/supabase/database.types.ts
+
+      # plpgsql_check over every function the migrations define: catches
+      # typos, wrong column names and type mismatches that would only
+      # surface at runtime, on the first call.
+      - name: Database functions pass the linter
+        run: supabase db lint --schema public --fail-on error
 
       - run: npm run test:integration
 

@@ -1,8 +1,46 @@
 # Project Status
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 ## Current milestone
+
+**HARDENING + REGRESSION GUARD RAILS** (2026-10-01) — a creator/
+respondent walkthrough, two independent reviews and a reported bug
+(forms that looked "incomplete" after a long idle) turned into verified,
+committed batches. Every fix has a test that fails without it; the
+riskiest ones were proven by mutation (remove the fix, watch the test
+fail). Full list and reasoning: `DECISIONS.md` (2026-10-01).
+
+- **Respondent data:** atomic validate-first autosave/complete; the
+  spam trap flags instead of discarding (the reported bug); path-only
+  file answers; idempotent completion; cleared answers deleted.
+- **Tenancy:** self-granted owner rows, public reads of drafts and
+  client-callable publish closed (migration 18, `rls-isolation.test.ts`).
+- **Integrations:** idempotent, leased, recoverable webhook and Sheets
+  jobs; signed OAuth state; formula neutralisation; `/api/cron/health`.
+- **Logic:** forward-only jumps, real-option rules, runtime loop guard
+  for forms published earlier, property tests.
+- **Data lifecycle:** storage cleanup past 1000 rows, exact leads in SQL,
+  one funnel definition, bot/creator views excluded.
+- **Creator surfaces:** trustworthy Share-page lead status, phone menu
+  as a real dialog, safer embed, focus moves with the question, contrast
+  and labelling fixes found by axe.
+- **Abuse:** client address no longer trusts visitor-written
+  `X-Forwarded-For`; `/start` limit sized for shared networks.
+
+Checks: 237 unit + 100 integration tests, plus the Playwright suite on
+desktop and phone (see `docs/testing.md` for what each covers); CI also
+lints database functions and pins the Supabase CLI.
+
+**To deploy** (also in README): `npm run db:migrate` for migrations
+14–23, `CLIENT_IP_HEADER` if not on Vercel, an uptime monitor on
+`/api/cron/health`.
+
+Remaining before production: file malware scanning service, Resend and
+Google OAuth credentials (the Sheets reconnect journey can't be
+automated without a real client), Supabase redirect URLs (see README).
+
+### Earlier milestone
 
 **PRD GAP CLOSURE — v0 = Phase 1 + P2.7** (2026-09-30), three batches:
 

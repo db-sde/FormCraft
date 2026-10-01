@@ -64,7 +64,7 @@ export function QuestionPreviewControl({
                 {CONTACT_FIELD_LABELS[field]}
                 {question.settings.requiredFields.includes(field) ? " *" : " (optional)"}
               </span>
-              <Input disabled />
+              <Input disabled aria-label={CONTACT_FIELD_LABELS[field]} />
             </div>
           ))}
         </div>

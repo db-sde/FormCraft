@@ -66,6 +66,18 @@ First E2E run: `npx playwright install chromium webkit`. See
    rows. On other hosts, call the same `/api/cron/*` paths (GET or
    POST) with that header.
 5. Set `RESEND_API_KEY` and `EMAIL_FROM` for owner notifications.
+6. **Client addresses.** Per-IP rate limits must not trust the first
+   `X-Forwarded-For` entry (visitors write it). On Vercel nothing is
+   needed. Elsewhere set `CLIENT_IP_HEADER` to a header your host
+   overwrites (`cf-connecting-ip`, `fly-client-ip`, …), or
+   `TRUSTED_PROXY_HOPS` to the number of proxies in front of the app.
+7. **Monitoring.** Point an uptime monitor at `GET /api/cron/health` with
+   `Authorization: Bearer $CRON_SECRET`: `200` healthy, `503` when
+   scheduled retries are overdue or uploads are stuck, with the reasons
+   in the body.
+8. Authentication → Email: leave "Secure email change" on (the local
+   config does the same). A change then needs a click from both the old
+   and new address, and the app's message says so.
 
 ## Project map
 

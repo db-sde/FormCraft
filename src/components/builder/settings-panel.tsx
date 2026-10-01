@@ -669,6 +669,9 @@ function ContactInfoSettings({
                 {CONTACT_FIELD_LABELS[field]}
               </label>
               <label
+                // Dimmed because its switch is off-limits until the field is
+                // shown; aria-disabled tells tools that's deliberate.
+                aria-disabled={!shown}
                 className={cn(
                   "text-muted-foreground flex items-center gap-2 text-xs",
                   !shown && "opacity-40",

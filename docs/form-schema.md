@@ -84,10 +84,18 @@ independently (e.g. `short_text` settings: `placeholder?`, `minLength?`,
    Unicode rejection before anything else runs.
 2. **Structural** (`FormSchemaV1Zod.parse`) — types correct, no
    duplicate `question.id`/`ending.id`/`logic.id`.
-3. **Semantic** — every `logic[].questionId` and jump target resolves
-   to a real question/ending; no question references itself in a way
-   that creates a 0-step infinite loop; option-scoped operators only
-   used against option-bearing question types.
+3. **Semantic** (`validateSemantics`, run on every draft save and on
+   publish) — every `logic[].questionId` and jump target resolves to a
+   real question/ending; **a `jump_to_question` rule may only target a
+   question later in the form** (`backward_jump` — see below);
+   option-scoped operators only against option-bearing question types;
+   rules that compare to an option must name an option the question
+   really has (`dangling_logic_option`); no two options share an id.
+   Errors carry a creator-facing message ("Logic rule 2: jumps back to
+   an earlier question…"); `message` itself is for logs.
+   `validateForPublish` adds one check that only matters live: a rule
+   still waiting for its comparison value is refused
+   (`incomplete_logic_rule`), though it may be saved as a draft.
 4. **Publication compile** — additionally requires: every question is
    reachable from the start under at least one logic path (or no logic
    touches it, meaning default linear order applies), no cycles in the
@@ -110,9 +118,23 @@ responses stay interpretable without rewriting old rows.
 
 ## Logic loop / dangling-reference handling
 
-- Deleting a question that is referenced by a logic rule does not
-  silently delete the rule. The builder flags the rule as broken and
-  blocks publish until resolved (delete the rule or repoint it).
-- The publication compiler performs a directed-graph reachability and
-  cycle check over `{questions, logic, endings}`; a detected cycle
-  fails publish with a specific error naming the rule ids involved.
+- **Jumps only go forward.** A rule that jumped back (e.g. "Q3 is
+  answered → go to Q2") matched again on the way past Q3 and sent the
+  respondent round forever; the static cycle check could not see it
+  because Q3 still had a default way out. With forward-only jumps the
+  question graph is acyclic by construction. The builder offers only
+  later questions as targets, refuses a reorder that would turn a jump
+  into a jump back, and validation rejects it server-side.
+- **Forms published before that rule keep working.** The compiler does
+  not re-validate what it serves, and `evaluateNextStep` takes the set
+  of questions already shown: a jump to one of them is ignored and the
+  default step skips them, so any walk ends in at most one step per
+  question. The browser and `walkForm` (server) use the same function
+  and agree on the path — see `tests/unit/logic-properties.test.ts`.
+- Deleting a question that a rule references removes those rules after
+  a confirmation. Deleting an option removes the rules that checked it
+  (with a notice). Moving a question is refused if it would create a
+  backward jump.
+- The publication compiler still runs reachability and
+  strongly-connected-component checks over `{questions, logic, endings}`
+  as a second line of defence.

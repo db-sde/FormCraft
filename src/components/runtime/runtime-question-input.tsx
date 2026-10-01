@@ -475,7 +475,7 @@ function FileUploadInput({
         />
       </label>
       {status === "error" && (
-        <p className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-600">
           Upload failed — please try a different file.
         </p>
       )}
