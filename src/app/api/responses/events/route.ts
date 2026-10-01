@@ -13,6 +13,35 @@ const EventBody = z.object({
   questionId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
 });
 
+const QUESTION_CACHE_MS = 60_000;
+const questionCache = new Map<string, { ids: Set<string> | null; expires: number }>();
+
+/** The live version's question ids for a form (null if it isn't live),
+ * cached briefly — step events arrive on every question. */
+async function publishedQuestionIds(
+  admin: ReturnType<typeof createAdminClient>,
+  formId: string,
+) {
+  const hit = questionCache.get(formId);
+  if (hit && hit.expires > Date.now()) return hit.ids;
+
+  const { data } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .eq("status", "published")
+    .maybeSingle();
+  const questions = (data?.schema as { questions?: { id?: string }[] } | null)?.questions;
+  const ids = questions
+    ? new Set(
+        questions.map((q) => q.id).filter((id): id is string => typeof id === "string"),
+      )
+    : null;
+  if (questionCache.size > 500) questionCache.clear();
+  questionCache.set(formId, { ids, expires: Date.now() + QUESTION_CACHE_MS });
+  return ids;
+}
+
 /**
  * Respondent step events (PRD §3.6: question_viewed / question_answered)
  * — ids only, never answer values. Fire-and-forget from the public
@@ -34,13 +63,22 @@ export async function POST(request: NextRequest) {
   if (!limited.allowed) return apiError("rate_limited", "Too many events.", 429);
 
   after(async () => {
-    const { data: live } = await admin
-      .from("form_versions")
-      .select("id")
-      .eq("form_id", parsed.data.formId)
-      .eq("status", "published")
-      .maybeSingle();
-    if (!live) return;
+    // Only events that make sense for this form are recorded: the form
+    // must be live, the question one of its published questions, and a
+    // response id (if given) one of this form's responses. Anything else
+    // — fabricated ids, another form's response — is quietly dropped, so
+    // the funnel can't be skewed by an anonymous caller.
+    const questionIds = await publishedQuestionIds(admin, parsed.data.formId);
+    if (!questionIds?.has(parsed.data.questionId)) return;
+    if (parsed.data.responseId) {
+      const { data: owned } = await admin
+        .from("responses")
+        .select("id")
+        .eq("id", parsed.data.responseId)
+        .eq("form_id", parsed.data.formId)
+        .maybeSingle();
+      if (!owned) return;
+    }
     try {
       await recordAnalyticsEvent(admin, {
         formId: parsed.data.formId,

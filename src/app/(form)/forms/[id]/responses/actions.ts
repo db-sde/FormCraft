@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { deleteResponse } from "@/domains/responses";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Authorization is RLS: the DELETE only matches a row whose parent
@@ -18,7 +19,8 @@ export async function deleteResponseAction(
   const { supabase } = await getCurrentWorkspace();
 
   try {
-    await deleteResponse(supabase, responseId);
+    const deleted = await deleteResponse(supabase, responseId, createAdminClient());
+    if (!deleted) return { ok: false };
     revalidatePath(`/forms/${formId}/responses`);
     return { ok: true };
   } catch {

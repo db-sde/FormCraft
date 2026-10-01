@@ -815,6 +815,27 @@ export type Database = {
         Args: { target_workspace_id: string };
         Returns: boolean;
       };
+      list_leads: {
+        Args: {
+          p_form_id?: string;
+          p_limit?: number;
+          p_offset?: number;
+          p_search?: string;
+          p_workspace_id: string;
+        };
+        Returns: {
+          captured_at: string;
+          form_id: string;
+          form_title: string;
+          last_active_at: string;
+          referrer: string;
+          response_id: string;
+          status: Database["public"]["Enums"]["response_status"];
+          total_count: number;
+          utm_source: string;
+          value: Json;
+        }[];
+      };
       publish_form_version: {
         Args: { compiled_schema: Json; target_form_id: string };
         Returns: {

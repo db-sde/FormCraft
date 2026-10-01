@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
+import { headers } from "next/headers";
 import { getPublicFormBySlug } from "@/domains/forms";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { isLikelyBot } from "@/lib/http/bots";
 import { PublicFormRuntime } from "./public-form-runtime";
 
 /** One lookup per request, shared by the page and its metadata. */
@@ -36,13 +39,37 @@ export default async function PublicFormPage({
   if (!publicForm) notFound();
 
   // A view is counted on every render of this page, including a
-  // refresh mid-response — distinct from form_started, which only
-  // fires once per response row (see /api/responses/start). Analytics
-  // must never affect the page render, so both calls are best-effort.
+  // refresh mid-response — distinct from a start, which is the first
+  // interaction (see /api/responses/start). Not counted: crawlers and
+  // link-preview fetchers (sharing a link in chat apps makes their
+  // servers load it), and members of the form's own workspace looking
+  // at their live form. Request details must be read before after();
+  // analytics must never affect the page render, so everything after
+  // that is best-effort.
+  const userAgent = (await headers()).get("user-agent");
+  const viewer = (await (await createServerSupabaseClient()).auth.getUser()).data.user;
+  const countsAsView = !isLikelyBot(userAgent);
+
   after(async () => {
+    if (!countsAsView) return;
     const admin = createAdminClient();
-    const distinctId = crypto.randomUUID();
     try {
+      if (viewer) {
+        const { data: form } = await admin
+          .from("forms")
+          .select("workspace_id")
+          .eq("id", publicForm.formId)
+          .single();
+        const { data: membership } = form
+          ? await admin
+              .from("workspace_members")
+              .select("user_id")
+              .eq("workspace_id", form.workspace_id)
+              .eq("user_id", viewer.id)
+              .maybeSingle()
+          : { data: null };
+        if (membership) return; // the creator checking their own form
+      }
       await recordAnalyticsEvent(admin, {
         formId: publicForm.formId,
         eventType: "form_viewed",
@@ -52,7 +79,7 @@ export default async function PublicFormPage({
       // Swallow — see comment above.
     }
     await captureServerEvent({
-      distinctId,
+      distinctId: crypto.randomUUID(),
       event: "form_viewed",
       properties: { formId: publicForm.formId, embedded },
     });

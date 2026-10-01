@@ -58,37 +58,56 @@ export async function recordAnalyticsEvent(
 }
 
 /**
- * Read path for the dashboard's funnel/completion-rate widgets. Counts
- * in the database rather than fetching rows: PostgREST caps a select at
- * max_rows (1000), so counting fetched rows silently undercounted any
- * form past a thousand events. Preview traffic is excluded at the
- * source, same as computeFunnelSummary.
+ * The funnel behind the Views / Started / Completed / Completion-rate
+ * cards. Views come from analytics events (nothing else records a page
+ * view). Starts and completions come from the canonical `responses`
+ * table, counted for responses *started* in the period — so the cards
+ * always agree with the response lists, deleting a response is
+ * reflected immediately, and the completion rate is a true cohort rate
+ * (never above 100%). Everything is counted in the database: PostgREST
+ * caps a select at 1000 rows, so counting fetched rows silently
+ * undercounted any popular form. Preview traffic is excluded at the
+ * source.
  */
 export async function getFunnelSummaryForForm(
   supabase: Client,
   formId: string,
-  /** Only count events at or after this instant (PRD P1.20 "selected
+  /** Only count activity at or after this instant (PRD P1.20 "selected
    * period"); omit for all time. */
   since?: Date,
 ): Promise<FunnelSummary> {
-  const count = async (eventType: AnalyticsEventType) => {
-    let query = supabase
-      .from("analytics_events")
-      .select("id", { count: "exact", head: true })
-      .eq("form_id", formId)
-      .eq("event_type", eventType)
-      .eq("is_preview", false);
-    if (since) query = query.gte("created_at", since.toISOString());
-    const { count, error } = await query;
-    if (error) throw error;
-    return count ?? 0;
-  };
+  const sinceIso = since?.toISOString();
 
-  const [views, starts, completions] = await Promise.all([
-    count("form_viewed"),
-    count("form_started"),
-    count("form_submitted"),
-  ]);
+  const viewsQuery = supabase
+    .from("analytics_events")
+    .select("id", { count: "exact", head: true })
+    .eq("form_id", formId)
+    .eq("event_type", "form_viewed")
+    .eq("is_preview", false);
+  const startsQuery = supabase
+    .from("responses")
+    .select("id", { count: "exact", head: true })
+    .eq("form_id", formId)
+    .eq("is_preview", false);
+  const completionsQuery = supabase
+    .from("responses")
+    .select("id", { count: "exact", head: true })
+    .eq("form_id", formId)
+    .eq("is_preview", false)
+    .eq("status", "completed");
+
+  const [views, starts, completions] = await Promise.all(
+    [
+      sinceIso ? viewsQuery.gte("created_at", sinceIso) : viewsQuery,
+      sinceIso ? startsQuery.gte("started_at", sinceIso) : startsQuery,
+      sinceIso ? completionsQuery.gte("started_at", sinceIso) : completionsQuery,
+    ].map(async (query) => {
+      const { count, error } = await query;
+      if (error) throw error;
+      return count ?? 0;
+    }),
+  );
+
   return {
     views,
     starts,

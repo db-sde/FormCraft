@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { purgeExpiredUnfinishedResponses } from "@/domains/responses";
+import { purgeDeletedForms, purgeExpiredUnfinishedResponses } from "@/domains/responses";
 import { pruneRateLimits } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
@@ -14,9 +14,10 @@ async function run(request: NextRequest) {
   const rejected = rejectUnlessCron(request);
   if (rejected) return rejected;
   const admin = createAdminClient();
-  const result = await purgeExpiredUnfinishedResponses(admin);
+  const expired = await purgeExpiredUnfinishedResponses(admin);
+  const forms = await purgeDeletedForms(admin);
   await pruneRateLimits(admin);
-  return NextResponse.json(result);
+  return NextResponse.json({ ...expired, ...forms });
 }
 
 export const GET = run;

@@ -1,10 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { removeUploadFiles } from "@/domains/uploads/cleanup";
 
 type Client = SupabaseClient<Database>;
 
 const BATCH = 500;
-const UPLOADS_BUCKET = "response-uploads";
 
 /**
  * Deletes unfinished responses older than each form's retention setting
@@ -41,17 +41,7 @@ export async function purgeExpiredUnfinishedResponses(
       if (!expired?.length) break;
       const ids = expired.map((r) => r.id);
 
-      const { data: uploads, error: uploadsError } = await admin
-        .from("uploads")
-        .select("storage_path")
-        .in("response_id", ids);
-      if (uploadsError) throw uploadsError;
-      if (uploads?.length) {
-        const { error: removeError } = await admin.storage
-          .from(UPLOADS_BUCKET)
-          .remove(uploads.map((u) => u.storage_path));
-        if (removeError) throw removeError;
-      }
+      await removeUploadFiles(admin, { responseIds: ids });
 
       const { error: deleteError } = await admin.from("responses").delete().in("id", ids);
       if (deleteError) throw deleteError;
@@ -60,4 +50,41 @@ export async function purgeExpiredUnfinishedResponses(
     }
   }
   return { deleted };
+}
+
+const DELETED_FORM_GRACE_DAYS = 30;
+
+/**
+ * Permanently removes forms that were deleted more than 30 days ago —
+ * their responses, leads, analytics and uploaded files — which
+ * otherwise sat in the database forever after a creator "deleted" them.
+ * The grace period leaves room to restore one by hand. Run from the
+ * retention cron.
+ */
+export async function purgeDeletedForms(
+  admin: Client,
+  now: Date = new Date(),
+): Promise<{ purged: number }> {
+  const cutoff = new Date(
+    now.getTime() - DELETED_FORM_GRACE_DAYS * 86_400_000,
+  ).toISOString();
+  let purged = 0;
+  for (;;) {
+    const { data: forms, error } = await admin
+      .from("forms")
+      .select("id")
+      .not("deleted_at", "is", null)
+      .lt("deleted_at", cutoff)
+      .limit(100);
+    if (error) throw error;
+    if (!forms?.length) break;
+    const formIds = forms.map((f) => f.id);
+
+    await removeUploadFiles(admin, { formIds });
+    const { error: deleteError } = await admin.from("forms").delete().in("id", formIds);
+    if (deleteError) throw deleteError;
+    purged += formIds.length;
+    if (forms.length < 100) break;
+  }
+  return { purged };
 }

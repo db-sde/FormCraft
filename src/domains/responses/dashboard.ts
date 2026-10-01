@@ -121,8 +121,14 @@ export async function listResponses(
     .eq("form_id", formId);
   query =
     view === "completed"
-      ? query.eq("status", "completed").order("completed_at", { ascending: false })
-      : query.eq("status", "partial").order("last_active_at", { ascending: false });
+      ? query
+          .eq("status", "completed")
+          .order("completed_at", { ascending: false })
+          .order("id", { ascending: false })
+      : query
+          .eq("status", "partial")
+          .order("last_active_at", { ascending: false })
+          .order("id", { ascending: false });
 
   const { data, error, count } = await query.range(from, to);
   if (error) throw error;
@@ -133,23 +139,25 @@ export async function listResponses(
   const previewQuestions = pickPreviewQuestions(latest);
 
   // Every answer for this page (not just preview columns) — progress
-  // needs the full count. At most 25 responses, so well under max_rows.
+  // needs the full count. 25 responses × up to 200 questions can exceed
+  // the 1000 rows one request returns, so page through all of them.
   const answersByResponse = new Map<string, Map<string, unknown>>();
-  if (rows.length > 0) {
+  const responseIds = rows.map((r) => r.id);
+  for (let from = 0; responseIds.length > 0; from += FETCH_PAGE) {
     const { data: answerRows, error: answersError } = await supabase
       .from("answers")
       .select("response_id, question_id, value")
-      .in(
-        "response_id",
-        rows.map((r) => r.id),
-      )
-      .limit(FETCH_PAGE);
+      .in("response_id", responseIds)
+      .order("response_id")
+      .order("question_id")
+      .range(from, from + FETCH_PAGE - 1);
     if (answersError) throw answersError;
     for (const a of answerRows ?? []) {
       const forResponse = answersByResponse.get(a.response_id) ?? new Map();
       forResponse.set(a.question_id, a.value);
       answersByResponse.set(a.response_id, forResponse);
     }
+    if ((answerRows?.length ?? 0) < FETCH_PAGE) break;
   }
 
   // Ending titles and answer formatting come from each response's own
@@ -203,11 +211,18 @@ export async function listResponses(
 }
 
 /** The responses immediately newer/older than the given one, in the
- * same order its list uses — for prev/next on the detail page. */
+ * same order its list uses — for prev/next on the detail page. Ordered
+ * by (timestamp, id): comparing the timestamp alone skipped any response
+ * sharing the exact same instant. */
 export async function getAdjacentResponseIds(
   supabase: Client,
   formId: string,
-  current: { status: string; completedAt: string | null; lastActiveAt: string },
+  current: {
+    id: string;
+    status: string;
+    completedAt: string | null;
+    lastActiveAt: string;
+  },
 ): Promise<{ newerId: string | null; olderId: string | null }> {
   const completed = current.status === "completed";
   const column = completed ? "completed_at" : "last_active_at";
@@ -222,8 +237,16 @@ export async function getAdjacentResponseIds(
       .eq("status", completed ? "completed" : "partial");
 
   const [newer, older] = await Promise.all([
-    base().gt(column, at).order(column, { ascending: true }).limit(1),
-    base().lt(column, at).order(column, { ascending: false }).limit(1),
+    base()
+      .or(`${column}.gt.${at},and(${column}.eq.${at},id.gt.${current.id})`)
+      .order(column, { ascending: true })
+      .order("id", { ascending: true })
+      .limit(1),
+    base()
+      .or(`${column}.lt.${at},and(${column}.eq.${at},id.lt.${current.id})`)
+      .order(column, { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1),
   ]);
   if (newer.error) throw newer.error;
   if (older.error) throw older.error;
@@ -344,12 +367,50 @@ export async function getResponseDetail(
   };
 }
 
+/**
+ * Deletes a response and its uploaded files. Authorization is the
+ * caller's own session (RLS only lets a member delete their workspace's
+ * responses); the files can't be removed by that session, so the
+ * service-role client does that after the database row is gone. Returns
+ * false if there was nothing the caller could delete.
+ */
 export async function deleteResponse(
   supabase: Client,
   responseId: string,
-): Promise<void> {
-  const { error } = await supabase.from("responses").delete().eq("id", responseId);
+  admin: Client,
+): Promise<boolean> {
+  // Visible to the caller only if they're a member — an unauthorised id
+  // finds nothing here and nothing is touched.
+  const { data: uploads, error: uploadsError } = await supabase
+    .from("uploads")
+    .select("storage_path")
+    .eq("response_id", responseId);
+  if (uploadsError) throw uploadsError;
+
+  const { data: deleted, error } = await supabase
+    .from("responses")
+    .delete()
+    .eq("id", responseId)
+    .select("id");
   if (error) throw error;
+  if (!deleted?.length) return false;
+
+  if (uploads?.length) {
+    await removeFromBucketSafely(
+      admin,
+      uploads.map((u) => u.storage_path),
+    );
+  }
+  return true;
+}
+
+async function removeFromBucketSafely(admin: Client, paths: string[]) {
+  for (let i = 0; i < paths.length; i += 100) {
+    const { error } = await admin.storage
+      .from("response-uploads")
+      .remove(paths.slice(i, i + 100));
+    if (error) throw error;
+  }
 }
 
 export type ResponseCounts = { completed: number; partial: number; inProgress: number };

@@ -1,17 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import {
+  THEME_ASSETS_BUCKET,
+  removeFolder,
+  removeUploadFiles,
+} from "@/domains/uploads/cleanup";
 
 type Client = SupabaseClient<Database>;
 
-const UPLOADS_BUCKET = "response-uploads";
-
 /**
  * Permanently deletes a user and everything they own (PRD P1.1 account
- * deletion, §13): their workspaces — which cascade to forms, versions,
- * responses, answers, integrations and analytics — the files
- * respondents uploaded to those forms (storage isn't covered by the
- * database cascade), then the auth user (cascading their profile and
- * memberships). Service-role client only.
+ * deletion, §13): the files respondents uploaded to their forms and the
+ * logos/backgrounds they uploaded (storage isn't covered by the
+ * database cascade), their workspaces — which cascade to forms,
+ * versions, responses, answers, integrations and analytics — then the
+ * auth user (cascading their profile and memberships). Files go first:
+ * if deleting them fails the account is still intact and the call can
+ * simply be retried. Service-role client only.
  */
 export async function deleteAccount(admin: Client, userId: string): Promise<void> {
   const { data: workspaces, error: workspacesError } = await admin
@@ -22,26 +27,28 @@ export async function deleteAccount(admin: Client, userId: string): Promise<void
   const workspaceIds = (workspaces ?? []).map((w) => w.id);
 
   if (workspaceIds.length > 0) {
-    const { data: forms, error: formsError } = await admin
-      .from("forms")
-      .select("id")
-      .in("workspace_id", workspaceIds);
-    if (formsError) throw formsError;
-    const formIds = (forms ?? []).map((f) => f.id);
+    // Every form id, however many (paged by id — a single select stops
+    // at 1000).
+    const formIds: string[] = [];
+    for (let cursor: string | null = null; ;) {
+      let query = admin
+        .from("forms")
+        .select("id")
+        .in("workspace_id", workspaceIds)
+        .order("id")
+        .limit(500);
+      if (cursor) query = query.gt("id", cursor);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!data?.length) break;
+      formIds.push(...data.map((f) => f.id));
+      cursor = data[data.length - 1].id;
+      if (data.length < 500) break;
+    }
 
-    for (let i = 0; i < formIds.length; i += 100) {
-      const { data: uploads, error: uploadsError } = await admin
-        .from("uploads")
-        .select("storage_path, responses!inner(form_id)")
-        .in("responses.form_id", formIds.slice(i, i + 100))
-        .limit(1000);
-      if (uploadsError) throw uploadsError;
-      if (uploads?.length) {
-        const { error } = await admin.storage
-          .from(UPLOADS_BUCKET)
-          .remove(uploads.map((u) => u.storage_path));
-        if (error) throw error;
-      }
+    await removeUploadFiles(admin, { formIds });
+    for (const workspaceId of workspaceIds) {
+      await removeFolder(admin, THEME_ASSETS_BUCKET, workspaceId);
     }
 
     const { error: deleteError } = await admin

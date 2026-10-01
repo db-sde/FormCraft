@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
-import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
+import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
   walkForm,
   validateAnswer,
@@ -116,10 +116,37 @@ function filterAnswersToKnownQuestions(
   schema: FormSchemaV1,
   answers: AnswerMap,
 ): AnswerMap {
-  const knownIds = new Set(schema.questions.map((q) => q.id));
-  return Object.fromEntries(
-    Object.entries(answers).filter(([questionId]) => knownIds.has(questionId)),
+  const byId = new Map(schema.questions.map((q) => [q.id, q]));
+  const known: AnswerMap = {};
+  for (const [questionId, value] of Object.entries(answers)) {
+    const question = byId.get(questionId);
+    if (question) known[questionId] = normalizeAnswer(question, value);
+  }
+  return known;
+}
+
+/**
+ * Shapes an answer into what is stored. A Contact info answer keeps only
+ * the fields the block asks for, trimmed, with blank ones dropped — so a
+ * block the respondent emptied (or filled with spaces) becomes `{}`,
+ * which the database removes, instead of lingering as a "lead" with no
+ * details.
+ */
+export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
+  if (question.type !== "contact_info") return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const kept: Record<string, string> = {};
+  for (const field of question.settings.fields) {
+    const raw = record[field];
+    if (typeof raw === "string" && raw.trim() !== "") kept[field] = raw.trim();
+  }
+  // Fields outside the block's configuration are left for validation
+  // to reject rather than silently discarded here.
+  const unexpected = Object.keys(record).some(
+    (key) => !(question.settings.fields as string[]).includes(key),
   );
+  return unexpected ? value : kept;
 }
 
 /** Only defined values, as plain JSON for the database functions. */
