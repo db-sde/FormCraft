@@ -105,9 +105,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const publicForm = await loadPublicForm(slug);
-  if (!publicForm) return { title: "Form unavailable", robots: { index: false } };
+  if (!publicForm)
+    return { title: { absolute: "This form isn't available" }, robots: { index: false } };
 
   const { title, description } = publicForm.compiled.schema.meta;
+  // Respondent tabs show only the form's title (Part 8 §4) — it never
+  // changes per question, so it doesn't reveal progress or answers.
   // Shared form links get a real preview card in chat apps/social.
-  return { title, description, openGraph: { title, description } };
+  return { title: { absolute: title }, description, openGraph: { title, description } };
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { EndingV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
@@ -12,13 +11,19 @@ import {
   type AnswerMap,
 } from "@/domains/logic";
 import { RuntimeQuestionInput } from "./runtime-question-input";
-import { Button } from "@/components/ui/button";
-import { cn } from "cn";
 import {
-  THEME_FONT_STACK,
-  THEME_BUTTON_RADIUS,
-  themeTokenOverrides,
-} from "@/components/theme-styles";
+  Stage,
+  StageActions,
+  StageButton,
+  StageError,
+  StageNumber,
+  WelcomeBackBanner,
+  stageDescClass,
+  stageLabelClass,
+  stageTitleClass,
+  type StageMode,
+} from "./stage";
+import { cn } from "cn";
 
 export type CompleteOutcome =
   | { ok: true; endingId: string }
@@ -38,6 +43,32 @@ const AUTO_ADVANCE_DELAY_MS = 350;
 
 function isEntryScreen(question: QuestionV1) {
   return question.type === "welcome_screen" || question.type === "statement";
+}
+
+/** A–Z picks a choice tile, Y/N answers yes/no, 0–9 sets a rating or
+ * scale value — unless the respondent is typing in a field. */
+function pickByKey(e: KeyboardEvent, container: HTMLElement | null) {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
+  const target = e.target as HTMLElement | null;
+  if (!container || !target) return;
+  const typing =
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT" ||
+    target.isContentEditable;
+  if (typing) return;
+  if (!(
+    target === document.body ||
+    container.contains(target) ||
+    target.contains(container)
+  ))
+    return;
+  const key = e.key.toUpperCase();
+  const tile = container.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
+  if (!tile) return;
+  e.preventDefault();
+  tile.click();
+  tile.focus({ preventScroll: true });
 }
 
 /**
@@ -66,7 +97,18 @@ export function FormRuntime({
   savesProgress = false,
   onStepEvent,
   className,
+  mode = "auto",
+  welcomeBack = false,
+  redirectOnEnding = false,
 }: {
+  /** Sizes: "auto" (the public form) follows the screen; Preview forces
+   * desktop or phone. */
+  mode?: StageMode;
+  /** Resumed from saved progress: show the "Welcome back" pill. */
+  welcomeBack?: boolean;
+  /** The live form follows an ending's redirect after a 3s countdown;
+   * Preview never navigates away. */
+  redirectOnEnding?: boolean;
   /** Public runtime only: step analytics (ids only, never values). */
   onStepEvent?: (
     type: "question_viewed" | "question_answered",
@@ -102,6 +144,8 @@ export function FormRuntime({
   const [ending, setEnding] = useState<EndingV1 | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Which way the last step moved, for the slide direction.
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const questionHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -110,7 +154,6 @@ export function FormRuntime({
   // Strict Mode's repeat effect run) never grabs focus on page load.
   const focusedStepRef = useRef(currentId);
 
-  const theme = compiled.schema.theme;
   const question = compiled.schema.questions.find((q) => q.id === currentId);
   const currentIndex = compiled.orderedQuestionIds.indexOf(currentId);
   // Where the respondent goes from here, given the questions they have
@@ -177,6 +220,7 @@ export function FormRuntime({
       void finish(currentAnswers, next.endingId);
     } else {
       setError(null);
+      setDirection("forward");
       const nextHistory = [...history, question.id];
       setHistory(nextHistory);
       setCurrentId(next.questionId);
@@ -206,6 +250,7 @@ export function FormRuntime({
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     const prev = history[history.length - 1];
     const prevHistory = history.slice(0, -1);
+    setDirection("back");
     setHistory(prevHistory);
     setCurrentId(prev);
     setError(null);
@@ -250,7 +295,11 @@ export function FormRuntime({
     // yes/no — where focus otherwise sits on <body> after the previous
     // question's input unmounts.
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Enter" || e.isComposing) return;
+      if (e.isComposing) return;
+      if (e.key !== "Enter") {
+        pickByKey(e, containerRef.current);
+        return;
+      }
       // A field that handles Enter itself (e.g. the contact block moving
       // to its next input) marks the event handled. stopPropagation
       // can't express that here: React's own listeners live on the
@@ -291,83 +340,58 @@ export function FormRuntime({
     [],
   );
 
-  const containerStyle: React.CSSProperties = {
-    ...(themeTokenOverrides(theme) as React.CSSProperties),
-    backgroundColor: theme.backgroundColor,
-    color: theme.textColor ?? undefined,
-    fontFamily: THEME_FONT_STACK[theme.fontFamily],
-    backgroundImage: theme.backgroundImageUrl
-      ? `url(${theme.backgroundImageUrl})`
-      : undefined,
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-  };
-
-  const buttonStyle: React.CSSProperties = {
-    backgroundColor: theme.primaryColor,
-    borderRadius: THEME_BUTTON_RADIUS[theme.buttonStyle],
-  };
+  const theme = compiled.schema.theme;
+  // Numbers count every step after the welcome screen, as the builder does.
+  const numbered = compiled.orderedQuestionIds.filter(
+    (id) => compiled.schema.questions.find((q) => q.id === id)?.type !== "welcome_screen",
+  );
+  const total = numbered.length || 1;
 
   if (ending) {
     return (
-      <div
-        className={cn(
-          "flex h-full min-h-[420px] flex-col items-center justify-center gap-4 p-10 text-center",
-          className,
-        )}
-        style={containerStyle}
-      >
-        {theme.logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL
-          <img src={theme.logoUrl} alt="" className="h-10 object-contain" />
-        )}
-        <h2
-          ref={endingHeadingRef}
-          tabIndex={-1}
-          className="text-2xl font-semibold outline-none"
-        >
-          {ending.title}
-        </h2>
-        {ending.description && (
-          <p className="max-w-md opacity-80">{ending.description}</p>
-        )}
-        {ending.redirectUrl && (
-          <Button asChild style={buttonStyle} className="text-white">
-            <a href={ending.redirectUrl}>{ending.buttonLabel || "Continue"}</a>
-          </Button>
-        )}
-      </div>
+      <EndingScreen
+        ending={ending}
+        theme={theme}
+        mode={mode}
+        className={className}
+        headingRef={endingHeadingRef}
+        redirect={redirectOnEnding}
+      />
     );
   }
 
   if (!question) {
     return (
-      <div
-        className={cn(
-          "flex h-full min-h-[420px] items-center justify-center p-10 text-center text-sm opacity-70",
-          className,
-        )}
-      >
-        This form has no questions yet.
-      </div>
+      <Stage theme={theme} mode={mode} className={cn("min-h-[420px]", className)}>
+        <p className="text-center text-sm text-(--st-muted)">
+          This form has no questions yet.
+        </p>
+      </Stage>
     );
   }
 
   const entry = isEntryScreen(question);
+  const number = numbered.indexOf(question.id) + 1;
+  const autoAdvances = AUTO_ADVANCE_TYPES.has(question.type);
   const primaryLabel = entry
-    ? question.settings.buttonLabel || (isLastStep ? "Submit" : "Start")
+    ? question.settings.buttonLabel ||
+      (isLastStep ? "Submit" : question.type === "statement" ? "Continue" : "Start")
     : isLastStep
       ? "Submit"
       : "OK";
+  const enterHint =
+    question.type === "long_text" ? "Shift ⇧ + Enter ↵ for a new line" : "press Enter ↵";
+  const progress = question.type === "welcome_screen" ? 0 : Math.min(1, number / total);
+  const welcome = question.type === "welcome_screen";
 
   return (
-    <div
+    <Stage
       ref={containerRef}
-      className={cn(
-        "flex h-full min-h-[420px] flex-col justify-between gap-6 p-6 sm:p-10",
-        className,
-      )}
-      style={containerStyle}
+      theme={theme}
+      mode={mode}
+      progress={progress}
+      banner={welcomeBack && history.length === 0 ? <WelcomeBackBanner /> : undefined}
+      className={cn("min-h-[420px]", className)}
     >
       {/* Spam trap: invisible to people and skipped by keyboard and screen
           readers; bots that fill every field reveal themselves. The name
@@ -388,123 +412,204 @@ export function FormRuntime({
         data-form-type="other"
         className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
       />
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-5">
-        {theme.logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL
-          <img src={theme.logoUrl} alt="" className="h-8 self-start object-contain" />
+      <div
+        key={question.id}
+        className={cn(
+          "flex flex-col gap-(--st-gap)",
+          direction === "back" ? "fc-step-in-back" : "fc-step-in",
         )}
-        {entry && question.settings.imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
-          <img
-            src={question.settings.imageUrl}
-            alt={question.settings.imageAlt ?? ""}
-            className="max-h-64 w-full rounded-lg object-contain"
-          />
-        )}
-        <div>
-          <h2
-            ref={questionHeadingRef}
-            tabIndex={-1}
-            className="text-xl font-semibold outline-none sm:text-2xl"
+      >
+        {entry ? (
+          <div
+            className={cn(
+              "flex flex-col gap-4",
+              welcome &&
+                "in-data-[mode=desktop]:items-center in-data-[mode=desktop]:text-center md:in-data-[mode=auto]:items-center md:in-data-[mode=auto]:text-center",
+            )}
           >
-            {question.label}
-            {question.required && !entry && question.type !== "contact_info" && (
-              <span aria-hidden className="ml-1" style={{ color: theme.primaryColor }}>
-                *
-              </span>
+            {question.settings.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+              <img
+                src={question.settings.imageUrl}
+                alt={question.settings.imageAlt ?? ""}
+                className="max-h-64 w-full rounded-(--st-tile-br) object-contain"
+              />
             )}
-            {question.required && !entry && question.type !== "contact_info" && (
-              <span className="sr-only"> (required)</span>
+            <h2
+              ref={questionHeadingRef}
+              tabIndex={-1}
+              className={cn(stageTitleClass, "outline-none focus-visible:shadow-none")}
+            >
+              {question.label}
+            </h2>
+            {question.description && (
+              <p className={cn(stageDescClass, "max-w-[460px]")}>
+                {question.description}
+              </p>
             )}
-          </h2>
-          {question.description && (
-            <p className="mt-1.5 text-sm opacity-70 sm:text-base">
-              {question.description}
-            </p>
-          )}
-        </div>
+            {error && <StageError>{error}</StageError>}
+            <div className="mt-2 flex items-center gap-3 in-data-[mode=phone]:w-full max-md:in-data-[mode=auto]:w-full">
+              <StageButton
+                onClick={() => goNext()}
+                disabled={submitting}
+                className="px-[26px] in-data-[mode=phone]:flex-1 max-md:in-data-[mode=auto]:flex-1"
+              >
+                {submitting && (
+                  <span className="size-[15px] animate-spin rounded-full border-2 border-current border-t-transparent" />
+                )}
+                {submitting ? "Submitting…" : primaryLabel}
+              </StageButton>
+              {!submitting && (
+                <span className="text-[12.5px] text-(--st-muted) in-data-[mode=phone]:hidden max-md:in-data-[mode=auto]:hidden [@media(hover:none)]:hidden">
+                  {enterHint}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {number > 0 && <StageNumber n={number} />}
+            <div className="flex flex-col gap-2">
+              <h2
+                ref={questionHeadingRef}
+                tabIndex={-1}
+                className={cn(stageLabelClass, "outline-none focus-visible:shadow-none")}
+              >
+                {question.label}
+                {question.required && question.type !== "contact_info" && (
+                  <>
+                    <span aria-hidden className="text-(--st-primary)">
+                      {" "}
+                      *
+                    </span>
+                    <span className="sr-only"> (required)</span>
+                  </>
+                )}
+              </h2>
+              {question.description && (
+                <p className={stageDescClass}>{question.description}</p>
+              )}
+            </div>
 
-        <RuntimeQuestionInput
-          key={question.id}
-          question={question}
-          value={answers[question.id]}
-          onChange={setAnswer}
-          primaryColor={theme.primaryColor}
-          getResponseId={getResponseId}
-        />
+            <RuntimeQuestionInput
+              key={question.id}
+              question={question}
+              value={answers[question.id]}
+              onChange={setAnswer}
+              getResponseId={getResponseId}
+              invalid={!!error}
+            />
 
-        {error && (
-          <p role="alert" className="text-sm text-red-600">
-            {error}
+            {error && <StageError>{error}</StageError>}
+
+            <StageActions
+              showBack={history.length > 0}
+              onBack={goBack}
+              onNext={() => goNext()}
+              label={primaryLabel}
+              submitting={submitting}
+              showCheck={!isLastStep && !autoAdvances}
+              enterHint={enterHint}
+            />
+          </>
+        )}
+
+        {savesProgress && currentIndex >= 0 && !entry && (
+          <p className="text-xs text-(--st-muted)">
+            {question.type === "contact_info"
+              ? "Your details are saved when you continue, even if you don't finish."
+              : "Your answers are saved as you go."}
           </p>
         )}
-
-        <div className="mt-1 flex items-center gap-3">
-          {history.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Back"
-              onClick={goBack}
-              disabled={submitting}
-            >
-              <ArrowLeft />
-            </Button>
-          )}
-          <Button
-            type="button"
-            onClick={() => goNext()}
-            style={buttonStyle}
-            className="text-white"
-            disabled={submitting}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="animate-spin" /> Submitting…
-              </>
-            ) : (
-              <>
-                {primaryLabel}
-                {!entry && !isLastStep && <ArrowRight />}
-              </>
-            )}
-          </Button>
-          {!submitting && (
-            <span className="hidden text-xs opacity-70 sm:inline">
-              {question.type === "long_text"
-                ? "Shift ⇧ + Enter ↵ for a new line"
-                : "press Enter ↵"}
-            </span>
-          )}
-        </div>
       </div>
-
-      {savesProgress && currentIndex >= 0 && (
-        <p className="mx-auto -mb-3 w-full max-w-xl text-xs opacity-70">
-          {question.type === "contact_info"
-            ? "Your details are saved when you continue, even if you don't finish."
-            : "Your answers are saved as you go."}
-        </p>
-      )}
-      {currentIndex >= 0 && (
-        <div
-          role="progressbar"
-          aria-label="Form progress"
-          aria-valuenow={currentIndex + 1}
-          aria-valuemin={1}
-          aria-valuemax={compiled.orderedQuestionIds.length}
-          className="mx-auto h-1 w-full max-w-xl overflow-hidden rounded-full bg-black/10"
-        >
-          <div
-            className="h-full transition-all"
-            style={{
-              width: `${((currentIndex + 1) / compiled.orderedQuestionIds.length) * 100}%`,
-              backgroundColor: theme.primaryColor,
-            }}
-          />
-        </div>
-      )}
-    </div>
+    </Stage>
   );
+}
+
+const REDIRECT_SECONDS = 3;
+
+/** An ending (Part 6 §6.4, Part 8 §3). With a redirect URL on the live
+ * form: the response is already saved, so count down 3s, then go in
+ * the same tab; if the browser blocks it, the button stays. */
+function EndingScreen({
+  ending,
+  theme,
+  mode,
+  className,
+  headingRef,
+  redirect,
+}: {
+  ending: EndingV1;
+  theme: CompiledFormV1["schema"]["theme"];
+  mode: StageMode;
+  className?: string;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  redirect: boolean;
+}) {
+  const target = ending.redirectUrl;
+  const counting = redirect && !!target;
+  const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
+  const host = target ? safeHost(target) : null;
+
+  useEffect(() => {
+    if (!counting || !target) return;
+    if (secondsLeft <= 0) {
+      window.location.assign(target);
+      return;
+    }
+    const timer = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [counting, target, secondsLeft]);
+
+  return (
+    <Stage
+      theme={theme}
+      mode={mode}
+      progress={1}
+      madeWith={ending.showMadeWith !== false}
+      className={cn("min-h-[420px]", className)}
+    >
+      <div className="fc-step-in flex flex-col items-start gap-4 pb-10">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className={cn(stageTitleClass, "outline-none focus-visible:shadow-none")}
+        >
+          {ending.title}
+        </h2>
+        {ending.description && (
+          <p className={cn(stageDescClass, "max-w-[460px]")}>{ending.description}</p>
+        )}
+        {counting && secondsLeft > 0 && (
+          <p role="status" className="text-[15px] text-(--st-muted)">
+            Taking you to <strong className="text-(--st-text)">{host}</strong> in{" "}
+            {secondsLeft} second{secondsLeft === 1 ? "" : "s"}…
+          </p>
+        )}
+        {target && (
+          <div className="mt-2 flex flex-col items-start gap-2 in-data-[mode=phone]:w-full max-md:in-data-[mode=auto]:w-full">
+            <StageButton
+              onClick={() => window.location.assign(target)}
+              className="px-[26px] in-data-[mode=phone]:w-full max-md:in-data-[mode=auto]:w-full"
+            >
+              {counting ? "Go now" : ending.buttonLabel || `Continue to ${host}`}
+            </StageButton>
+            {counting && (
+              <span className="text-[12.5px] text-(--st-muted)">
+                Not redirected? Use the button above.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </Stage>
+  );
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }

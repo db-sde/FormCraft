@@ -244,6 +244,8 @@ export const EndingV1 = z.object({
   buttonLabel: optionalSafeText(100),
   redirectUrl: webUrl.optional(),
   isDefault: z.boolean().default(false),
+  /** The "Made with FormCraft" badge on this ending; shown unless false. */
+  showMadeWith: z.boolean().optional(),
 });
 export type EndingV1 = z.infer<typeof EndingV1>;
 

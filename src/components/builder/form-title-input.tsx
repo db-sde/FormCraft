@@ -39,13 +39,14 @@ export function FormTitleInput({
       setCommitted(previous);
       setValue(previous);
       onTitleChange(previous);
-      toast.error(result.message);
+      toast.error("Couldn't rename.", { description: result.message });
     }
   }
 
   return (
     <input
       aria-label="Form name"
+      title="Click to rename"
       value={value}
       maxLength={200}
       onChange={(e) => setValue(e.target.value)}
@@ -60,7 +61,7 @@ export function FormTitleInput({
           requestAnimationFrame(() => input.blur());
         }
       }}
-      className="hover:border-input focus:border-ring min-w-0 flex-1 truncate rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none sm:max-w-xs"
+      className="font-heading hover:bg-hover-wash focus:border-ink focus:bg-card focus:shadow-focus h-[34px] w-[300px] min-w-0 shrink truncate rounded-sm border-[1.5px] border-transparent bg-transparent px-2 text-[17px] font-bold outline-none max-xl:w-[200px]"
     />
   );
 }

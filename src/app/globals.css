@@ -7,6 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-canvas: var(--canvas);
+  --color-board: var(--board);
+  --color-board-dot: var(--board-dot);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -125,6 +127,9 @@
   --radius: 10px;
   /* App canvas behind cards (dashboard, responses, builder). */
   --canvas: #f5efe4;
+  /* The builder's dotted work surface. */
+  --board: #efe6d6;
+  --board-dot: #d9ccb6;
   --sidebar: #fffaf1;
   --sidebar-foreground: #2b2118;
   --sidebar-primary: #2b2118;
@@ -225,6 +230,8 @@
   --disabled-foreground: #6f6254;
   --disabled-border: #3d3229;
   --canvas: #1c1713;
+  --board: #211b16;
+  --board-dot: #3a3027;
   --sidebar: #26201a;
   --sidebar-foreground: #f3ebdf;
   --sidebar-primary: #f3ebdf;
@@ -326,6 +333,189 @@
   /* The ring every focusable thing uses: a surface-coloured gap, then ink. */
   .fc-focus {
     @apply focus-visible:shadow-focus outline-none;
+  }
+}
+
+/*
+ * The respondent stage (FC Stage, Part 6): one template for every
+ * question type and theme, sized per mode. Colours come from stageVars()
+ * on the same element; these are only the measurements.
+ */
+@layer components {
+  .fc-stage {
+    --st-label: 26px;
+    --st-title: 38px;
+    --st-desc: 16px;
+    --st-input: 22px;
+    --st-tile: 15px;
+    --st-pad: 40px 56px;
+    --st-pad-x: 28px;
+    --st-gap: 16px;
+    --st-btn-h: 42px;
+    --st-num: 14px;
+    --st-maxw: 560px;
+    --st-tile-max: 420px;
+    --st-tile-pad: 11px 14px;
+    --st-yn-max: 360px;
+    --st-yn-h: 120px;
+    --st-star: 46px;
+    --st-star-10: 34px;
+    --st-cell-h: 52px;
+    --st-cell-font: 16px;
+    --st-cell-gap: 6px;
+    --st-long-h: 84px;
+    --st-bar: 5px;
+    --st-btn-font: 15px;
+  }
+  .fc-stage[data-mode="phone"] {
+    --st-label: 22px;
+    --st-title: 30px;
+    --st-desc: 15px;
+    --st-input: 20px;
+    --st-tile: 15.5px;
+    --st-pad: 64px 22px 28px;
+    --st-pad-x: 22px;
+    --st-gap: 18px;
+    --st-btn-h: 48px;
+    --st-num: 13px;
+    --st-maxw: 100%;
+    --st-tile-max: 100%;
+    --st-tile-pad: 13px 14px;
+    --st-yn-max: 100%;
+    --st-yn-h: 112px;
+    --st-star: 40px;
+    --st-star-10: 26px;
+    --st-cell-h: 44px;
+    --st-cell-font: 14px;
+    --st-cell-gap: 4px;
+    --st-long-h: 96px;
+    --st-bar: 4px;
+    --st-btn-font: 16px;
+  }
+  .fc-stage[data-mode="desktop"] {
+    --st-label: 30px;
+    --st-title: 44px;
+    --st-desc: 17px;
+    --st-input: 26px;
+    --st-tile: 16px;
+    --st-pad: 72px 96px;
+    --st-pad-x: 40px;
+    --st-gap: 22px;
+    --st-btn-h: 46px;
+    --st-num: 15px;
+    --st-maxw: 640px;
+  }
+  /* The public form: phone sizes, then desktop sizes from 768px. */
+  .fc-stage[data-mode="auto"] {
+    --st-label: 22px;
+    --st-title: 30px;
+    --st-desc: 15px;
+    --st-input: 20px;
+    --st-tile: 15.5px;
+    --st-pad: 64px 22px 28px;
+    --st-pad-x: 22px;
+    --st-gap: 18px;
+    --st-btn-h: 48px;
+    --st-num: 13px;
+    --st-maxw: 100%;
+    --st-tile-max: 100%;
+    --st-tile-pad: 13px 14px;
+    --st-yn-max: 100%;
+    --st-yn-h: 112px;
+    --st-star: 40px;
+    --st-star-10: 26px;
+    --st-cell-h: 44px;
+    --st-cell-font: 14px;
+    --st-cell-gap: 4px;
+    --st-long-h: 96px;
+    --st-bar: 4px;
+    --st-btn-font: 16px;
+  }
+  @media (min-width: 768px) {
+    .fc-stage[data-mode="auto"] {
+      --st-label: 30px;
+      --st-title: 44px;
+      --st-desc: 17px;
+      --st-input: 26px;
+      --st-tile: 16px;
+      --st-pad: 72px 96px;
+      --st-pad-x: 40px;
+      --st-gap: 22px;
+      --st-btn-h: 46px;
+      --st-num: 15px;
+      --st-maxw: 640px;
+      --st-tile-max: 420px;
+      --st-tile-pad: 11px 14px;
+      --st-yn-max: 360px;
+      --st-yn-h: 120px;
+      --st-star: 46px;
+      --st-star-10: 34px;
+      --st-cell-h: 52px;
+      --st-cell-font: 16px;
+      --st-cell-gap: 6px;
+      --st-long-h: 84px;
+      --st-bar: 5px;
+      --st-btn-font: 15px;
+    }
+  }
+  /* Respondent text uses the creator's font, never the app's display face. */
+  .fc-stage :is(h1, h2, h3) {
+    font-family: inherit;
+    letter-spacing: normal;
+  }
+  /* Focus inside a form: 2px in the theme background plus 2px in the
+   * text colour, so it works on any theme. */
+  .fc-stage :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--st-bg),
+      0 0 0 4px var(--st-text);
+  }
+}
+
+@keyframes fc-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+@keyframes fc-step-in-back {
+  from {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+@keyframes fc-beat {
+  50% {
+    transform: scale(0.97);
+  }
+}
+@keyframes fc-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+.fc-step-in {
+  animation: fc-step-in 320ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fc-step-in-back {
+  animation: fc-step-in-back 320ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fc-beat {
+  animation: fc-beat 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fc-step-in,
+  .fc-step-in-back {
+    animation: fc-fade-in 120ms both;
+  }
+  .fc-beat {
+    animation: none;
+  }
+}
+@keyframes fc-fade-in {
+  from {
+    opacity: 0;
   }
 }
 

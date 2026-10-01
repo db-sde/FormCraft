@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDraftForEdit, getPublishInfo } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
@@ -8,6 +9,17 @@ import {
   unpublishAction,
   renameFormAction,
 } from "./actions";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const { supabase, workspace } = await getCurrentWorkspace();
+  const draft = await getDraftForEdit(supabase, id, workspace.id);
+  return { title: draft ? `${draft.formTitle} · Build` : "Build" };
+}
 
 export default async function FormBuilderPage({
   params,

@@ -3,9 +3,17 @@
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OptionsEditor } from "./options-editor";
 import { ImageUploadField } from "./image-upload-field";
-import { ADDABLE_QUESTION_TYPES, QUESTION_TYPE_META } from "./question-meta";
+import { ADDABLE_QUESTION_TYPES, QUESTION_TYPE_META, TypeTile } from "./question-meta";
+import {
+  ChipToggles,
+  PANEL_INPUT,
+  PanelField,
+  PanelNote,
+  SectionHead,
+  Segmented,
+  SwitchRow,
+} from "./panel-ui";
 import type { QuestionType } from "@/domains/forms/schema/question-types";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -15,35 +23,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "cn";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "cn";
 import {
   CONTACT_FIELDS,
   CONTACT_FIELD_LABELS,
   type ContactField,
 } from "@/domains/forms/schema/question-types";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-muted-foreground text-xs font-medium">{label}</Label>
-      {children}
-    </div>
-  );
-}
+/** Accepted-file chips → the MIME patterns uploads are checked against.
+ * Only types the server can verify from the file's bytes are offered. */
+const FILE_KINDS = [
+  { label: "Images", mime: "image/*" },
+  { label: "PDF", mime: "application/pdf" },
+] as const;
 
-/** Type-specific settings editor. `onChange` receives a fully-formed
- * replacement question (the caller owns persisting it) — kept as one
- * function rather than per-field setters so each branch can update
- * `settings` immutably without a generic/unsafe partial-merge helper
- * fighting the discriminated union. */
+const num = (v: string) => (v === "" ? undefined : Number(v));
+
+/** Type-specific settings for the selected question (Part 4, right
+ * panel). `onChange` receives a fully-formed replacement question (the
+ * caller owns persisting it) — kept as one function rather than
+ * per-field setters so each branch can update `settings` immutably
+ * without a generic/unsafe partial-merge helper fighting the
+ * discriminated union. */
 export function SettingsPanel({
   question,
   onChange,
   onChangeType,
   workspaceId,
   formId,
+  invalid = false,
 }: {
   /** For uploading a welcome/statement image. */
   workspaceId: string;
@@ -52,54 +61,64 @@ export function SettingsPanel({
   onChange: (next: QuestionV1) => void;
   /** Convert to another type (the builder confirms lossy changes). */
   onChangeType?: (type: QuestionType) => void;
+  /** Outline the fields involved in a "Not saved" problem. */
+  invalid?: boolean;
 }) {
+  const bad = invalid ? "border-destructive" : "";
+
   return (
-    <div className="space-y-5">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-4">
       {question.type !== "welcome_screen" && onChangeType && (
-        <Field label="Question type">
+        <PanelField label="Question type">
           <Select
             value={question.type}
             onValueChange={(value) => onChangeType(value as QuestionType)}
           >
-            <SelectTrigger className="w-full" aria-label="Question type">
+            <SelectTrigger className="h-[38px] w-full" aria-label="Question type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ADDABLE_QUESTION_TYPES.map((type) => {
-                const Icon = QUESTION_TYPE_META[type].icon;
-                return (
-                  <SelectItem key={type} value={type}>
-                    <Icon className="text-muted-foreground" />
-                    {QUESTION_TYPE_META[type].label}
-                  </SelectItem>
-                );
-              })}
+              {ADDABLE_QUESTION_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  <TypeTile type={type} size={22} />
+                  {QUESTION_TYPE_META[type].label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-        </Field>
+        </PanelField>
       )}
+
       {question.type !== "welcome_screen" &&
         question.type !== "statement" &&
         question.type !== "contact_info" && (
-          <>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="required-toggle" className="text-sm font-medium">
-                Required
-              </Label>
-              <Switch
-                id="required-toggle"
-                checked={question.required}
-                onCheckedChange={(required) => onChange({ ...question, required })}
-              />
-            </div>
-            <Separator />
-          </>
+          <SwitchRow
+            label="Required"
+            hint="Respondents can't skip it"
+            checked={question.required}
+            onCheckedChange={(required) => onChange({ ...question, required })}
+          />
         )}
 
       {(question.type === "welcome_screen" || question.type === "statement") && (
         <>
+          <PanelField label="Button label">
+            <Input
+              className={PANEL_INPUT}
+              value={question.settings.buttonLabel ?? ""}
+              placeholder={question.type === "welcome_screen" ? "Start" : "Continue"}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, buttonLabel: e.target.value },
+                })
+              }
+            />
+          </PanelField>
+          <SectionHead>Image</SectionHead>
           <ImageUploadField
             label="Image (optional)"
+            noun="an image"
             workspaceId={workspaceId}
             formId={formId}
             value={question.settings.imageUrl}
@@ -108,8 +127,9 @@ export function SettingsPanel({
             }
           />
           {question.settings.imageUrl && (
-            <Field label="Image description (alt text)">
+            <PanelField label="Image description (alt text)">
               <Input
+                className={PANEL_INPUT}
                 value={question.settings.imageAlt ?? ""}
                 placeholder="What the image shows, for screen readers"
                 maxLength={300}
@@ -123,44 +143,19 @@ export function SettingsPanel({
                   })
                 }
               />
-            </Field>
+            </PanelField>
           )}
         </>
       )}
 
-      {question.type === "welcome_screen" && (
-        <Field label="Button label">
-          <Input
-            value={question.settings.buttonLabel ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...question,
-                settings: { ...question.settings, buttonLabel: e.target.value },
-              })
-            }
-          />
-        </Field>
-      )}
-
-      {question.type === "statement" && (
-        <Field label="Button label">
-          <Input
-            value={question.settings.buttonLabel ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...question,
-                settings: { ...question.settings, buttonLabel: e.target.value },
-              })
-            }
-          />
-        </Field>
-      )}
-
       {question.type === "short_text" && (
         <>
-          <Field label="Placeholder">
+          <SectionHead>Answer</SectionHead>
+          <PanelField label="Placeholder">
             <Input
+              className={PANEL_INPUT}
               value={question.settings.placeholder ?? ""}
+              placeholder="Type your answer here…"
               onChange={(e) =>
                 onChange({
                   ...question,
@@ -168,75 +163,68 @@ export function SettingsPanel({
                 })
               }
             />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Min length">
-              <Input
-                type="number"
-                min={0}
-                value={question.settings.minLength ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: {
-                      ...question.settings,
-                      minLength:
-                        e.target.value === "" ? undefined : Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Max length">
-              <Input
-                type="number"
-                min={1}
-                value={question.settings.maxLength ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: {
-                      ...question.settings,
-                      maxLength:
-                        e.target.value === "" ? undefined : Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-          </div>
-        </>
-      )}
-
-      {question.type === "long_text" && (
-        <>
-          <Field label="Placeholder">
+          </PanelField>
+          <PanelField label="Min length" half>
             <Input
-              value={question.settings.placeholder ?? ""}
+              className={cn(PANEL_INPUT, bad)}
+              type="number"
+              min={0}
+              value={question.settings.minLength ?? ""}
               onChange={(e) =>
                 onChange({
                   ...question,
-                  settings: { ...question.settings, placeholder: e.target.value },
+                  settings: { ...question.settings, minLength: num(e.target.value) },
                 })
               }
             />
-          </Field>
-          <Field label="Max length">
+          </PanelField>
+          <PanelField label="Max length" half>
             <Input
+              className={cn(PANEL_INPUT, bad)}
               type="number"
               min={1}
               value={question.settings.maxLength ?? ""}
               onChange={(e) =>
                 onChange({
                   ...question,
-                  settings: {
-                    ...question.settings,
-                    maxLength: e.target.value === "" ? undefined : Number(e.target.value),
-                  },
+                  settings: { ...question.settings, maxLength: num(e.target.value) },
                 })
               }
             />
-          </Field>
+          </PanelField>
+        </>
+      )}
+
+      {question.type === "long_text" && (
+        <>
+          <SectionHead>Answer</SectionHead>
+          <PanelField label="Placeholder">
+            <Input
+              className={PANEL_INPUT}
+              value={question.settings.placeholder ?? ""}
+              placeholder="Type your answer here…"
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, placeholder: e.target.value },
+                })
+              }
+            />
+          </PanelField>
+          <PanelField label="Max length" hint="Characters. Leave empty for no limit.">
+            <Input
+              className={PANEL_INPUT}
+              type="number"
+              min={1}
+              value={question.settings.maxLength ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, maxLength: num(e.target.value) },
+                })
+              }
+            />
+          </PanelField>
         </>
       )}
 
@@ -244,60 +232,74 @@ export function SettingsPanel({
         <ContactInfoSettings question={question} onChange={onChange} />
       )}
 
+      {question.type === "email" && (
+        <PanelNote>
+          Answers are checked automatically to make sure they look like an email address.
+        </PanelNote>
+      )}
+      {question.type === "url" && (
+        <PanelNote>
+          Answers are checked automatically to make sure they look like a web address.
+          “example.com” is fine.
+        </PanelNote>
+      )}
+
       {question.type === "phone" && (
-        <Field label="Default country code">
-          <Input
-            placeholder="US"
-            maxLength={2}
-            value={question.settings.defaultCountry ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...question,
-                settings: {
-                  ...question.settings,
-                  defaultCountry: e.target.value.toUpperCase() || undefined,
-                },
-              })
-            }
-          />
-        </Field>
+        <>
+          <SectionHead>Answer</SectionHead>
+          <PanelField
+            label="Default country"
+            hint="Two-letter code, like US or GB. Used when people leave out the +."
+          >
+            <Input
+              className={cn(PANEL_INPUT, "uppercase")}
+              placeholder="US"
+              maxLength={2}
+              value={question.settings.defaultCountry ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: {
+                    ...question.settings,
+                    defaultCountry: e.target.value.toUpperCase() || undefined,
+                  },
+                })
+              }
+            />
+          </PanelField>
+        </>
       )}
 
       {question.type === "number" && (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Min">
-              <Input
-                type="number"
-                value={question.settings.min ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: {
-                      ...question.settings,
-                      min: e.target.value === "" ? undefined : Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Max">
-              <Input
-                type="number"
-                value={question.settings.max ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: {
-                      ...question.settings,
-                      max: e.target.value === "" ? undefined : Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-          </div>
-          <Field label="Decimal places">
+          <SectionHead>Answer</SectionHead>
+          <PanelField label="Min" half>
+            <Input
+              className={cn(PANEL_INPUT, bad)}
+              type="number"
+              value={question.settings.min ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, min: num(e.target.value) },
+                })
+              }
+            />
+          </PanelField>
+          <PanelField label="Max" half>
+            <Input
+              className={cn(PANEL_INPUT, bad)}
+              type="number"
+              value={question.settings.max ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, max: num(e.target.value) },
+                })
+              }
+            />
+          </PanelField>
+          <PanelField label="Decimal places">
             <Select
               value={
                 question.settings.decimals === undefined
@@ -314,7 +316,7 @@ export function SettingsPanel({
                 })
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="h-[38px] w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -325,111 +327,95 @@ export function SettingsPanel({
                 <SelectItem value="3">Up to 3</SelectItem>
               </SelectContent>
             </Select>
-          </Field>
+          </PanelField>
         </>
       )}
 
-      {question.type === "single_select" && (
+      {(question.type === "single_select" ||
+        question.type === "multi_select" ||
+        question.type === "dropdown") && (
         <>
-          <Field label="Options">
+          <SectionHead>Choices</SectionHead>
+          <PanelField label="Options">
             <OptionsEditor
               options={question.settings.options}
               onChange={(options) =>
-                onChange({ ...question, settings: { ...question.settings, options } })
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, options },
+                } as QuestionV1)
               }
             />
-          </Field>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="allow-other" className="text-sm font-medium">
-              Allow &quot;Other&quot;
-            </Label>
-            <Switch
-              id="allow-other"
+          </PanelField>
+          {question.type !== "dropdown" && (
+            <SwitchRow
+              label="Allow “Other”"
+              hint={
+                question.type === "single_select"
+                  ? "Adds a tile that opens a text field"
+                  : undefined
+              }
               checked={question.settings.allowOther}
               onCheckedChange={(allowOther) =>
-                onChange({ ...question, settings: { ...question.settings, allowOther } })
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, allowOther },
+                } as QuestionV1)
               }
             />
-          </div>
+          )}
+          {question.type === "multi_select" && (
+            <>
+              <PanelField label="Min selections" half>
+                <Input
+                  className={cn(PANEL_INPUT, bad)}
+                  type="number"
+                  min={0}
+                  value={question.settings.minSelections ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...question,
+                      settings: {
+                        ...question.settings,
+                        minSelections: num(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </PanelField>
+              <PanelField label="Max selections" half>
+                <Input
+                  className={cn(PANEL_INPUT, bad)}
+                  type="number"
+                  min={1}
+                  value={question.settings.maxSelections ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...question,
+                      settings: {
+                        ...question.settings,
+                        maxSelections: num(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </PanelField>
+            </>
+          )}
+          {question.type === "dropdown" && (
+            <PanelNote>
+              Tip: paste a list with one option per line to add many at once.
+            </PanelNote>
+          )}
         </>
-      )}
-
-      {question.type === "multi_select" && (
-        <>
-          <Field label="Options">
-            <OptionsEditor
-              options={question.settings.options}
-              onChange={(options) =>
-                onChange({ ...question, settings: { ...question.settings, options } })
-              }
-            />
-          </Field>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="allow-other" className="text-sm font-medium">
-              Allow &quot;Other&quot;
-            </Label>
-            <Switch
-              id="allow-other"
-              checked={question.settings.allowOther}
-              onCheckedChange={(allowOther) =>
-                onChange({ ...question, settings: { ...question.settings, allowOther } })
-              }
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Min selections">
-              <Input
-                type="number"
-                min={0}
-                value={question.settings.minSelections ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: {
-                      ...question.settings,
-                      minSelections:
-                        e.target.value === "" ? undefined : Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Max selections">
-              <Input
-                type="number"
-                min={1}
-                value={question.settings.maxSelections ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: {
-                      ...question.settings,
-                      maxSelections:
-                        e.target.value === "" ? undefined : Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-          </div>
-        </>
-      )}
-
-      {question.type === "dropdown" && (
-        <Field label="Options">
-          <OptionsEditor
-            options={question.settings.options}
-            onChange={(options) =>
-              onChange({ ...question, settings: { ...question.settings, options } })
-            }
-          />
-        </Field>
       )}
 
       {question.type === "yes_no" && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Yes label">
+        <>
+          <SectionHead>Labels</SectionHead>
+          <PanelField label="Yes label" half>
             <Input
+              className={PANEL_INPUT}
               value={question.settings.yesLabel ?? ""}
               placeholder="Yes"
               onChange={(e) =>
@@ -439,9 +425,10 @@ export function SettingsPanel({
                 })
               }
             />
-          </Field>
-          <Field label="No label">
+          </PanelField>
+          <PanelField label="No label" half>
             <Input
+              className={PANEL_INPUT}
               value={question.settings.noLabel ?? ""}
               placeholder="No"
               onChange={(e) =>
@@ -451,14 +438,16 @@ export function SettingsPanel({
                 })
               }
             />
-          </Field>
-        </div>
+          </PanelField>
+        </>
       )}
 
       {question.type === "date" && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Earliest date">
+        <>
+          <SectionHead>Limits</SectionHead>
+          <PanelField label="Earliest date" half>
             <Input
+              className={PANEL_INPUT}
               type="date"
               value={question.settings.minDate ?? ""}
               onChange={(e) =>
@@ -471,9 +460,10 @@ export function SettingsPanel({
                 })
               }
             />
-          </Field>
-          <Field label="Latest date">
+          </PanelField>
+          <PanelField label="Latest date" half>
             <Input
+              className={PANEL_INPUT}
               type="date"
               value={question.settings.maxDate ?? ""}
               onChange={(e) =>
@@ -486,108 +476,116 @@ export function SettingsPanel({
                 })
               }
             />
-          </Field>
-        </div>
+          </PanelField>
+        </>
       )}
 
       {question.type === "rating" && (
-        <Field label="Scale">
-          <Select
-            value={String(question.settings.scale)}
-            onValueChange={(value) =>
+        <>
+          <SectionHead>Scale</SectionHead>
+          <Segmented
+            label="Scale"
+            value={String(question.settings.scale) as "5" | "10"}
+            options={[
+              { value: "5", label: "5" },
+              { value: "10", label: "10" },
+            ]}
+            onChange={(value) =>
               onChange({
                 ...question,
                 settings: { ...question.settings, scale: Number(value) as 5 | 10 },
               })
             }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5">1–5</SelectItem>
-              <SelectItem value="10">1–10</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+          />
+        </>
       )}
 
       {question.type === "opinion_scale" && (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Min">
-              <Input
-                type="number"
-                value={question.settings.min}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: { ...question.settings, min: Number(e.target.value) },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Max">
-              <Input
-                type="number"
-                value={question.settings.max}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: { ...question.settings, max: Number(e.target.value) },
-                  })
-                }
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Left label">
-              <Input
-                value={question.settings.leftLabel ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: { ...question.settings, leftLabel: e.target.value },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Right label">
-              <Input
-                value={question.settings.rightLabel ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...question,
-                    settings: { ...question.settings, rightLabel: e.target.value },
-                  })
-                }
-              />
-            </Field>
-          </div>
+          <SectionHead>Scale</SectionHead>
+          <PanelField label="Min" half>
+            <Input
+              className={cn(PANEL_INPUT, bad)}
+              type="number"
+              value={question.settings.min}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, min: Number(e.target.value) },
+                })
+              }
+            />
+          </PanelField>
+          <PanelField label="Max" half>
+            <Input
+              className={cn(PANEL_INPUT, bad)}
+              type="number"
+              value={question.settings.max}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, max: Number(e.target.value) },
+                })
+              }
+            />
+          </PanelField>
+          <PanelField label="Left label" half>
+            <Input
+              className={PANEL_INPUT}
+              value={question.settings.leftLabel ?? ""}
+              placeholder="Not likely"
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, leftLabel: e.target.value },
+                })
+              }
+            />
+          </PanelField>
+          <PanelField label="Right label" half>
+            <Input
+              className={PANEL_INPUT}
+              value={question.settings.rightLabel ?? ""}
+              placeholder="Very likely"
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, rightLabel: e.target.value },
+                })
+              }
+            />
+          </PanelField>
         </>
       )}
 
       {question.type === "file_upload" && (
         <>
-          <Field label="Accepted types (comma-separated)">
+          <SectionHead>Files</SectionHead>
+          <ChipToggles
+            label="Accepted file types"
+            options={FILE_KINDS.map((kind) => {
+              const accepted = question.settings.acceptedMimeTypes;
+              const on = accepted.includes(kind.mime);
+              return {
+                label: kind.label,
+                on,
+                onToggle: () => {
+                  const next = on
+                    ? accepted.filter((m) => m !== kind.mime)
+                    : [...accepted, kind.mime];
+                  // At least one type stays on — the schema needs one.
+                  if (next.length === 0) return;
+                  onChange({
+                    ...question,
+                    settings: { ...question.settings, acceptedMimeTypes: next },
+                  });
+                },
+              };
+            })}
+          />
+          <PanelField label="Max size" hint="In MB, up to 100.">
             <Input
-              value={question.settings.acceptedMimeTypes.join(", ")}
-              onChange={(e) =>
-                onChange({
-                  ...question,
-                  settings: {
-                    ...question.settings,
-                    acceptedMimeTypes: e.target.value
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  },
-                })
-              }
-            />
-          </Field>
-          <Field label="Max size (MB)">
-            <Input
+              className={cn(PANEL_INPUT, bad)}
               type="number"
               min={1}
               max={100}
@@ -599,15 +597,8 @@ export function SettingsPanel({
                 })
               }
             />
-          </Field>
+          </PanelField>
         </>
-      )}
-
-      {(question.type === "email" || question.type === "url") && (
-        <p className="text-muted-foreground text-xs">
-          Answers are validated automatically as{" "}
-          {question.type === "email" ? "an email address" : "a URL"}.
-        </p>
       )}
     </div>
   );
@@ -638,63 +629,64 @@ function ContactInfoSettings({
   }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <p className="text-sm font-medium">Lead details to collect</p>
-        <p className="text-muted-foreground text-xs">
+    <>
+      <SectionHead>Lead details</SectionHead>
+      <div className="col-span-full flex flex-col gap-2">
+        <p className="text-muted-foreground text-[12.5px]">
           Saved as soon as the respondent moves on — you keep the lead even if they
           don&apos;t finish the form.
         </p>
-      </div>
-      <div className="divide-y rounded-md border">
-        {CONTACT_FIELDS.map((field) => {
-          const shown = fields.includes(field);
-          const isOnlyField = shown && fields.length === 1;
-          return (
-            <div
-              key={field}
-              className="flex items-center justify-between gap-3 px-3 py-2"
-            >
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={shown}
-                  disabled={isOnlyField}
-                  onCheckedChange={(checked) =>
-                    update(
-                      checked ? [...fields, field] : fields.filter((f) => f !== field),
-                      requiredFields.filter((f) => f !== field || checked),
-                    )
-                  }
-                />
-                {CONTACT_FIELD_LABELS[field]}
-              </label>
-              <label
-                // Dimmed because its switch is off-limits until the field is
-                // shown; aria-disabled tells tools that's deliberate.
-                aria-disabled={!shown}
-                className={cn(
-                  "text-muted-foreground flex items-center gap-2 text-xs",
-                  !shown && "opacity-40",
-                )}
+        <div className="divide-border border-border bg-card divide-y overflow-hidden rounded-sm border-[1.5px]">
+          {CONTACT_FIELDS.map((field) => {
+            const shown = fields.includes(field);
+            const isOnlyField = shown && fields.length === 1;
+            return (
+              <div
+                key={field}
+                className="flex items-center justify-between gap-3 px-3 py-2"
               >
-                Required
-                <Switch
-                  disabled={!shown}
-                  checked={requiredFields.includes(field)}
-                  onCheckedChange={(checked) =>
-                    update(
-                      fields,
-                      checked
-                        ? [...requiredFields, field]
-                        : requiredFields.filter((f) => f !== field),
-                    )
-                  }
-                />
-              </label>
-            </div>
-          );
-        })}
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <Checkbox
+                    checked={shown}
+                    disabled={isOnlyField}
+                    onCheckedChange={(checked) =>
+                      update(
+                        checked ? [...fields, field] : fields.filter((f) => f !== field),
+                        requiredFields.filter((f) => f !== field || checked),
+                      )
+                    }
+                  />
+                  {CONTACT_FIELD_LABELS[field]}
+                </label>
+                <label
+                  // Dimmed because its switch is off-limits until the field is
+                  // shown; aria-disabled tells tools that's deliberate.
+                  aria-disabled={!shown}
+                  className={cn(
+                    "text-muted-foreground flex items-center gap-2 text-xs",
+                    !shown && "opacity-40",
+                  )}
+                >
+                  Required
+                  <Switch
+                    size="sm"
+                    disabled={!shown}
+                    checked={requiredFields.includes(field)}
+                    onCheckedChange={(checked) =>
+                      update(
+                        fields,
+                        checked
+                          ? [...requiredFields, field]
+                          : requiredFields.filter((f) => f !== field),
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,22 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, X, Loader2 } from "lucide-react";
+import { ImagePlus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
+/** The file name at the end of a storage URL, without our upload prefix. */
+function fileNameFrom(url: string): string {
+  try {
+    const last = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "");
+    return last || "image";
+  } catch {
+    return "image";
+  }
+}
+
+/** Creator image upload (Part 4): a dashed "Upload …" button when empty,
+ * a thumbnail row with a remove button when set. */
 export function ImageUploadField({
   label,
+  noun = "an image",
+  meta,
   workspaceId,
   formId,
   value,
   onChange,
 }: {
   label: string;
+  /** "a logo", "an image" — reads "Upload a logo". */
+  noun?: string;
+  /** Second line of the filled row, e.g. "Top left, 32px tall". */
+  meta?: string;
   workspaceId: string;
   formId: string;
   value: string | undefined;
@@ -36,11 +52,11 @@ export function ImageUploadField({
     // privacy-sensitive happens server-side for respondent uploads;
     // this bucket only ever holds creator-supplied theme assets.
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError("Use a PNG, JPEG, WebP, or SVG image.");
+      setError("Use a PNG, JPEG, WebP or SVG image.");
       return;
     }
     if (file.size > MAX_SIZE_BYTES) {
-      setError("Image must be under 5MB.");
+      setError("That image is over 5 MB. Try a smaller one.");
       return;
     }
 
@@ -55,7 +71,7 @@ export function ImageUploadField({
         .upload(path, file, { upsert: true });
 
       if (uploadError) {
-        setError("Upload failed. Please try again.");
+        setError("The upload failed. Try again.");
         return;
       }
 
@@ -67,32 +83,41 @@ export function ImageUploadField({
   }
 
   return (
-    <div className="space-y-1.5">
-      <Label className="text-muted-foreground text-xs font-medium">{label}</Label>
+    <div className="col-span-full flex flex-col gap-1.5">
+      <span className="text-[13.5px] font-semibold">{label}</span>
       {value ? (
-        <div className="border-input relative overflow-hidden rounded-md border">
+        <div className="border-ink flex items-center gap-2.5 rounded-[8px] border-[1.5px] p-2">
           {/* eslint-disable-next-line @next/next/no-img-element -- external, variable-origin Supabase Storage URL */}
-          <img src={value} alt="" className="h-24 w-full object-cover" />
-          <Button
+          <img
+            src={value}
+            alt=""
+            className="bg-muted h-10 w-14 shrink-0 rounded-[5px] object-cover"
+          />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="truncate text-[13px]">{fileNameFrom(value)}</b>
+            {meta && <span className="text-muted-foreground text-xs">{meta}</span>}
+          </span>
+          <button
             type="button"
-            variant="secondary"
-            size="icon-sm"
-            className="absolute top-1.5 right-1.5"
             aria-label={`Remove ${label.toLowerCase()}`}
             onClick={() => onChange(undefined)}
+            className="fc-focus hover:bg-hover-wash grid size-7 shrink-0 place-items-center rounded-sm"
           >
-            <X className="size-3.5" />
-          </Button>
+            <Trash2 className="size-3.5" />
+          </button>
         </div>
       ) : (
-        <label className="border-input hover:bg-accent/50 flex h-20 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed text-sm">
+        <label className="border-ink hover:bg-hover-wash focus-within:shadow-focus flex cursor-pointer items-center gap-3 rounded-[8px] border-[1.5px] border-dashed p-3">
           {uploading ? (
-            <Loader2 className="text-muted-foreground size-4 animate-spin" />
+            <span className="border-ink size-5 shrink-0 animate-spin rounded-full border-2 border-t-transparent" />
           ) : (
-            <Upload className="text-muted-foreground size-4" />
+            <ImagePlus className="size-5 shrink-0" />
           )}
-          <span className="text-muted-foreground">
-            {uploading ? "Uploading…" : "Upload image"}
+          <span className="flex flex-col">
+            <b className="text-[13.5px]">{uploading ? "Uploading…" : `Upload ${noun}`}</b>
+            <span className="text-muted-foreground text-xs">
+              PNG, JPEG, WebP or SVG · up to 5 MB
+            </span>
           </span>
           <input
             type="file"
@@ -103,7 +128,11 @@ export function ImageUploadField({
           />
         </label>
       )}
-      {error && <p className="text-destructive text-xs">{error}</p>}
+      {error && (
+        <p role="alert" className="text-destructive text-xs">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

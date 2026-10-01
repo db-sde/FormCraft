@@ -1,45 +1,67 @@
 "use client";
 
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { useId } from "react";
+import { cn } from "cn";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+/** A swatch plus a mono hex field in one box (Part 4, Design panel).
+ * `optional` lets the hex be cleared — e.g. Text, which is then worked
+ * out from the background. */
 export function ColorField({
   label,
   value,
   onChange,
+  hint,
+  optional = false,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (hex: string) => void;
+  hint?: string;
+  optional?: boolean;
+  /** Shown when an optional value is empty. */
+  placeholder?: string;
 }) {
-  const valid = HEX_RE.test(value);
+  const id = useId();
+  const valid = HEX_RE.test(value) || (optional && value === "");
 
   return (
-    <div className="space-y-1.5">
-      <Label className="text-muted-foreground text-xs font-medium">{label}</Label>
-      <div className="flex items-center gap-2">
+    <div className="col-span-full flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-[13.5px] font-semibold">
+        {label}
+      </label>
+      <div
+        className={cn(
+          "bg-field focus-within:shadow-focus flex h-[38px] items-center gap-2 rounded-sm border-[1.5px] px-1.5",
+          valid ? "border-input" : "border-destructive",
+        )}
+      >
         <input
           type="color"
-          value={valid ? value : "#000000"}
+          value={HEX_RE.test(value) ? value : (placeholder ?? "#000000")}
           onChange={(e) => onChange(e.target.value)}
           aria-label={`${label} swatch`}
-          className="border-input size-8 shrink-0 cursor-pointer rounded-md border p-0.5"
+          className="size-[26px] shrink-0 cursor-pointer rounded-[5px] border border-black/15 bg-transparent p-0 [&::-moz-color-swatch]:rounded-[4px] [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0"
         />
-        <Input
+        <input
+          id={id}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={`${label} hex value`}
+          onChange={(e) => onChange(e.target.value.trim())}
           aria-invalid={!valid}
           maxLength={7}
-          className="font-mono"
+          spellCheck={false}
+          placeholder={placeholder?.toUpperCase()}
+          className="placeholder:text-subtle-foreground min-w-0 flex-1 bg-transparent font-mono text-[13px] uppercase outline-none"
         />
       </div>
-      {!valid && (
-        <p className="text-destructive text-xs">
-          Enter a 6-digit hex color, e.g. #0f172a
-        </p>
+      {!valid ? (
+        <span className="text-destructive text-xs">
+          Use a 6-digit hex colour, like #1D6F8C.
+        </span>
+      ) : (
+        hint && <span className="text-muted-foreground text-xs">{hint}</span>
       )}
     </div>
   );

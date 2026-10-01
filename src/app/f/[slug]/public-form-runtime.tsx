@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { AnswerMap } from "@/domains/logic";
+import { Stage } from "@/components/runtime/stage";
 import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
 
 type StoredResponse = {
@@ -414,14 +414,21 @@ export function PublicFormRuntime({
   }
 
   if (resumed === undefined) {
+    // Loading: the themed background plus a spinner (Part 6 §6.1).
     return (
-      <div
-        className="flex min-h-dvh items-center justify-center"
-        style={{ backgroundColor: theme.backgroundColor }}
+      <Stage
+        theme={theme}
         aria-busy="true"
+        className={embedded ? "min-h-[480px]" : "min-h-dvh"}
       >
-        <Loader2 className="size-6 animate-spin opacity-50" aria-label="Loading form" />
-      </div>
+        <div
+          role="status"
+          className="flex flex-col items-center gap-3.5 text-(--st-primary)"
+        >
+          <span className="size-9 animate-spin rounded-full border-[3px] border-current border-t-transparent" />
+          <span className="text-sm text-(--st-muted)">Loading…</span>
+        </div>
+      </Stage>
     );
   }
 
@@ -431,6 +438,8 @@ export function PublicFormRuntime({
       initialAnswers={resumed?.answers}
       initialQuestionId={resumed?.lastQuestionId}
       initialHistory={resumed?.history}
+      welcomeBack={!!resumed && !!resumed.lastQuestionId}
+      redirectOnEnding
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}
       getResponseId={() => ensureSession().then((s) => s.responseId)}
