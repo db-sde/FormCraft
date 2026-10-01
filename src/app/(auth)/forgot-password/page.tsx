@@ -1,18 +1,15 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 import { requestPasswordResetAction, type ActionResult } from "../actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+  AuthActions,
+  AuthCard,
+  AuthField,
+  AuthFooter,
+  AuthNotice,
+} from "@/components/auth/auth-ui";
 
 const initialState: ActionResult = {};
 
@@ -23,33 +20,39 @@ export default function ForgotPasswordPage() {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Reset your password</CardTitle>
-        <CardDescription>
-          Enter your email and we&apos;ll send you a link to reset your password.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={formAction} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
-            {state.fieldErrors?.email && (
-              <p className="text-destructive text-sm">{state.fieldErrors.email}</p>
-            )}
-          </div>
-          {state.error && <p className="text-destructive text-sm">{state.error}</p>}
-          <Button type="submit" className="w-full" disabled={pending}>
+    <AuthCard
+      title="Reset your password"
+      subtitle="Enter the email you signed up with and we'll send you a link to choose a new password."
+    >
+      <form action={formAction} className="flex flex-1 flex-col gap-[22px] sm:gap-[18px]">
+        {state.error && <AuthNotice>{state.error}</AuthNotice>}
+        <AuthField
+          id="email"
+          name="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="name@example.com"
+          error={state.fieldErrors?.email}
+          required
+        />
+        <AuthActions>
+          <Button
+            type="submit"
+            size="auth"
+            className="shadow-card h-[52px] w-full text-base sm:h-[46px] sm:text-[15px]"
+            disabled={pending}
+            data-loading={pending || undefined}
+          >
+            {pending && <ButtonSpinner />}
             {pending ? "Sending…" : "Send reset link"}
           </Button>
-        </form>
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          <Link href="/login" className="text-foreground font-medium underline">
-            Back to log in
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+          <AuthFooter
+            text="Remembered it?"
+            link={{ href: "/login", label: "Back to log in" }}
+          />
+        </AuthActions>
+      </form>
+    </AuthCard>
   );
 }

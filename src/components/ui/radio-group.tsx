@@ -17,6 +17,7 @@ function RadioGroup({
   );
 }
 
+/** Selected: marigold dot inside a thick ink ring. */
 function RadioGroupItem({
   className,
   ...props
@@ -25,17 +26,12 @@ function RadioGroupItem({
     <RadioGroupPrimitive.Item
       data-slot="radio-group-item"
       className={cn(
-        "group/radio-group-item peer border-input group-has-[:focus-visible]/field-label:not-data-checked:border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground group-has-[:focus-visible]/field-label:data-checked:border-primary dark:data-checked:bg-primary relative flex aspect-square size-4 shrink-0 rounded-full border outline-none group-has-[:focus-visible]/field-label:ring-0 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-3",
+        "group/radio-group-item peer border-ink bg-field focus-visible:shadow-focus disabled:border-disabled-border disabled:bg-disabled aria-invalid:border-destructive data-checked:border-secondary data-checked:bg-primary relative flex aspect-square size-[18px] shrink-0 rounded-full border-[1.5px] outline-none after:absolute after:-inset-x-3 after:-inset-y-2 disabled:cursor-not-allowed data-checked:border-[5px]",
         className,
       )}
       {...props}
     >
-      <RadioGroupPrimitive.Indicator
-        data-slot="radio-group-indicator"
-        className="flex size-4 items-center justify-center"
-      >
-        <span className="bg-primary-foreground absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full" />
-      </RadioGroupPrimitive.Indicator>
+      <RadioGroupPrimitive.Indicator data-slot="radio-group-indicator" />
     </RadioGroupPrimitive.Item>
   );
 }

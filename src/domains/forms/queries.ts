@@ -44,7 +44,80 @@ export type FormListItem = {
   responseCount: number;
   /** Respondents who answered something but never submitted. */
   incompleteCount: number;
+  createdAt: string;
+  /** Enough of the draft to draw the dashboard card's preview. */
+  preview: FormPreview;
 };
+
+/** The first real question of a form, drawn in the form's own theme on
+ * dashboard and template cards. */
+export type FormPreview = {
+  theme: FormSchemaV1["theme"];
+  question: string;
+  /** Up to four answer chips (options, scale numbers, Yes/No…). */
+  chips: string[];
+};
+
+const DEFAULT_PREVIEW_THEME: FormSchemaV1["theme"] = {
+  primaryColor: "#0f172a",
+  backgroundColor: "#ffffff",
+  fontFamily: "inter",
+  buttonStyle: "rounded",
+};
+
+/** Builds a card preview from a schema without trusting its shape —
+ * a malformed draft still gets a sensible card. */
+export function previewFromSchema(raw: unknown): FormPreview {
+  const schema = (raw ?? {}) as Partial<FormSchemaV1>;
+  const theme = { ...DEFAULT_PREVIEW_THEME, ...(schema.theme ?? {}) };
+  const questions = [...(schema.questions ?? [])].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0),
+  );
+  const first =
+    questions.find((q) => q.type !== "welcome_screen" && q.type !== "statement") ??
+    questions[0];
+  if (!first)
+    return { theme, question: schema.meta?.title ?? "Untitled form", chips: [] };
+
+  let chips: string[] = [];
+  const settings = (first.settings ?? {}) as Record<string, unknown>;
+  switch (first.type) {
+    case "single_select":
+    case "multi_select":
+    case "dropdown":
+      chips = ((settings.options as { label?: string }[] | undefined) ?? [])
+        .map((o) => o.label ?? "")
+        .filter(Boolean);
+      break;
+    case "yes_no":
+      chips = [
+        (settings.yesLabel as string | undefined) || "Yes",
+        (settings.noLabel as string | undefined) || "No",
+      ];
+      break;
+    case "rating":
+      chips = Array.from({ length: Math.min(Number(settings.scale) || 5, 5) }, (_, i) =>
+        String(i + 1),
+      );
+      break;
+    case "opinion_scale": {
+      const max = Number(settings.max ?? 10);
+      chips = [max - 3, max - 2, max - 1, max].filter((n) => n >= 0).map(String);
+      break;
+    }
+    case "file_upload":
+      chips = ["Upload"];
+      break;
+    case "contact_info":
+      chips = ["Name", "Email"];
+      break;
+  }
+  return {
+    theme,
+    question: first.label || "Untitled question",
+    chips: chips.slice(0, 4),
+  };
+}
 
 /** A minimal but valid draft schema for a brand-new form: a welcome
  * screen leads to one starter question, then the default ending. Kept
@@ -113,11 +186,12 @@ export async function listFormsForWorkspace(
   const { data, error } = await supabase
     .from("forms")
     .select(
-      "id, title, slug, updated_at, form_versions(status), completed:responses(count), incomplete:responses(count)",
+      "id, title, slug, updated_at, created_at, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count)",
     )
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
-    // These filter the embedded rows being counted, not the forms.
+    // These filter the embedded rows, not the forms.
+    .eq("draft.status", "draft")
     .eq("completed.status", "completed")
     .eq("incomplete.status", "partial")
     .order("updated_at", { ascending: false });
@@ -133,6 +207,8 @@ export async function listFormsForWorkspace(
     publishState: publishStateFrom((form.form_versions ?? []).map((v) => v.status)),
     responseCount: form.completed?.[0]?.count ?? 0,
     incompleteCount: form.incomplete?.[0]?.count ?? 0,
+    createdAt: form.created_at,
+    preview: previewFromSchema(form.draft?.[0]?.schema),
   }));
 }
 

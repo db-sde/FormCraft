@@ -20,6 +20,7 @@ import { createQuestion, createOption, createEnding } from "../src/domains/forms
 import { parseFormSchema, validateSemantics } from "../src/domains/forms/schema/validate";
 import type { FormSchemaV1, QuestionV1, OptionV1 } from "../src/domains/forms/schema/v1";
 import type { QuestionType } from "../src/domains/forms/schema/question-types";
+import { THEME_PRESETS } from "../src/domains/themes/presets";
 
 type QuestionSpec = {
   type: QuestionType;
@@ -476,6 +477,17 @@ const templates: TemplateDef[] = [
     ],
   ),
 ];
+
+// Each template gets one of the design-system presets (Sunset, Ocean,
+// Classic, Forest in turn) so the gallery shows what theming can do;
+// creators restyle a copy freely in the builder's Theme tab.
+const GALLERY_PRESETS = ["sunset", "ocean", "classic", "forest"];
+templates.forEach((template, i) => {
+  const preset = THEME_PRESETS.find(
+    (p) => p.id === GALLERY_PRESETS[i % GALLERY_PRESETS.length],
+  )!;
+  template.schema.theme = { ...preset.theme, preset: preset.id };
+});
 
 for (const template of templates) {
   const parsed = parseFormSchema(template.schema);

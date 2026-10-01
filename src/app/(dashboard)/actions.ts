@@ -25,6 +25,21 @@ export async function createFormAction(): Promise<void> {
   redirect(`/forms/${id}`);
 }
 
+/** "Try a sample form" (first-run welcome): a copy of the first
+ * template, ready to poke around in. Falls back to a blank form if no
+ * templates are installed. */
+export async function createSampleFormAction(): Promise<void> {
+  const { supabase } = await getCurrentWorkspace();
+  const { data } = await supabase
+    .from("templates")
+    .select("id")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return createFormAction();
+  return createFormFromTemplateAction(data.id);
+}
+
 export async function createFormFromTemplateAction(templateId: string): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
   const template = await getTemplateById(supabase, templateId);

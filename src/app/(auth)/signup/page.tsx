@@ -1,18 +1,15 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 import { signUpAction, type ActionResult } from "../actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+  AuthActions,
+  AuthCard,
+  AuthField,
+  AuthFooter,
+  AuthNotice,
+} from "@/components/auth/auth-ui";
 
 const initialState: ActionResult = {};
 
@@ -20,71 +17,60 @@ export default function SignupPage() {
   const [state, formAction, pending] = useActionState(signUpAction, initialState);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Start building forms in minutes.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={formAction} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="fullName">Full name</Label>
-            <Input
-              id="fullName"
-              name="fullName"
-              autoComplete="name"
-              defaultValue={state.values?.fullName}
-              required
-            />
-            {state.fieldErrors?.fullName && (
-              <p className="text-destructive text-sm">{state.fieldErrors.fullName}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              defaultValue={state.values?.email}
-              required
-            />
-            {state.fieldErrors?.email && (
-              <p className="text-destructive text-sm">{state.fieldErrors.email}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              aria-describedby="password-hint"
-              required
-            />
-            {state.fieldErrors?.password ? (
-              <p className="text-destructive text-sm">{state.fieldErrors.password}</p>
-            ) : (
-              <p id="password-hint" className="text-muted-foreground text-xs">
-                At least 8 characters.
-              </p>
-            )}
-          </div>
-          {state.error && <p className="text-destructive text-sm">{state.error}</p>}
-          <Button type="submit" className="w-full" disabled={pending}>
+    <AuthCard title="Create your account" subtitle="Start building forms in minutes.">
+      <form action={formAction} className="flex flex-1 flex-col gap-[22px] sm:gap-[18px]">
+        {state.error && (
+          <AuthNotice tone={state.errorTone ?? "error"}>{state.error}</AuthNotice>
+        )}
+        <AuthField
+          id="fullName"
+          name="fullName"
+          label="Full name"
+          autoComplete="name"
+          placeholder="Maya Rao"
+          defaultValue={state.values?.fullName}
+          error={state.fieldErrors?.fullName}
+          required
+        />
+        <AuthField
+          id="email"
+          name="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="name@example.com"
+          defaultValue={state.values?.email}
+          error={state.fieldErrors?.email}
+          required
+        />
+        <AuthField
+          id="password"
+          name="password"
+          label="Password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          helper="At least 8 characters."
+          error={state.fieldErrors?.password}
+          required
+        />
+        <AuthActions>
+          <Button
+            type="submit"
+            size="auth"
+            className="shadow-card h-[52px] w-full text-base sm:h-[46px] sm:text-[15px]"
+            disabled={pending}
+            data-loading={pending || undefined}
+          >
+            {pending && <ButtonSpinner />}
             {pending ? "Creating account…" : "Create account"}
           </Button>
-        </form>
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          Already have an account?{" "}
-          <Link href="/login" className="text-foreground font-medium underline">
-            Log in
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+          <AuthFooter
+            text="Already have an account?"
+            link={{ href: "/login", label: "Log in" }}
+          />
+        </AuthActions>
+      </form>
+    </AuthCard>
   );
 }

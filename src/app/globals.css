@@ -8,9 +8,35 @@
   --color-background: var(--background);
   --color-canvas: var(--canvas);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --color-ink: var(--ink);
+  --color-shadow-ink: var(--shadow-ink);
+  --color-body-secondary: var(--body-secondary);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-field: var(--field);
+  --color-scrim: var(--scrim);
+  --color-hover-wash: var(--hover-wash);
+  --color-hover-wash-strong: var(--hover-wash-strong);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-disabled-border: var(--disabled-border);
+  --shadow-raised: 2px 2px 0 var(--shadow-ink);
+  --shadow-raised-hover: 3px 3px 0 var(--shadow-ink);
+  --shadow-card: 3px 3px 0 var(--shadow-ink);
+  --shadow-lift: 4px 4px 0 var(--shadow-ink);
+  --shadow-dialog: 6px 6px 0 var(--shadow-ink);
+  --shadow-focus: 0 0 0 2px var(--card), 0 0 0 4px var(--ring);
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Phone < 768 · Tablet 768–1279 · Desktop 1280+ · Wide 1440+ */
+  --breakpoint-wide: 90rem;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -40,101 +66,281 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* XS 4 · SM 6 (buttons, inputs) · Card 10 · Dialog 14 · Pill 999 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 22px;
+  --radius-4xl: 26px;
 }
 
 /*
- * FormCraft brand tokens. The whole creator app reads colour from these
- * variables — swap the values here to rebrand. (Published forms don't
- * use them: each form carries its creator's own theme, see
- * themeTokenOverrides in src/components/theme-styles.ts.)
+ * FormCraft brand tokens ("Index Card" direction — see the design
+ * handoff, Part 1 Foundations). The whole creator app reads colour from
+ * these variables; dark mode swaps the values only, layouts never change.
+ * (Published forms don't use them: each form carries its creator's own
+ * theme, see themeTokenOverrides in src/components/theme-styles.ts.)
  */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.21 0.034 264.665);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.511 0.262 276.966);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.003 264.542);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.967 0.003 264.542);
-  --muted-foreground: oklch(0.52 0.027 264.364);
-  --accent: oklch(0.962 0.018 272.314);
-  --accent-foreground: oklch(0.359 0.144 278.697);
-  --destructive: oklch(0.53 0.23 27.325);
-  --border: oklch(0.928 0.006 264.531);
-  --input: oklch(0.928 0.006 264.531);
-  --ring: oklch(0.673 0.182 276.935);
-  --chart-1: oklch(0.511 0.262 276.966);
-  --chart-2: oklch(0.673 0.182 276.935);
-  --chart-3: oklch(0.785 0.115 274.713);
-  --chart-4: oklch(0.696 0.17 162.48);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
+  --background: #f5efe4;
+  --foreground: #2b2118;
+  --card: #fffaf1;
+  --card-foreground: #2b2118;
+  --popover: #fffaf1;
+  --popover-foreground: #2b2118;
+  --primary: #f2b233;
+  --primary-foreground: #2b2118;
+  --secondary: #2b2118;
+  --secondary-foreground: #fffaf1;
+  --secondary-hover: #4a3b2e;
+  --muted: #efe6d6;
+  --muted-foreground: #6f6254;
+  --accent: #f8e6b8;
+  --accent-foreground: #2b2118;
+  --accent-pressed: #f2e2bf;
+  --destructive: #c8372d;
+  --destructive-foreground: #ffffff;
+  --success: #2f9e5f;
+  --warning: #c99a2e;
+  --border: #e2d5c0;
+  --input: #cdbda4;
+  --ring: #2b2118;
+  /* Outlines on interactive components and cards, and the colour of
+   * every hard-offset shadow. */
+  --ink: #2b2118;
+  --shadow-ink: #2b2118;
+  /* Secondary body text on cards; quieter text such as placeholders. */
+  --body-secondary: #4d4236;
+  --subtle-foreground: #9a8c7a;
+  --field: #ffffff;
+  --scrim: rgba(43, 33, 24, 0.5);
+  --hover-wash: rgba(43, 33, 24, 0.07);
+  --hover-wash-strong: rgba(43, 33, 24, 0.12);
+  --disabled: #efe6d6;
+  --disabled-foreground: #a39684;
+  --disabled-border: #d8cab3;
+  --radius: 10px;
   /* App canvas behind cards (dashboard, responses, builder). */
-  --canvas: oklch(0.985 0.002 264);
-  --sidebar: oklch(0.985 0.002 264);
-  --sidebar-foreground: oklch(0.21 0.034 264.665);
-  --sidebar-primary: oklch(0.511 0.262 276.966);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.955 0.017 272);
-  --sidebar-accent-foreground: oklch(0.359 0.144 278.697);
-  --sidebar-border: oklch(0.928 0.006 264.531);
-  --sidebar-ring: oklch(0.673 0.182 276.935);
+  --canvas: #f5efe4;
+  --sidebar: #fffaf1;
+  --sidebar-foreground: #2b2118;
+  --sidebar-primary: #2b2118;
+  --sidebar-primary-foreground: #fffaf1;
+  --sidebar-accent: rgba(43, 33, 24, 0.07);
+  --sidebar-accent-foreground: #2b2118;
+  --sidebar-border: #2b2118;
+  --sidebar-ring: #2b2118;
+  --chart-1: #f2b233;
+  --chart-2: #2b2118;
+  --chart-3: #e07b1a;
+  --chart-4: #2f9e5f;
+  --chart-5: #3a6fd8;
+
+  /* Status chips: background / text / dot. */
+  --chip-live-bg: #dcf1e3;
+  --chip-live-fg: #1f6b42;
+  --chip-live-dot: #2f9e5f;
+  --chip-draft-bg: #f5e9cc;
+  --chip-draft-fg: #7a5a17;
+  --chip-draft-dot: #c99a2e;
+  --chip-changes-bg: #fbe1c4;
+  --chip-changes-fg: #8a4b0f;
+  --chip-changes-dot: #e07b1a;
+  --chip-progress-bg: #dde7fb;
+  --chip-progress-fg: #244f9e;
+  --chip-progress-dot: #3a6fd8;
+  --chip-pending-bg: #ece6dc;
+  --chip-pending-fg: #5d5245;
+  --chip-pending-dot: #9a8c7a;
+  --chip-failed-bg: #f9dcd7;
+  --chip-failed-fg: #9c2a20;
+  --chip-failed-dot: #c8372d;
+  --chip-exhausted-bg: #2b2118;
+  --chip-exhausted-fg: #fffaf1;
+  --chip-exhausted-dot: #c8372d;
+
+  /* Inline alerts: info / success / error. */
+  --alert-info-bg: #dde7fb;
+  --alert-info-fg: #1b3d7a;
+  --alert-info-border: #3a6fd8;
+  --alert-success-bg: #dcf1e3;
+  --alert-success-fg: #17532f;
+  --alert-success-border: #2f9e5f;
+  --alert-error-bg: #f9dcd7;
+  --alert-error-fg: #7e2018;
+  --alert-error-border: #c8372d;
+  --alert-warning-bg: #fbe1c4;
+  --alert-warning-fg: #6e3b0c;
+  --alert-warning-border: #e07b1a;
+
+  /* Question-type tiles, one tint per group. */
+  --qt-screens-bg: #e0e9d4;
+  --qt-screens-fg: #3f5b2a;
+  --qt-text-bg: #dbe8f7;
+  --qt-text-fg: #244f9e;
+  --qt-choice-bg: #f8e3b0;
+  --qt-choice-fg: #7a5a17;
+  --qt-scale-bg: #f6d3c9;
+  --qt-scale-fg: #9c3a20;
+  --qt-other-bg: #e8def2;
+  --qt-other-fg: #5b3d84;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --canvas: oklch(0.17 0 0);
+  --background: #1c1713;
+  --foreground: #f3ebdf;
+  --card: #26201a;
+  --card-foreground: #f3ebdf;
+  --popover: #26201a;
+  --popover-foreground: #f3ebdf;
+  --primary: #f2b233;
+  --primary-foreground: #1c1713;
+  --secondary: #f3ebdf;
+  --secondary-foreground: #1c1713;
+  --secondary-hover: #d9cfc1;
+  --muted: #2f2820;
+  --muted-foreground: #b0a18e;
+  --accent: #3a2f1d;
+  --accent-foreground: #f3ebdf;
+  --accent-pressed: #45381f;
+  --destructive: #ff7a66;
+  --destructive-foreground: #1c1713;
+  --success: #4cc27f;
+  --warning: #e0b44f;
+  --border: #3d3229;
+  --input: #54463a;
+  --ring: #f3ebdf;
+  --ink: #54463a;
+  --shadow-ink: #000000;
+  --body-secondary: #cbbda9;
+  --subtle-foreground: #8d7f6d;
+  --field: #1f1a15;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --hover-wash: rgba(243, 235, 223, 0.07);
+  --hover-wash-strong: rgba(243, 235, 223, 0.12);
+  --disabled: #2f2820;
+  --disabled-foreground: #6f6254;
+  --disabled-border: #3d3229;
+  --canvas: #1c1713;
+  --sidebar: #26201a;
+  --sidebar-foreground: #f3ebdf;
+  --sidebar-primary: #f3ebdf;
+  --sidebar-primary-foreground: #1c1713;
+  --sidebar-accent: rgba(243, 235, 223, 0.07);
+  --sidebar-accent-foreground: #f3ebdf;
+  --sidebar-border: #3d3229;
+  --sidebar-ring: #f3ebdf;
+  --chart-1: #f2b233;
+  --chart-2: #f3ebdf;
+  --chart-3: #e07b1a;
+  --chart-4: #4cc27f;
+  --chart-5: #6f9bf0;
+
+  --chip-live-bg: #1f3a2a;
+  --chip-live-fg: #8fdcae;
+  --chip-live-dot: #4cc27f;
+  --chip-draft-bg: #3a2f17;
+  --chip-draft-fg: #e8c879;
+  --chip-draft-dot: #e0b44f;
+  --chip-changes-bg: #3d2a15;
+  --chip-changes-fg: #f3b77a;
+  --chip-changes-dot: #f0913a;
+  --chip-progress-bg: #1d2a45;
+  --chip-progress-fg: #a9c4f7;
+  --chip-progress-dot: #6f9bf0;
+  --chip-pending-bg: #322b23;
+  --chip-pending-fg: #c9bba8;
+  --chip-pending-dot: #9a8c7a;
+  --chip-failed-bg: #42201b;
+  --chip-failed-fg: #ffb0a3;
+  --chip-failed-dot: #ff7a66;
+  --chip-exhausted-bg: #f3ebdf;
+  --chip-exhausted-fg: #1c1713;
+  --chip-exhausted-dot: #c8372d;
+
+  --alert-info-bg: #1d2a45;
+  --alert-info-fg: #c3d5fa;
+  --alert-info-border: #6f9bf0;
+  --alert-success-bg: #1f3a2a;
+  --alert-success-fg: #b5e8c9;
+  --alert-success-border: #4cc27f;
+  --alert-error-bg: #42201b;
+  --alert-error-fg: #ffc4ba;
+  --alert-error-border: #ff7a66;
+  --alert-warning-bg: #3d2a15;
+  --alert-warning-fg: #f7cf9f;
+  --alert-warning-border: #f0913a;
+
+  --qt-screens-bg: #2c3622;
+  --qt-screens-fg: #b9d39d;
+  --qt-text-bg: #1f2c42;
+  --qt-text-fg: #a9c4f7;
+  --qt-choice-bg: #3a2f17;
+  --qt-choice-fg: #e8c879;
+  --qt-scale-bg: #3f2219;
+  --qt-scale-fg: #f2a58e;
+  --qt-other-bg: #2f2640;
+  --qt-other-fg: #cdb6ec;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 45%, transparent);
+  }
+}
+
+@layer components {
+  /* Caption / label: DM Sans 700, 11.5px, +0.1em, uppercase. */
+  .fc-caption {
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  /* The ring every focusable thing uses: a surface-coloured gap, then ink. */
+  .fc-focus {
+    @apply focus-visible:shadow-focus outline-none;
+  }
+}
+
+@keyframes fc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Reduced motion: no slides or scaling, quick fades only. Components
+ * that animate position check this themselves; this caps the rest. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 120ms !important;
   }
 }

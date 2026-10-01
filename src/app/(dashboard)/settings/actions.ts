@@ -43,13 +43,48 @@ export async function updateEmailAction(email: string): Promise<AccountResult> {
   };
 }
 
-export async function updatePasswordAction(password: string): Promise<AccountResult> {
+export async function updatePasswordAction(
+  password: string,
+  currentPassword?: string,
+): Promise<AccountResult> {
   if (password.length < 8) return { ok: false, message: "Use at least 8 characters." };
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
+  // Someone at an unlocked laptop shouldn't be able to lock the owner out:
+  // the current password has to be right first.
+  if (currentPassword !== undefined) {
+    const { error: checkError } = await supabase.auth.signInWithPassword({
+      email: user.email ?? "",
+      password: currentPassword,
+    });
+    if (checkError) return { ok: false, message: "Your current password isn't right." };
+  }
   const { error } = await supabase.auth.updateUser({ password });
   if (error)
     return { ok: false, message: error.message || "Couldn't change your password." };
   return { ok: true, message: "Password updated." };
+}
+
+export async function renameWorkspaceAction(
+  workspaceId: string,
+  name: string,
+): Promise<AccountResult> {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 80)
+    return { ok: false, message: "Enter a name up to 80 characters." };
+  if (!z.string().uuid().safeParse(workspaceId).success)
+    return { ok: false, message: "Workspace not found." };
+  const { supabase } = await requireUser();
+  // Row-level security only lets the owner update a workspace; a
+  // non-owner's update matches no rows.
+  const { data, error } = await supabase
+    .from("workspaces")
+    .update({ name: trimmed })
+    .eq("id", workspaceId)
+    .select("id");
+  if (error || !data?.length)
+    return { ok: false, message: "Only the workspace owner can rename it." };
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Workspace renamed." };
 }
 
 /** Deletes the signed-in user's account and all their data. Requires

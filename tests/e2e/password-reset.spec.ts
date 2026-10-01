@@ -57,6 +57,7 @@ test.describe("password reset", () => {
   test("an invalid link explains itself on the login page", async ({ page }) => {
     await page.goto("/auth/confirm?code=not-a-real-code&next=/reset-password");
     await page.waitForURL("**/login?notice=link_invalid");
-    await expect(page.getByRole("status")).toContainText("expired");
+    // An expired link is a warning banner (role="alert"), not a status.
+    await expect(page.getByRole("alert").filter({ hasText: "expired" })).toBeVisible();
   });
 });

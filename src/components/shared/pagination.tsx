@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { cn } from "cn";
+
+const base =
+  "fc-focus inline-flex h-9 items-center gap-1.5 rounded-sm border-[1.5px] px-3 text-sm font-semibold";
 
 function PageLink({
   href,
@@ -8,21 +12,24 @@ function PageLink({
 }: {
   href: string;
   disabled: boolean;
-  children: string;
+  children: React.ReactNode;
 }) {
-  // A disabled <Link> still navigates — render an inert button instead.
+  // A disabled <Link> still navigates — render an inert span instead.
   return disabled ? (
-    <Button variant="outline" size="sm" disabled>
+    <span
+      aria-disabled
+      className={cn(base, "border-disabled-border text-subtle-foreground border-dashed")}
+    >
       {children}
-    </Button>
+    </span>
   ) : (
-    <Button asChild variant="outline" size="sm">
-      <Link href={href}>{children}</Link>
-    </Button>
+    <Link href={href} className={cn(base, "border-ink bg-card hover:bg-accent")}>
+      {children}
+    </Link>
   );
 }
 
-/** Previous / Next for a paged list. `hrefFor(page)` builds each URL. */
+/** Previous · "Page 1 of 12" · Next (Part 1 §3 Navigation). */
 export function Pagination({
   page,
   pageCount,
@@ -34,18 +41,18 @@ export function Pagination({
 }) {
   if (pageCount <= 1) return null;
   return (
-    <div className="mt-4 flex items-center justify-between text-sm">
+    <div className="mt-5 flex items-center justify-center gap-3 text-sm">
+      <PageLink href={hrefFor(page - 1)} disabled={page <= 1}>
+        <ArrowLeft className="size-3.5" />
+        Previous
+      </PageLink>
       <span className="text-muted-foreground">
-        Page {page} of {pageCount}
+        Page <b className="text-foreground">{page}</b> of {pageCount}
       </span>
-      <div className="flex gap-2">
-        <PageLink href={hrefFor(page - 1)} disabled={page <= 1}>
-          Previous
-        </PageLink>
-        <PageLink href={hrefFor(page + 1)} disabled={page >= pageCount}>
-          Next
-        </PageLink>
-      </div>
+      <PageLink href={hrefFor(page + 1)} disabled={page >= pageCount}>
+        Next
+        <ArrowRight className="size-3.5" />
+      </PageLink>
     </div>
   );
 }

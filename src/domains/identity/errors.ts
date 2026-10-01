@@ -22,16 +22,19 @@ export function mapAuthError(rawMessage: string | undefined | null): AuthError {
   if (msg.includes("already registered") || msg.includes("already exists")) {
     return {
       code: "duplicate_email",
-      message: "An account with this email already exists.",
+      message: "An account with that email already exists. Log in instead?",
     };
   }
   if (msg.includes("invalid login credentials")) {
-    return { code: "invalid_credentials", message: "Incorrect email or password." };
+    return {
+      code: "invalid_credentials",
+      message: "That email and password don't match. Try again, or reset your password.",
+    };
   }
   if (msg.includes("email not confirmed")) {
     return {
       code: "email_not_confirmed",
-      message: "Please verify your email address before logging in.",
+      message: "Confirm your email first. Check your inbox for the link we sent.",
     };
   }
   if (
@@ -54,7 +57,7 @@ export function mapAuthError(rawMessage: string | undefined | null): AuthError {
   if (msg.includes("rate limit") || msg.includes("too many")) {
     return {
       code: "rate_limited",
-      message: "Too many attempts. Please wait and try again.",
+      message: "Too many attempts. Wait a minute, then try again.",
     };
   }
 

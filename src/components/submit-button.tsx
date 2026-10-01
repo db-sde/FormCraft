@@ -1,14 +1,14 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 
 /**
  * A submit button for server-action forms: disabled with a spinner
  * while its form is submitting, so the click gets immediate feedback
  * and a double-click can't run the action twice (e.g. create two
- * forms).
+ * forms). While pending it keeps its colours and shows the 14px
+ * spinner with the "…ing" label, as the design system specifies.
  */
 export function SubmitButton({
   icon,
@@ -25,9 +25,10 @@ export function SubmitButton({
       type="submit"
       disabled={pending || props.disabled}
       aria-busy={pending}
+      data-loading={pending || undefined}
       {...props}
     >
-      {pending ? <Loader2 className="animate-spin" /> : icon}
+      {pending ? <ButtonSpinner /> : icon}
       {pending && pendingLabel ? pendingLabel : children}
     </Button>
   );

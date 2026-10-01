@@ -2,14 +2,21 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
+/** Inline banners (Part 1 §3): tinted fill, 1.5px coloured border,
+ * 18px icon, bold title over the body. */
 const alertVariants = cva(
-  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
+  "group/alert relative grid w-full gap-0.5 rounded-sm border-[1.5px] px-3.5 py-3 text-left text-[13.5px] leading-[1.45] has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-24 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-3 *:[svg]:row-span-2 *:[svg]:mt-px *:[svg]:text-current *:[svg:not([class*='size-'])]:size-[18px]",
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
+        default: "border-ink bg-card text-card-foreground",
+        info: "border-[var(--alert-info-border)] bg-[var(--alert-info-bg)] text-[var(--alert-info-fg)]",
+        success:
+          "border-[var(--alert-success-border)] bg-[var(--alert-success-bg)] text-[var(--alert-success-fg)]",
+        warning:
+          "border-[var(--alert-warning-border)] bg-[var(--alert-warning-bg)] text-[var(--alert-warning-fg)]",
         destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+          "border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] text-[var(--alert-error-fg)]",
       },
     },
     defaultVariants: {
@@ -26,6 +33,7 @@ function Alert({
   return (
     <div
       data-slot="alert"
+      data-variant={variant ?? "default"}
       role="alert"
       className={cn(alertVariants({ variant }), className)}
       {...props}
@@ -38,7 +46,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="alert-title"
       className={cn(
-        "[&_a]:hover:text-foreground font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3",
+        "font-bold group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3",
         className,
       )}
       {...props}
@@ -51,7 +59,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<"div">) 
     <div
       data-slot="alert-description"
       className={cn(
-        "text-muted-foreground [&_a]:hover:text-foreground text-sm text-balance md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_p:not(:last-child)]:mb-4",
+        "group-data-[variant=default]/alert:text-muted-foreground text-pretty group-has-[>svg]/alert:col-start-2 [&_a]:font-semibold [&_a]:underline [&_a]:underline-offset-3 [&_p:not(:last-child)]:mb-3",
         className,
       )}
       {...props}
@@ -63,7 +71,7 @@ function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="alert-action"
-      className={cn("absolute top-2 right-2", className)}
+      className={cn("absolute top-1/2 right-3 -translate-y-1/2", className)}
       {...props}
     />
   );

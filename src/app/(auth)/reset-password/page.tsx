@@ -1,27 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { CircleCheck, Link2Off } from "lucide-react";
 import { ResetPasswordInput, mapAuthError } from "@/domains/identity";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, ButtonSpinner } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+  AuthActions,
+  AuthCard,
+  AuthField,
+  AuthFooter,
+  AuthNotice,
+} from "@/components/auth/auth-ui";
+
+const primary = "h-[52px] w-full text-base shadow-card sm:h-[46px] sm:text-[15px]";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [sessionReady, setSessionReady] = useState(false);
-  const [linkInvalid, setLinkInvalid] = useState(false);
+  const [status, setStatus] = useState<"checking" | "ready" | "invalid" | "saved">(
+    "checking",
+  );
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
@@ -35,11 +38,7 @@ export default function ResetPasswordPage() {
     // fragment/PKCE code, handled automatically by the browser client
     // (detectSessionInUrl). We just need to confirm it landed.
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSessionReady(true);
-      } else {
-        setLinkInvalid(true);
-      }
+      setStatus(data.session ? "ready" : "invalid");
     });
   }, [supabase]);
 
@@ -47,67 +46,95 @@ export default function ResetPasswordPage() {
     setServerError(null);
     const { error } = await supabase.auth.updateUser({ password: values.password });
     if (error) {
-      setServerError(mapAuthError(error.message).message);
+      setServerError(
+        mapAuthError(error.message).code === "weak_password"
+          ? mapAuthError(error.message).message
+          : "We couldn't save your password. Nothing changed. Please try again.",
+      );
       return;
     }
+    setStatus("saved");
     router.push("/dashboard");
   }
 
-  if (linkInvalid) {
+  if (status === "checking") {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Link expired or invalid</CardTitle>
-          <CardDescription>
-            Request a new password reset link and try again.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <AuthCard title="Checking your link…" subtitle="This only takes a second.">
+        <div className="flex justify-center pt-2 pb-1" role="status">
+          <span className="size-8 animate-spin rounded-full border-[3px] border-current border-t-transparent" />
+        </div>
+      </AuthCard>
+    );
+  }
+
+  if (status === "invalid") {
+    return (
+      <AuthCard
+        icon={{ node: <Link2Off />, tint: "var(--alert-error-bg)" }}
+        title="This link has expired"
+        subtitle="Reset links work once and only for an hour. Request a new password reset link and try again."
+      >
+        <AuthActions>
+          <Button asChild size="auth" className={primary}>
+            <Link href="/forgot-password">Request new link</Link>
+          </Button>
+          <AuthFooter text="Or go back to" link={{ href: "/login", label: "Log in" }} />
+        </AuthActions>
+      </AuthCard>
+    );
+  }
+
+  if (status === "saved") {
+    return (
+      <AuthCard
+        icon={{ node: <CircleCheck />, tint: "var(--alert-success-bg)" }}
+        title="Password saved"
+        subtitle="You're signed in. Taking you to your forms…"
+      >
+        <Button asChild size="auth" className={primary}>
+          <Link href="/dashboard">Go to your forms</Link>
+        </Button>
+      </AuthCard>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Choose a new password</CardTitle>
-        <CardDescription>Make it at least 8 characters.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="password">New password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              {...register("password")}
-            />
-            {errors.password && (
-              <p className="text-destructive text-sm">{errors.password.message}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              {...register("confirmPassword")}
-            />
-            {errors.confirmPassword && (
-              <p className="text-destructive text-sm">{errors.confirmPassword.message}</p>
-            )}
-          </div>
-          {serverError && <p className="text-destructive text-sm">{serverError}</p>}
+    <AuthCard title="Choose a new password" subtitle="Make it at least 8 characters.">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="flex flex-1 flex-col gap-[22px] sm:gap-[18px]"
+      >
+        {serverError && <AuthNotice>{serverError}</AuthNotice>}
+        <AuthField
+          id="password"
+          label="New password"
+          type="password"
+          autoComplete="new-password"
+          autoFocus
+          error={errors.password?.message}
+          {...register("password")}
+        />
+        <AuthField
+          id="confirmPassword"
+          label="Confirm password"
+          type="password"
+          autoComplete="new-password"
+          error={errors.confirmPassword?.message}
+          {...register("confirmPassword")}
+        />
+        <AuthActions>
           <Button
             type="submit"
-            className="w-full"
-            disabled={!sessionReady || isSubmitting}
+            size="auth"
+            className={primary}
+            disabled={isSubmitting}
+            data-loading={isSubmitting || undefined}
           >
+            {isSubmitting && <ButtonSpinner />}
             {isSubmitting ? "Saving…" : "Save new password"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </AuthActions>
+      </form>
+    </AuthCard>
   );
 }

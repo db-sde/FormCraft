@@ -11,7 +11,7 @@ test.describe("auth", () => {
     await page.getByRole("button", { name: "Create account" }).click();
 
     await page.waitForURL("**/signup/check-email");
-    await expect(page.getByText(/check your email/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /check your inbox/i })).toBeVisible();
   });
 
   test("login with valid credentials reaches the dashboard, logout returns to login", async ({
@@ -39,7 +39,11 @@ test.describe("auth", () => {
       await page.getByLabel("Password").fill("definitely-wrong-password");
       await page.getByRole("button", { name: "Log in" }).click();
 
-      await expect(page.getByText("Incorrect email or password.")).toBeVisible();
+      await expect(
+        page.getByText(
+          "That email and password don't match. Try again, or reset your password.",
+        ),
+      ).toBeVisible();
       await expect(page).toHaveURL(/\/login/);
     } finally {
       await deleteUser(user.userId);

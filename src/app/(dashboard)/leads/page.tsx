@@ -18,29 +18,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "cn";
-import {
-  ACTIVITY_LABEL,
-  responseActivity,
-  type ResponseActivity,
-} from "@/domains/responses/activity";
+import type { Metadata } from "next";
+import { responseActivity } from "@/domains/responses/activity";
+import { ActivityChip } from "@/components/responses/activity-chip";
 
-function ActivityBadge({ activity }: { activity: ResponseActivity }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap",
-        activity === "completed"
-          ? "bg-emerald-50 text-emerald-700"
-          : activity === "in_progress"
-            ? "bg-sky-50 text-sky-700"
-            : "bg-amber-50 text-amber-700",
-      )}
-    >
-      {ACTIVITY_LABEL[activity]}
-    </span>
-  );
-}
+export const metadata: Metadata = { title: "Leads" };
 
 export default async function LeadsPage({
   searchParams,
@@ -61,11 +43,12 @@ export default async function LeadsPage({
   return (
     <>
       <PageHeader
+        eyebrow={`${leads.totalCount.toLocaleString()} lead${leads.totalCount === 1 ? "" : "s"} in ${workspace.name}`}
         title="Leads"
         description="Everyone who left their contact details in one of your forms — including people who didn't finish."
         actions={
           leads.totalCount > 0 && (
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="h-11 font-semibold">
               <a href={exportHref} download>
                 <Download />
                 Export CSV
@@ -76,7 +59,7 @@ export default async function LeadsPage({
       />
 
       {forms.length > 0 && (
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+        <div className="mb-[22px] flex flex-col gap-3 sm:flex-row">
           <form action="/leads" className="flex-1 sm:max-w-xs">
             {formId && <input type="hidden" name="form" value={formId} />}
             <Input
@@ -128,7 +111,7 @@ export default async function LeadsPage({
         />
       ) : (
         <>
-          <div className="bg-card overflow-x-auto rounded-xl border shadow-xs">
+          <div className="border-ink bg-card overflow-hidden rounded-lg border-[1.5px]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -143,8 +126,8 @@ export default async function LeadsPage({
               </TableHeader>
               <TableBody>
                 {leads.items.map((lead) => (
-                  <TableRow key={lead.responseId} className="hover:bg-muted/40 relative">
-                    <TableCell className="font-medium">
+                  <TableRow key={lead.responseId} className="relative">
+                    <TableCell className="font-semibold">
                       <Link
                         href={`/forms/${lead.formId}/responses/${lead.responseId}`}
                         className="after:absolute after:inset-0 after:content-['']"
@@ -183,7 +166,7 @@ export default async function LeadsPage({
                       <span className="line-clamp-1">{lead.formTitle}</span>
                     </TableCell>
                     <TableCell>
-                      <ActivityBadge
+                      <ActivityChip
                         activity={responseActivity({
                           status: lead.completed ? "completed" : "partial",
                           lastActiveAt: lead.lastActiveAt,

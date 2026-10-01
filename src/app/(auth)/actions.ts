@@ -16,6 +16,8 @@ import { safeNextPath } from "@/lib/http/safe-next-path";
 
 export type ActionResult = {
   error?: string;
+  /** "warn" for rate limits (amber banner), otherwise a red error. */
+  errorTone?: "error" | "warn";
   fieldErrors?: Record<string, string>;
   /** Non-secret values echoed back so the form can refill them — React
    * resets uncontrolled fields after a form action, which would
@@ -23,8 +25,9 @@ export type ActionResult = {
   values?: Record<string, string>;
 };
 
-const RATE_LIMITED_MESSAGE =
-  "Too many attempts. Please wait a few minutes and try again.";
+const RATE_LIMITED_MESSAGE = "Too many attempts. Wait a minute, then try again.";
+const SIGNUP_RATE_LIMITED_MESSAGE =
+  "Too many sign-up attempts from this network. Try again in a few minutes.";
 
 function echo(formData: FormData, keys: string[]): Record<string, string> {
   return Object.fromEntries(
@@ -67,7 +70,7 @@ export async function signUpAction(
   if (
     !(await hitRateLimit(createAdminClient(), `signup:${ip}`, 10, 60 * 60 * 1000)).allowed
   ) {
-    return { error: RATE_LIMITED_MESSAGE, values };
+    return { error: SIGNUP_RATE_LIMITED_MESSAGE, errorTone: "warn", values };
   }
 
   const supabase = await createServerSupabaseClient();
@@ -109,14 +112,19 @@ export async function logInAction(
   if (
     !(await hitRateLimit(createAdminClient(), rateLimitKey, 10, 10 * 60 * 1000)).allowed
   ) {
-    return { error: RATE_LIMITED_MESSAGE, values };
+    return { error: RATE_LIMITED_MESSAGE, errorTone: "warn", values };
   }
 
   const supabase = await createServerSupabaseClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    return { error: mapAuthError(error.message).message, values };
+    const mapped = mapAuthError(error.message);
+    return {
+      error: mapped.message,
+      errorTone: mapped.code === "rate_limited" ? "warn" : "error",
+      values,
+    };
   }
 
   // Back to the page that sent them to login (the middleware passes it
