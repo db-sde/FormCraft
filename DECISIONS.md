@@ -3,6 +3,42 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Logic engine: one model, additive schema
+
+Asked for explicitly (a full logic/scoring engine), which goes beyond the
+Phase 1 scope rule in CLAUDE.md; the request overrides it, and the work
+follows the other rules (server authoritative, immutable versions,
+stable ids, deterministic runtime). Design: docs/logic-engine.md.
+
+- **Additive to `FormSchemaV1`, no v2.** Variables, rules, hidden fields,
+  `visibleIf`, `validations`, option `scores`/`correct` and `weight` are
+  optional fields, so every stored draft and published version parses
+  and behaves exactly as before.
+- **One engine.** Legacy `logic` rules are translated into the rule
+  model at evaluation time (`legacyToRule`) instead of being migrated in
+  the database; `evaluateNextStep` / `walkForm` keep their signatures
+  and now run through it. All pre-existing logic tests pass unchanged.
+- **Evaluation order:** legacy rules, then `rules`, in array order; every
+  matching rule's variable actions run, the first matching navigation
+  wins (the legacy "first match wins"); hidden questions are skipped and
+  never required; completion rules run last and only pick the ending if
+  a question rule didn't.
+- **Variables are derived, not stored.** They're recomputed by replaying
+  the answers along the path (client while answering, server at
+  submission), so they can't drift or be forged. Date logic uses a
+  pinned clock and the form's timezone (UTC by default).
+- **No formula variables.** Variables change only through ordered
+  actions, so dependency cycles can't exist; jumps stay forward-only, so
+  navigation cycles can't either.
+- **Expressions are a typed AST** with a whitelist of functions;
+  evaluation is total (bad types, ÷0 and NaN become null).
+- **Static analysis** (`analyzeLogic`): broken references, backward
+  jumps, type mistakes and ÷0 are errors that block saving;
+  contradictory conditions, shadowed rules and required-but-conditional
+  questions are warnings.
+- Integration tests now run one file at a time: the webhook, Sheets and
+  health tests sweep shared job queues and were interfering in parallel.
+
 ## 2026-10-02 — New UI ("Index Card" handoff): where we followed it and where we didn't
 
 The design handoff (`design_handoff_formcraft`, Parts 1–8) is the visual

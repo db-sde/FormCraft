@@ -4,6 +4,15 @@ import {
   LOGIC_OPERATORS,
   OPTION_BEARING_QUESTION_TYPES,
 } from "./question-types";
+import { optionalSafeText, safeText, stableId } from "./primitives";
+import {
+  Condition,
+  HiddenFieldV1,
+  OptionScoreV1,
+  QuestionValidationV1,
+  RuleV1,
+  VariableV1,
+} from "./logic-model";
 
 /**
  * Canonical Phase 1 form schema, version 1. This is the single typed
@@ -14,22 +23,6 @@ import {
  * generated client-side with nanoid and must never be reused or derived
  * from array position.
  */
-
-const stableId = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[A-Za-z0-9_-]+$/, "id must be URL-safe (letters, numbers, - or _)");
-
-// Reject NUL bytes anywhere in user-supplied free text — Postgres text
-// columns/JSONB cannot store them and some clients mishandle them.
-const safeText = (max: number) =>
-  z
-    .string()
-    .max(max)
-    .refine((v) => !v.includes("\u0000"), "text must not contain NUL characters");
-
-const optionalSafeText = (max: number) => safeText(max).optional();
 
 // Creator-supplied links rendered to respondents (ending redirect, logo,
 // background image). z.url() alone accepts any scheme — including
@@ -43,6 +36,10 @@ const webUrl = z
 export const OptionV1 = z.object({
   id: stableId,
   label: safeText(500),
+  /** Points this option adds to variables when chosen (scoring, quizzes). */
+  scores: z.array(OptionScoreV1).max(10).optional(),
+  /** Knowledge quizzes: marks the right answer(s). */
+  correct: z.boolean().optional(),
 });
 export type OptionV1 = z.infer<typeof OptionV1>;
 
@@ -164,6 +161,12 @@ const baseQuestionFields = {
   label: safeText(1000),
   description: optionalSafeText(2000),
   required: z.boolean().default(false),
+  /** Shown only when this holds; otherwise skipped (never required). */
+  visibleIf: Condition.optional(),
+  /** Conditional and cross-field checks, run when leaving the question. */
+  validations: z.array(QuestionValidationV1).max(10).optional(),
+  /** Multiplies the option scores this question adds (default 1). */
+  weight: z.number().finite().min(0).max(100).optional(),
 };
 
 export const QuestionV1 = z.discriminatedUnion("type", [
@@ -296,11 +299,17 @@ export const FormSchemaV1 = z.object({
   meta: z.object({
     title: safeText(200),
     description: optionalSafeText(2000),
+    /** IANA zone for date logic ("today", "this week"); UTC when unset. */
+    timezone: z.string().max(64).optional(),
   }),
   theme: ThemeV1,
   endings: z.array(EndingV1).min(1).max(20),
   questions: z.array(QuestionV1).min(1).max(200),
+  /** Legacy single-question rules; still evaluated (as rules) forever. */
   logic: z.array(LogicRuleV1).max(500),
+  variables: z.array(VariableV1).max(100).optional(),
+  rules: z.array(RuleV1).max(500).optional(),
+  hiddenFields: z.array(HiddenFieldV1).max(20).optional(),
 });
 export type FormSchemaV1 = z.infer<typeof FormSchemaV1>;
 

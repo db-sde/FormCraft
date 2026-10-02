@@ -35,6 +35,18 @@ function buildGraph(schema: FormSchemaV1): Map<string, GraphEdge[]> {
       }
     }
 
+    for (const rule of schema.rules ?? []) {
+      if (rule.disabled || rule.on.event !== "question_answered") continue;
+      if (rule.on.questionId !== q.id) continue;
+      for (const action of rule.then) {
+        if (action.type === "jump_to_question") {
+          edges.push({ to: action.questionId, ruleId: rule.id });
+        } else if (action.type !== "set_variable") {
+          edges.push({ to: null, ruleId: rule.id });
+        }
+      }
+    }
+
     graph.set(q.id, edges);
   });
 

@@ -1,3 +1,4 @@
+import { analyzeLogic } from "./analyze";
 import {
   FormSchemaV1,
   OPTION_BEARING_TYPES,
@@ -220,6 +221,15 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
         ),
       );
     }
+  }
+
+  // Rules, variables, visibility and checks (the logic engine's model).
+  const logicError = analyzeLogic(schema).find((issue) => issue.severity === "error");
+  if (logicError) {
+    throw new FormSchemaError(logicError.message, logicError.code, {
+      message: logicError.message,
+      questionId: logicError.questionId,
+    });
   }
 
   const backward = backwardJumpRules(schema)[0];
