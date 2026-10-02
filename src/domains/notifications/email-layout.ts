@@ -22,7 +22,8 @@ export type EmailLayoutInput = {
   body: string;
   /** Label / value lines in a shaded box. */
   meta?: { label: string; value: string }[];
-  button: { label: string; href: string };
+  /** Omitted (or empty) for an email with no call to action. */
+  button?: { label: string; href: string };
   /** Small print under the button. */
   fine: string;
   /** "Sent to …" line in the footer. */
@@ -41,7 +42,8 @@ const FONT = "Arial, Helvetica, sans-serif";
 
 export function renderEmailHtml(input: EmailLayoutInput): string {
   const e = escapeHtml;
-  const href = input.raw?.buttonHref ? input.button.href : e(input.button.href);
+  const button = input.button?.label && input.button.href ? input.button : null;
+  const href = button ? (input.raw?.buttonHref ? button.href : e(button.href)) : "";
   const sentTo = input.sentTo ? (input.raw?.sentTo ? input.sentTo : e(input.sentTo)) : "";
   const meta = input.meta?.length
     ? `<tr><td style="padding:0 0 24px 0;">
@@ -79,15 +81,19 @@ export function renderEmailHtml(input: EmailLayoutInput): string {
             <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${input.tagColor};font-size:12px;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;color:${INK};">${e(input.tag)}</span>
           </td></tr>
           <tr><td style="padding:16px 0 10px 0;font-family:${FONT};font-size:28px;line-height:1.15;font-weight:bold;letter-spacing:-0.02em;color:${INK};">${e(input.title)}</td></tr>
-          <tr><td style="padding:0 0 20px 0;font-family:${FONT};font-size:16px;line-height:1.55;color:#4a3f35;">${e(input.body)}</td></tr>
+          <tr><td style="padding:0 0 20px 0;font-family:${FONT};font-size:16px;line-height:1.55;color:#4a3f35;white-space:pre-line;">${e(input.body)}</td></tr>
           ${meta}
-          <tr><td>
+          ${
+            button
+              ? `<tr><td>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr><td bgcolor="#f2b233" style="border:1.5px solid ${INK};border-radius:6px;">
-                <a href="${href}" target="_blank" style="display:inline-block;padding:14px 24px;font-family:${FONT};font-size:16px;font-weight:bold;color:${INK};text-decoration:none;">${e(input.button.label)}</a>
+                <a href="${href}" target="_blank" style="display:inline-block;padding:14px 24px;font-family:${FONT};font-size:16px;font-weight:bold;color:${INK};text-decoration:none;">${e(button.label)}</a>
               </td></tr>
             </table>
-          </td></tr>
+          </td></tr>`
+              : ""
+          }
           <tr><td style="padding:24px 0 0 0;font-family:${FONT};font-size:13px;line-height:1.5;color:#6f6254;">${e(input.fine)}</td></tr>
         </table>
       </td></tr>

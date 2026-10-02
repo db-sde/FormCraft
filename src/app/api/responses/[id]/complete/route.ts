@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
+import { sendConfirmationEmail } from "@/domains/notifications/confirmation";
 import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
 import { enqueueSheetsSync, dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { recordAnalyticsEvent } from "@/domains/analytics";
@@ -117,6 +118,7 @@ export async function POST(
           }),
         );
         await step(() => notifyFormOwnerOfCompletedResponse(admin, result.formId, id));
+        await step(() => sendConfirmationEmail(admin, id));
         await step(async () => {
           await enqueueWebhookDeliveries(admin, id);
           // Send right away rather than waiting for the next scheduled

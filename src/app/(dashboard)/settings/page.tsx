@@ -12,6 +12,8 @@ import { canAdmin, listTeam } from "@/domains/workspaces";
 import { dnsInstructions, listDomains } from "@/domains/domains";
 import { listFormsForWorkspace } from "@/domains/forms";
 import { DomainSettings } from "@/components/dashboard/domain-settings";
+import { ApiKeySettings } from "@/components/dashboard/api-key-settings";
+import { listApiKeys } from "@/domains/api";
 import { getUsage, getWorkspacePlan } from "@/domains/billing";
 
 const TITLES = {
@@ -20,6 +22,7 @@ const TITLES = {
   members: "Members",
   plan: "Plan and usage",
   domains: "Domains",
+  api: "API keys",
 };
 
 export async function generateMetadata({
@@ -36,6 +39,7 @@ const TABS = [
   ["workspace", "Workspace"],
   ["members", "Members"],
   ["domains", "Domains"],
+  ["api", "API"],
   ["plan", "Plan"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -63,6 +67,14 @@ export default async function SettingsPage({
       ? await Promise.all([
           listDomains(supabase, workspace.id),
           listFormsForWorkspace(supabase, workspace.id),
+          getWorkspacePlan(supabase, workspace.id),
+        ])
+      : null;
+
+  const apiData =
+    tab === "api" && canAdmin(workspace.role)
+      ? await Promise.all([
+          listApiKeys(supabase, workspace.id),
           getWorkspacePlan(supabase, workspace.id),
         ])
       : null;
@@ -112,6 +124,15 @@ export default async function SettingsPage({
       )}
 
       {planData && <PlanUsage plan={planData[0]} usage={planData[1]} />}
+
+      {tab === "api" && (
+        <ApiKeySettings
+          keys={apiData?.[0] ?? []}
+          allowed={apiData?.[1].entitlements.api_access ?? false}
+          isAdmin={canAdmin(workspace.role)}
+          appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        />
+      )}
 
       {domainData && (
         <DomainSettings

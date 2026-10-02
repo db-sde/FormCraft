@@ -5,7 +5,11 @@ import Link from "next/link";
 import QRCode from "qrcode";
 import { Check, Copy, ExternalLink, Share2, X } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { buildEmbedSnippet } from "@/domains/forms/embed";
+import {
+  buildEmbedSnippet,
+  buildPopupSnippet,
+  type PopupMode,
+} from "@/domains/forms/embed";
 import {
   Popover,
   PopoverClose,
@@ -247,18 +251,28 @@ export function ShareEmbed({
   slug,
   formId,
   title,
+  popupEmbeds = false,
+  color = "#1f1f1f",
 }: {
   slug: string;
   formId: string;
   title: string;
+  /** The plan includes popup / side-tab / button embeds (P2.23). */
+  popupEmbeds?: boolean;
+  /** The form's button colour, for the launcher. */
+  color?: string;
 }) {
-  const [mode, setMode] = useState<EmbedMode>("standard");
+  const [mode, setMode] = useState<EmbedMode | PopupMode>("standard");
+  const [label, setLabel] = useState("Open form");
   const [copied, copy] = useCopy();
   const url = publicFormUrl(slug);
   const code =
     mode === "standard"
       ? buildEmbedSnippet({ formUrl: url, formId, title })
-      : `<iframe src="${url}?embed=1" title="${title.replace(/"/g, "&quot;")}" style="position:fixed;inset:0;width:100%;height:100%;border:0"></iframe>`;
+      : mode === "full"
+        ? `<iframe src="${url}?embed=1" title="${title.replace(/"/g, "&quot;")}" style="position:fixed;inset:0;width:100%;height:100%;border:0"></iframe>`
+        : buildPopupSnippet({ formUrl: url, formId, title, mode, label, color });
+  const launcher = mode === "popup" || mode === "side-tab" || mode === "button";
 
   return (
     <>
@@ -267,6 +281,13 @@ export function ShareEmbed({
           [
             ["standard", "Standard"],
             ["full", "Full page"],
+            ...(popupEmbeds
+              ? ([
+                  ["popup", "Popup"],
+                  ["side-tab", "Side tab"],
+                  ["button", "Button"],
+                ] as const)
+              : []),
           ] as const
         ).map(([id, label]) => (
           <button
@@ -285,6 +306,22 @@ export function ShareEmbed({
           </button>
         ))}
       </div>
+      {!popupEmbeds && (
+        <p className="text-muted-foreground text-xs">
+          Popup, side tab and button embeds are part of paid plans.
+        </p>
+      )}
+      {launcher && (
+        <label className="flex items-center gap-2 text-[13px] font-semibold">
+          Button text
+          <input
+            value={label}
+            maxLength={40}
+            onChange={(e) => setLabel(e.target.value)}
+            className="border-input bg-field h-8 rounded-sm border-[1.5px] px-2 font-normal"
+          />
+        </label>
+      )}
       <pre className="max-h-48 overflow-auto rounded-sm bg-[#2b2118] p-3 font-mono text-xs leading-[1.55] break-all whitespace-pre-wrap text-[#f3ebdf]">
         {code}
       </pre>

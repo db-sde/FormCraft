@@ -99,6 +99,137 @@ export type Database = {
           },
         ];
       };
+      api_keys: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          key_hash: string;
+          last_used_at: string | null;
+          name: string;
+          prefix: string;
+          revoked_at: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          key_hash: string;
+          last_used_at?: string | null;
+          name: string;
+          prefix: string;
+          revoked_at?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          key_hash?: string;
+          last_used_at?: string | null;
+          name?: string;
+          prefix?: string;
+          revoked_at?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "api_keys_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      confirmation_email_log: {
+        Row: {
+          created_at: string;
+          error: string | null;
+          form_id: string;
+          response_id: string;
+          status: string;
+        };
+        Insert: {
+          created_at?: string;
+          error?: string | null;
+          form_id: string;
+          response_id: string;
+          status: string;
+        };
+        Update: {
+          created_at?: string;
+          error?: string | null;
+          form_id?: string;
+          response_id?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "confirmation_email_log_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "confirmation_email_log_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: true;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      confirmation_emails: {
+        Row: {
+          body: string;
+          cta_label: string | null;
+          cta_url: string | null;
+          enabled: boolean;
+          form_id: string;
+          recipient_question_id: string | null;
+          subject: string;
+          updated_at: string;
+        };
+        Insert: {
+          body?: string;
+          cta_label?: string | null;
+          cta_url?: string | null;
+          enabled?: boolean;
+          form_id: string;
+          recipient_question_id?: string | null;
+          subject?: string;
+          updated_at?: string;
+        };
+        Update: {
+          body?: string;
+          cta_label?: string | null;
+          cta_url?: string | null;
+          enabled?: boolean;
+          form_id?: string;
+          recipient_question_id?: string | null;
+          subject?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "confirmation_emails_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: true;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       custom_domains: {
         Row: {
           created_at: string;
@@ -233,7 +364,10 @@ export type Database = {
           deleted_at: string | null;
           description: string | null;
           folder_id: string | null;
+          ga_measurement_id: string | null;
+          gtm_container_id: string | null;
           id: string;
+          meta_pixel_id: string | null;
           partial_retention_days: number | null;
           resume_links_enabled: boolean;
           save_partial_responses: boolean;
@@ -248,7 +382,10 @@ export type Database = {
           deleted_at?: string | null;
           description?: string | null;
           folder_id?: string | null;
+          ga_measurement_id?: string | null;
+          gtm_container_id?: string | null;
           id?: string;
+          meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
@@ -263,7 +400,10 @@ export type Database = {
           deleted_at?: string | null;
           description?: string | null;
           folder_id?: string | null;
+          ga_measurement_id?: string | null;
+          gtm_container_id?: string | null;
           id?: string;
+          meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
@@ -790,33 +930,49 @@ export type Database = {
       };
       webhook_endpoints: {
         Row: {
+          api_key_id: string | null;
+          config: Json;
           created_at: string;
           enabled: boolean;
           form_id: string;
           id: string;
+          kind: string;
           signing_secret: string;
           updated_at: string;
           url: string;
         };
         Insert: {
+          api_key_id?: string | null;
+          config?: Json;
           created_at?: string;
           enabled?: boolean;
           form_id: string;
           id?: string;
+          kind?: string;
           signing_secret: string;
           updated_at?: string;
           url: string;
         };
         Update: {
+          api_key_id?: string | null;
+          config?: Json;
           created_at?: string;
           enabled?: boolean;
           form_id?: string;
           id?: string;
+          kind?: string;
           signing_secret?: string;
           updated_at?: string;
           url?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "webhook_endpoints_api_key_fk";
+            columns: ["api_key_id"];
+            isOneToOne: false;
+            referencedRelation: "api_keys";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "webhook_endpoints_form_id_fkey";
             columns: ["form_id"];

@@ -10,8 +10,12 @@ import {
 import { signatureHeaderValue } from "./signing";
 import { nextBackoffDelayMs, isExhausted } from "./backoff";
 import { isDisallowedWebhookHost, resolvesToDisallowedAddress } from "./url-safety";
+import { buildSlackMessage } from "./slack";
+import { parseFormSchema } from "@/domains/forms/schema";
 
 type Client = SupabaseClient<Database>;
+
+export type EndpointKind = "webhook" | "slack" | "zapier" | "make";
 
 export type WebhookEndpoint = {
   id: string;
@@ -19,6 +23,9 @@ export type WebhookEndpoint = {
   url: string;
   enabled: boolean;
   createdAt: string;
+  kind: EndpointKind;
+  /** Slack: the questions included in the message (empty = first ten). */
+  questionIds: string[];
 };
 
 export async function listWebhookEndpoints(
@@ -27,7 +34,7 @@ export async function listWebhookEndpoints(
 ): Promise<WebhookEndpoint[]> {
   const { data, error } = await supabase
     .from("webhook_endpoints")
-    .select("id, form_id, url, enabled, created_at")
+    .select("id, form_id, url, enabled, created_at, kind, config")
     .eq("form_id", formId)
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -38,6 +45,10 @@ export async function listWebhookEndpoints(
     url: row.url,
     enabled: row.enabled,
     createdAt: row.created_at,
+    kind: row.kind as EndpointKind,
+    questionIds: Array.isArray((row.config as { questionIds?: unknown })?.questionIds)
+      ? (row.config as { questionIds: string[] }).questionIds
+      : [],
   }));
 }
 
@@ -49,11 +60,19 @@ export async function createWebhookEndpoint(
   supabase: Client,
   formId: string,
   url: string,
+  options: { kind?: EndpointKind; config?: Json; apiKeyId?: string } = {},
 ): Promise<{ id: string; signingSecret: string }> {
   const signingSecret = generateSigningSecret();
   const { data, error } = await supabase
     .from("webhook_endpoints")
-    .insert({ form_id: formId, url, signing_secret: signingSecret })
+    .insert({
+      form_id: formId,
+      url,
+      signing_secret: signingSecret,
+      kind: options.kind ?? "webhook",
+      config: options.config ?? {},
+      api_key_id: options.apiKeyId ?? null,
+    })
     .select("id")
     .single();
   if (error) throw error;
@@ -251,8 +270,8 @@ export type DeliveryAttemptResult = {
 
 async function attemptDelivery(
   url: string,
-  signingSecret: string,
-  payload: WebhookPayload,
+  body: string,
+  headers: Record<string, string>,
 ): Promise<DeliveryAttemptResult> {
   // Defense in depth — the same host check already runs when a
   // creator adds the endpoint, but checking again immediately before
@@ -272,17 +291,12 @@ async function attemptDelivery(
     return { status: "failed", error: "endpoint host not allowed" };
   }
 
-  const body = serializeWebhookPayload(payload);
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-FormCraft-Signature": signatureHeaderValue(signingSecret, body),
-        "X-FormCraft-Event": payload.eventType,
-      },
+      headers: { "Content-Type": "application/json", ...headers },
       body,
       signal: controller.signal,
       // Never follow redirects: a public URL could otherwise bounce the
@@ -371,7 +385,7 @@ async function processDelivery(
 ) {
   const { data: endpoint } = await admin
     .from("webhook_endpoints")
-    .select("url, signing_secret, enabled")
+    .select("url, signing_secret, enabled, kind, config")
     .eq("id", delivery.endpoint_id)
     .maybeSingle();
 
@@ -386,11 +400,12 @@ async function processDelivery(
   }
 
   const attemptCount = delivery.attempt_count + 1;
-  const result = await attemptDelivery(
-    endpoint.url,
-    endpoint.signing_secret,
-    delivery.payload as unknown as WebhookPayload,
-  );
+  const payload = delivery.payload as unknown as WebhookPayload;
+  const request =
+    endpoint.kind === "slack"
+      ? await slackRequest(admin, payload, endpoint.config)
+      : signedRequest(endpoint.signing_secret, payload);
+  const result = await attemptDelivery(endpoint.url, request.body, request.headers);
 
   if (result.status === "succeeded") {
     await admin
@@ -402,6 +417,45 @@ async function processDelivery(
   await recordFailure(admin, delivery.id, attemptCount, result.error ?? "unknown error");
 }
 
+/** The signed JSON body every webhook / Zapier / Make delivery gets. */
+function signedRequest(signingSecret: string, payload: WebhookPayload) {
+  const body = serializeWebhookPayload(payload);
+  return {
+    body,
+    headers: {
+      "X-FormCraft-Signature": signatureHeaderValue(signingSecret, body),
+      "X-FormCraft-Event": payload.eventType,
+    },
+  };
+}
+
+/** A Slack message for the response, from its own form version. */
+async function slackRequest(admin: Client, payload: WebhookPayload, config: Json) {
+  const { data: response } = await admin
+    .from("responses")
+    .select("form_version_id, forms(title)")
+    .eq("id", payload.responseId)
+    .single();
+  const { data: version } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("id", response!.form_version_id)
+    .single();
+  const questionIds = Array.isArray((config as { questionIds?: unknown })?.questionIds)
+    ? ((config as { questionIds: unknown[] }).questionIds.filter(
+        (id) => typeof id === "string",
+      ) as string[])
+    : [];
+  const message = buildSlackMessage({
+    formTitle: (response!.forms as { title: string } | null)?.title ?? "your form",
+    schema: parseFormSchema(version!.schema),
+    answers: payload.answers,
+    questionIds,
+    responseUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/forms/${payload.formId}/responses/${payload.responseId}`,
+  });
+  return { body: JSON.stringify(message), headers: {} };
+}
+
 /** Sends a synthetic test payload immediately (no enqueue/retry) so a
  * creator can verify their endpoint works. Not recorded in the
  * delivery log — it's a connectivity check, not a real event. */
@@ -411,10 +465,25 @@ export async function sendTestDelivery(
 ): Promise<DeliveryAttemptResult> {
   const { data: endpoint, error } = await supabase
     .from("webhook_endpoints")
-    .select("url, signing_secret, form_id")
+    .select("url, signing_secret, form_id, kind")
     .eq("id", endpointId)
     .single();
   if (error) throw error;
+
+  if (endpoint.kind === "slack") {
+    const { data: form } = await supabase
+      .from("forms")
+      .select("title")
+      .eq("id", endpoint.form_id)
+      .single();
+    return attemptDelivery(
+      endpoint.url,
+      JSON.stringify({
+        text: `FormCraft is connected: new responses to ${form?.title ?? "this form"} will appear here.`,
+      }),
+      {},
+    );
+  }
 
   const payload = buildWebhookPayload({
     eventId: crypto.randomUUID(),
@@ -425,5 +494,6 @@ export async function sendTestDelivery(
     answers: { example_question: "example answer" },
   });
 
-  return attemptDelivery(endpoint.url, endpoint.signing_secret, payload);
+  const request = signedRequest(endpoint.signing_secret, payload);
+  return attemptDelivery(endpoint.url, request.body, request.headers);
 }

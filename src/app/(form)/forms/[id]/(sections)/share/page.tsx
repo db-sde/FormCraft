@@ -1,3 +1,4 @@
+import { getWorkspacePlan } from "@/domains/billing";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AtSign, ExternalLink, Mail, MessageCircle, Rocket, Share2 } from "lucide-react";
@@ -31,10 +32,11 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   const { id: formId } = await params;
   const { supabase, workspace, form, isLive, hasUnpublishedChanges, publishState } =
     await loadFormForPage(formId);
-  const [draft, published, settings] = await Promise.all([
+  const [draft, published, settings, { entitlements }] = await Promise.all([
     getDraftForEdit(supabase, formId, workspace.id),
     getPublishedSchema(supabase, formId),
     getFormSettings(supabase, formId, workspace.id),
+    getWorkspacePlan(supabase, workspace.id),
   ]);
   const leadCapture = leadCaptureStatus({
     draftHasContactStep: hasLeadCapture(draft?.schema.questions ?? []),
@@ -150,7 +152,13 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
             wide
           >
             <div className="flex flex-col gap-3.5">
-              <ShareEmbed slug={form.slug} formId={form.id} title={form.title} />
+              <ShareEmbed
+                slug={form.slug}
+                formId={form.id}
+                title={form.title}
+                popupEmbeds={entitlements.popup_embeds}
+                color={published?.theme.primaryColor ?? draft?.schema.theme.primaryColor}
+              />
             </div>
           </SettingsSection>
         </div>

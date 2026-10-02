@@ -561,6 +561,8 @@ export type PublicForm = {
   /** Creator setting: respondents can get a link to finish later (P2.8). */
   resumeLinksEnabled: boolean;
   workspaceId: string;
+  /** Analytics / pixel identifiers (P2.12); shown only on a plan with them. */
+  tracking: { ga: string | null; gtm: string | null; meta: string | null };
 };
 
 export type FormSettings = {
@@ -643,7 +645,9 @@ export async function getPublicFormBySlug(
 ): Promise<PublicForm | null> {
   const { data: form, error: formError } = await supabase
     .from("forms")
-    .select("id, workspace_id, save_partial_responses, resume_links_enabled")
+    .select(
+      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id",
+    )
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
@@ -667,6 +671,11 @@ export async function getPublicFormBySlug(
     savePartialResponses: form.save_partial_responses,
     resumeLinksEnabled: form.resume_links_enabled,
     workspaceId: form.workspace_id,
+    tracking: {
+      ga: form.ga_measurement_id,
+      gtm: form.gtm_container_id,
+      meta: form.meta_pixel_id,
+    },
   };
 }
 

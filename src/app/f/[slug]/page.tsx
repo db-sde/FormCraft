@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isLikelyBot } from "@/lib/http/bots";
 import { PublicFormRuntime } from "./public-form-runtime";
+import { TrackingScripts } from "./tracking-scripts";
 import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
 import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
@@ -134,6 +135,7 @@ export default async function PublicFormPage({
 
   return (
     <div className={embedded ? undefined : "min-h-screen"}>
+      {entitlements.tracking_pixels && <TrackingScripts ids={publicForm.tracking} />}
       <PublicFormRuntime
         formId={publicForm.formId}
         formVersionId={publicForm.formVersionId}

@@ -3,6 +3,39 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Wave 4: confirmation emails, pixels, popup embeds, Zapier/Make, Slack
+
+- **Confirmation emails (P2.18)** can't become a mail cannon: the
+  recipient is only the address the respondent typed into the form's
+  chosen email question; at most one per response (a log row is claimed
+  before sending); none for spam-flagged responses; 500 per form per day.
+  The creator writes plain text with recall; it's escaped into the
+  standard layout, and the subject is kept to one line. Sent after the
+  response is saved, like the owner notification; needs Resend.
+- **Pixels (P2.12):** GA4, GTM and Meta Pixel by ID only, checked
+  against their exact formats in the database and again before going
+  into each vendor's standard snippet. Live form only, and only on a
+  plan with them. Events: page view, start, submit — never answers. The
+  panel tells creators these set cookies and may need consent; FormCraft
+  doesn't show a consent banner for them (the creator's site/policy
+  decides).
+- **Popup / side-tab / button embeds (P2.23)** are one self-contained
+  script per embed, rendered in a shadow root (no style clashes either
+  way, no globals), with Escape, a close button, focus return and scroll
+  lock. The plan gate is on offering the code (it runs on the creator's
+  site, and anyone could build their own popup around a public link).
+  Testing caught focus not returning from inside the shadow root — fixed.
+- **Zapier / Make (P2.13)** use workspace API keys (Business) and REST
+  hooks that are ordinary signed webhook endpoints, as the PRD asks
+  ("reuse webhook infrastructure"). Publishing a Zapier/Make app listing
+  is an external step; the endpoints it needs exist and are documented
+  in docs/api.md. The same keys are the base of the public API (P3.11).
+- **Slack (P2.14)** by incoming webhook rather than an OAuth app: the
+  channel is chosen in Slack when the webhook is made, no Slack client
+  secret is needed, and deliveries ride the webhook queue. Messages show
+  the chosen answers (up to ten) and a link to the response; uploads are
+  never linked.
+
 ## 2026-10-02 — Wave 3: branding, fonts, custom domains
 
 - **Badge (P2.1):** the existing per-ending switch stays, but it only

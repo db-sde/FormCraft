@@ -72,6 +72,8 @@ export function WebhooksPanel({
             url: result.url,
             enabled: true,
             createdAt: result.createdAt,
+            kind: "webhook",
+            questionIds: [],
           },
         ]);
         setSecretCopied(false);

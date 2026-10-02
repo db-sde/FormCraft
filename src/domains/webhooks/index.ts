@@ -3,3 +3,4 @@ export * from "./backoff";
 export * from "./payload";
 export * from "./url-safety";
 export * from "./queries";
+export * from "./slack";

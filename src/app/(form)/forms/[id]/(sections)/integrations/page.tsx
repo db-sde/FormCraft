@@ -13,6 +13,16 @@ import { NotificationsPanel } from "@/components/integrations/notifications-pane
 import { FormSectionHeader } from "@/components/forms/form-top-bar";
 import { FormPageActions } from "@/components/forms/form-page-actions";
 import { cn } from "cn";
+import { ChartLine, MailCheck, MessageSquare } from "lucide-react";
+import { SlackPanel } from "@/components/integrations/slack-panel";
+import { ConfirmationPanel } from "@/components/integrations/confirmation-panel";
+import { TrackingPanel } from "@/components/integrations/tracking-panel";
+import { getWorkspacePlan } from "@/domains/billing";
+import { parseFormSchema } from "@/domains/forms/schema";
+import {
+  emailQuestions,
+  getConfirmationSettings,
+} from "@/domains/notifications/confirmation";
 import { loadFormForPage } from "../../load-form";
 
 export async function generateMetadata({
@@ -96,14 +106,44 @@ export default async function IntegrationsPage({
   const { id: formId } = await params;
   const { sheets_error: sheetsError, sheets_connected: sheetsConnected } =
     await searchParams;
-  const { supabase, user, form, isLive, publishState, hasUnpublishedChanges } =
+  const { supabase, user, workspace, form, isLive, publishState, hasUnpublishedChanges } =
     await loadFormForPage(formId, { editorsOnly: true });
 
-  const [endpoints, sheetsConnection, notificationsEnabled] = await Promise.all([
+  const [
+    allEndpoints,
+    sheetsConnection,
+    notificationsEnabled,
+    { entitlements },
+    confirmation,
+    { data: draft },
+    { data: tracking },
+  ] = await Promise.all([
     listWebhookEndpoints(supabase, formId),
     getConnectionForForm(supabase, formId),
     getNotificationsEnabled(supabase, formId),
+    getWorkspacePlan(supabase, workspace.id),
+    getConfirmationSettings(supabase, formId),
+    supabase
+      .from("form_versions")
+      .select("schema")
+      .eq("form_id", formId)
+      .eq("status", "draft")
+      .maybeSingle(),
+    supabase
+      .from("forms")
+      .select("ga_measurement_id, gtm_container_id, meta_pixel_id")
+      .eq("id", formId)
+      .single(),
   ]);
+  const endpoints = allEndpoints.filter((e) => e.kind === "webhook");
+  const slackEndpoints = allEndpoints.filter((e) => e.kind === "slack");
+  const schema = draft ? parseFormSchema(draft.schema) : null;
+  let n = 0;
+  const numbered = (schema?.questions ?? [])
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .filter((q) => q.type !== "welcome_screen")
+    .map((q) => ({ question: q, number: ++n }));
   const deliveriesByEndpoint = Object.fromEntries(
     await Promise.all(
       endpoints.map(async (e) => [e.id, await listDeliveries(supabase, e.id)] as const),
@@ -185,6 +225,61 @@ export default async function IntegrationsPage({
             initialSyncLog={sheetsSyncLog}
           />
         </div>
+      </Section>
+
+      <Section
+        icon={<MessageSquare />}
+        tint="choice"
+        title="Slack"
+        description="Post each completed response to a Slack channel."
+      >
+        <SlackPanel
+          formId={formId}
+          endpoints={slackEndpoints}
+          allowed={entitlements.slack}
+          questions={numbered
+            .filter(({ question: q }) => q.type !== "statement")
+            .map(({ question: q, number }) => ({
+              id: q.id,
+              number,
+              label: q.label.trim() || "Untitled",
+            }))}
+        />
+      </Section>
+
+      <Section
+        icon={<MailCheck />}
+        tint="text"
+        title="Confirmation email"
+        description="Email respondents a copy or a thank-you after they submit."
+      >
+        <ConfirmationPanel
+          formId={formId}
+          initial={confirmation}
+          allowed={entitlements.confirmation_emails}
+          emailConfigured={Boolean(process.env.RESEND_API_KEY)}
+          emailQuestions={(schema ? emailQuestions(schema) : []).map((q) => ({
+            id: q.id,
+            label: `${numbered.find((x) => x.question.id === q.id)?.number ?? ""} · ${q.label.trim() || "Untitled"}`,
+          }))}
+        />
+      </Section>
+
+      <Section
+        icon={<ChartLine />}
+        tint="live"
+        title="Analytics and ad pixels"
+        description="Measure visits to the live form in Google Analytics, Tag Manager or Meta."
+      >
+        <TrackingPanel
+          formId={formId}
+          allowed={entitlements.tracking_pixels}
+          initial={{
+            gaMeasurementId: tracking?.ga_measurement_id ?? "",
+            gtmContainerId: tracking?.gtm_container_id ?? "",
+            metaPixelId: tracking?.meta_pixel_id ?? "",
+          }}
+        />
       </Section>
 
       <Section

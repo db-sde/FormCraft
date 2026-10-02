@@ -101,6 +101,12 @@ questionId }` — ids only, never answer values. Accepted only for a
 
 ## Webhooks (creator-configured, outbound)
 
+Endpoints have a `kind`: `webhook` (signed JSON, below), `slack` (a
+Slack incoming-webhook URL — only `https://hooks.slack.com/…`; the body
+is a Slack message with the form title, the chosen answers and a link to
+the response; file answers are never linked), `zapier` / `make` (made
+through the API). All share the delivery queue and retry schedule.
+
 `POST /api/webhooks/test` — send a synthetic test payload to a
 configured endpoint (auth required, workspace-scoped).
 
@@ -142,6 +148,23 @@ account to your form.
 invalid_state` otherwise), exchanges the code, stores tokens, never
 returns them to the client. Disconnecting is a server action in the
 form's Integrations tab.
+
+## Public API v1 (Zapier / Make)
+
+`Authorization: Bearer fc_live_…` — a workspace API key (Settings → API,
+Business plan; shown once, stored as SHA-256). 120 requests a minute per
+key. Every call re-checks the plan; revoking a key removes its hooks.
+
+- `GET /api/v1/me` → `{ workspace: { id, name } }` (connection test).
+- `GET /api/v1/forms` → `{ forms: [{ id, title }] }` — live forms only.
+- `GET /api/v1/forms/:id/responses` → the latest 3 completed (non-spam)
+  responses, in the webhook payload shape (Zapier's sample).
+- `POST /api/v1/hooks` `{ formId, url, source: "zapier" | "make" }` →
+  `201 { id }`. Subscribes to "new completed response": an ordinary
+  signed webhook endpoint (same queue, retries, HTTPS + public-address
+  checks). `404` for another workspace's form, `400` for a private or
+  non-HTTPS URL.
+- `DELETE /api/v1/hooks/:id` → `204`; only the key's workspace's hooks.
 
 ## Scheduled jobs
 

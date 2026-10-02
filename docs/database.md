@@ -123,6 +123,24 @@ this doc needs fixing.
   without a session: returns `(domain_id, default_slug)` for a
   _verified_ domain only. Used by `src/proxy.ts`.
 
+## Outbound integrations (migration 30)
+
+- **`webhook_endpoints.kind`** (`webhook` / `slack` / `zapier` / `make`),
+  **`config`** (jsonb; Slack: `questionIds`), **`api_key_id`** (the key
+  that made a Zapier/Make subscription; `on delete cascade`, and the
+  `api_keys_drop_subscriptions` trigger deletes them when the key is
+  revoked). A check keeps Slack URLs on `https://hooks.slack.com/`.
+- **`confirmation_emails`** (one row per form): `enabled`,
+  `recipient_question_id`, `subject`, `body` (plain text with recall),
+  optional `cta_label` / `cta_url` (https). Members read, editors manage.
+- **`confirmation_email_log`** — one row per response (primary key), the
+  claim that makes sending at-most-once; server only.
+- **`forms.ga_measurement_id` / `gtm_container_id` / `meta_pixel_id`** —
+  format-checked identifiers (never code).
+- **`api_keys`** — `name`, `prefix` (to recognise), `key_hash`
+  (SHA-256), `created_by`, `last_used_at`, `revoked_at`. Admins read and
+  revoke; creating is server-side.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

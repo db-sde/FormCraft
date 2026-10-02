@@ -303,6 +303,7 @@ export function PublicFormRuntime({
           };
           sessionRef.current = fresh;
           if (savesProgress) writeStored(formId, fresh);
+          pixel("start");
           return fresh;
         },
         (error: unknown) => {
@@ -436,6 +437,7 @@ export function PublicFormRuntime({
 
       if (res.ok) {
         const data = (await res.json()) as { endingId: string };
+        pixel("submit");
         // Only now is the response durably complete — clearing earlier
         // would lose the respondent's answers if the submit failed.
         clearStored(formId);
@@ -554,6 +556,16 @@ export function PublicFormRuntime({
       className={embedded ? "min-h-[480px]" : "min-h-dvh"}
     />
   );
+}
+
+/** Tells the creator's analytics pixels (if the form has any, see
+ * tracking-scripts.tsx) about a start or a submit — never answers. */
+function pixel(event: "start" | "submit") {
+  try {
+    (window as { formcraftTrack?: (e: string) => void }).formcraftTrack?.(event);
+  } catch {
+    // Third-party scripts must never affect the form.
+  }
 }
 
 /** Reads the hidden spam-trap field FormRuntime renders. */
