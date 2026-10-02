@@ -7,11 +7,14 @@ import {
   WorkspaceSettings,
 } from "@/components/dashboard/account-settings";
 import { cn } from "cn";
+import { PlanUsage } from "@/components/dashboard/plan-usage";
+import { getUsage, getWorkspacePlan } from "@/domains/billing";
 
 const TITLES = {
   account: "Account settings",
   workspace: "Workspace settings",
   members: "Members",
+  plan: "Plan and usage",
 };
 
 export async function generateMetadata({
@@ -27,6 +30,7 @@ const TABS = [
   ["account", "Account"],
   ["workspace", "Workspace"],
   ["members", "Members"],
+  ["plan", "Plan"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -59,6 +63,14 @@ export default async function SettingsPage({
       };
     });
   }
+
+  const planData =
+    tab === "plan"
+      ? await Promise.all([
+          getWorkspacePlan(supabase, workspace.id),
+          getUsage(supabase, workspace.id),
+        ])
+      : null;
 
   return (
     <div className="flex flex-col gap-[26px]">
@@ -95,6 +107,8 @@ export default async function SettingsPage({
           isOwner={workspace.role === "owner"}
         />
       )}
+
+      {planData && <PlanUsage plan={planData[0]} usage={planData[1]} />}
 
       {tab === "members" && (
         <SettingsSection

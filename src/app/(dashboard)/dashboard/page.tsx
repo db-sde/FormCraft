@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
 import { FormsBrowser } from "@/components/dashboard/forms-browser";
 import { OnboardingDialog } from "@/components/dashboard/onboarding-dialog";
+import { getUsage, getWorkspacePlan, usageWarnings } from "@/domains/billing";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { workspace } = await getCurrentWorkspace();
@@ -72,5 +73,29 @@ export default async function DashboardPage() {
     );
   }
 
-  return <FormsBrowser forms={forms} workspaceName={workspace.name} />;
+  const [plan, usage] = await Promise.all([
+    getWorkspacePlan(supabase, workspace.id),
+    getUsage(supabase, workspace.id),
+  ]);
+  const warnings = usageWarnings(usage, plan.entitlements);
+
+  return (
+    <>
+      {warnings.length > 0 && (
+        <div
+          role="status"
+          className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-sm border-[1.5px] border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] px-3.5 py-2.5 text-[13.5px] text-[var(--alert-error-fg)]"
+        >
+          <span className="flex-1">{warnings.map((w) => w.message).join(" ")}</span>
+          <Link
+            href="/settings?tab=plan"
+            className="font-semibold underline underline-offset-2"
+          >
+            See your plan
+          </Link>
+        </div>
+      )}
+      <FormsBrowser forms={forms} workspaceName={workspace.name} />
+    </>
+  );
 }

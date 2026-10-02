@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import { sniffContentType, matchesAcceptedTypes } from "./sniff";
 
@@ -64,7 +65,7 @@ export async function prepareUpload(
 ): Promise<PreparedUpload> {
   const { data: response, error: responseError } = await admin
     .from("responses")
-    .select("form_version_id, status")
+    .select("form_version_id, status, forms(workspace_id)")
     .eq("id", responseId)
     .maybeSingle();
   if (responseError) throw responseError;
@@ -82,10 +83,20 @@ export async function prepareUpload(
   const question = compiled.schema.questions.find((q) => q.id === questionId);
   if (!question || question.type !== "file_upload") throw new QuestionNotFoundError();
 
+  // The plan's per-file ceiling applies on top of the question's own.
+  const workspaceId = (response.forms as { workspace_id: string } | null)?.workspace_id;
+  const planMb = workspaceId
+    ? (await getWorkspacePlan(admin, workspaceId)).entitlements.upload_mb
+    : null;
+
   return {
     responseId,
     questionId,
-    maxBytes: Math.min(question.settings.maxSizeMb * 1024 * 1024, HARD_MAX_BYTES),
+    maxBytes: Math.min(
+      question.settings.maxSizeMb * 1024 * 1024,
+      planMb === null ? HARD_MAX_BYTES : planMb * 1024 * 1024,
+      HARD_MAX_BYTES,
+    ),
     acceptedMimeTypes: question.settings.acceptedMimeTypes,
   };
 }

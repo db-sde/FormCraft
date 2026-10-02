@@ -50,6 +50,28 @@ this doc needs fixing.
   into a new form's draft; templates are never referenced live.
 - `notification_settings` — `workspace_id`/`form_id`, `enabled`.
 
+## Plans and usage (Phase 2, migration 25)
+
+- **`plans`** — `id`, `name`, `sort_order`, `entitlements` (jsonb:
+  limits as numbers, `null` = unlimited; features as booleans; keys in
+  `src/domains/billing/entitlements.ts`). Seeded: free, pro, business,
+  enterprise. Readable by any signed-in user; written by migrations only.
+- **`workspaces.plan_id`** (default `free`) and
+  **`workspaces.entitlement_overrides`** (jsonb, per-workspace
+  exceptions). The `workspaces_protect_plan` trigger pins both for any
+  request made with a user's session (`auth.role()` authenticated/anon):
+  inserts get Free with no overrides, updates keep the old values. Only
+  the service role (`npm run plan:set`) and migrations change them.
+  Workspaces that existed before migration 25 got
+  `{"remove_branding": true, "upload_mb": 100}` so nothing changed for them.
+- **`usage_counters`** — `(workspace_id, metric, period_start)` →
+  `value`, one row per calendar month (UTC). `completed_responses` is
+  counted by the `responses_count_completed` trigger on the first
+  transition to completed (so retries can't double count);
+  `ai_credits` by the app through `increment_usage` (service role only —
+  execute is revoked from users). Members can read their workspace's
+  counters. Seats and storage are measured from rows, not counted.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

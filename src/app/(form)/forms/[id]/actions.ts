@@ -21,6 +21,7 @@ import type { RuleProposal } from "@/domains/ai/rule-draft";
 import { aiConfigured, MAX_INSTRUCTION_LENGTH } from "@/domains/ai/config";
 import { proposeRule } from "@/domains/ai/propose-rule";
 import Anthropic from "@anthropic-ai/sdk";
+import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 
 export async function renameFormAction(
   formId: string,
@@ -216,6 +217,15 @@ export async function proposeRuleAction(
       ok: false,
       code: "limited",
       message: "That's a lot of AI rules for one hour. Try again later.",
+    };
+  }
+  const admin = createAdminClient();
+  const { entitlements } = await getWorkspacePlan(admin, workspace.id);
+  if (!(await spendAiCredit(admin, workspace.id, entitlements))) {
+    return {
+      ok: false,
+      code: "limited",
+      message: "You've used this month's AI credits on your plan.",
     };
   }
 

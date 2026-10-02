@@ -12,6 +12,7 @@ import { aiConfigured, MAX_FORM_PROMPT_LENGTH } from "@/domains/ai/config";
 import { generateForm } from "@/domains/ai/generate-form";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -96,6 +97,11 @@ export async function generateFormAction(
   );
   if (!limit.allowed) {
     return { message: "That's a lot of generated forms for one hour. Try again later." };
+  }
+  const admin = createAdminClient();
+  const { entitlements } = await getWorkspacePlan(admin, workspace.id);
+  if (!(await spendAiCredit(admin, workspace.id, entitlements))) {
+    return { message: "You've used this month's AI credits on your plan." };
   }
 
   let result;

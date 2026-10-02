@@ -3,6 +3,39 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Phase 2 starts: defaults, and Wave 0 (plans and usage)
+
+The user asked to build all remaining phases, starting with Phase 2.
+The defaults proposed in the Phase 2 plan apply:
+
+- **Order:** Wave 0 foundations → 1 conversion → 2 teams → 3 branding
+  and domains → 4 outbound → 5 external (status: `PROJECT_STATUS.md`).
+- **Plans without checkout.** Entitlements are modelled and enforced;
+  plans are assigned by `npm run plan:set` (service role). FormCraft's
+  own subscription billing isn't in the PRD's Phase 2 list and can plug
+  into `workspaces.plan_id` later.
+- **What each plan includes** is seeded data in `plans` (editable
+  without a deploy): Free keeps everything Phase 1 offered plus logic,
+  hidden fields, redirects and recall; Pro adds badge removal, fonts,
+  confirmation emails, popup embeds, pixels, multilingual, scheduling;
+  Business adds seats, custom domains, Slack, CRM, payments, API.
+- **Nothing existing gets worse.** Workspaces created before plans get
+  overrides keeping no badge and the 100 MB file ceiling Phase 1 allowed.
+- **Limits never lose submissions** (PRD §8). The monthly response
+  limit is soft: responses past it are stored and delivered, and the
+  creator sees a banner on the dashboard and in Settings → Plan. Limits
+  checked before an action (AI credits; seats, from Wave 2) stop the
+  action with a message instead.
+- **AI credits are spent before the call** (one per rule draft or
+  generated form), so a failing call still costs a credit; simpler and
+  can't be raced past the limit. Free gets 20 a month.
+- **Counting:** completed responses by a database trigger (once per
+  response, whatever the client retries); the current month was
+  backfilled in the migration.
+- **Outside accounts** (custom-domain TLS, Slack, HubSpot, Stripe,
+  scheduling, Resend) are built against adapters with test doubles and
+  verified locally; live checks wait for keys.
+
 ## 2026-10-02 — AI-assisted logic and forms: the model proposes, code decides
 
 - **Flat drafts, not the AST.** Structured outputs can't express

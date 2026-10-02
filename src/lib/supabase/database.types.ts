@@ -232,6 +232,27 @@ export type Database = {
           },
         ];
       };
+      plans: {
+        Row: {
+          entitlements: Json;
+          id: string;
+          name: string;
+          sort_order: number;
+        };
+        Insert: {
+          entitlements?: Json;
+          id: string;
+          name: string;
+          sort_order?: number;
+        };
+        Update: {
+          entitlements?: Json;
+          id?: string;
+          name?: string;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           created_at: string;
@@ -547,6 +568,35 @@ export type Database = {
           },
         ];
       };
+      usage_counters: {
+        Row: {
+          metric: string;
+          period_start: string;
+          value: number;
+          workspace_id: string;
+        };
+        Insert: {
+          metric: string;
+          period_start: string;
+          value?: number;
+          workspace_id: string;
+        };
+        Update: {
+          metric?: string;
+          period_start?: string;
+          value?: number;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "usage_counters_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       webhook_deliveries: {
         Row: {
           attempt_count: number;
@@ -687,25 +737,31 @@ export type Database = {
       workspaces: {
         Row: {
           created_at: string;
+          entitlement_overrides: Json;
           id: string;
           name: string;
           owner_id: string;
+          plan_id: string;
           slug: string;
           updated_at: string;
         };
         Insert: {
           created_at?: string;
+          entitlement_overrides?: Json;
           id?: string;
           name: string;
           owner_id: string;
+          plan_id?: string;
           slug: string;
           updated_at?: string;
         };
         Update: {
           created_at?: string;
+          entitlement_overrides?: Json;
           id?: string;
           name?: string;
           owner_id?: string;
+          plan_id?: string;
           slug?: string;
           updated_at?: string;
         };
@@ -715,6 +771,13 @@ export type Database = {
             columns: ["owner_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspaces_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "plans";
             referencedColumns: ["id"];
           },
         ];
@@ -797,9 +860,11 @@ export type Database = {
         Args: { workspace_name: string; workspace_slug: string };
         Returns: {
           created_at: string;
+          entitlement_overrides: Json;
           id: string;
           name: string;
           owner_id: string;
+          plan_id: string;
           slug: string;
           updated_at: string;
         };
@@ -813,6 +878,10 @@ export type Database = {
       hit_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_seconds: number };
         Returns: boolean;
+      };
+      increment_usage: {
+        Args: { p_amount?: number; p_metric: string; p_workspace_id: string };
+        Returns: number;
       };
       is_workspace_member: {
         Args: { target_workspace_id: string };
