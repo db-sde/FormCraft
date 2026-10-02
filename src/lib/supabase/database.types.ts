@@ -369,6 +369,7 @@ export type Database = {
           id: string;
           meta_pixel_id: string | null;
           partial_retention_days: number | null;
+          payment_config: Json | null;
           resume_links_enabled: boolean;
           save_partial_responses: boolean;
           slug: string;
@@ -387,6 +388,7 @@ export type Database = {
           id?: string;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
+          payment_config?: Json | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug: string;
@@ -405,6 +407,7 @@ export type Database = {
           id?: string;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
+          payment_config?: Json | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug?: string;
@@ -429,6 +432,44 @@ export type Database = {
           },
           {
             foreignKeyName: "forms_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      integration_credentials: {
+        Row: {
+          created_at: string;
+          encrypted: Json;
+          id: string;
+          label: string | null;
+          provider: string;
+          status: string;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          encrypted: Json;
+          id?: string;
+          label?: string | null;
+          provider: string;
+          status?: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          encrypted?: Json;
+          id?: string;
+          label?: string | null;
+          provider?: string;
+          status?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "integration_credentials_workspace_id_fkey";
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspaces";
@@ -464,6 +505,60 @@ export type Database = {
             columns: ["form_id"];
             isOneToOne: true;
             referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payments: {
+        Row: {
+          amount: number;
+          checkout_session_id: string | null;
+          created_at: string;
+          currency: string;
+          form_id: string;
+          livemode: boolean;
+          paid_at: string | null;
+          response_id: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          amount: number;
+          checkout_session_id?: string | null;
+          created_at?: string;
+          currency: string;
+          form_id: string;
+          livemode?: boolean;
+          paid_at?: string | null;
+          response_id: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          amount?: number;
+          checkout_session_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          form_id?: string;
+          livemode?: boolean;
+          paid_at?: string | null;
+          response_id?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payments_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payments_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: true;
+            referencedRelation: "responses";
             referencedColumns: ["id"];
           },
         ];
@@ -544,6 +639,7 @@ export type Database = {
           id: string;
           idempotency_key: string | null;
           is_preview: boolean;
+          language: string | null;
           last_active_at: string;
           last_question_id: string | null;
           random_seed: string | null;
@@ -569,6 +665,7 @@ export type Database = {
           id?: string;
           idempotency_key?: string | null;
           is_preview?: boolean;
+          language?: string | null;
           last_active_at?: string;
           last_question_id?: string | null;
           random_seed?: string | null;
@@ -594,6 +691,7 @@ export type Database = {
           id?: string;
           idempotency_key?: string | null;
           is_preview?: boolean;
+          language?: string | null;
           last_active_at?: string;
           last_question_id?: string | null;
           random_seed?: string | null;
@@ -1231,6 +1329,15 @@ export type Database = {
       increment_usage: {
         Args: { p_amount?: number; p_metric: string; p_workspace_id: string };
         Returns: number;
+      };
+      integration_status: {
+        Args: { p_workspace_id: string };
+        Returns: {
+          created_at: string;
+          label: string;
+          provider: string;
+          status: string;
+        }[];
       };
       is_workspace_member: {
         Args: { target_workspace_id: string };

@@ -121,14 +121,18 @@ export function MadeWithBadge({ className }: { className?: string }) {
 }
 
 /** The "Welcome back" pill shown when a respondent resumes. */
-export function WelcomeBackBanner() {
+export function WelcomeBackBanner({
+  text = "Welcome back. Picking up where you left off.",
+}: {
+  text?: string;
+}) {
   return (
     <div
       role="status"
       className="flex [animation:fc-fade-out_400ms_4s_forwards] items-center gap-2 rounded-full border border-(--st-primary) bg-(--st-sel) px-3.5 py-[7px] text-[13px] font-semibold whitespace-nowrap"
     >
       <span aria-hidden className="size-[7px] rounded-full bg-(--st-primary)" />
-      Welcome back. Picking up where you left off.
+      {text}
     </div>
   );
 }
@@ -225,7 +229,9 @@ export function StageActions({
   enterHint,
   disabled = false,
   inert = false,
+  backLabel = "Back",
 }: {
+  backLabel?: string;
   showBack: boolean;
   onBack?: () => void;
   onNext?: () => void;
@@ -242,7 +248,7 @@ export function StageActions({
       {showBack && (
         <button
           type="button"
-          aria-label="Back"
+          aria-label={backLabel}
           onClick={onBack}
           disabled={submitting || disabled}
           tabIndex={inert ? -1 : undefined}

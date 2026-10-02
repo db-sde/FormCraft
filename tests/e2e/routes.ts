@@ -24,6 +24,7 @@ export const PAGE_ROUTES = [
   "/forms/[id]/settings",
   "/f/[slug]",
   "/invite/[token]",
+  "/f/[slug]/payment",
 ] as const;
 
 /** API / handler routes → the spec that covers them. */
@@ -41,6 +42,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/cron/retention": "api-contract.spec.ts",
   "/api/cron/domains": "api-contract.spec.ts",
   "/api/v1/me": "public-api.spec.ts",
+  "/api/payments/stripe/[workspaceId]": "payments.spec.ts",
   "/api/v1/forms": "public-api.spec.ts",
   "/api/v1/forms/[id]/responses": "public-api.spec.ts",
   "/api/v1/hooks": "public-api.spec.ts",

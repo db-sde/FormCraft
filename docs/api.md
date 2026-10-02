@@ -149,6 +149,20 @@ invalid_state` otherwise), exchanges the code, stores tokens, never
 returns them to the client. Disconnecting is a server action in the
 form's Integrations tab.
 
+## Payments (Stripe, P2.17)
+
+- `POST /api/responses/:id/complete` returns `paymentUrl` (a Stripe
+  Checkout URL) when the form takes payment; the amount is computed on
+  the server. The runtime sends the respondent there; answers are
+  already saved.
+- `GET /f/:slug/payment?session_id=…` — the return page. It asks Stripe
+  (server-side) and shows paid / processing / "try again".
+- `POST /api/payments/stripe/:workspaceId` — the workspace's Stripe
+  webhook endpoint. Accepted only with a valid `Stripe-Signature` for
+  that workspace's signing secret (five-minute tolerance). Handles
+  `checkout.session.completed` / `async_payment_succeeded` / `_failed` /
+  `expired`; a paid payment never goes back.
+
 ## Public API v1 (Zapier / Make)
 
 `Authorization: Bearer fc_live_…` — a workspace API key (Settings → API,

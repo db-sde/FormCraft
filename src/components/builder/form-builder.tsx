@@ -12,6 +12,7 @@ import {
   EyeOff,
   Flag,
   GitBranch,
+  Languages,
   Palette,
   Plus,
   Split,
@@ -60,6 +61,7 @@ import { CHOICE_TYPES, syncCarriedOptions } from "@/domains/forms/options";
 import { themeForPlan } from "@/domains/themes/fonts";
 import { ThemeSettingsPanel } from "./theme-settings-panel";
 import { LogicEditor } from "./logic-editor";
+import { TranslationsEditor } from "./translations-editor";
 import { QuestionLogicPanel } from "./logic/question-logic-panel";
 import {
   describeRule,
@@ -113,7 +115,8 @@ type Selection =
   | { kind: "question"; id: string }
   | { kind: "ending"; id: string }
   | { kind: "theme" }
-  | { kind: "logic" };
+  | { kind: "logic" }
+  | { kind: "languages" };
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const SAVE_RETRY_MS = 5000;
@@ -163,7 +166,10 @@ export function FormBuilder({
   onProposeRule,
   brandingRemovable = true,
   customFonts = true,
+  multilingual = true,
 }: {
+  /** The plan shows more than one language on the live form. */
+  multilingual?: boolean;
   /** The plan allows switching off the "Made with FormCraft" badge. */
   brandingRemovable?: boolean;
   /** The plan includes paid and uploaded fonts. */
@@ -880,7 +886,7 @@ export function FormBuilder({
       <div
         className={cn(
           "grid min-h-0 flex-1",
-          selection.kind === "logic"
+          selection.kind === "logic" || selection.kind === "languages"
             ? "grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-[248px_minmax(0,1fr)]"
             : "grid-cols-[280px_minmax(0,1fr)_300px] max-xl:grid-cols-[248px_minmax(0,1fr)_300px]",
         )}
@@ -1025,6 +1031,15 @@ export function FormBuilder({
                   meta: null,
                 },
                 {
+                  kind: "languages" as const,
+                  label: "Languages",
+                  icon: <Languages className="size-[13px]" />,
+                  tint: "choice",
+                  meta: schema.languages?.others.length
+                    ? `${schema.languages.others.length + 1} languages`
+                    : null,
+                },
+                {
                   kind: "logic" as const,
                   label: "Logic",
                   icon: <Split className="size-[13px]" />,
@@ -1072,7 +1087,13 @@ export function FormBuilder({
         </aside>
 
         <main className="bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px]">
-          {selection.kind === "logic" ? (
+          {selection.kind === "languages" ? (
+            <TranslationsEditor
+              schema={schema}
+              onChange={updateLogic}
+              allowed={multilingual}
+            />
+          ) : selection.kind === "logic" ? (
             <LogicEditor
               schema={schema}
               onChange={updateLogic}
@@ -1114,7 +1135,7 @@ export function FormBuilder({
           )}
         </main>
 
-        {selection.kind !== "logic" && (
+        {selection.kind !== "logic" && selection.kind !== "languages" && (
           <aside className="border-ink bg-card min-h-0 overflow-y-auto border-l-[1.5px]">
             <div className="flex flex-col gap-[18px] px-[18px] pt-[18px] pb-10">
               {selectedQuestion && (

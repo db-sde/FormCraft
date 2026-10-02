@@ -267,6 +267,8 @@ export const EndingV1 = z.object({
   isDefault: z.boolean().default(false),
   /** The "Made with FormCraft" badge on this ending; shown unless false. */
   showMadeWith: z.boolean().optional(),
+  /** A Calendly / Cal.com booking page shown on this ending (P2.16). */
+  scheduler: z.object({ provider: z.enum(["calendly", "cal"]), url: webUrl }).optional(),
 });
 export type EndingV1 = z.infer<typeof EndingV1>;
 
@@ -329,6 +331,54 @@ export type LogicRuleV1 = z.infer<typeof LogicRuleV1>;
 
 // --- top-level form schema ---------------------------------------------
 
+// --- languages (P2.21) ------------------------------------------------------
+
+const languageCode = z.enum([
+  "en",
+  "es",
+  "fr",
+  "de",
+  "pt",
+  "it",
+  "nl",
+  "hi",
+  "ja",
+  "zh",
+  "ar",
+]);
+const translatedText = (max: number) => safeText(max).optional();
+
+export const TranslationV1 = z.object({
+  meta: z
+    .object({ title: translatedText(200), description: translatedText(2000) })
+    .optional(),
+  questions: z
+    .record(
+      stableId,
+      z.object({
+        label: translatedText(1000),
+        description: translatedText(2000),
+        placeholder: translatedText(200),
+        buttonLabel: translatedText(100),
+        yesLabel: translatedText(50),
+        noLabel: translatedText(50),
+        options: z.record(stableId, safeText(500)).optional(),
+      }),
+    )
+    .optional(),
+  endings: z
+    .record(
+      stableId,
+      z.object({
+        title: translatedText(200),
+        description: translatedText(2000),
+        buttonLabel: translatedText(100),
+      }),
+    )
+    .optional(),
+});
+export type TranslationV1 = z.infer<typeof TranslationV1>;
+
 export const FormSchemaV1 = z.object({
   schemaVersion: z.literal(1),
   meta: z.object({
@@ -354,6 +404,12 @@ export const FormSchemaV1 = z.object({
   hiddenFields: z.array(HiddenFieldV1).max(20).optional(),
   /** Ask a random few of a group of questions (logic spec phase 19). */
   pools: z.array(QuestionPoolV1).max(20).optional(),
+  /** The language the form is written in, and the others it offers. */
+  languages: z
+    .object({ default: languageCode, others: z.array(languageCode).max(10) })
+    .optional(),
+  /** Text in the other languages, by stable id (P2.21). */
+  translations: z.partialRecord(languageCode, TranslationV1).optional(),
 });
 export type FormSchemaV1 = z.infer<typeof FormSchemaV1>;
 

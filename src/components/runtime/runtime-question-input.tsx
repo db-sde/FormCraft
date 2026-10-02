@@ -1,5 +1,6 @@
 "use client";
 
+import { useRuntimeStrings } from "./runtime-strings";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   Calendar,
@@ -75,6 +76,7 @@ export function RuntimeQuestionInput({
   preview?: boolean;
   invalid?: boolean;
 }) {
+  const strings = useRuntimeStrings();
   const control = renderControl();
   if (!preview) return control;
   return (
@@ -98,7 +100,7 @@ export function RuntimeQuestionInput({
             aria-invalid={invalid || undefined}
             aria-label={question.label}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={question.settings.placeholder || "Type your answer here…"}
+            placeholder={question.settings.placeholder || strings.typeAnswer}
             maxLength={question.settings.maxLength}
             className={UNDERLINE}
           />
@@ -113,7 +115,7 @@ export function RuntimeQuestionInput({
             aria-invalid={invalid || undefined}
             aria-label={question.label}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={question.settings.placeholder || "Type your answer here…"}
+            placeholder={question.settings.placeholder || strings.typeAnswer}
             maxLength={question.settings.maxLength}
             className={cn(
               UNDERLINE,
@@ -353,6 +355,7 @@ function MultiSelect({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const strings = useRuntimeStrings();
   const [beat, pulse] = useBeat();
   const selected = Array.isArray(value) ? (value as string[]) : [];
   const otherEntry = selected.find((v) => v.startsWith(OTHER_PREFIX));
@@ -378,7 +381,7 @@ function MultiSelect({
         ? `Choose at least ${minSelections}`
         : maxSelections
           ? `Choose up to ${maxSelections}`
-          : "Choose as many as you like";
+          : strings.chooseMany;
   const options = [
     ...question.settings.options.map((o) => ({
       id: o.id,

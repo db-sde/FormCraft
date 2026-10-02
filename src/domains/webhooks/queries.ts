@@ -11,11 +11,12 @@ import { signatureHeaderValue } from "./signing";
 import { nextBackoffDelayMs, isExhausted } from "./backoff";
 import { isDisallowedWebhookHost, resolvesToDisallowedAddress } from "./url-safety";
 import { buildSlackMessage } from "./slack";
+import { sendToHubspot } from "@/domains/integrations/hubspot";
 import { parseFormSchema } from "@/domains/forms/schema";
 
 type Client = SupabaseClient<Database>;
 
-export type EndpointKind = "webhook" | "slack" | "zapier" | "make";
+export type EndpointKind = "webhook" | "slack" | "zapier" | "make" | "hubspot";
 
 export type WebhookEndpoint = {
   id: string;
@@ -401,6 +402,23 @@ async function processDelivery(
 
   const attemptCount = delivery.attempt_count + 1;
   const payload = delivery.payload as unknown as WebhookPayload;
+  if (endpoint.kind === "hubspot") {
+    const result = await hubspotDelivery(admin, payload, endpoint.config);
+    if (result.status === "succeeded") {
+      await admin
+        .from("webhook_deliveries")
+        .update({ status: "succeeded", attempt_count: attemptCount, last_error: null })
+        .eq("id", delivery.id);
+    } else {
+      await recordFailure(
+        admin,
+        delivery.id,
+        attemptCount,
+        result.error ?? "HubSpot failed",
+      );
+    }
+    return;
+  }
   const request =
     endpoint.kind === "slack"
       ? await slackRequest(admin, payload, endpoint.config)
@@ -427,6 +445,30 @@ function signedRequest(signingSecret: string, payload: WebhookPayload) {
       "X-FormCraft-Event": payload.eventType,
     },
   };
+}
+
+/** The response's contact in HubSpot (P2.15), from its own version. */
+async function hubspotDelivery(admin: Client, payload: WebhookPayload, config: Json) {
+  const { data: response } = await admin
+    .from("responses")
+    .select("form_version_id, forms(workspace_id)")
+    .eq("id", payload.responseId)
+    .single();
+  const { data: version } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("id", response!.form_version_id)
+    .single();
+  const mapping = ((config as { mapping?: unknown })?.mapping ?? {}) as Record<
+    string,
+    string
+  >;
+  return sendToHubspot(admin, {
+    workspaceId: (response!.forms as { workspace_id: string }).workspace_id,
+    schema: parseFormSchema(version!.schema),
+    answers: payload.answers,
+    mapping,
+  });
 }
 
 /** A Slack message for the response, from its own form version. */

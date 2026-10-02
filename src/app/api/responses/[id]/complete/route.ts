@@ -4,6 +4,7 @@ import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
 import { sendConfirmationEmail } from "@/domains/notifications/confirmation";
+import { checkoutForResponse } from "@/domains/payments/checkout";
 import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
 import { enqueueSheetsSync, dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { recordAnalyticsEvent } from "@/domains/analytics";
@@ -132,7 +133,19 @@ export async function POST(
       });
     }
 
-    return NextResponse.json({ endingId: result.endingId });
+    // Payment (P2.17): the response is already saved; now the server
+    // starts Stripe Checkout for the amount it works out itself.
+    const payment = parsed.data.trap
+      ? null
+      : await checkoutForResponse(createAdminClient(), id, {
+          origin: request.nextUrl.origin,
+        }).catch(() => ({ error: "The payment couldn't be started." }));
+
+    return NextResponse.json({
+      endingId: result.endingId,
+      ...(payment && "url" in payment ? { paymentUrl: payment.url } : {}),
+      ...(payment && "error" in payment ? { paymentError: payment.error } : {}),
+    });
   } catch (error) {
     if (error instanceof ResponseNotFoundError) {
       return apiError("not_found", "Response not found.", 404);

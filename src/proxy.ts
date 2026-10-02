@@ -74,6 +74,13 @@ async function customDomain(request: NextRequest, host: string) {
   ) {
     return NextResponse.next({ request: { headers } });
   }
+  // Stripe brings respondents back to /f/<slug>/payment (P2.17).
+  const payment = /^\/f\/([a-z0-9][a-z0-9-]{0,80})\/payment\/?$/.exec(path);
+  if (payment) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/f/${payment[1]}/payment`;
+    return NextResponse.rewrite(url, { request: { headers } });
+  }
   let slug: string | null = null;
   if (path === "/") slug = domain.defaultSlug;
   else {

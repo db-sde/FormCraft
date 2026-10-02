@@ -13,6 +13,11 @@ import {
 import { z } from "zod";
 import { EntitlementError, requireFeature, type Feature } from "@/domains/billing";
 import { canEdit } from "@/domains/workspaces";
+import { PaymentConfig } from "@/domains/payments/stripe";
+import { mappingProblems, verifyHubspotToken } from "@/domains/integrations/hubspot";
+import { loadCredential } from "@/domains/integrations/credentials";
+import { parseFormSchema } from "@/domains/forms/schema";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ConfirmationSettings,
   saveConfirmationSettings,
@@ -314,5 +319,120 @@ export async function saveTrackingAction(
   if (error || !data?.length)
     return { ok: false, message: "Couldn't save. Please try again." };
   revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
+}
+
+/** Payment on submit (P2.17): a fixed price or a calculated variable.
+ * Null removes it. */
+export async function savePaymentConfigAction(
+  formId: string,
+  config: PaymentConfig | null,
+): Promise<FeatureResult> {
+  if (config !== null && !PaymentConfig.safeParse(config).success) {
+    return {
+      ok: false,
+      message:
+        PaymentConfig.safeParse(config).error?.issues[0]?.message ??
+        "Check the payment settings.",
+    };
+  }
+  const ctx = config
+    ? await editableFormWithFeature(formId, "payments")
+    : await (async () => {
+        const c = await getCurrentWorkspace();
+        return canEdit(c.workspace.role) ? c : { error: "You have view-only access." };
+      })();
+  if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
+  const { data, error } = await ctx.supabase
+    .from("forms")
+    .update({ payment_config: config })
+    .eq("id", formId)
+    .eq("workspace_id", ctx.workspace.id)
+    .select("id");
+  if (error || !data?.length)
+    return { ok: false, message: "Couldn't save. Please try again." };
+  revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
+}
+
+const HubspotMappingInput = z
+  .record(
+    z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),
+    z.string().regex(/^[A-Za-z0-9_-]{1,64}(\.[a-z]+)?$/),
+  )
+  .refine((m) => Object.keys(m).length <= 50, "Map up to 50 properties.");
+
+/** HubSpot contact sync for this form (P2.15): the field mapping.
+ * Null turns it off. */
+export async function saveHubspotSyncAction(
+  formId: string,
+  mapping: Record<string, string> | null,
+): Promise<FeatureResult> {
+  const ctx = await editableFormWithFeature(formId, "crm");
+  if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
+  const { data: existing } = await ctx.supabase
+    .from("webhook_endpoints")
+    .select("id")
+    .eq("form_id", formId)
+    .eq("kind", "hubspot")
+    .maybeSingle();
+  if (mapping === null) {
+    if (existing)
+      await ctx.supabase.from("webhook_endpoints").delete().eq("id", existing.id);
+    revalidatePath(`/forms/${formId}/integrations`);
+    return { ok: true };
+  }
+  const parsed = HubspotMappingInput.safeParse(mapping);
+  if (!parsed.success) return { ok: false, message: "Check the property names." };
+  if (!parsed.data.email) {
+    return {
+      ok: false,
+      message: "Map a question to Email — contacts are matched by email.",
+    };
+  }
+  if (existing) {
+    await ctx.supabase
+      .from("webhook_endpoints")
+      .update({ config: { mapping: parsed.data } })
+      .eq("id", existing.id);
+  } else {
+    await createWebhookEndpoint(ctx.supabase, formId, "https://api.hubapi.com", {
+      kind: "hubspot",
+      config: { mapping: parsed.data },
+    });
+  }
+  revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
+}
+
+/** "Test mapping": the mapping fits the form and the token still works
+ * (without creating a contact). */
+export async function testHubspotAction(
+  formId: string,
+  mapping: Record<string, string>,
+): Promise<FeatureResult> {
+  const ctx = await editableFormWithFeature(formId, "crm");
+  if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
+  const { data: draft } = await ctx.supabase
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .eq("status", "draft")
+    .single();
+  const problems = mappingProblems(parseFormSchema(draft!.schema), mapping);
+  if (problems.length) return { ok: false, message: problems[0] };
+  const credential = await loadCredential<{ token: string }>(
+    createAdminClient(),
+    ctx.workspace.id,
+    "hubspot",
+  );
+  if (!credential)
+    return { ok: false, message: "Connect HubSpot in Settings → Connections first." };
+  if (!(await verifyHubspotToken(credential.token))) {
+    return {
+      ok: false,
+      message: "HubSpot rejected the token. Reconnect it in Settings → Connections.",
+    };
+  }
   return { ok: true };
 }

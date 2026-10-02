@@ -2,6 +2,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 
+// The app under test talks to a fake Stripe that payments.spec.ts runs
+// (never the real API). The test server inherits this.
+export const FAKE_STRIPE_PORT = 4600;
+process.env.STRIPE_API_BASE ??= `http://127.0.0.1:${FAKE_STRIPE_PORT}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",

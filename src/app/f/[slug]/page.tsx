@@ -15,6 +15,7 @@ import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
 import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { themeForPlan } from "@/domains/themes/fonts";
+import { formLanguages, LANGUAGES, pickLanguage } from "@/domains/forms/i18n";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -35,7 +36,7 @@ export default async function PublicFormPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ embed?: string; [RESUME_PARAM]?: string }>;
+  searchParams: Promise<{ embed?: string; lang?: string; [RESUME_PARAM]?: string }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
@@ -94,7 +95,15 @@ export default async function PublicFormPage({
   // at their live form. Request details must be read before after();
   // analytics must never affect the page render, so everything after
   // that is best-effort.
-  const userAgent = (await headers()).get("user-agent");
+  const requestHeaders = await headers();
+  const userAgent = requestHeaders.get("user-agent");
+  // Languages (P2.21) only on a plan that includes them.
+  const offered = entitlements.multilingual
+    ? formLanguages(compiled.schema)
+    : [formLanguages(compiled.schema)[0]];
+  const language = entitlements.multilingual
+    ? pickLanguage(compiled.schema, query.lang, requestHeaders.get("accept-language"))
+    : offered[0];
   const viewer = (await (await createServerSupabaseClient()).auth.getUser()).data.user;
   const countsAsView = !isLikelyBot(userAgent);
 
@@ -144,6 +153,9 @@ export default async function PublicFormPage({
         resumeLinks={publicForm.resumeLinksEnabled && publicForm.savePartialResponses}
         resume={resume}
         brandingRemovable={entitlements.remove_branding}
+        languages={offered.map((code) => ({ code, name: LANGUAGES[code] }))}
+        initialLanguage={language}
+        schedulingAllowed={entitlements.scheduling}
         embedded={embedded}
       />
     </div>

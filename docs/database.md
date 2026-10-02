@@ -141,6 +141,23 @@ this doc needs fixing.
   (SHA-256), `created_by`, `last_used_at`, `revoked_at`. Admins read and
   revoke; creating is server-side.
 
+## CRM, payments and languages (migrations 31–32)
+
+- **`responses.language`** — the language a response was given in (P2.21).
+- **`integration_credentials`** — `(workspace_id, provider)` unique;
+  `encrypted` (AES-256-GCM `{iv, authTag, ciphertext}`, key from
+  `APP_SECRET`), `label` (masked), `status` (ok / invalid). RLS on with
+  no policies: server only. Members see a safe summary through
+  `integration_status(workspace_id)`.
+- **`webhook_endpoints.kind`** also allows `hubspot` (config: `mapping`,
+  property → question id[.field]).
+- **`forms.payment_config`** — `{ amount | amountVariableId, currency,
+description }` or null.
+- **`payments`** — one per response: `amount` (minor units, computed on
+  the server), `currency`, `status` (pending / paid / failed / expired /
+  canceled), `checkout_session_id`, `livemode`, `paid_at`. Members read;
+  only the server writes (Stripe webhook or a server-side session check).
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

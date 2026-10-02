@@ -13,6 +13,7 @@ import { dnsInstructions, listDomains } from "@/domains/domains";
 import { listFormsForWorkspace } from "@/domains/forms";
 import { DomainSettings } from "@/components/dashboard/domain-settings";
 import { ApiKeySettings } from "@/components/dashboard/api-key-settings";
+import { ConnectionSettings } from "@/components/dashboard/connection-settings";
 import { listApiKeys } from "@/domains/api";
 import { getUsage, getWorkspacePlan } from "@/domains/billing";
 
@@ -23,6 +24,7 @@ const TITLES = {
   plan: "Plan and usage",
   domains: "Domains",
   api: "API keys",
+  connections: "Connections",
 };
 
 export async function generateMetadata({
@@ -39,6 +41,7 @@ const TABS = [
   ["workspace", "Workspace"],
   ["members", "Members"],
   ["domains", "Domains"],
+  ["connections", "Connections"],
   ["api", "API"],
   ["plan", "Plan"],
 ] as const;
@@ -75,6 +78,14 @@ export default async function SettingsPage({
     tab === "api" && canAdmin(workspace.role)
       ? await Promise.all([
           listApiKeys(supabase, workspace.id),
+          getWorkspacePlan(supabase, workspace.id),
+        ])
+      : null;
+
+  const connectionData =
+    tab === "connections"
+      ? await Promise.all([
+          supabase.rpc("integration_status", { p_workspace_id: workspace.id }),
           getWorkspacePlan(supabase, workspace.id),
         ])
       : null;
@@ -124,6 +135,17 @@ export default async function SettingsPage({
       )}
 
       {planData && <PlanUsage plan={planData[0]} usage={planData[1]} />}
+
+      {connectionData && (
+        <ConnectionSettings
+          stripe={connectionData[0].data?.find((c) => c.provider === "stripe") ?? null}
+          hubspot={connectionData[0].data?.find((c) => c.provider === "hubspot") ?? null}
+          payments={connectionData[1].entitlements.payments}
+          crm={connectionData[1].entitlements.crm}
+          isAdmin={canAdmin(workspace.role)}
+          stripeWebhookUrl={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payments/stripe/${workspace.id}`}
+        />
+      )}
 
       {tab === "api" && (
         <ApiKeySettings

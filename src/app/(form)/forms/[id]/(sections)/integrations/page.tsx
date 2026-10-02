@@ -13,7 +13,10 @@ import { NotificationsPanel } from "@/components/integrations/notifications-pane
 import { FormSectionHeader } from "@/components/forms/form-top-bar";
 import { FormPageActions } from "@/components/forms/form-page-actions";
 import { cn } from "cn";
-import { ChartLine, MailCheck, MessageSquare } from "lucide-react";
+import { ChartLine, Contact, CreditCard, MailCheck, MessageSquare } from "lucide-react";
+import { PaymentPanel } from "@/components/integrations/payment-panel";
+import { HubspotPanel } from "@/components/integrations/hubspot-panel";
+import { readPaymentConfig } from "@/domains/payments/stripe";
 import { SlackPanel } from "@/components/integrations/slack-panel";
 import { ConfirmationPanel } from "@/components/integrations/confirmation-panel";
 import { TrackingPanel } from "@/components/integrations/tracking-panel";
@@ -131,10 +134,21 @@ export default async function IntegrationsPage({
       .maybeSingle(),
     supabase
       .from("forms")
-      .select("ga_measurement_id, gtm_container_id, meta_pixel_id")
+      .select("ga_measurement_id, gtm_container_id, meta_pixel_id, payment_config")
       .eq("id", formId)
       .single(),
   ]);
+  const { data: connections } = await supabase.rpc("integration_status", {
+    p_workspace_id: workspace.id,
+  });
+  const hubspotEndpoint = allEndpoints.find((e) => e.kind === "hubspot");
+  const { data: hubspotConfig } = hubspotEndpoint
+    ? await supabase
+        .from("webhook_endpoints")
+        .select("config")
+        .eq("id", hubspotEndpoint.id)
+        .single()
+    : { data: null };
   const endpoints = allEndpoints.filter((e) => e.kind === "webhook");
   const slackEndpoints = allEndpoints.filter((e) => e.kind === "slack");
   const schema = draft ? parseFormSchema(draft.schema) : null;
@@ -244,6 +258,53 @@ export default async function IntegrationsPage({
               number,
               label: q.label.trim() || "Untitled",
             }))}
+        />
+      </Section>
+
+      <Section
+        icon={<CreditCard />}
+        tint="live"
+        title="Payment"
+        description="Charge respondents when they submit, through your Stripe account."
+      >
+        <PaymentPanel
+          formId={formId}
+          initial={readPaymentConfig(tracking?.payment_config ?? null)}
+          allowed={entitlements.payments}
+          stripeConnected={!!connections?.some((c) => c.provider === "stripe")}
+          numberVariables={(schema?.variables ?? [])
+            .filter((v) => v.type === "number")
+            .map((v) => ({ id: v.id, name: v.name }))}
+        />
+      </Section>
+
+      <Section
+        icon={<Contact />}
+        tint="choice"
+        title="HubSpot"
+        description="Create or update a HubSpot contact for each response."
+      >
+        <HubspotPanel
+          formId={formId}
+          allowed={entitlements.crm}
+          connected={!!connections?.some((c) => c.provider === "hubspot")}
+          initial={
+            (hubspotConfig?.config as { mapping?: Record<string, string> } | null)
+              ?.mapping ?? null
+          }
+          sources={numbered.flatMap(({ question: q, number }) => {
+            const label = `${number} · ${q.label.trim() || "Untitled"}`;
+            if (q.type === "contact_info") {
+              return ((q.settings as { fields?: string[] }).fields ?? []).map(
+                (field) => ({
+                  value: `${q.id}.${field}`,
+                  label: `${label} → ${field}`,
+                }),
+              );
+            }
+            if (q.type === "statement" || q.type === "file_upload") return [];
+            return [{ value: q.id, label }];
+          })}
         />
       </Section>
 

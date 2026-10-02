@@ -3,6 +3,44 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Wave 5: scheduling, languages, HubSpot, Stripe
+
+- **Scheduling (P2.16)** as a booking page on an ending (Calendly or
+  Cal.com hosts only), prefilled with the respondent's name and email and
+  tagged with the response id (Calendly `utm_content`, Cal.com
+  `metadata[formcraftResponseId]`) so a booking can be traced to the
+  answers that qualified it. A booking page stops the automatic redirect.
+- **Languages (P2.21):** translations keyed by the same ids (so logic,
+  answers and analytics are shared), falling back to the original text;
+  the respondent picks from a switcher, else `?lang=`, else the browser.
+  FormCraft's own words are translated for 11 languages (English where a
+  string is missing); server-side validation messages stay English for
+  now. Arabic renders right-to-left. Responses record their language.
+  Without the plan the live form shows only its own language (the
+  builder still lets you prepare translations).
+- **HubSpot (P2.15)** with a private-app token instead of an OAuth app
+  (no HubSpot app registration needed; the PRD's "reconnect expired
+  authorization" becomes: a 401 marks the connection invalid and Settings
+  asks for a new token). Explicit field mapping; email required; contacts
+  updated by email, else created; uploads never sent. Deliveries use the
+  webhook queue, so failures retry and show in the log.
+- **Stripe (P2.17)** with the workspace's own keys (secret or restricted
+  key + webhook signing secret, both checked/encrypted) rather than
+  Stripe Connect, which needs a platform account. Checkout only (no card
+  data here); amount fixed or from a number variable, computed on the
+  server from the saved response; status only from the signed webhook or
+  a server-side session check; answers saved before payment; paid never
+  regresses and isn't charged twice. Refunds stay in Stripe (as the PRD
+  allows). Payment settings live on the form (like pixel IDs), not in the
+  versioned schema, so they apply to the live form immediately.
+- **Found while testing:** Zod 4 records with enum keys are exhaustive
+  (would have demanded every language) — switched to `partialRecord`;
+  the payment retry built an https return URL on an http host — it now
+  uses the request's own origin.
+- **Not live-verified:** real Stripe, HubSpot, Calendly and Cal.com need
+  the user's accounts. Everything is tested against fakes (fake Stripe
+  server with a Checkout page in E2E; fake HubSpot API in integration).
+
 ## 2026-10-02 — Wave 4: confirmation emails, pixels, popup embeds, Zapier/Make, Slack
 
 - **Confirmation emails (P2.18)** can't become a mail cannon: the

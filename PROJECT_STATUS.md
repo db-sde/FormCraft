@@ -4,6 +4,35 @@ Last updated: 2026-10-02
 
 ## Current milestone
 
+**PHASE 2 — CONVERT & INTEGRATE** (2026-10-02) — all 23 PRD items built,
+in six waves, each with migrations, unit + integration + E2E tests and a
+DECISIONS.md entry:
+
+| Wave          | Items                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 0 Foundations | Plans, entitlements (data, not code), usage metering — migration 25                                                   |
+| 1 Conversion  | P2.9 redirects + delay, P2.8 resume links, question pools + shuffled options, carry-forward options — 26–27           |
+| 2 Teams       | P2.19 owner/admin/editor/viewer in RLS, invitations, workspace switcher; P2.20 folders; P2.1 badge by plan — 28       |
+| 3 Branding    | P2.22 paid + uploaded fonts, P2.2 custom domains (DNS TXT, proxy routing, re-check) — 29                              |
+| 4 Outbound    | P2.18 confirmation emails, P2.12 pixels, P2.23 popup embeds, P2.13 Zapier/Make (API keys + /api/v1), P2.14 Slack — 30 |
+| 5 External    | P2.16 scheduling, P2.21 multilingual, P2.15 HubSpot, P2.17 Stripe — 31–32                                             |
+
+Already there before: P2.3–P2.7, P2.10, P2.11 (logic engine, partial
+responses, drop-off, UTM).
+
+**Needs the user's accounts to go live** (everything is tested against
+fakes): Stripe keys + webhook, HubSpot token, Resend (emails/invites),
+Vercel token (custom-domain TLS), Calendly/Cal.com links, Zapier/Make app
+listings, Google OAuth client (Sheets), `ANTHROPIC_API_KEY` (AI).
+
+**To deploy:** `npm run db:migrate` (migrations 24–32), set the new
+optional env vars in `.env.example`, add the `/api/cron/domains` cron
+(in vercel.json), assign plans with `npm run plan:set`.
+
+**Next:** Phase 3 (AI copilot and response analysis, conversion
+insights, A/B tests, version history, public API, SSO/2FA/audit logs,
+granular permissions, retention) and the remaining logic-spec phases.
+
 **LOGIC, SCORING & INTELLIGENCE ENGINE** (2026-10-02) — one deterministic
 event → condition → action engine shared by the builder Preview, the
 live form and the server's authoritative walk; legacy rules keep

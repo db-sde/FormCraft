@@ -53,6 +53,8 @@ export type StartAttribution = {
   hidden?: Record<string, string>;
   /** The browser's random seed for pools and option order. */
   seed?: string;
+  /** The language the respondent chose (P2.21). */
+  language?: string;
 };
 
 /** Only the hidden fields the published form declares, as short strings —
@@ -129,6 +131,10 @@ export async function startResponse(
       hidden_fields: hidden,
       random_seed:
         attribution.seed && SEED_PATTERN.test(attribution.seed) ? attribution.seed : null,
+      language:
+        attribution.language && /^[a-z]{2}$/.test(attribution.language)
+          ? attribution.language
+          : null,
     })
     .select("id, form_version_id")
     .single();

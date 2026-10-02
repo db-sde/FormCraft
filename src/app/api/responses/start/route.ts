@@ -25,6 +25,11 @@ const StartBody = z.object({
     .optional(),
   /** The browser's random seed (question pools, option order). */
   seed: z.string().regex(SEED_PATTERN).optional(),
+  /** The language the respondent is filling the form in (P2.21). */
+  language: z
+    .string()
+    .regex(/^[a-z]{2}$/)
+    .optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -60,6 +65,7 @@ export async function POST(request: NextRequest) {
       embedded: parsed.data.embedded,
       hidden: parsed.data.hidden,
       seed: parsed.data.seed,
+      language: parsed.data.language,
     });
 
     // A response row only gets created here — never on a resumed

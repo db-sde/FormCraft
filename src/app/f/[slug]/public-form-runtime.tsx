@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
 import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
 import type { ResumeResult } from "@/domains/responses/resume";
 import { newSeed } from "@/domains/logic/random";
+import {
+  RTL_LANGUAGES,
+  translateSchema,
+  uiStrings,
+  type LanguageCode,
+} from "@/domains/forms/i18n";
 
 const RESUME_NOTICE: Record<Exclude<ResumeResult, { ok: true }>["reason"], string> = {
   invalid: "That link doesn't work, so you're starting fresh.",
@@ -104,6 +110,7 @@ async function startSession(
   formId: string,
   hidden: Record<string, string>,
   seed: string,
+  language: string,
 ): Promise<{
   responseId: string;
   formVersionId: string;
@@ -111,7 +118,7 @@ async function startSession(
   const res = await fetch("/api/responses/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ formId, ...attribution(), hidden, seed }),
+    body: JSON.stringify({ formId, ...attribution(), hidden, seed, language }),
   });
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
   return (await res.json()) as { responseId: string; formVersionId: string };
@@ -155,9 +162,17 @@ export function PublicFormRuntime({
   resumeLinks = false,
   resume = null,
   brandingRemovable = true,
+  schedulingAllowed = false,
+  languages = [],
+  initialLanguage = "en",
 }: {
+  /** Languages the respondent can choose (P2.21), default first. */
+  languages?: { code: string; name: string }[];
+  initialLanguage?: string;
   /** From the workspace's plan, decided on the server (P2.1). */
   brandingRemovable?: boolean;
+  /** From the plan: booking pages on endings (P2.16). */
+  schedulingAllowed?: boolean;
   /** Creator setting: respondents can get a link to finish later (P2.8). */
   resumeLinks?: boolean;
   /** A resume link this page was opened with, already checked on the server. */
@@ -195,6 +210,15 @@ export function PublicFormRuntime({
 
   // A new respondent's seed; a resumed session keeps the one it had.
   const [freshSeed] = useState(newSeed);
+  // The respondent's language: the form's text is translated here, by
+  // stable ids, so switching never touches answers or the path.
+  const [language, setLanguage] = useState(initialLanguage);
+  const languageRef = useRef(initialLanguage);
+  languageRef.current = language;
+  const shown = useMemo(
+    () => ({ ...compiled, schema: translateSchema(compiled.schema, language) }),
+    [compiled, language],
+  );
 
   const theme = compiled.schema.theme;
 
@@ -290,7 +314,12 @@ export function PublicFormRuntime({
       return Promise.reject(new Error("start recently failed"));
     }
     if (!startPromiseRef.current) {
-      startPromiseRef.current = startSession(formId, urlHidden, freshSeed).then(
+      startPromiseRef.current = startSession(
+        formId,
+        urlHidden,
+        freshSeed,
+        languageRef.current,
+      ).then(
         (data) => {
           const fresh: StoredResponse = {
             responseId: data.responseId,
@@ -436,12 +465,23 @@ export function PublicFormRuntime({
       });
 
       if (res.ok) {
-        const data = (await res.json()) as { endingId: string };
+        const data = (await res.json()) as {
+          endingId: string;
+          paymentUrl?: string;
+          paymentError?: string;
+        };
         pixel("submit");
+        if (data.paymentUrl) {
+          // Answers are saved; payment happens on Stripe, and the form
+          // only shows it as paid once Stripe confirms (P2.17).
+          clearStored(formId);
+          window.location.assign(data.paymentUrl);
+          return { ok: true, endingId: data.endingId, redirecting: true };
+        }
         // Only now is the response durably complete — clearing earlier
         // would lose the respondent's answers if the submit failed.
         clearStored(formId);
-        return { ok: true, endingId: data.endingId };
+        return { ok: true, endingId: data.endingId, responseId: current.responseId };
       }
 
       const body = (await res.json().catch(() => null)) as {
@@ -533,28 +573,52 @@ export function PublicFormRuntime({
   }
 
   return (
-    <FormRuntime
-      compiled={compiled}
-      initialAnswers={resumed?.answers}
-      initialQuestionId={resumed?.lastQuestionId}
-      initialHistory={resumed?.history}
-      welcomeBack={!!resumed && !!resumed.lastQuestionId}
-      hidden={resumed?.hidden ?? urlHidden}
-      seed={resumed?.seed ?? freshSeed}
-      brandingRemovable={brandingRemovable}
-      redirectOnEnding
-      onAnswerChange={handleAnswerChange}
-      onComplete={handleComplete}
-      getResponseId={() => ensureSession().then((s) => s.responseId)}
-      savesProgress={savesProgress}
-      onStepEvent={sendStepEvent}
-      onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
-      notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
-      // Embedded: natural height, reported to the host page so its
-      // iframe grows/shrinks to fit (full-viewport height would pin the
-      // iframe at whatever size it started with).
-      className={embedded ? "min-h-[480px]" : "min-h-dvh"}
-    />
+    <div
+      dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
+      className="relative"
+    >
+      {languages.length > 1 && (
+        <label className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-[12.5px] shadow-sm">
+          <span className="sr-only">{uiStrings(language).language}</span>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="bg-transparent font-semibold outline-none"
+            aria-label={uiStrings(language).language}
+          >
+            {languages.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <FormRuntime
+        compiled={shown}
+        language={language}
+        initialAnswers={resumed?.answers}
+        initialQuestionId={resumed?.lastQuestionId}
+        initialHistory={resumed?.history}
+        welcomeBack={!!resumed && !!resumed.lastQuestionId}
+        hidden={resumed?.hidden ?? urlHidden}
+        seed={resumed?.seed ?? freshSeed}
+        brandingRemovable={brandingRemovable}
+        schedulingAllowed={schedulingAllowed}
+        redirectOnEnding
+        onAnswerChange={handleAnswerChange}
+        onComplete={handleComplete}
+        getResponseId={() => ensureSession().then((s) => s.responseId)}
+        savesProgress={savesProgress}
+        onStepEvent={sendStepEvent}
+        onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
+        notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
+        // Embedded: natural height, reported to the host page so its
+        // iframe grows/shrinks to fit (full-viewport height would pin the
+        // iframe at whatever size it started with).
+        className={embedded ? "min-h-[480px]" : "min-h-dvh"}
+      />
+    </div>
   );
 }
 

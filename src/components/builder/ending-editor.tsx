@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { EndingV1, FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { DEFAULT_REDIRECT_DELAY } from "@/domains/forms/redirect";
 import { showsMadeWith } from "@/domains/forms/branding";
+import { isSchedulerUrl } from "@/domains/forms/scheduler";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -103,6 +104,7 @@ export function EndingSettingsPanel({
           onChange={(e) => onChange({ ...ending, buttonLabel: e.target.value })}
         />
       </PanelField>
+      <SchedulerField ending={ending} onChange={onChange} />
       <SwitchRow
         label="Show “Made with FormCraft”"
         hint={brandingRemovable ? undefined : "Removing it is part of paid plans."}
@@ -162,5 +164,77 @@ export function EndingSettingsPanel({
         </>
       )}
     </div>
+  );
+}
+
+/** A Calendly / Cal.com booking page on this ending (P2.16). Shown on the
+ * live form only on plans with scheduling. */
+function SchedulerField({
+  ending,
+  onChange,
+}: {
+  ending: EndingV1;
+  onChange: (next: EndingV1) => void;
+}) {
+  const provider = ending.scheduler?.provider ?? "none";
+  const [url, setUrl] = useState(ending.scheduler?.url ?? "");
+  const valid = provider !== "none" && isSchedulerUrl(provider, url);
+  return (
+    <>
+      <PanelField label="Booking page">
+        <Select
+          value={provider}
+          onValueChange={(next) => {
+            if (next === "none") onChange({ ...ending, scheduler: undefined });
+            else if (isSchedulerUrl(next as "calendly" | "cal", url)) {
+              onChange({
+                ...ending,
+                scheduler: { provider: next as "calendly" | "cal", url },
+              });
+            } else {
+              onChange({ ...ending, scheduler: undefined });
+            }
+          }}
+        >
+          <SelectTrigger className="h-[38px] w-full" aria-label="Booking page">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="calendly">Calendly</SelectItem>
+            <SelectItem value="cal">Cal.com</SelectItem>
+          </SelectContent>
+        </Select>
+      </PanelField>
+      <PanelField
+        label="Booking link"
+        hint={
+          url && !valid
+            ? "Use your Calendly or Cal.com link (https://calendly.com/… or https://cal.com/…)."
+            : "Shown on this ending, filled in with their name and email. Paid plans."
+        }
+      >
+        <Input
+          type="url"
+          className={PANEL_INPUT}
+          value={url}
+          placeholder="https://calendly.com/you/intro"
+          onChange={(e) => {
+            const next = e.target.value.trim();
+            setUrl(e.target.value);
+            const chosen: "calendly" | "cal" | null = /calendly\.com/.test(next)
+              ? "calendly"
+              : /cal\.com/.test(next)
+                ? "cal"
+                : null;
+            if (chosen && isSchedulerUrl(chosen, next)) {
+              onChange({ ...ending, scheduler: { provider: chosen, url: next } });
+            } else if (!next) {
+              onChange({ ...ending, scheduler: undefined });
+            }
+          }}
+        />
+      </PanelField>
+    </>
   );
 }

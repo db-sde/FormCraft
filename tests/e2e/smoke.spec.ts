@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  adminClient,
   createConfirmedUser,
   createPublishedForm,
   deleteUser,
@@ -145,6 +146,18 @@ test.describe("smoke: every page renders cleanly", () => {
       await expect(r.getByText("Where can we reach you?")).toBeVisible();
       await respondent.close();
       visited.add("/f/[slug]");
+
+      // The payment return page, for a response that's been paid.
+      await adminClient().from("payments").insert({
+        response_id: responseId,
+        form_id: formId,
+        amount: 1500,
+        currency: "usd",
+        status: "paid",
+      });
+      await expectHealthy(page, `${liveLink}/payment?response=${responseId}`, problems);
+      await expect(page.getByRole("heading", { name: "Payment received" })).toBeVisible();
+      visited.add("/f/[slug]/payment");
 
       // An invitation link that doesn't work explains itself.
       await expectHealthy(page, `/invite/${"x".repeat(43)}`, problems);

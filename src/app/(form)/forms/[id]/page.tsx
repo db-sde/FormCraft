@@ -71,6 +71,7 @@ export default async function FormBuilderPage({
       aiEnabled={aiConfigured()}
       brandingRemovable={entitlements.remove_branding}
       customFonts={entitlements.custom_fonts}
+      multilingual={entitlements.multilingual}
       onProposeRule={proposeRuleAction}
     />
   );

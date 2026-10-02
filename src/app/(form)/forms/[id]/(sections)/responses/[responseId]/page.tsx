@@ -83,6 +83,11 @@ export default async function ResponseDetailPage({
 }) {
   const { id: formId, responseId } = await params;
   const { supabase, form, viewOnly } = await loadFormForPage(formId);
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("amount, currency, status, livemode")
+    .eq("response_id", responseId)
+    .maybeSingle();
 
   const detail = await getResponseDetail(supabase, responseId);
   if (!detail || detail.formId !== formId) notFound();
@@ -210,6 +215,36 @@ export default async function ResponseDetailPage({
           <span>Source: {source}</span>
         </div>
       </div>
+
+      {payment && (
+        <section className="border-ink bg-card flex flex-wrap items-center gap-3 rounded-lg border-[1.5px] px-[18px] py-3 text-sm">
+          <b>Payment</b>
+          <span className="font-heading text-lg font-bold">
+            {new Intl.NumberFormat("en", {
+              style: "currency",
+              currency: payment.currency.toUpperCase(),
+            }).format(payment.amount / (payment.currency === "jpy" ? 1 : 100))}
+          </span>
+          <span
+            className={
+              payment.status === "paid"
+                ? "rounded-full bg-[var(--chip-live-bg)] px-2.5 py-0.5 text-[12px] font-bold text-[var(--chip-live-fg)]"
+                : "rounded-full bg-[var(--chip-draft-bg)] px-2.5 py-0.5 text-[12px] font-bold text-[var(--chip-draft-fg)]"
+            }
+          >
+            {payment.status === "paid"
+              ? "Paid"
+              : payment.status === "pending"
+                ? "Not paid yet"
+                : payment.status === "expired"
+                  ? "Expired"
+                  : "Failed"}
+          </span>
+          {!payment.livemode && (
+            <span className="text-muted-foreground text-xs">Stripe test mode</span>
+          )}
+        </section>
+      )}
 
       {(Object.keys(detail.results.variables).length > 0 ||
         Object.keys(detail.results.hidden).length > 0) && (
