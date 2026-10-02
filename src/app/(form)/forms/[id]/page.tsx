@@ -8,7 +8,9 @@ import {
   publishAction,
   unpublishAction,
   renameFormAction,
+  proposeRuleAction,
 } from "./actions";
+import { aiConfigured } from "@/domains/ai/config";
 
 export async function generateMetadata({
   params,
@@ -59,6 +61,8 @@ export default async function FormBuilderPage({
       onPublish={publishAction}
       onUnpublish={unpublishAction}
       onRename={renameFormAction}
+      aiEnabled={aiConfigured()}
+      onProposeRule={proposeRuleAction}
     />
   );
 }

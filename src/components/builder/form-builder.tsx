@@ -1,5 +1,6 @@
 "use client";
 
+import type { RuleProposal } from "@/domains/ai/rule-draft";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -150,7 +151,16 @@ export function FormBuilder({
   onRename,
   addLeadCaptureOnOpen = false,
   openPreviewOnLoad = false,
+  aiEnabled = false,
+  onProposeRule,
 }: {
+  /** AI is configured on the server ("Describe a rule"). */
+  aiEnabled?: boolean;
+  onProposeRule?: (
+    formId: string,
+    instruction: string,
+    schema: FormSchemaV1,
+  ) => Promise<{ ok: true; proposal: RuleProposal } | { ok: false; message: string }>;
   /** Opened from a dashboard "Preview" (`?preview=1`). */
   openPreviewOnLoad?: boolean;
   /** Opened from "Add lead capture" elsewhere (`?leadCapture=1`). */
@@ -1033,6 +1043,15 @@ export function FormBuilder({
               schema={schema}
               onChange={updateLogic}
               onSelectQuestion={(id) => setSelection({ kind: "question", id })}
+              ai={
+                onProposeRule
+                  ? {
+                      enabled: aiEnabled,
+                      propose: (instruction) =>
+                        onProposeRule(formId, instruction, schema),
+                    }
+                  : undefined
+              }
             />
           ) : (
             <BuilderCanvas

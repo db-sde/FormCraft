@@ -15,6 +15,12 @@ import type { FormSchemaV1 } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/analytics/track";
+import { parseFormSchema } from "@/domains/forms/schema";
+import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
+import type { RuleProposal } from "@/domains/ai/rule-draft";
+import { aiConfigured, MAX_INSTRUCTION_LENGTH } from "@/domains/ai/config";
+import { proposeRule } from "@/domains/ai/propose-rule";
+import Anthropic from "@anthropic-ai/sdk";
 
 export async function renameFormAction(
   formId: string,
@@ -153,4 +159,97 @@ export async function trackBuilderEventAction(
     actorId: user.id,
     metadata: questionType ? { questionType: questionType.slice(0, 40) } : undefined,
   });
+}
+
+export type ProposeRuleResult =
+  | { ok: true; proposal: RuleProposal }
+  | { ok: false; code: "not_configured" | "limited" | "failed"; message: string };
+
+/**
+ * "Describe a rule" (Phase 30): the model proposes, the creator decides.
+ * Nothing is saved here — the proposal goes back to the builder, and if
+ * accepted it reaches the draft through the normal autosave path and
+ * its validation. The schema comes from the builder (it may hold edits
+ * autosave hasn't sent yet), so it is re-parsed; the form itself must be
+ * in the caller's workspace.
+ */
+export async function proposeRuleAction(
+  formId: string,
+  instruction: string,
+  schema: FormSchemaV1,
+): Promise<ProposeRuleResult> {
+  if (!aiConfigured()) {
+    return {
+      ok: false,
+      code: "not_configured",
+      message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing).",
+    };
+  }
+  const text = instruction.trim();
+  if (!text)
+    return { ok: false, code: "failed", message: "Describe what should happen." };
+  if (text.length > MAX_INSTRUCTION_LENGTH) {
+    return {
+      ok: false,
+      code: "failed",
+      message: `Keep it under ${MAX_INSTRUCTION_LENGTH} characters.`,
+    };
+  }
+
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  const { data } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (!data) return { ok: false, code: "failed", message: "Form not found." };
+
+  const limit = await hitRateLimit(
+    createAdminClient(),
+    `ai-rule:${user.id}`,
+    30,
+    3_600_000,
+  );
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      code: "limited",
+      message: "That's a lot of AI rules for one hour. Try again later.",
+    };
+  }
+
+  let parsed: FormSchemaV1;
+  try {
+    parsed = parseFormSchema(schema);
+  } catch {
+    return { ok: false, code: "failed", message: "Save your form's changes first." };
+  }
+
+  try {
+    const result = await proposeRule(text, parsed);
+    return result.ok
+      ? { ok: true, proposal: result.proposal }
+      : { ok: false, code: "failed", message: result.message };
+  } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      return {
+        ok: false,
+        code: "limited",
+        message: "The AI is busy. Try again in a minute.",
+      };
+    }
+    if (error instanceof Anthropic.AuthenticationError) {
+      return {
+        ok: false,
+        code: "not_configured",
+        message: "The server's ANTHROPIC_API_KEY was rejected.",
+      };
+    }
+    return {
+      ok: false,
+      code: "failed",
+      message: "The AI couldn't be reached. Try again.",
+    };
+  }
 }

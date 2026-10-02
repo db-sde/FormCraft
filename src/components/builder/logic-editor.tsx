@@ -34,6 +34,7 @@ import { TypeTile } from "./question-meta";
 import { ConditionEditor } from "./logic/condition-editor";
 import { ActionsEditor } from "./logic/actions-editor";
 import { VariablesPanel } from "./logic/variables-panel";
+import { DescribeRule, type ProposeRule } from "./logic/describe-rule";
 import {
   defaultCompare,
   describeAction,
@@ -53,10 +54,13 @@ export function LogicEditor({
   schema,
   onChange,
   onSelectQuestion,
+  ai,
 }: {
   schema: FormSchemaV1;
   onChange: (patch: Partial<FormSchemaV1>) => void;
   onSelectQuestion?: (questionId: string) => void;
+  /** "Describe a rule": whether AI is set up, and the server call. */
+  ai?: { enabled: boolean; propose: ProposeRule };
 }) {
   const [view, setView] = useState<View>("rules");
   const rules = useMemo(() => allRules(schema), [schema]);
@@ -144,6 +148,18 @@ export function LogicEditor({
 
       {view === "rules" && (
         <>
+          <DescribeRule
+            schema={schema}
+            enabled={ai?.enabled ?? false}
+            propose={ai?.propose}
+            onAccept={({ rule, newVariables }) =>
+              onChange({
+                logic: [],
+                rules: [...rules, rule],
+                variables: [...(schema.variables ?? []), ...newVariables],
+              })
+            }
+          />
           {rules.length === 0 && (
             <div className="border-ink bg-card flex flex-col items-center gap-2 rounded-lg border-[1.5px] border-dashed p-9 text-center">
               <span className="border-ink shadow-card grid size-11 -rotate-6 place-items-center rounded-[10px] border-[1.5px] bg-[var(--qt-other-bg)] text-[var(--qt-other-fg)]">

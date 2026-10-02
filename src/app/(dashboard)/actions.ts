@@ -7,6 +7,11 @@ import { createFormWithDraft, duplicateForm, softDeleteForm } from "@/domains/fo
 import { getTemplateById } from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
+import Anthropic from "@anthropic-ai/sdk";
+import { aiConfigured, MAX_FORM_PROMPT_LENGTH } from "@/domains/ai/config";
+import { generateForm } from "@/domains/ai/generate-form";
+import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -57,6 +62,68 @@ export async function createFormFromTemplateAction(templateId: string): Promise<
     eventType: "form_created",
     actorId: user.id,
     metadata: { source: "template", templateId },
+  });
+  redirect(`/forms/${id}`);
+}
+
+export type GenerateFormState = { message: string } | null;
+
+/**
+ * "Describe your form" (Phase 31): the model drafts, buildGeneratedForm
+ * turns the draft into a schema that has passed the same validation as
+ * a saved draft, and it becomes an ordinary new draft the creator edits
+ * before publishing. Nothing is published.
+ */
+export async function generateFormAction(
+  _previous: GenerateFormState,
+  formData: FormData,
+): Promise<GenerateFormState> {
+  if (!aiConfigured()) {
+    return { message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing)." };
+  }
+  const prompt = String(formData.get("prompt") ?? "").trim();
+  if (!prompt) return { message: "Describe the form you want." };
+  if (prompt.length > MAX_FORM_PROMPT_LENGTH) {
+    return { message: `Keep it under ${MAX_FORM_PROMPT_LENGTH} characters.` };
+  }
+
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  const limit = await hitRateLimit(
+    createAdminClient(),
+    `ai-form:${user.id}`,
+    10,
+    3_600_000,
+  );
+  if (!limit.allowed) {
+    return { message: "That's a lot of generated forms for one hour. Try again later." };
+  }
+
+  let result;
+  try {
+    result = await generateForm(prompt);
+  } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      return { message: "The AI is busy. Try again in a minute." };
+    }
+    if (error instanceof Anthropic.AuthenticationError) {
+      return { message: "The server's ANTHROPIC_API_KEY was rejected." };
+    }
+    return { message: "The AI couldn't be reached. Try again." };
+  }
+  if (!result.ok) return { message: result.message };
+
+  const { id } = await createFormWithDraft(
+    supabase,
+    workspace.id,
+    user.id,
+    result.schema.meta.title,
+    result.schema,
+  );
+  trackEvent({
+    formId: id,
+    eventType: "form_created",
+    actorId: user.id,
+    metadata: { source: "ai", warnings: result.warnings.length },
   });
   redirect(`/forms/${id}`);
 }
