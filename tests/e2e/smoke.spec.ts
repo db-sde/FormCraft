@@ -146,6 +146,11 @@ test.describe("smoke: every page renders cleanly", () => {
       await respondent.close();
       visited.add("/f/[slug]");
 
+      // An invitation link that doesn't work explains itself.
+      await expectHealthy(page, `/invite/${"x".repeat(43)}`, problems);
+      await expect(page.getByText("This invitation doesn't work")).toBeVisible();
+      visited.add("/invite/[token]");
+
       // Every registered page was actually visited above.
       expect([...visited].sort()).toEqual([...PAGE_ROUTES].sort());
     } finally {

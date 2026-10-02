@@ -11,6 +11,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isLikelyBot } from "@/lib/http/bots";
 import { PublicFormRuntime } from "./public-form-runtime";
 import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -42,6 +43,12 @@ export default async function PublicFormPage({
 
   // A resume link (P2.8) opens the same unfinished response; a link that
   // no longer works starts fresh, with a note saying why.
+  // Plan features are decided here, on the server (P2.1, P2.22).
+  const { entitlements } = await getWorkspacePlan(
+    createAdminClient(),
+    publicForm.workspaceId,
+  );
+
   const resume =
     typeof query[RESUME_PARAM] === "string"
       ? await resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
@@ -103,6 +110,7 @@ export default async function PublicFormPage({
         savesProgress={publicForm.savePartialResponses}
         resumeLinks={publicForm.resumeLinksEnabled && publicForm.savePartialResponses}
         resume={resume}
+        brandingRemovable={entitlements.remove_branding}
         embedded={embedded}
       />
     </div>

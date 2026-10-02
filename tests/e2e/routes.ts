@@ -23,6 +23,7 @@ export const PAGE_ROUTES = [
   "/forms/[id]/integrations",
   "/forms/[id]/settings",
   "/f/[slug]",
+  "/invite/[token]",
 ] as const;
 
 /** API / handler routes → the spec that covers them. */

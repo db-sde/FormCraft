@@ -7,8 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Authorization is RLS: the DELETE only matches a row whose parent
- * form belongs to a workspace the caller is a member of (see
- * "responses: members can delete via form" policy) — an id for
+ * form belongs to a workspace the caller can edit (see "responses:
+ * editors can delete via form", migration 28) — an id for
  * someone else's response simply deletes zero rows rather than
  * erroring, same pattern used by the draft-save action.
  */

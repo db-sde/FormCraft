@@ -160,7 +160,10 @@ export function FormBuilder({
   openPreviewOnLoad = false,
   aiEnabled = false,
   onProposeRule,
+  brandingRemovable = true,
 }: {
+  /** The plan allows switching off the "Made with FormCraft" badge. */
+  brandingRemovable?: boolean;
   /** AI is configured on the server ("Describe a rule"). */
   aiEnabled?: boolean;
   onProposeRule?: (
@@ -852,6 +855,7 @@ export function FormBuilder({
       </header>
 
       <PreviewDialog
+        brandingRemovable={brandingRemovable}
         schema={schema}
         open={previewOpen}
         onOpenChange={setPreviewOpen}
@@ -1074,6 +1078,7 @@ export function FormBuilder({
             />
           ) : (
             <BuilderCanvas
+              brandingRemovable={brandingRemovable}
               theme={schema.theme}
               item={
                 selectedQuestion
@@ -1162,6 +1167,7 @@ export function FormBuilder({
                   onChange={updateEnding}
                   meta={schema.meta}
                   onMetaChange={(meta) => setSchema((s) => ({ ...s, meta }))}
+                  brandingRemovable={brandingRemovable}
                 />
               )}
               {selection.kind === "theme" && (

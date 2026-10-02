@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { listFormsForWorkspace } from "@/domains/forms";
+import { listFolders, listFormsForWorkspace } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createFormAction } from "../actions";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { FormsBrowser } from "@/components/dashboard/forms-browser";
 import { OnboardingDialog } from "@/components/dashboard/onboarding-dialog";
 import { getUsage, getWorkspacePlan, usageWarnings } from "@/domains/billing";
+import { canEdit } from "@/domains/workspaces";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { workspace } = await getCurrentWorkspace();
@@ -73,9 +74,10 @@ export default async function DashboardPage() {
     );
   }
 
-  const [plan, usage] = await Promise.all([
+  const [plan, usage, folders] = await Promise.all([
     getWorkspacePlan(supabase, workspace.id),
     getUsage(supabase, workspace.id),
+    listFolders(supabase, workspace.id),
   ]);
   const warnings = usageWarnings(usage, plan.entitlements);
 
@@ -95,7 +97,13 @@ export default async function DashboardPage() {
           </Link>
         </div>
       )}
-      <FormsBrowser forms={forms} workspaceName={workspace.name} />
+      <FormsBrowser
+        forms={forms}
+        workspaceName={workspace.name}
+        canEdit={canEdit(workspace.role)}
+        folders={folders}
+        currentUserId={user.id}
+      />
     </>
   );
 }

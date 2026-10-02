@@ -99,6 +99,35 @@ export type Database = {
           },
         ];
       };
+      folders: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "folders_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_versions: {
         Row: {
           created_at: string;
@@ -149,6 +178,7 @@ export type Database = {
           created_by: string;
           deleted_at: string | null;
           description: string | null;
+          folder_id: string | null;
           id: string;
           partial_retention_days: number | null;
           resume_links_enabled: boolean;
@@ -163,6 +193,7 @@ export type Database = {
           created_by: string;
           deleted_at?: string | null;
           description?: string | null;
+          folder_id?: string | null;
           id?: string;
           partial_retention_days?: number | null;
           resume_links_enabled?: boolean;
@@ -177,6 +208,7 @@ export type Database = {
           created_by?: string;
           deleted_at?: string | null;
           description?: string | null;
+          folder_id?: string | null;
           id?: string;
           partial_retention_days?: number | null;
           resume_links_enabled?: boolean;
@@ -192,6 +224,13 @@ export type Database = {
             columns: ["created_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "forms_folder_id_fkey";
+            columns: ["folder_id"];
+            isOneToOne: false;
+            referencedRelation: "folders";
             referencedColumns: ["id"];
           },
           {
@@ -733,6 +772,60 @@ export type Database = {
           },
         ];
       };
+      workspace_invitations: {
+        Row: {
+          accepted_at: string | null;
+          created_at: string;
+          email: string;
+          expires_at: string;
+          id: string;
+          invited_by: string | null;
+          revoked_at: string | null;
+          role: string;
+          token_hash: string;
+          workspace_id: string;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          created_at?: string;
+          email: string;
+          expires_at?: string;
+          id?: string;
+          invited_by?: string | null;
+          revoked_at?: string | null;
+          role: string;
+          token_hash: string;
+          workspace_id: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          created_at?: string;
+          email?: string;
+          expires_at?: string;
+          id?: string;
+          invited_by?: string | null;
+          revoked_at?: string | null;
+          role?: string;
+          token_hash?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workspace_invitations_invited_by_fkey";
+            columns: ["invited_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspace_invitations_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       workspace_members: {
         Row: {
           created_at: string;
@@ -825,6 +918,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      can_admin_workspace: {
+        Args: { target_workspace_id: string };
+        Returns: boolean;
+      };
+      can_edit_workspace: {
+        Args: { target_workspace_id: string };
+        Returns: boolean;
+      };
       claim_due_sheets_syncs: {
         Args: { p_lease_seconds: number; p_limit: number };
         Returns: {
@@ -1013,7 +1114,7 @@ export type Database = {
       sheets_sync_status: "pending" | "succeeded" | "failed" | "exhausted";
       upload_status: "pending" | "clean" | "quarantined" | "deleted";
       webhook_delivery_status: "pending" | "succeeded" | "failed" | "exhausted";
-      workspace_role: "owner" | "editor";
+      workspace_role: "owner" | "editor" | "admin" | "viewer";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -1145,7 +1246,7 @@ export const Constants = {
       sheets_sync_status: ["pending", "succeeded", "failed", "exhausted"],
       upload_status: ["pending", "clean", "quarantined", "deleted"],
       webhook_delivery_status: ["pending", "succeeded", "failed", "exhausted"],
-      workspace_role: ["owner", "editor"],
+      workspace_role: ["owner", "editor", "admin", "viewer"],
     },
   },
 } as const;

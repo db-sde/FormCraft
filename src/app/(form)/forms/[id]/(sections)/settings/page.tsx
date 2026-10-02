@@ -23,7 +23,7 @@ export default async function FormSettingsPage({
 }) {
   const { id: formId } = await params;
   const { supabase, workspace, form, isLive, publishState, hasUnpublishedChanges } =
-    await loadFormForPage(formId);
+    await loadFormForPage(formId, { editorsOnly: true });
   const settings = await getFormSettings(supabase, formId, workspace.id);
   if (!settings) notFound();
 

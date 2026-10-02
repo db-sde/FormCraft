@@ -45,6 +45,10 @@ export type FormListItem = {
   /** Respondents who answered something but never submitted. */
   incompleteCount: number;
   createdAt: string;
+  /** Who made it (for "Created by me"). */
+  createdBy: string | null;
+  /** The folder it's filed in; null = not in a folder. */
+  folderId: string | null;
   /** Enough of the draft to draw the dashboard card's preview. */
   preview: FormPreview;
 };
@@ -186,7 +190,7 @@ export async function listFormsForWorkspace(
   const { data, error } = await supabase
     .from("forms")
     .select(
-      "id, title, slug, updated_at, created_at, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count)",
+      "id, title, slug, updated_at, created_at, created_by, folder_id, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count)",
     )
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
@@ -208,6 +212,8 @@ export async function listFormsForWorkspace(
     responseCount: form.completed?.[0]?.count ?? 0,
     incompleteCount: form.incomplete?.[0]?.count ?? 0,
     createdAt: form.created_at,
+    createdBy: form.created_by,
+    folderId: form.folder_id,
     preview: previewFromSchema(form.draft?.[0]?.schema),
   }));
 }
@@ -554,6 +560,7 @@ export type PublicForm = {
   savePartialResponses: boolean;
   /** Creator setting: respondents can get a link to finish later (P2.8). */
   resumeLinksEnabled: boolean;
+  workspaceId: string;
 };
 
 export type FormSettings = {
@@ -636,7 +643,7 @@ export async function getPublicFormBySlug(
 ): Promise<PublicForm | null> {
   const { data: form, error: formError } = await supabase
     .from("forms")
-    .select("id, save_partial_responses, resume_links_enabled")
+    .select("id, workspace_id, save_partial_responses, resume_links_enabled")
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
@@ -659,6 +666,7 @@ export async function getPublicFormBySlug(
     compiled,
     savePartialResponses: form.save_partial_responses,
     resumeLinksEnabled: form.resume_links_enabled,
+    workspaceId: form.workspace_id,
   };
 }
 

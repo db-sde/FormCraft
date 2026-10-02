@@ -3,6 +3,7 @@
 import { seededShuffle } from "@/domains/logic/random";
 import { availableOptionIds } from "@/domains/forms/options";
 import { endingRedirect } from "@/domains/forms/redirect";
+import { showsMadeWith } from "@/domains/forms/branding";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { EndingV1, QuestionV1 } from "@/domains/forms/schema/v1";
@@ -116,7 +117,11 @@ export function FormRuntime({
   onFinishLater,
   notice,
   seed,
+  brandingRemovable = true,
 }: {
+  /** The plan allows switching off the "Made with FormCraft" badge
+   * (decided by the server for the live form). */
+  brandingRemovable?: boolean;
   /** The response's random seed: which pool questions are asked and the
    * order of shuffled options. */
   seed?: string;
@@ -426,6 +431,7 @@ export function FormRuntime({
     return (
       <EndingScreen
         ending={ending}
+        brandingRemovable={brandingRemovable}
         meta={compiled.schema.meta}
         recallSource={endingRecall}
         theme={theme}
@@ -712,6 +718,7 @@ function FinishLater({
  * browser blocks it, the button stays. */
 function EndingScreen({
   ending,
+  brandingRemovable,
   meta,
   recallSource,
   theme,
@@ -721,6 +728,7 @@ function EndingScreen({
   redirect,
 }: {
   ending: EndingV1;
+  brandingRemovable: boolean;
   meta: CompiledFormV1["schema"]["meta"];
   /** Final answers and variables, for {{score}}-style recall. */
   recallSource: RecallSource | null;
@@ -756,7 +764,7 @@ function EndingScreen({
       theme={theme}
       mode={mode}
       progress={1}
-      madeWith={ending.showMadeWith !== false}
+      madeWith={showsMadeWith(ending, brandingRemovable)}
       className={cn("min-h-[420px]", className)}
     >
       <div className="fc-step-in flex flex-col items-start gap-4 pb-10">

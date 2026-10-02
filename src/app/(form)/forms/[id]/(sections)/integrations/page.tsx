@@ -97,7 +97,7 @@ export default async function IntegrationsPage({
   const { sheets_error: sheetsError, sheets_connected: sheetsConnected } =
     await searchParams;
   const { supabase, user, form, isLive, publishState, hasUnpublishedChanges } =
-    await loadFormForPage(formId);
+    await loadFormForPage(formId, { editorsOnly: true });
 
   const [endpoints, sheetsConnection, notificationsEnabled] = await Promise.all([
     listWebhookEndpoints(supabase, formId),

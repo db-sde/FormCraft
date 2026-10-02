@@ -1,5 +1,6 @@
 "use client";
 
+import { showsMadeWith } from "@/domains/forms/branding";
 import { Flag, Palette } from "lucide-react";
 import type { EndingV1, QuestionV1, ThemeV1 } from "@/domains/forms/schema/v1";
 import { RuntimeQuestionInput } from "@/components/runtime/runtime-question-input";
@@ -56,7 +57,10 @@ export function BuilderCanvas({
   item,
   onChangeQuestion,
   onChangeEnding,
+  brandingRemovable = true,
 }: {
+  /** The plan allows switching off the "Made with FormCraft" badge. */
+  brandingRemovable?: boolean;
   theme: ThemeV1;
   item: CanvasItem;
   onChangeQuestion: (next: QuestionV1) => void;
@@ -134,7 +138,12 @@ export function BuilderCanvas({
           />
         )}
         {item.kind === "ending" && (
-          <EndingStage theme={theme} ending={item.ending} onChange={onChangeEnding} />
+          <EndingStage
+            theme={theme}
+            ending={item.ending}
+            onChange={onChangeEnding}
+            brandingRemovable={brandingRemovable}
+          />
         )}
         {item.kind === "theme" && (
           <Stage theme={theme} mode="canvas" progress={0.3} className="size-full">
@@ -292,17 +301,19 @@ function EndingStage({
   theme,
   ending,
   onChange,
+  brandingRemovable,
 }: {
   theme: ThemeV1;
   ending: EndingV1;
   onChange: (next: EndingV1) => void;
+  brandingRemovable: boolean;
 }) {
   return (
     <Stage
       theme={theme}
       mode="canvas"
       progress={1}
-      madeWith={ending.showMadeWith !== false}
+      madeWith={showsMadeWith(ending, brandingRemovable)}
       className="size-full"
     >
       <div className="flex flex-col items-start gap-4 pb-10">

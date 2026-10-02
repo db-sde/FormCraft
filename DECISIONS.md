@@ -3,6 +3,37 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Wave 2: teams and folders
+
+- **Four roles (P2.19).** Owner (the workspace's creator, exactly one),
+  Admin (everything but ownership and deleting the workspace), Editor
+  (what every member could do before — existing members are editors,
+  unchanged), Viewer (reads forms, responses, analytics; changes
+  nothing). Enforced in row-level security, not just the UI.
+- **Viewers get view-only screens,** not failing saves: the builder,
+  Settings and Integrations send them to Responses; tabs, form menus,
+  New form and delete buttons are hidden; a "View only" label shows.
+- **Invitations** are links (7 days, one email address, hashed tokens).
+  When Resend is set up they're emailed; either way the admin gets the
+  link to share. Accepting requires being signed in with the invited
+  address. A new account created from an invitation returns to it after
+  confirming its email (signup now carries a safe `next`).
+- **Seats** come from the plan (`members`) and count open invitations,
+  so a workspace can't over-invite and accept later. Free has one seat,
+  so inviting needs a paid plan (seeded data; editable).
+- **Several workspaces:** a member of more than one switches in the
+  sidebar menu. The choice is a cookie preference, re-checked against
+  membership on every request.
+- **No ownership transfer yet** — the owner can't leave or be demoted;
+  transfer needs its own flow (and billing ownership) to be safe.
+- **Folders (P2.20)** are flat (no nesting) and per workspace. Deleting
+  one moves its forms out; the confirmation says so. Dashboard filters:
+  folder, status, search and "Created by me".
+- **Found while testing:** the owner-only member policy was what let a
+  new user's first workspace get its owner row — kept alongside the
+  admin policy. And teammates couldn't see each other's names (profiles
+  were self-only), fixed with a shares-a-workspace policy.
+
 ## 2026-10-02 — Wave 1: redirects, resume links, randomness, carry-forward
 
 - **Redirect after submission (P2.9).** The ending's redirect wins, else

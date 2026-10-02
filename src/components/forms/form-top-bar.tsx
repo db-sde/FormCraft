@@ -3,13 +3,15 @@ import { ChevronRight } from "lucide-react";
 import type { PublishState } from "@/domains/forms";
 import { FormStatusBadge } from "./form-status-badge";
 import { FormTabs, type FormTab } from "./form-tabs";
+import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { canEdit } from "@/domains/workspaces";
 
 /**
  * The top of a form's Responses / Integrations / Settings / Share pages
  * (Part 5): breadcrumb, the form's name, its publish state and the
  * section tabs, over an ink rule.
  */
-export function FormSectionHeader({
+export async function FormSectionHeader({
   formId,
   title,
   active,
@@ -28,6 +30,8 @@ export function FormSectionHeader({
   actions?: React.ReactNode;
 }) {
   const trail = [{ label: title, href: `/forms/${formId}/responses` }, ...crumbs];
+  const { workspace } = await getCurrentWorkspace();
+  const viewOnly = !canEdit(workspace.role);
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
@@ -69,10 +73,17 @@ export function FormSectionHeader({
           <FormStatusBadge state={state} hasChanges={hasChanges} />
         </div>
         <div className="flex min-w-0 shrink-0 items-center gap-2">
-          {actions}
+          {viewOnly ? (
+            <span className="text-muted-foreground text-[13px] font-semibold">
+              View only
+            </span>
+          ) : (
+            actions
+          )}
           <FormTabs
             formId={formId}
             active={active}
+            viewOnly={viewOnly}
             className="max-w-full overflow-x-auto"
           />
         </div>

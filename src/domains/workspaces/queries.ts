@@ -11,7 +11,7 @@ export type WorkspaceSummary = {
   id: string;
   name: string;
   slug: string;
-  role: "owner" | "editor";
+  role: "owner" | "admin" | "editor" | "viewer";
 };
 
 /** Returns the user's workspaces, oldest membership first — so the

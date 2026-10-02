@@ -21,10 +21,13 @@ export function FormTabs({
   formId,
   active,
   className,
+  viewOnly = false,
 }: {
   formId: string;
   active: FormTab;
   className?: string;
+  /** Viewers see only what they can use. */
+  viewOnly?: boolean;
 }) {
   return (
     <nav
@@ -34,7 +37,7 @@ export function FormTabs({
         className,
       )}
     >
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => !viewOnly || tab.id === "responses").map((tab) => {
         const isActive = tab.id === active;
         return (
           <Link

@@ -2,8 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { WORKSPACE_COOKIE } from "@/lib/auth/current-workspace";
+import { canEdit } from "@/domains/workspaces";
 import { z } from "zod";
-import { createFormWithDraft, duplicateForm, softDeleteForm } from "@/domains/forms";
+import {
+  createFolder,
+  createFormWithDraft,
+  deleteFolder,
+  duplicateForm,
+  FolderError,
+  moveFormToFolder,
+  renameFolder,
+  softDeleteForm,
+} from "@/domains/forms";
 import { getTemplateById } from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
@@ -16,6 +28,7 @@ import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) redirect("/dashboard");
   const { id } = await createFormWithDraft(
     supabase,
     workspace.id,
@@ -48,6 +61,7 @@ export async function createSampleFormAction(): Promise<void> {
 
 export async function createFormFromTemplateAction(templateId: string): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) redirect("/dashboard");
   const template = await getTemplateById(supabase, templateId);
   if (!template) redirect("/templates");
 
@@ -89,6 +103,9 @@ export async function generateFormAction(
   }
 
   const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { message: "You have view-only access to this workspace." };
+  }
   const limit = await hitRateLimit(
     createAdminClient(),
     `ai-form:${user.id}`,
@@ -141,6 +158,9 @@ export async function duplicateFormAction(
 ): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
   if (!FormId.safeParse(formId).success) return { ok: false, message: "Form not found." };
   const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { ok: false, message: "You have view-only access to this workspace." };
+  }
   try {
     const copy = await duplicateForm(supabase, formId, workspace.id, user.id);
     if (!copy) return { ok: false, message: "Form not found." };
@@ -162,11 +182,113 @@ export async function deleteFormAction(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (!FormId.safeParse(formId).success) return { ok: false, message: "Form not found." };
   const { supabase, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { ok: false, message: "You have view-only access to this workspace." };
+  }
   try {
     await softDeleteForm(supabase, formId, workspace.id);
     revalidatePath("/dashboard");
     return { ok: true };
   } catch {
     return { ok: false, message: "Couldn't delete the form. Please try again." };
+  }
+}
+
+/** Switches the workspace the app shows. Only a workspace the user is a
+ * member of can be chosen; the cookie is a preference, re-checked on
+ * every request. */
+export async function switchWorkspaceAction(workspaceId: string): Promise<void> {
+  const { workspaces } = await getCurrentWorkspace();
+  if (!workspaces.some((w) => w.id === workspaceId)) return;
+  (await cookies()).set(WORKSPACE_COOKIE, workspaceId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
+}
+
+export type FolderResult =
+  { ok: true; folder?: { id: string; name: string } } | { ok: false; message: string };
+
+async function editableWorkspace() {
+  const ctx = await getCurrentWorkspace();
+  return canEdit(ctx.workspace.role) ? ctx : null;
+}
+
+export async function createFolderAction(name: string): Promise<FolderResult> {
+  const ctx = await editableWorkspace();
+  if (!ctx) return { ok: false, message: "You have view-only access to this workspace." };
+  try {
+    const folder = await createFolder(ctx.supabase, ctx.workspace.id, name);
+    revalidatePath("/dashboard");
+    return { ok: true, folder };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof FolderError ? error.message : "Couldn't create it.",
+    };
+  }
+}
+
+export async function renameFolderAction(
+  folderId: string,
+  name: string,
+): Promise<FolderResult> {
+  const ctx = await editableWorkspace();
+  if (!ctx || !FormId.safeParse(folderId).success)
+    return { ok: false, message: "Folder not found." };
+  try {
+    await renameFolder(ctx.supabase, ctx.workspace.id, folderId, name);
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof FolderError ? error.message : "Couldn't rename it.",
+    };
+  }
+}
+
+export async function deleteFolderAction(folderId: string): Promise<FolderResult> {
+  const ctx = await editableWorkspace();
+  if (!ctx || !FormId.safeParse(folderId).success)
+    return { ok: false, message: "Folder not found." };
+  try {
+    await deleteFolder(ctx.supabase, ctx.workspace.id, folderId);
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof FolderError ? error.message : "Couldn't delete it.",
+    };
+  }
+}
+
+export async function moveFormToFolderAction(
+  formId: string,
+  folderId: string | null,
+): Promise<FolderResult> {
+  const ctx = await editableWorkspace();
+  if (
+    !ctx ||
+    !FormId.safeParse(formId).success ||
+    (folderId !== null && !FormId.safeParse(folderId).success)
+  ) {
+    return { ok: false, message: "Form not found." };
+  }
+  try {
+    await moveFormToFolder(ctx.supabase, ctx.workspace.id, formId, folderId);
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof FolderError ? error.message : "Couldn't move it.",
+    };
   }
 }

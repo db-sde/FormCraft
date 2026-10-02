@@ -84,6 +84,31 @@ this doc needs fixing.
 - **`responses.random_seed`** — the seed a response's question pools
   and option order were drawn from (null for older responses).
 
+## Teams and folders (migration 28)
+
+- **Roles:** `workspace_role` adds `admin` and `viewer` to `owner` and
+  `editor`. `can_edit_workspace(id)` (owner/admin/editor) and
+  `can_admin_workspace(id)` (owner/admin) are the security-definer
+  checks. Every write policy (forms, form_versions, responses delete,
+  notification_settings, webhook_endpoints, sheets_connections, folders,
+  theme-assets storage) uses "can edit"; reads stay "is a member".
+- **Members:** the owner (by `workspaces.owner_id`) and admins manage
+  `workspace_members`. The `workspace_members_protect_owner` trigger
+  stops anyone removing or re-roling the owner's row and stops anyone
+  else holding `owner`. Ownership transfer isn't offered yet.
+- **`workspace_invitations`** — email (lowercased), role
+  (admin/editor/viewer), SHA-256 `token_hash`, `invited_by`, 7-day
+  `expires_at`, `accepted_at`, `revoked_at`; one open invitation per
+  address per workspace. Admins read and revoke; creating and accepting
+  are server-side (seat limit from the plan, invited address must match
+  the accepting account).
+- **`profiles`:** people who share a workspace can read each other's
+  name and email (`shares_workspace_with`), for the members list.
+- **`folders`** — `workspace_id`, `name`. `forms.folder_id` is
+  `on delete set null`: deleting a folder never deletes forms. The
+  `forms_check_folder` trigger keeps a form out of another workspace's
+  folder.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { createContext, useContext, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
@@ -18,13 +18,18 @@ import {
   Send,
   TextCursorInput,
   Trash2,
+  FolderInput,
 } from "lucide-react";
 import {
   publishAction,
   renameFormAction,
   unpublishAction,
 } from "@/app/(form)/forms/[id]/actions";
-import { duplicateFormAction, deleteFormAction } from "@/app/(dashboard)/actions";
+import {
+  duplicateFormAction,
+  deleteFormAction,
+  moveFormToFolderAction,
+} from "@/app/(dashboard)/actions";
 import type { FormListItem } from "@/domains/forms";
 import { Input } from "@/components/ui/input";
 import { Button, ButtonSpinner } from "@/components/ui/button";
@@ -40,6 +45,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -60,6 +68,11 @@ import { cn } from "cn";
  * `onDuplicating` lets the list show a "Duplicating…" placeholder card
  * while the copy is made.
  */
+/** Viewers get the read-only parts of the menu (set by FormsBrowser). */
+export const CanEditContext = createContext(true);
+/** The workspace's folders, for "Move to folder". */
+export const FoldersContext = createContext<{ id: string; name: string }[]>([]);
+
 export function FormActionsMenu({
   form,
   vertical = false,
@@ -72,6 +85,8 @@ export function FormActionsMenu({
   className?: string;
 }) {
   const router = useRouter();
+  const canEdit = useContext(CanEditContext);
+  const folders = useContext(FoldersContext);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState(form.title);
@@ -182,11 +197,13 @@ export function FormActionsMenu({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[200px]">
-          <DropdownMenuItem asChild>
-            <Link href={`/forms/${form.id}`}>
-              <PencilLine /> Edit
-            </Link>
-          </DropdownMenuItem>
+          {canEdit && (
+            <DropdownMenuItem asChild>
+              <Link href={`/forms/${form.id}`}>
+                <PencilLine /> Edit
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem asChild>
             <Link href={`/forms/${form.id}/responses`}>
               <Inbox /> Responses
@@ -197,42 +214,79 @@ export function FormActionsMenu({
               <Link2 /> Copy link
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem asChild>
-            <Link href={`/forms/${form.id}?preview=1`}>
-              <Eye /> Preview
-            </Link>
-          </DropdownMenuItem>
+          {canEdit && (
+            <DropdownMenuItem asChild>
+              <Link href={`/forms/${form.id}?preview=1`}>
+                <Eye /> Preview
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem asChild>
             <Link href={`/forms/${form.id}/share`}>
               <Send /> Share
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => {
-              setNewTitle(form.title);
-              setRenaming(true);
-            }}
-          >
-            <TextCursorInput /> Rename
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={duplicate}>
-            <Copy /> Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={togglePublished}>
-            {form.publishState === "live" ? (
-              <>
-                <EyeOff /> Unpublish
-              </>
-            ) : (
-              <>
-                <Rocket /> Publish
-              </>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-            <Trash2 /> Delete
-          </DropdownMenuItem>
+          {canEdit && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  setNewTitle(form.title);
+                  setRenaming(true);
+                }}
+              >
+                <TextCursorInput /> Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={duplicate}>
+                <Copy /> Duplicate
+              </DropdownMenuItem>
+              {folders.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <FolderInput /> Move to folder
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {[{ id: null, name: "No folder" }, ...folders].map((f) => (
+                      <DropdownMenuItem
+                        key={f.id ?? "none"}
+                        disabled={(form.folderId ?? null) === f.id}
+                        onSelect={async () => {
+                          const result = await moveFormToFolderAction(form.id, f.id);
+                          if (result.ok) {
+                            toast.success(
+                              f.id ? `Moved to ${f.name}.` : "Moved out of its folder.",
+                            );
+                            router.refresh();
+                          } else {
+                            toast.error(result.message);
+                          }
+                        }}
+                      >
+                        {f.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              <DropdownMenuItem onSelect={togglePublished}>
+                {form.publishState === "live" ? (
+                  <>
+                    <EyeOff /> Unpublish
+                  </>
+                ) : (
+                  <>
+                    <Rocket /> Publish
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setConfirmDelete(true)}
+              >
+                <Trash2 /> Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

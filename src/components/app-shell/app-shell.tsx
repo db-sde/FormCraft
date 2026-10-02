@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useStoredValue } from "@/lib/hooks/use-stored-value";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "cn";
 import { Dialog } from "radix-ui";
-import { createFormAction } from "@/app/(dashboard)/actions";
+import { createFormAction, switchWorkspaceAction } from "@/app/(dashboard)/actions";
 import { logOutAction } from "@/app/(auth)/actions";
 import type { OnboardingStep } from "@/domains/workspaces";
 import { SubmitButton } from "@/components/submit-button";
@@ -169,7 +169,20 @@ function GettingStarted({ steps }: { steps: OnboardingStep[] }) {
   );
 }
 
-function WorkspaceSwitcher({ name, memberCount }: { name: string; memberCount: number }) {
+type WorkspaceChoice = { id: string; name: string; role: string };
+
+function WorkspaceSwitcher({
+  name,
+  memberCount,
+  workspaceId,
+  workspaces,
+}: {
+  name: string;
+  memberCount: number;
+  workspaceId: string;
+  workspaces: WorkspaceChoice[];
+}) {
+  const [switching, startSwitching] = useTransition();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -194,13 +207,32 @@ function WorkspaceSwitcher({ name, memberCount }: { name: string; memberCount: n
         <DropdownMenuLabel className="fc-caption pt-1.5 pb-1 text-[11px]">
           Workspaces
         </DropdownMenuLabel>
-        <DropdownMenuItem className="bg-accent min-h-[42px]">
-          <span className="border-ink bg-primary font-heading text-primary-foreground grid size-6 place-items-center rounded-[6px] border-[1.5px] text-[11px] font-bold">
-            {(name.trim()[0] ?? "W").toUpperCase()}
-          </span>
-          <span className="flex-1 truncate font-semibold">{name}</span>
-          <Check />
-        </DropdownMenuItem>
+        {workspaces.map((w) => {
+          const current = w.id === workspaceId;
+          return (
+            <DropdownMenuItem
+              key={w.id}
+              disabled={switching}
+              className={cn("min-h-[42px]", current && "bg-accent")}
+              onSelect={() => {
+                if (!current) startSwitching(() => switchWorkspaceAction(w.id));
+              }}
+            >
+              <span className="border-ink bg-primary font-heading text-primary-foreground grid size-6 place-items-center rounded-[6px] border-[1.5px] text-[11px] font-bold">
+                {(w.name.trim()[0] ?? "W").toUpperCase()}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                <span className="truncate font-semibold">{w.name}</span>
+                {w.role !== "owner" && (
+                  <span className="text-muted-foreground text-xs capitalize">
+                    {w.role}
+                  </span>
+                )}
+              </span>
+              {current && <Check />}
+            </DropdownMenuItem>
+          );
+        })}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/settings?tab=workspace">
@@ -289,6 +321,9 @@ function NewFormButton({ className }: { className?: string }) {
 function Sidebar({
   nav,
   workspaceName,
+  workspaceId,
+  workspaces,
+  canEdit,
   memberCount,
   userName,
   userEmail,
@@ -297,6 +332,9 @@ function Sidebar({
 }: {
   nav: NavItem[];
   workspaceName: string;
+  workspaceId: string;
+  workspaces: WorkspaceChoice[];
+  canEdit: boolean;
   memberCount: number;
   userName: string;
   userEmail: string;
@@ -309,8 +347,13 @@ function Sidebar({
       <div className="px-1.5">
         <Brand href="/dashboard" />
       </div>
-      <WorkspaceSwitcher name={workspaceName} memberCount={memberCount} />
-      <NewFormButton />
+      <WorkspaceSwitcher
+        name={workspaceName}
+        memberCount={memberCount}
+        workspaceId={workspaceId}
+        workspaces={workspaces}
+      />
+      {canEdit && <NewFormButton />}
       <nav aria-label="Main" className="flex flex-col gap-1">
         {nav.map((item) => {
           const active = isActive(item.match);
@@ -348,6 +391,9 @@ function Sidebar({
  */
 export function AppShell({
   workspaceName,
+  workspaceId,
+  workspaces,
+  canEdit,
   memberCount,
   formCount,
   steps,
@@ -356,6 +402,10 @@ export function AppShell({
   children,
 }: {
   workspaceName: string;
+  workspaceId: string;
+  workspaces: WorkspaceChoice[];
+  /** Editors and up can create forms; viewers only look. */
+  canEdit: boolean;
   memberCount: number;
   formCount: number;
   steps: OnboardingStep[];
@@ -396,6 +446,9 @@ export function AppShell({
         <Sidebar
           nav={nav}
           workspaceName={workspaceName}
+          workspaceId={workspaceId}
+          workspaces={workspaces}
+          canEdit={canEdit}
           memberCount={memberCount}
           userName={userName}
           userEmail={userEmail}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { EndingV1, FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { DEFAULT_REDIRECT_DELAY } from "@/domains/forms/redirect";
+import { showsMadeWith } from "@/domains/forms/branding";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -49,7 +50,9 @@ export function EndingSettingsPanel({
   onChange,
   meta,
   onMetaChange,
+  brandingRemovable = true,
 }: {
+  brandingRemovable?: boolean;
   ending: EndingV1;
   onChange: (next: EndingV1) => void;
   meta?: FormSchemaV1["meta"];
@@ -102,7 +105,9 @@ export function EndingSettingsPanel({
       </PanelField>
       <SwitchRow
         label="Show “Made with FormCraft”"
-        checked={ending.showMadeWith !== false}
+        hint={brandingRemovable ? undefined : "Removing it is part of paid plans."}
+        checked={showsMadeWith(ending, brandingRemovable)}
+        disabled={!brandingRemovable}
         onCheckedChange={(on) => onChange({ ...ending, showMadeWith: on })}
       />
 

@@ -1,12 +1,24 @@
 import "server-only";
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { canEdit } from "@/domains/workspaces";
 import { getPublishInfo, publishStateFrom } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 
 /** The form a /forms/[id]/* page is about, scoped to the caller's
- * workspace (404 otherwise) — shared by those pages' headers. */
-export const loadFormForPage = cache(async (formId: string) => {
+ * workspace (404 otherwise) — shared by those pages' headers. Pages
+ * that only make sense for people who can edit send viewers to the
+ * form's responses (RLS would refuse their changes anyway). */
+export async function loadFormForPage(
+  formId: string,
+  options: { editorsOnly?: boolean } = {},
+) {
+  const loaded = await loadForm(formId);
+  if (options.editorsOnly && loaded.viewOnly) redirect(`/forms/${formId}/responses`);
+  return loaded;
+}
+
+const loadForm = cache(async (formId: string) => {
   const { supabase, workspace, user } = await getCurrentWorkspace();
   const { data: form } = await supabase
     .from("forms")
@@ -27,6 +39,7 @@ export const loadFormForPage = cache(async (formId: string) => {
     workspace,
     user,
     form,
+    viewOnly: !canEdit(workspace.role),
     isLive: publishInfo?.isPublished ?? false,
     hasUnpublishedChanges: publishInfo?.hasUnpublishedChanges ?? false,
   };

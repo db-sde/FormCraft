@@ -38,7 +38,9 @@ export function PreviewDialog({
   open,
   onOpenChange,
   onShowProblem,
+  brandingRemovable = true,
 }: {
+  brandingRemovable?: boolean;
   schema: FormSchemaV1;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -188,6 +190,7 @@ export function PreviewDialog({
                   compiled={result.compiled}
                   hidden={hidden}
                   seed={seed}
+                  brandingRemovable={brandingRemovable}
                   onAnswerChange={(next) => setAnswers(next)}
                   mode="desktop"
                   className="h-full"
@@ -200,6 +203,7 @@ export function PreviewDialog({
                   compiled={result.compiled}
                   hidden={hidden}
                   seed={seed}
+                  brandingRemovable={brandingRemovable}
                   onAnswerChange={(next) => setAnswers(next)}
                   mode="phone"
                   className="h-full"

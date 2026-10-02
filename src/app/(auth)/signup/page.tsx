@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signUpAction, type ActionResult } from "../actions";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 import {
@@ -13,12 +14,21 @@ import {
 
 const initialState: ActionResult = {};
 
+/** Where to land after confirming the email (e.g. back to an invitation). */
+function NextField() {
+  const next = useSearchParams().get("next");
+  return next ? <input type="hidden" name="next" value={next} /> : null;
+}
+
 export default function SignupPage() {
   const [state, formAction, pending] = useActionState(signUpAction, initialState);
 
   return (
     <AuthCard title="Create your account" subtitle="Start building forms in minutes.">
       <form action={formAction} className="flex flex-1 flex-col gap-[22px] sm:gap-[18px]">
+        <Suspense>
+          <NextField />
+        </Suspense>
         {state.error && (
           <AuthNotice tone={state.errorTone ?? "error"}>{state.error}</AuthNotice>
         )}

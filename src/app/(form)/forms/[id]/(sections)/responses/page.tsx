@@ -155,7 +155,7 @@ export default async function ResponsesPage({
 }) {
   const { id: formId } = await params;
   const sp = await searchParams;
-  const { supabase, form, isLive, publishState, hasUnpublishedChanges } =
+  const { supabase, form, isLive, publishState, hasUnpublishedChanges, viewOnly } =
     await loadFormForPage(formId);
 
   const view: ResponseView = sp.view === "incomplete" ? "incomplete" : "completed";
@@ -629,10 +629,12 @@ export default async function ResponsesPage({
                           )}
                           <td className="relative z-10 px-2 text-right">
                             <span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                              <DeleteResponseButton
-                                formId={formId}
-                                responseId={item.id}
-                              />
+                              {!viewOnly && (
+                                <DeleteResponseButton
+                                  formId={formId}
+                                  responseId={item.id}
+                                />
+                              )}
                             </span>
                           </td>
                         </tr>

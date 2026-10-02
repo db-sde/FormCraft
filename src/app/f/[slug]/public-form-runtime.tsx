@@ -154,7 +154,10 @@ export function PublicFormRuntime({
   embedded = false,
   resumeLinks = false,
   resume = null,
+  brandingRemovable = true,
 }: {
+  /** From the workspace's plan, decided on the server (P2.1). */
+  brandingRemovable?: boolean;
   /** Creator setting: respondents can get a link to finish later (P2.8). */
   resumeLinks?: boolean;
   /** A resume link this page was opened with, already checked on the server. */
@@ -536,6 +539,7 @@ export function PublicFormRuntime({
       welcomeBack={!!resumed && !!resumed.lastQuestionId}
       hidden={resumed?.hidden ?? urlHidden}
       seed={resumed?.seed ?? freshSeed}
+      brandingRemovable={brandingRemovable}
       redirectOnEnding
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}

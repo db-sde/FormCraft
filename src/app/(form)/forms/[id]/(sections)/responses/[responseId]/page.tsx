@@ -82,7 +82,7 @@ export default async function ResponseDetailPage({
   params: Promise<{ id: string; responseId: string }>;
 }) {
   const { id: formId, responseId } = await params;
-  const { supabase, form } = await loadFormForPage(formId);
+  const { supabase, form, viewOnly } = await loadFormForPage(formId);
 
   const detail = await getResponseDetail(supabase, responseId);
   if (!detail || detail.formId !== formId) notFound();
@@ -166,13 +166,15 @@ export default async function ResponseDetailPage({
         >
           Older
         </NavLink>
-        <DeleteResponseButton
-          formId={formId}
-          responseId={responseId}
-          redirectTo={listHref}
-          who={who}
-          variant="outline"
-        />
+        {!viewOnly && (
+          <DeleteResponseButton
+            formId={formId}
+            responseId={responseId}
+            redirectTo={listHref}
+            who={who}
+            variant="outline"
+          />
+        )}
       </div>
 
       <div className="border-ink flex flex-col gap-2.5 border-b-[1.5px] pb-[18px]">
