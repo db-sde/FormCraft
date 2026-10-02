@@ -22,7 +22,6 @@ import type {
   QuestionV1,
   EndingV1,
   ThemeV1,
-  LogicRuleV1,
 } from "@/domains/forms/schema/v1";
 import type { QuestionType } from "@/domains/forms/schema/question-types";
 import {
@@ -36,14 +35,10 @@ import {
   createEnding,
   canDeleteEnding,
   removeEnding,
-  rulesReferencingQuestion,
-  rulesReferencingEnding,
   hasLeadCapture,
   insertLeadCapture,
   convertQuestion,
   rulesBrokenByTypeChange,
-  rulesBrokenByOptionRemoval,
-  rulesBrokenByReorder,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
@@ -61,7 +56,20 @@ import { AddQuestionMenu } from "./add-question-menu";
 import { SettingsPanel } from "./settings-panel";
 import { EndingSettingsPanel } from "./ending-editor";
 import { ThemeSettingsPanel } from "./theme-settings-panel";
-import { LogicEditor, describeRule } from "./logic-editor";
+import { LogicEditor } from "./logic-editor";
+import { QuestionLogicPanel } from "./logic/question-logic-panel";
+import { describeRule, questionKind, questionName } from "./logic/logic-ui";
+import {
+  allRules,
+  conditionUsesQuestion,
+  endingReferences,
+  jumpsBrokenByReorder,
+  questionReferences,
+  removeEndingReferences,
+  removeQuestionReferences,
+  removeRules,
+  rulesBrokenByOptionChange,
+} from "@/domains/forms/references";
 import { PreviewDialog } from "./preview-dialog";
 import { SaveStatus, type SaveState } from "./save-status";
 import { FormTitleInput } from "./form-title-input";
@@ -107,6 +115,25 @@ export type PublishInfo = {
   publishedVersionNumber: number | null;
   hasUnpublishedChanges: boolean;
 };
+
+function deleteSummary(pending: {
+  kind: "question" | "ending";
+  ruleIds: string[];
+  questionIds: string[];
+}): string {
+  const rules = pending.ruleIds.length;
+  const ruleText = `${rules} logic rule${rules === 1 ? "" : "s"}`;
+  if (pending.kind === "ending") {
+    return `${ruleText} ${rules === 1 ? "goes" : "go"} to this ending. Deleting it also removes ${rules === 1 ? "that rule" : "those rules"}.`;
+  }
+  const parts = [
+    rules > 0 ? ruleText : null,
+    pending.questionIds.length > 0
+      ? `${pending.questionIds.length} other question${pending.questionIds.length === 1 ? "" : "s"}`
+      : null,
+  ].filter(Boolean);
+  return `It's used by ${parts.join(" and ")}. Deleting the question also removes what depends on it.`;
+}
 
 export function FormBuilder({
   formTitle,
@@ -170,7 +197,7 @@ export function FormBuilder({
     question: QuestionV1;
     to: QuestionType;
     lossy: boolean;
-    brokenRules: LogicRuleV1[];
+    brokenRuleIds: string[];
   } | null>(null);
   const [selection, setSelection] = useState<Selection>({
     kind: "question",
@@ -189,8 +216,20 @@ export function FormBuilder({
   }, [opening.added, router, formId]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [pendingDelete, setPendingDelete] = useState<
-    | { kind: "question"; id: string; label: string; affectedRules: LogicRuleV1[] }
-    | { kind: "ending"; id: string; label: string; affectedRules: LogicRuleV1[] }
+    | {
+        kind: "question";
+        id: string;
+        label: string;
+        ruleIds: string[];
+        questionIds: string[];
+      }
+    | {
+        kind: "ending";
+        id: string;
+        label: string;
+        ruleIds: string[];
+        questionIds: string[];
+      }
     | null
   >(null);
 
@@ -305,25 +344,21 @@ export function FormBuilder({
     // pointing at nothing, so those rules go with it (and we say so).
     const remaining = (next.settings as { options?: { id: string }[] }).options;
     const removed = remaining
-      ? rulesBrokenByOptionRemoval(
-          schema.logic,
-          next.id,
-          new Set(remaining.map((o) => o.id)),
-        )
+      ? rulesBrokenByOptionChange(schema, next.id, new Set(remaining.map((o) => o.id)))
       : [];
     if (removed.length > 0) {
-      const gone = new Set(removed.map((r) => r.id));
       toast(
         removed.length === 1
           ? "1 logic rule removed"
           : `${removed.length} logic rules removed`,
         { description: "They checked an option you just deleted." },
       );
-      setSchema((s) => ({
-        ...s,
-        questions: s.questions.map((q) => (q.id === next.id ? next : q)),
-        logic: s.logic.filter((r) => !gone.has(r.id)),
-      }));
+      setSchema((s) =>
+        removeRules(
+          { ...s, questions: s.questions.map((q) => (q.id === next.id ? next : q)) },
+          removed,
+        ),
+      );
       return;
     }
     setSchema((s) => ({
@@ -343,8 +378,27 @@ export function FormBuilder({
     setSchema((s) => ({ ...s, theme: next }));
   }
 
-  function updateLogic(next: LogicRuleV1[]) {
-    setSchema((s) => ({ ...s, logic: next }));
+  function updateLogic(patch: Partial<FormSchemaV1>) {
+    setSchema((s) => ({ ...s, ...patch }));
+  }
+
+  /** Rules a type change would break: legacy ones the old rules decided,
+   * plus any rule comparing this question's answer as a different kind. */
+  function rulesBrokenByTypeChangeAll(question: QuestionV1, to: QuestionType): string[] {
+    const legacy = rulesBrokenByTypeChange(
+      schema.logic,
+      question.id,
+      question.type,
+      to,
+    ).map((r) => r.id);
+    const converted = convertQuestion(question, to).question;
+    const kindChanges = questionKind(question) !== questionKind(converted);
+    const modern = kindChanges
+      ? (schema.rules ?? [])
+          .filter((r) => r.when && conditionUsesQuestion(r.when, question.id))
+          .map((r) => r.id)
+      : [];
+    return [...new Set([...legacy, ...modern])];
   }
 
   function track(eventType: "question_added" | "form_previewed", questionType?: string) {
@@ -369,29 +423,24 @@ export function FormBuilder({
 
   function applyTypeChange(question: QuestionV1, to: QuestionType) {
     const converted = convertQuestion(question, to).question;
-    const broken = new Set(
-      rulesBrokenByTypeChange(schema.logic, question.id, question.type, to).map(
-        (r) => r.id,
+    const broken = rulesBrokenByTypeChangeAll(question, to);
+    setSchema((s) =>
+      removeRules(
+        {
+          ...s,
+          questions: s.questions.map((q) => (q.id === question.id ? converted : q)),
+        },
+        broken,
       ),
     );
-    setSchema((s) => ({
-      ...s,
-      questions: s.questions.map((q) => (q.id === question.id ? converted : q)),
-      logic: s.logic.filter((r) => !broken.has(r.id)),
-    }));
   }
 
   function requestTypeChange(question: QuestionV1, to: QuestionType) {
     if (question.type === to) return;
     const { lossy } = convertQuestion(question, to);
-    const brokenRules = rulesBrokenByTypeChange(
-      schema.logic,
-      question.id,
-      question.type,
-      to,
-    );
-    if (lossy || brokenRules.length > 0) {
-      setPendingTypeChange({ question, to, lossy, brokenRules });
+    const brokenRuleIds = rulesBrokenByTypeChangeAll(question, to);
+    if (lossy || brokenRuleIds.length > 0) {
+      setPendingTypeChange({ question, to, lossy, brokenRuleIds });
     } else {
       applyTypeChange(question, to);
     }
@@ -407,20 +456,18 @@ export function FormBuilder({
   function requestDeleteQuestion(id: string) {
     const question = schema.questions.find((q) => q.id === id);
     if (!question || !canDeleteQuestion(schema.questions, id)) return;
-    const affectedRules = rulesReferencingQuestion(schema.logic, id);
-    if (affectedRules.length > 0) {
-      setPendingDelete({ kind: "question", id, label: question.label, affectedRules });
+    const refs = questionReferences(schema, id);
+    if (refs.ruleIds.length > 0 || refs.questionIds.length > 0) {
+      setPendingDelete({ kind: "question", id, label: question.label, ...refs });
       return;
     }
     commitDeleteQuestion(id);
   }
 
   function commitDeleteQuestion(id: string) {
-    setSchema((s) => ({
-      ...s,
-      questions: removeQuestion(s.questions, id),
-      logic: s.logic.filter((r) => rulesReferencingQuestion([r], id).length === 0),
-    }));
+    setSchema((s) =>
+      removeQuestionReferences({ ...s, questions: removeQuestion(s.questions, id) }, id),
+    );
     if (selection.kind === "question" && selection.id === id) {
       const remaining = removeQuestion(schema.questions, id);
       setSelection(
@@ -435,20 +482,24 @@ export function FormBuilder({
     if (!canDeleteEnding(schema.endings, id)) return;
     const ending = schema.endings.find((e) => e.id === id);
     if (!ending) return;
-    const affectedRules = rulesReferencingEnding(schema.logic, id);
-    if (affectedRules.length > 0) {
-      setPendingDelete({ kind: "ending", id, label: ending.title, affectedRules });
+    const ruleIds = endingReferences(schema, id);
+    if (ruleIds.length > 0) {
+      setPendingDelete({
+        kind: "ending",
+        id,
+        label: ending.title,
+        ruleIds,
+        questionIds: [],
+      });
       return;
     }
     commitDeleteEnding(id);
   }
 
   function commitDeleteEnding(id: string) {
-    setSchema((s) => ({
-      ...s,
-      endings: removeEnding(s.endings, id),
-      logic: s.logic.filter((r) => rulesReferencingEnding([r], id).length === 0),
-    }));
+    setSchema((s) =>
+      removeEndingReferences({ ...s, endings: removeEnding(s.endings, id) }, id),
+    );
     if (selection.kind === "ending" && selection.id === id) {
       const remaining =
         schema.endings.find((e) => e.isDefault && e.id !== id) ?? schema.endings[0];
@@ -484,7 +535,7 @@ export function FormBuilder({
     const moved = moveQuestionAt(schema.questions, id, direction);
     // A rule may only jump forward. If this move would turn one into a
     // jump back, refuse rather than quietly rewriting the creator's logic.
-    const broken = rulesBrokenByReorder(schema.logic, schema.questions, moved);
+    const broken = jumpsBrokenByReorder(schema, moved);
     if (broken.length > 0) {
       toast.error("Can't move it there", {
         description:
@@ -498,7 +549,7 @@ export function FormBuilder({
   function handleReorder(fromIndex: number, toIndex: number) {
     const moved = reorderQuestions(schema.questions, fromIndex, toIndex);
     if (moved === schema.questions) return;
-    const broken = rulesBrokenByReorder(schema.logic, schema.questions, moved);
+    const broken = jumpsBrokenByReorder(schema, moved);
     if (broken.length > 0) {
       toast.error("Can't move it there", {
         description:
@@ -617,6 +668,7 @@ export function FormBuilder({
     if (q.type !== "welcome_screen") numbers.set(q.id, numbers.size + 1);
   }
   const stepCount = numbers.size;
+  const ruleCount = schema.logic.length + (schema.rules?.length ?? 0);
   const currentTitle = schema.meta.title || formTitle;
 
   // Tab title: "• " while edits haven't reached the server (Part 8).
@@ -934,8 +986,8 @@ export function FormBuilder({
                   icon: <Split className="size-[13px]" />,
                   tint: "other",
                   meta:
-                    schema.logic.length > 0
-                      ? `${schema.logic.length} rule${schema.logic.length === 1 ? "" : "s"}`
+                    ruleCount > 0
+                      ? `${ruleCount} rule${ruleCount === 1 ? "" : "s"}`
                       : null,
                 },
               ].map((row) => {
@@ -978,10 +1030,9 @@ export function FormBuilder({
         <main className="bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px]">
           {selection.kind === "logic" ? (
             <LogicEditor
-              questions={schema.questions}
-              endings={schema.endings}
-              logic={schema.logic}
+              schema={schema}
               onChange={updateLogic}
+              onSelectQuestion={(id) => setSelection({ kind: "question", id })}
             />
           ) : (
             <BuilderCanvas
@@ -1046,6 +1097,14 @@ export function FormBuilder({
                   invalid={!!selectedProblem}
                   onChange={updateQuestion}
                   onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
+                />
+              )}
+              {selectedQuestion && (
+                <QuestionLogicPanel
+                  schema={schema}
+                  question={selectedQuestion}
+                  onChange={updateQuestion}
+                  onSchemaChange={updateLogic}
                 />
               )}
               {selectedEnding && (
@@ -1139,8 +1198,8 @@ export function FormBuilder({
               {pendingTypeChange?.lossy &&
                 "This question's settings (options, limits, validation) will reset. "}
               {pendingTypeChange &&
-                pendingTypeChange.brokenRules.length > 0 &&
-                `${pendingTypeChange.brokenRules.length} logic rule${pendingTypeChange.brokenRules.length === 1 ? "" : "s"} based on its answer will be removed. `}
+                pendingTypeChange.brokenRuleIds.length > 0 &&
+                `${pendingTypeChange.brokenRuleIds.length} logic rule${pendingTypeChange.brokenRuleIds.length === 1 ? "" : "s"} based on its answer will be removed. `}
               Responses you&apos;ve already collected keep their answers.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1175,34 +1234,36 @@ export function FormBuilder({
                 : `Delete “${pendingDelete?.label || "Untitled question"}”?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingDelete &&
-                (pendingDelete.kind === "ending"
-                  ? `${pendingDelete.affectedRules.length} logic rule${pendingDelete.affectedRules.length === 1 ? " jumps" : "s jump"} to this ending. Deleting it also removes ${pendingDelete.affectedRules.length === 1 ? "that rule" : "those rules"}.`
-                  : `It's used by ${pendingDelete.affectedRules.length} logic rule${pendingDelete.affectedRules.length === 1 ? "" : "s"}. Deleting the question also removes ${pendingDelete.affectedRules.length === 1 ? "that rule" : "those rules"}.`)}
+              {pendingDelete && deleteSummary(pendingDelete)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {pendingDelete && (
-            <ul className="flex flex-col gap-1.5">
-              {pendingDelete.affectedRules.map((rule) => {
-                const { question, test, target } = describeRule(
-                  rule,
-                  schema.questions,
-                  schema.endings,
-                );
-                return (
+            <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+              {allRules(schema)
+                .map((rule, i) => ({ rule, n: i + 1 }))
+                .filter(({ rule }) => pendingDelete.ruleIds.includes(rule.id))
+                .map(({ rule, n }) => (
                   <li
                     key={rule.id}
                     className="bg-background flex items-center gap-2 rounded-sm px-2.5 py-[7px] text-[13px]"
                   >
                     <b className="bg-secondary text-primary grid size-5 shrink-0 place-items-center rounded-full text-[11px]">
-                      {schema.logic.findIndex((r) => r.id === rule.id) + 1}
+                      {n}
                     </b>
-                    <span className="min-w-0">
-                      If {question} {test} → {target}
-                    </span>
+                    <span className="min-w-0">{describeRule(rule, schema)}</span>
                   </li>
-                );
-              })}
+                ))}
+              {pendingDelete.questionIds.map((qid) => (
+                <li
+                  key={qid}
+                  className="bg-background flex items-center gap-2 rounded-sm px-2.5 py-[7px] text-[13px]"
+                >
+                  <span className="min-w-0">
+                    {questionName(schema, qid)}: its show condition or check uses this, so
+                    that part goes too.
+                  </span>
+                </li>
+              ))}
             </ul>
           )}
           <AlertDialogFooter>

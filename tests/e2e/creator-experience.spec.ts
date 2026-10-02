@@ -176,14 +176,14 @@ test.describe("logic editor only lets rules jump forward", () => {
 
       await page.getByRole("button", { name: /^Logic/ }).click();
       await page.getByRole("button", { name: "Add rule" }).click();
-      // New rules start on the first question; make this one jump to a question.
-      await page.getByRole("combobox").nth(2).click();
-      await page.getByRole("option", { name: "Jump to question" }).click();
-      await page.getByRole("combobox").nth(3).click();
+      // New rules run after the first question; make this one jump to a question.
+      await page.getByRole("combobox", { name: "Action 1", exact: true }).click();
+      await page.getByRole("option", { name: "Go to question" }).click();
+      await page.getByRole("combobox", { name: "Action 1: question" }).click();
 
-      await expect(page.getByRole("option", { name: "Second" })).toBeVisible();
-      await expect(page.getByRole("option", { name: "Third" })).toBeVisible();
-      await expect(page.getByRole("option", { name: "First" })).toHaveCount(0);
+      await expect(page.getByRole("option", { name: /Second/ })).toBeVisible();
+      await expect(page.getByRole("option", { name: /Third/ })).toBeVisible();
+      await expect(page.getByRole("option", { name: /First/ })).toHaveCount(0);
     } finally {
       await deleteUser(user.userId);
     }
@@ -218,7 +218,7 @@ test.describe("logic editor only lets rules jump forward", () => {
       // Touch the form so autosave runs its check.
       await page.getByRole("button", { name: "Add rule" }).click();
       await expect(
-        page.getByText(/Logic rule 1: jumps back to an earlier question/),
+        page.getByText(/Rule 1: it jumps back to an earlier question/).first(),
       ).toBeVisible({
         timeout: 15000,
       });

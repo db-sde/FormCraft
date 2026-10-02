@@ -61,7 +61,7 @@ export type EngineState = {
 const MAX_TRACE = 2000;
 
 /** Engine rules = legacy `logic` (translated) then `rules`, in order. */
-type NormalizedRule = RuleV1 & { legacy?: boolean };
+type NormalizedRule = RuleV1;
 
 type Run = {
   compiled: CompiledFormV1;
@@ -92,7 +92,6 @@ export function legacyToRule(rule: LogicRuleV1): NormalizedRule {
     rule.operator !== "is_answered" && rule.operator !== "is_not_answered";
   return {
     id: rule.id,
-    legacy: true,
     on: { event: "question_answered", questionId: rule.questionId },
     when: {
       type: "compare",

@@ -16,3 +16,4 @@ export {
 export { evaluateExpr, todayIn, type ExprContext } from "./expressions";
 export { evaluateCondition, isEmptyValue, valuesEqual } from "./conditions";
 export * from "./recall";
+export * from "./formula";

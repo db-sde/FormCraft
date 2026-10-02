@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EyeOff, FlaskConical, Monitor, Smartphone, X } from "lucide-react";
+import { EyeOff, FlaskConical, Monitor, Smartphone, Workflow, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { LogicTrace } from "./logic/logic-trace";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
   parseFormSchema,
@@ -44,6 +46,14 @@ export function PreviewDialog({
 }) {
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const [run, setRun] = useState(0);
+  const [showLogic, setShowLogic] = useState(false);
+  // What the respondent has answered so far, for the logic read-out.
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [hidden, setHidden] = useState<Record<string, string>>({});
+  const restart = () => {
+    setRun((n) => n + 1);
+    setAnswers({});
+  };
 
   const result = useMemo(() => {
     try {
@@ -118,10 +128,20 @@ export function PreviewDialog({
             variant="outline"
             size="sm"
             className="border-border h-[34px]"
-            onClick={() => setRun((n) => n + 1)}
+            onClick={restart}
             disabled={!result.ok}
           >
             Restart
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={showLogic}
+            className={cn("border-border h-[34px]", showLogic && "bg-accent")}
+            onClick={() => setShowLogic((v) => !v)}
+            disabled={!result.ok}
+          >
+            <Workflow /> Logic
           </Button>
           <Button
             variant="outline"
@@ -134,46 +154,84 @@ export function PreviewDialog({
           </Button>
         </div>
 
-        <div className="bg-board grid min-h-0 flex-1 place-items-center p-5">
-          {!result.ok ? (
-            <div className="flex max-w-[420px] flex-col items-center gap-2.5 text-center">
-              <span className="border-ink shadow-card grid size-[52px] -rotate-6 place-items-center rounded-[12px] border-[1.5px] bg-[var(--alert-error-bg)]">
-                <EyeOff className="text-destructive size-6" />
-              </span>
-              <b className="font-heading text-[22px]">Unable to preview this form.</b>
-              <span className="text-muted-foreground text-[14.5px] leading-normal">
-                {result.message}
-              </span>
-              {canJump && (
-                <Button
-                  className="mt-1.5"
-                  onClick={() => {
-                    onShowProblem?.(result.target ?? {});
-                    onOpenChange(false);
-                  }}
-                >
-                  Take me to it
-                </Button>
+        <div className="flex min-h-0 flex-1">
+          <div className="bg-board grid min-h-0 flex-1 place-items-center p-5">
+            {!result.ok ? (
+              <div className="flex max-w-[420px] flex-col items-center gap-2.5 text-center">
+                <span className="border-ink shadow-card grid size-[52px] -rotate-6 place-items-center rounded-[12px] border-[1.5px] bg-[var(--alert-error-bg)]">
+                  <EyeOff className="text-destructive size-6" />
+                </span>
+                <b className="font-heading text-[22px]">Unable to preview this form.</b>
+                <span className="text-muted-foreground text-[14.5px] leading-normal">
+                  {result.message}
+                </span>
+                {canJump && (
+                  <Button
+                    className="mt-1.5"
+                    onClick={() => {
+                      onShowProblem?.(result.target ?? {});
+                      onOpenChange(false);
+                    }}
+                  >
+                    Take me to it
+                  </Button>
+                )}
+              </div>
+            ) : device === "desktop" ? (
+              <div className="border-ink size-full max-w-[1100px] overflow-hidden rounded-lg border-[1.5px] bg-white">
+                <FormRuntime
+                  key={`d-${run}-${JSON.stringify(hidden)}`}
+                  compiled={result.compiled}
+                  hidden={hidden}
+                  onAnswerChange={(next) => setAnswers(next)}
+                  mode="desktop"
+                  className="h-full"
+                />
+              </div>
+            ) : (
+              <div className="border-ink shadow-lift h-full max-h-[700px] w-[375px] max-w-full overflow-hidden rounded-[32px] border-[1.5px] bg-white">
+                <FormRuntime
+                  key={`p-${run}-${JSON.stringify(hidden)}`}
+                  compiled={result.compiled}
+                  hidden={hidden}
+                  onAnswerChange={(next) => setAnswers(next)}
+                  mode="phone"
+                  className="h-full"
+                />
+              </div>
+            )}
+          </div>
+          {showLogic && result.ok && (
+            <aside className="border-ink bg-card w-[340px] shrink-0 overflow-y-auto border-l-[1.5px] p-4">
+              {(result.compiled.schema.hiddenFields ?? []).length > 0 && (
+                <div className="mb-4 flex flex-col gap-1.5">
+                  <span className="text-muted-foreground text-[11px] font-bold tracking-[0.1em] uppercase">
+                    Test URL fields
+                  </span>
+                  {(result.compiled.schema.hiddenFields ?? []).map((field) => (
+                    <label
+                      key={field.name}
+                      className="flex items-center gap-2 text-[13px]"
+                    >
+                      <span className="w-24 truncate font-mono">{field.name}</span>
+                      <Input
+                        value={hidden[field.name] ?? ""}
+                        placeholder={field.default ?? "empty"}
+                        onChange={(e) => {
+                          setHidden((h) => ({ ...h, [field.name]: e.target.value }));
+                          setAnswers({});
+                        }}
+                        className="h-8 px-2 text-[13px]"
+                      />
+                    </label>
+                  ))}
+                  <span className="text-muted-foreground text-xs">
+                    Changing one restarts the preview.
+                  </span>
+                </div>
               )}
-            </div>
-          ) : device === "desktop" ? (
-            <div className="border-ink size-full max-w-[1100px] overflow-hidden rounded-lg border-[1.5px] bg-white">
-              <FormRuntime
-                key={`d-${run}`}
-                compiled={result.compiled}
-                mode="desktop"
-                className="h-full"
-              />
-            </div>
-          ) : (
-            <div className="border-ink shadow-lift h-full max-h-[700px] w-[375px] max-w-full overflow-hidden rounded-[32px] border-[1.5px] bg-white">
-              <FormRuntime
-                key={`p-${run}`}
-                compiled={result.compiled}
-                mode="phone"
-                className="h-full"
-              />
-            </div>
+              <LogicTrace compiled={result.compiled} answers={answers} hidden={hidden} />
+            </aside>
           )}
         </div>
       </DialogContent>
