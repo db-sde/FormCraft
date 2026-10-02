@@ -283,6 +283,7 @@ export type Database = {
           ending_id: string | null;
           form_id: string;
           form_version_id: string;
+          hidden_fields: Json;
           id: string;
           idempotency_key: string | null;
           is_preview: boolean;
@@ -306,6 +307,7 @@ export type Database = {
           ending_id?: string | null;
           form_id: string;
           form_version_id: string;
+          hidden_fields?: Json;
           id?: string;
           idempotency_key?: string | null;
           is_preview?: boolean;
@@ -329,6 +331,7 @@ export type Database = {
           ending_id?: string | null;
           form_id?: string;
           form_version_id?: string;
+          hidden_fields?: Json;
           id?: string;
           idempotency_key?: string | null;
           is_preview?: boolean;

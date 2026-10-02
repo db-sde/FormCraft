@@ -19,6 +19,8 @@ type StoredResponse = {
   answers: AnswerMap;
   lastQuestionId: string;
   history: string[];
+  /** The hidden-field values this session started with. */
+  hidden?: Record<string, string>;
 };
 
 /** What the respondent has done so far, before or after a response
@@ -73,14 +75,30 @@ function attribution() {
   };
 }
 
-async function startSession(formId: string): Promise<{
+/** Values for the form's declared hidden fields from the page URL
+ * (`?source=linkedin`). Respondent-controlled: for routing and
+ * personalisation only; the server keeps declared names only. */
+function hiddenFromUrl(compiled: CompiledFormV1): Record<string, string> {
+  const params = new URLSearchParams(window.location.search);
+  const out: Record<string, string> = {};
+  for (const field of compiled.schema.hiddenFields ?? []) {
+    const value = params.get(field.name);
+    if (value) out[field.name] = value.slice(0, 500);
+  }
+  return out;
+}
+
+async function startSession(
+  formId: string,
+  hidden: Record<string, string>,
+): Promise<{
   responseId: string;
   formVersionId: string;
 }> {
   const res = await fetch("/api/responses/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ formId, ...attribution() }),
+    body: JSON.stringify({ formId, ...attribution(), hidden }),
   });
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
   return (await res.json()) as { responseId: string; formVersionId: string };
@@ -148,6 +166,10 @@ export function PublicFormRuntime({
   const resumeCheckRef = useRef<Promise<StoredResponse | null> | null>(null);
   const startPromiseRef = useRef<Promise<StoredResponse> | null>(null);
   const startFailedAtRef = useRef(0);
+  // Read once: a resumed session keeps the values it started with.
+  const [urlHidden] = useState<Record<string, string>>(() =>
+    typeof window === "undefined" ? {} : hiddenFromUrl(compiled),
+  );
 
   const theme = compiled.schema.theme;
 
@@ -222,13 +244,14 @@ export function PublicFormRuntime({
       return Promise.reject(new Error("start recently failed"));
     }
     if (!startPromiseRef.current) {
-      startPromiseRef.current = startSession(formId).then(
+      startPromiseRef.current = startSession(formId, urlHidden).then(
         (data) => {
           const fresh: StoredResponse = {
             responseId: data.responseId,
             formVersionId: data.formVersionId,
             idempotencyKey: crypto.randomUUID(),
             revision: 0,
+            hidden: urlHidden,
             ...progressRef.current,
           };
           sessionRef.current = fresh;
@@ -439,6 +462,7 @@ export function PublicFormRuntime({
       initialQuestionId={resumed?.lastQuestionId}
       initialHistory={resumed?.history}
       welcomeBack={!!resumed && !!resumed.lastQuestionId}
+      hidden={resumed?.hidden ?? urlHidden}
       redirectOnEnding
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}

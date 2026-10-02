@@ -14,6 +14,7 @@ import {
   CONTACT_FIELDS,
 } from "@/domains/forms/schema/question-types";
 import { getUploadSignedUrl } from "@/domains/uploads";
+import { formatValue } from "@/domains/logic/recall";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { LocalTime } from "@/components/local-time";
@@ -207,6 +208,31 @@ export default async function ResponseDetailPage({
           <span>Source: {source}</span>
         </div>
       </div>
+
+      {(Object.keys(detail.results.variables).length > 0 ||
+        Object.keys(detail.results.hidden).length > 0) && (
+        <section className="border-ink bg-card rounded-lg border-[1.5px] px-[18px] py-4">
+          <h2 className="text-muted-foreground mb-2.5 text-[11.5px] font-bold tracking-[0.1em] uppercase">
+            Results
+          </h2>
+          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3">
+            {Object.entries(detail.results.variables).map(([name, value]) => (
+              <div key={name} className="flex min-w-0 flex-col">
+                <dt className="text-muted-foreground font-mono text-xs">{name}</dt>
+                <dd className="font-heading truncate text-xl font-bold">
+                  {formatValue(value) || "—"}
+                </dd>
+              </div>
+            ))}
+            {Object.entries(detail.results.hidden).map(([name, value]) => (
+              <div key={`h-${name}`} className="flex min-w-0 flex-col">
+                <dt className="text-muted-foreground font-mono text-xs">{name} (URL)</dt>
+                <dd className="truncate text-[15px] font-semibold">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       <div className="grid gap-3.5 md:grid-cols-2">
         {detail.answers.map((answer, index) => {

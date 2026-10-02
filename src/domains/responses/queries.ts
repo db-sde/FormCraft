@@ -47,7 +47,33 @@ export type StartAttribution = {
   utmContent?: string;
   /** Came through an embed on another site. */
   embedded?: boolean;
+  /** Values for the form's declared hidden fields, from its URL. */
+  hidden?: Record<string, string>;
 };
+
+/** Only the hidden fields the published form declares, as short strings —
+ * anything else the client sends is dropped. */
+export function pickHiddenFields(
+  schema: FormSchemaV1,
+  provided: Record<string, unknown> | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!provided) return out;
+  for (const field of schema.hiddenFields ?? []) {
+    const value = provided[field.name];
+    if (typeof value === "string" && value !== "") out[field.name] = value.slice(0, 500);
+  }
+  return out;
+}
+
+function storedHidden(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      (e): e is [string, string] => typeof e[1] === "string",
+    ),
+  );
+}
 
 /**
  * Creates the IN_PROGRESS response row for a fresh respondent session.
@@ -74,12 +100,15 @@ export async function startResponse(
 
   const { data: version, error: versionError } = await admin
     .from("form_versions")
-    .select("id")
+    .select("id, schema")
     .eq("form_id", formId)
     .eq("status", "published")
     .maybeSingle();
   if (versionError) throw versionError;
   if (!version) throw new FormNotAvailableError();
+  const hidden = attribution.hidden
+    ? pickHiddenFields(parseFormSchema(version.schema), attribution.hidden)
+    : {};
 
   const { data: response, error } = await admin
     .from("responses")
@@ -93,6 +122,7 @@ export async function startResponse(
       utm_term: attribution.utmTerm,
       utm_content: attribution.utmContent,
       embedded: attribution.embedded ?? false,
+      hidden_fields: hidden,
     })
     .select("id, form_version_id")
     .single();
@@ -258,7 +288,7 @@ export async function completeResponse(
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
-    .select("status, form_id, form_version_id, ending_id")
+    .select("status, form_id, form_version_id, ending_id, hidden_fields")
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
@@ -282,7 +312,10 @@ export async function completeResponse(
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
   const knownAnswers = filterAnswersToKnownQuestions(compiled.schema, answers);
 
-  const walk = walkForm(compiled, knownAnswers);
+  const walk = walkForm(compiled, knownAnswers, {
+    hidden: storedHidden(response.hidden_fields),
+    now: new Date(),
+  });
   const reached = new Set(walk.visitedQuestionIds);
   // Only questions on the path actually taken are validated: an answer
   // left behind on a branch the respondent later logic-jumped away
@@ -292,6 +325,10 @@ export async function completeResponse(
     const result = validateAnswer(q, knownAnswers[q.id]);
     return result.ok ? [] : [{ questionId: q.id, message: result.message }];
   });
+  // The form's own conditional / cross-field checks, on the path taken.
+  for (const failure of walk.validationErrors) {
+    if (!errors.some((e) => e.questionId === failure.questionId)) errors.push(failure);
+  }
 
   // A file answer is an upload id; it must be a real upload of *this*
   // response for *this* question, not any string the client sent.

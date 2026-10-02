@@ -17,6 +17,11 @@ const StartBody = z.object({
   utmTerm: z.string().max(200).optional(),
   utmContent: z.string().max(200).optional(),
   embedded: z.boolean().optional(),
+  /** The form's hidden fields from its URL; undeclared names are dropped. */
+  hidden: z
+    .record(z.string().max(40), z.string().max(500))
+    .refine((v) => Object.keys(v).length <= 20, "too many hidden fields")
+    .optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -50,6 +55,7 @@ export async function POST(request: NextRequest) {
       utmTerm: parsed.data.utmTerm,
       utmContent: parsed.data.utmContent,
       embedded: parsed.data.embedded,
+      hidden: parsed.data.hidden,
     });
 
     // A response row only gets created here — never on a resumed

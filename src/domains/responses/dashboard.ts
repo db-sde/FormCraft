@@ -10,6 +10,7 @@ import {
 } from "./format";
 import { hasAnswer } from "@/domains/logic/validate-answer";
 import { ABANDONED_AFTER_MINUTES, describeSource } from "./activity";
+import { computeResponseResults, type ResponseResults } from "./results";
 import {
   toCsv,
   ExportTooLargeError,
@@ -396,6 +397,9 @@ export type ResponseDetail = {
     value: unknown;
     question: QuestionV1;
   }[];
+  /** Computed variables (by name) and URL values; empty when the form
+   * has none. Re-derived for completed responses only. */
+  results: ResponseResults;
 };
 
 export async function getResponseDetail(
@@ -405,7 +409,7 @@ export async function getResponseDetail(
   const { data: response, error } = await supabase
     .from("responses")
     .select(
-      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content",
+      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content, hidden_fields",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -459,6 +463,15 @@ export async function getResponseDetail(
     utmTerm: response.utm_term,
     utmContent: response.utm_content,
     answers,
+    results:
+      response.status === "completed"
+        ? computeResponseResults({
+            schema: versionRow.schema,
+            answers: Object.fromEntries(answersByQuestion),
+            hidden: response.hidden_fields,
+            completedAt: response.completed_at,
+          })
+        : { variables: {}, hidden: {} },
   };
 }
 

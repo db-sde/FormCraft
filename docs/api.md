@@ -97,9 +97,17 @@ Delivery payload:
   "responseId": "...",
   "submittedAt": "ISO-8601",
   "endingId": "...",
-  "answers": { "questionId": "value" }
+  "answers": { "questionId": "value" },
+  "variables": { "score": 72, "segment": "enterprise" },
+  "hidden": { "source": "linkedin" }
 }
 ```
+
+`variables` are the form's computed results (scores, totals, segments)
+by variable name, recomputed by the logic engine from the response's own
+form version with the clock pinned to `submittedAt`. `hidden` holds the
+values of the form's declared hidden fields from the respondent's link —
+respondent-controlled, so don't trust them for anything sensitive.
 
 Signed via `X-FormCraft-Signature: sha256=<hmac>` using the endpoint's
 `signing_secret`. Retries with bounded exponential backoff; duplicate

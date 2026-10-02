@@ -8,6 +8,10 @@ export type WebhookPayload = {
   submittedAt: string;
   endingId: string | null;
   answers: AnswerMap;
+  /** Computed results (scores, totals, segments), by variable name. */
+  variables: Record<string, unknown>;
+  /** The URL / hidden-field values the response started with. */
+  hidden: Record<string, string>;
 };
 
 /** Deterministic key ordering so the same logical event always
@@ -21,6 +25,8 @@ export function buildWebhookPayload(input: {
   submittedAt: string;
   endingId: string | null;
   answers: AnswerMap;
+  variables?: Record<string, unknown>;
+  hidden?: Record<string, string>;
 }): WebhookPayload {
   return {
     eventId: input.eventId,
@@ -30,6 +36,8 @@ export function buildWebhookPayload(input: {
     submittedAt: input.submittedAt,
     endingId: input.endingId,
     answers: input.answers,
+    variables: input.variables ?? {},
+    hidden: input.hidden ?? {},
   };
 }
 

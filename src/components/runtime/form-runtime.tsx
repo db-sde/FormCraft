@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { EndingV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
+  engineInputs,
   evaluateNextStep,
+  firstQuestionId,
+  questionLogicError,
+  renderRecall,
+  renderRecallUrl,
+  stateAt,
   validateAnswer,
+  walkForm,
   hasAnswer,
   OTHER_PREFIX,
   type AnswerMap,
+  type RecallSource,
 } from "@/domains/logic";
 import { RuntimeQuestionInput } from "./runtime-question-input";
 import {
@@ -100,7 +108,10 @@ export function FormRuntime({
   mode = "auto",
   welcomeBack = false,
   redirectOnEnding = false,
+  hidden,
 }: {
+  /** Values for the form's hidden fields (from the page URL). */
+  hidden?: Record<string, string>;
   /** Sizes: "auto" (the public form) follows the screen; Preview forces
    * desktop or phone. */
   mode?: StageMode;
@@ -134,14 +145,18 @@ export function FormRuntime({
    * page so the theme background covers the whole viewport. */
   className?: string;
 }) {
+  const engineOptions = useMemo(() => ({ hidden }), [hidden]);
   const [currentId, setCurrentId] = useState(
     initialQuestionId && compiled.orderedQuestionIds.includes(initialQuestionId)
       ? initialQuestionId
-      : compiled.orderedQuestionIds[0],
+      : (firstQuestionId(compiled, initialAnswers ?? {}, { hidden }) ??
+          compiled.orderedQuestionIds[0]),
   );
   const [answers, setAnswers] = useState<AnswerMap>(initialAnswers ?? {});
   const [history, setHistory] = useState<string[]>(initialHistory ?? []);
   const [ending, setEnding] = useState<EndingV1 | null>(null);
+  // What the ending's recall reads: the final variables for these answers.
+  const [endingRecall, setEndingRecall] = useState<RecallSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Which way the last step moved, for the slide direction.
@@ -165,14 +180,43 @@ export function FormRuntime({
       questionId,
       from,
       new Set([...history, questionId]),
+      engineOptions,
     );
+  }
+
+  // Recall ({{score}}, {{answer:…}}) for the question on screen reads the
+  // variables as they stand before it's answered.
+  const resolvedHidden = useMemo(
+    () => engineInputs(compiled, engineOptions).hidden,
+    [compiled, engineOptions],
+  );
+  const recallSource = useMemo<RecallSource>(
+    () => ({
+      schema: compiled.schema,
+      answers,
+      variables: stateAt(compiled, answers, [...history, currentId], engineOptions)
+        .variables,
+      hidden: resolvedHidden,
+    }),
+    [compiled, answers, history, currentId, engineOptions, resolvedHidden],
+  );
+  const recall = (text: string | undefined) => renderRecall(text, recallSource);
+
+  function showEnding(finalAnswers: AnswerMap, endingId: string) {
+    setEnding(compiled.schema.endings.find((e) => e.id === endingId) ?? null);
+    setEndingRecall({
+      schema: compiled.schema,
+      answers: finalAnswers,
+      variables: walkForm(compiled, finalAnswers, engineOptions).variables,
+      hidden: resolvedHidden,
+    });
   }
   const isLastStep =
     question !== undefined && stepFrom(question.id, answers).type === "ending";
 
   async function finish(finalAnswers: AnswerMap, endingId: string) {
     if (!onComplete) {
-      setEnding(compiled.schema.endings.find((e) => e.id === endingId) ?? null);
+      showEnding(finalAnswers, endingId);
       return;
     }
 
@@ -181,10 +225,12 @@ export function FormRuntime({
     setSubmitting(false);
 
     if (outcome.ok) {
-      const serverEnding =
-        compiled.schema.endings.find((e) => e.id === outcome.endingId) ??
-        compiled.schema.endings.find((e) => e.id === endingId);
-      setEnding(serverEnding ?? null);
+      const serverEndingId = compiled.schema.endings.some(
+        (e) => e.id === outcome.endingId,
+      )
+        ? outcome.endingId
+        : endingId;
+      showEnding(finalAnswers, serverEndingId);
       return;
     }
 
@@ -209,6 +255,17 @@ export function FormRuntime({
     const validation = validateAnswer(question, currentAnswers[question.id]);
     if (!validation.ok) {
       setError(validation.message);
+      return;
+    }
+    // The form's own conditional / cross-field checks.
+    const logicError = questionLogicError(
+      compiled,
+      currentAnswers,
+      [...history, question.id],
+      engineOptions,
+    );
+    if (logicError) {
+      setError(logicError);
       return;
     }
 
@@ -351,6 +408,7 @@ export function FormRuntime({
     return (
       <EndingScreen
         ending={ending}
+        recallSource={endingRecall}
         theme={theme}
         mode={mode}
         className={className}
@@ -374,7 +432,7 @@ export function FormRuntime({
   const number = numbered.indexOf(question.id) + 1;
   const autoAdvances = AUTO_ADVANCE_TYPES.has(question.type);
   const primaryLabel = entry
-    ? question.settings.buttonLabel ||
+    ? recall(question.settings.buttonLabel) ||
       (isLastStep ? "Submit" : question.type === "statement" ? "Continue" : "Start")
     : isLastStep
       ? "Submit"
@@ -440,11 +498,11 @@ export function FormRuntime({
               tabIndex={-1}
               className={cn(stageTitleClass, "outline-none focus-visible:shadow-none")}
             >
-              {question.label}
+              {recall(question.label)}
             </h2>
             {question.description && (
               <p className={cn(stageDescClass, "max-w-[460px]")}>
-                {question.description}
+                {recall(question.description)}
               </p>
             )}
             {error && <StageError>{error}</StageError>}
@@ -475,7 +533,7 @@ export function FormRuntime({
                 tabIndex={-1}
                 className={cn(stageLabelClass, "outline-none focus-visible:shadow-none")}
               >
-                {question.label}
+                {recall(question.label)}
                 {question.required && question.type !== "contact_info" && (
                   <>
                     <span aria-hidden className="text-(--st-primary)">
@@ -487,7 +545,7 @@ export function FormRuntime({
                 )}
               </h2>
               {question.description && (
-                <p className={stageDescClass}>{question.description}</p>
+                <p className={stageDescClass}>{recall(question.description)}</p>
               )}
             </div>
 
@@ -533,6 +591,7 @@ const REDIRECT_SECONDS = 3;
  * the same tab; if the browser blocks it, the button stays. */
 function EndingScreen({
   ending,
+  recallSource,
   theme,
   mode,
   className,
@@ -540,13 +599,20 @@ function EndingScreen({
   redirect,
 }: {
   ending: EndingV1;
+  /** Final answers and variables, for {{score}}-style recall. */
+  recallSource: RecallSource | null;
   theme: CompiledFormV1["schema"]["theme"];
   mode: StageMode;
   className?: string;
   headingRef: React.RefObject<HTMLHeadingElement | null>;
   redirect: boolean;
 }) {
-  const target = ending.redirectUrl;
+  const recall = (text: string | undefined) =>
+    recallSource ? renderRecall(text, recallSource) : text;
+  const target =
+    ending.redirectUrl && recallSource
+      ? renderRecallUrl(ending.redirectUrl, recallSource)
+      : ending.redirectUrl;
   const counting = redirect && !!target;
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
   const host = target ? safeHost(target) : null;
@@ -575,10 +641,12 @@ function EndingScreen({
           tabIndex={-1}
           className={cn(stageTitleClass, "outline-none focus-visible:shadow-none")}
         >
-          {ending.title}
+          {recall(ending.title)}
         </h2>
         {ending.description && (
-          <p className={cn(stageDescClass, "max-w-[460px]")}>{ending.description}</p>
+          <p className={cn(stageDescClass, "max-w-[460px]")}>
+            {recall(ending.description)}
+          </p>
         )}
         {counting && secondsLeft > 0 && (
           <p role="status" className="text-[15px] text-(--st-muted)">
@@ -592,7 +660,7 @@ function EndingScreen({
               onClick={() => window.location.assign(target)}
               className="px-[26px] in-data-[mode=phone]:w-full max-md:in-data-[mode=auto]:w-full"
             >
-              {counting ? "Go now" : ending.buttonLabel || `Continue to ${host}`}
+              {counting ? "Go now" : recall(ending.buttonLabel) || `Continue to ${host}`}
             </StageButton>
             {counting && (
               <span className="text-[12.5px] text-(--st-muted)">

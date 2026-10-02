@@ -1,3 +1,4 @@
+import { computeResponseResults } from "@/domains/responses/results";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { AnswerMap } from "@/domains/logic";
@@ -116,12 +117,21 @@ export async function listDeliveries(
 async function loadResponseForDelivery(admin: Client, responseId: string) {
   const { data: response, error } = await admin
     .from("responses")
-    .select("form_id, status, spam_suspected, ending_id, completed_at")
+    .select(
+      "form_id, form_version_id, status, spam_suspected, ending_id, completed_at, hidden_fields",
+    )
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
   if (!response || response.status !== "completed" || response.spam_suspected)
     return null;
+
+  const { data: version, error: versionError } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("id", response.form_version_id)
+    .single();
+  if (versionError) throw versionError;
 
   const { data: answerRows, error: answersError } = await admin
     .from("answers")
@@ -129,13 +139,20 @@ async function loadResponseForDelivery(admin: Client, responseId: string) {
     .eq("response_id", responseId);
   if (answersError) throw answersError;
 
+  const answers = Object.fromEntries(
+    (answerRows ?? []).map((a) => [a.question_id, a.value]),
+  ) as AnswerMap;
   return {
     formId: response.form_id,
     endingId: response.ending_id,
     submittedAt: response.completed_at ?? new Date().toISOString(),
-    answers: Object.fromEntries(
-      (answerRows ?? []).map((a) => [a.question_id, a.value]),
-    ) as AnswerMap,
+    answers,
+    results: computeResponseResults({
+      schema: version.schema,
+      answers,
+      hidden: response.hidden_fields,
+      completedAt: response.completed_at,
+    }),
   };
 }
 
@@ -173,6 +190,8 @@ export async function enqueueWebhookDeliveries(
       submittedAt: response.submittedAt,
       endingId: response.endingId,
       answers: response.answers,
+      variables: response.results.variables,
+      hidden: response.results.hidden,
     });
     return {
       endpoint_id: endpoint.id,
