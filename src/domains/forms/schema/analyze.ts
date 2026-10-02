@@ -525,14 +525,8 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
           });
         }
       }
-      if (q.required) {
-        push({
-          severity: "warning",
-          code: "required_conditional",
-          message: `${label} is required but only shown sometimes; when it's hidden it's skipped, not required.`,
-          questionId: q.id,
-        });
-      }
+      // A required question that's only shown sometimes is fine: when
+      // hidden it's skipped, never required (engine.ts), so no warning.
     }
     for (const check of q.validations ?? []) {
       const where = { label: `${label}'s check “${check.message}”`, questionId: q.id };

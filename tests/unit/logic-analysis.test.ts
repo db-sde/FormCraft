@@ -234,9 +234,8 @@ describe("analyzeLogic", () => {
         },
       ] as FormInput["questions"],
     });
-    expect(result.map((i) => i.code)).toEqual(
-      expect.arrayContaining(["self_reference", "required_conditional"]),
-    );
+    expect(result.map((i) => i.code)).not.toContain("required_conditional");
+    expect(result.map((i) => i.code)).toEqual(expect.arrayContaining(["self_reference"]));
   });
 
   it("needs a value for operators that compare against one", () => {

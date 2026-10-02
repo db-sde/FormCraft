@@ -21,6 +21,7 @@ import { parseFormSchema, validateSemantics } from "../src/domains/forms/schema/
 import type { FormSchemaV1, QuestionV1, OptionV1 } from "../src/domains/forms/schema/v1";
 import type { QuestionType } from "../src/domains/forms/schema/question-types";
 import { THEME_PRESETS } from "../src/domains/themes/presets";
+import { LOGIC_TEMPLATES } from "../src/domains/templates/logic-templates";
 
 type QuestionSpec = {
   type: QuestionType;
@@ -477,6 +478,16 @@ const templates: TemplateDef[] = [
     ],
   ),
 ];
+
+// Quizzes, calculators and qualifiers built on the logic engine.
+for (const logicTemplate of LOGIC_TEMPLATES) {
+  templates.push({
+    title: logicTemplate.title,
+    category: logicTemplate.category,
+    description: logicTemplate.description,
+    schema: parseFormSchema(logicTemplate.schema),
+  });
+}
 
 // Each template gets one of the design-system presets (Sunset, Ocean,
 // Classic, Forest in turn) so the gallery shows what theming can do;
