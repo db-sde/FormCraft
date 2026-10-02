@@ -2,6 +2,41 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { supabaseEnv } from "@/lib/supabase/env";
 import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
+import {
+  VISITOR_COOKIE,
+  VISITOR_ID_PATTERN,
+  VISITOR_MAX_AGE_SECONDS,
+} from "@/domains/experiments/visitor";
+
+/** Gives a public form page's visitor a random id (A/B tests, P3.9), on
+ * this request too so the first render can use it. Returns the new id
+ * to set on the response, or null when there already is one. */
+function ensureVisitor(request: NextRequest, headers: Headers): string | null {
+  if (VISITOR_ID_PATTERN.test(request.cookies.get(VISITOR_COOKIE)?.value ?? ""))
+    return null;
+  const id = crypto.randomUUID();
+  const cookie = headers.get("cookie");
+  headers.set("cookie", `${cookie ? `${cookie}; ` : ""}${VISITOR_COOKIE}=${id}`);
+  return id;
+}
+
+function withVisitor(
+  response: NextResponse,
+  request: NextRequest,
+  id: string | null,
+): NextResponse {
+  if (!id) return response;
+  const secure = request.nextUrl.protocol === "https:";
+  response.cookies.set(VISITOR_COOKIE, id, {
+    httpOnly: true,
+    path: "/",
+    maxAge: VISITOR_MAX_AGE_SECONDS,
+    // Embeds load the form in a third-party iframe.
+    sameSite: secure ? "none" : "lax",
+    secure,
+  });
+  return response;
+}
 
 /** Hosts that are FormCraft itself (everything else may be a customer's
  * custom domain, P2.2). */
@@ -90,7 +125,12 @@ async function customDomain(request: NextRequest, host: string) {
   if (!slug) return notConnected();
   const url = request.nextUrl.clone();
   url.pathname = `/f/${slug}`;
-  return NextResponse.rewrite(url, { request: { headers } });
+  const visitor = ensureVisitor(request, headers);
+  return withVisitor(
+    NextResponse.rewrite(url, { request: { headers } }),
+    request,
+    visitor,
+  );
 }
 
 export async function proxy(request: NextRequest) {
@@ -101,10 +141,12 @@ export async function proxy(request: NextRequest) {
   if (path.startsWith("/f/") || path.startsWith("/api/")) {
     // No session work here (as before); just make sure nobody can send
     // the custom-domain header themselves.
-    if (!request.headers.has(CUSTOM_DOMAIN_HEADER)) return NextResponse.next();
     const headers = new Headers(request.headers);
     headers.delete(CUSTOM_DOMAIN_HEADER);
-    return NextResponse.next({ request: { headers } });
+    const visitor = path.startsWith("/f/") ? ensureVisitor(request, headers) : null;
+    if (!visitor && !request.headers.has(CUSTOM_DOMAIN_HEADER))
+      return NextResponse.next();
+    return withVisitor(NextResponse.next({ request: { headers } }), request, visitor);
   }
   return updateSession(request);
 }

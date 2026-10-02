@@ -212,6 +212,7 @@ export default async function ResponseDetailPage({
             </span>
           )}
           <span>Took {formatDuration(detail.startedAt, endedAt)}</span>
+          <span>Version {detail.versionNumber}</span>
           <span>Source: {source}</span>
         </div>
       </div>

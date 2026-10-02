@@ -13,6 +13,7 @@ import { isStripeSecretKey, isStripeWebhookSecret } from "@/domains/payments";
 import { canAdmin } from "@/domains/workspaces";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { audit } from "@/domains/audit";
 
 export type ConnectionResult =
   { ok: true; message?: string } | { ok: false; message: string };
@@ -62,6 +63,12 @@ export async function connectStripeAction(
     { secretKey: key, webhookSecret: whsec },
     `${maskSecret(key)}${key.includes("_test_") ? " (test mode)" : ""}`,
   );
+  await audit(createAdminClient(), {
+    workspaceId: allowed.ctx.workspace.id,
+    actorId: allowed.ctx.user.id,
+    action: "integration.connected",
+    metadata: { provider: "stripe", mode: key.includes("_test_") ? "test" : "live" },
+  });
   revalidatePath("/settings");
   return { ok: true, message: "Stripe connected." };
 }
@@ -90,6 +97,12 @@ export async function connectHubspotAction(token: string): Promise<ConnectionRes
     { token: value },
     maskSecret(value),
   );
+  await audit(createAdminClient(), {
+    workspaceId: allowed.ctx.workspace.id,
+    actorId: allowed.ctx.user.id,
+    action: "integration.connected",
+    metadata: { provider: "hubspot" },
+  });
   revalidatePath("/settings");
   return { ok: true, message: "HubSpot connected." };
 }
@@ -101,6 +114,12 @@ export async function disconnectAction(provider: Provider): Promise<ConnectionRe
   if (!canAdmin(ctx.workspace.role))
     return { ok: false, message: "Only the owner and admins can do this." };
   await deleteCredential(createAdminClient(), ctx.workspace.id, provider);
+  await audit(createAdminClient(), {
+    workspaceId: ctx.workspace.id,
+    actorId: ctx.user.id,
+    action: "integration.disconnected",
+    metadata: { provider },
+  });
   revalidatePath("/settings");
   return { ok: true, message: "Disconnected." };
 }

@@ -425,6 +425,7 @@ export async function publishForm(
    * sessions (they could publish arbitrary JSON); the caller's own
    * client is only used to prove they can read this form's draft. */
   admin: Client,
+  publishedBy?: string,
 ): Promise<PublishResult> {
   const { data: draft, error: draftError } = await supabase
     .from("form_versions")
@@ -444,6 +445,12 @@ export async function publishForm(
   });
   if (error) throw error;
   if (!data) throw new Error("publish_form_version returned no row");
+  if (publishedBy) {
+    await admin
+      .from("form_versions")
+      .update({ published_by: publishedBy })
+      .eq("id", data.id);
+  }
 
   return {
     compiled,

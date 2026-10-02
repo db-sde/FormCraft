@@ -158,6 +158,38 @@ description }` or null.
   canceled), `checkout_session_id`, `livemode`, `paid_at`. Members read;
   only the server writes (Stripe webhook or a server-side session check).
 
+## Phase 3 (migrations 33–37)
+
+- **`audit_logs`** (33) — `workspace_id`, `actor_id` (null for the
+  system or an API key), `action` (`area.verb`), `target_type`,
+  `target_id`, `metadata` (never secrets or answers). Owners and admins
+  read; no write policies (the server writes with the service role).
+- **`form_versions.published_by`** (33) — who published each version.
+- **`workspaces.response_retention_days`** (33) — 7–3650 or null (keep).
+- **`api_keys.scopes`** (34) — subset of `forms:read`, `responses:read`,
+  `hooks:write`; defaults to all three.
+- **`workspace_members.permissions`** (34) — per-member overrides
+  (`{ "view_responses": false, … }`) on top of the role's defaults,
+  read by `has_permission(workspace, permission)`. Owners and admins
+  always have everything. Responses, answers, uploads (and their files)
+  need `view_responses`; integration settings need `manage_integrations`.
+- **`response_source_conversion(form, since?)`** (35) — starts and
+  completions per traffic source (UTM source, else referring host, else
+  Direct), without previews or spam. Security invoker.
+- **`experiments`** (36) — an A/B test: `form_id` (arm A, whose link is
+  shared), `variant_form_id` (arm B), `split` (% to B), `status`
+  (running / stopped, never restarted), `winner`. A trigger keeps both
+  arms in the experiment's workspace; one running test per form.
+  Publishers create and stop. **`responses.experiment_id`** — the test
+  that served a response; `experiment_stats(experiment)` counts per arm.
+- **2FA (37)** — `mfa_satisfied()`: true for an `aal2` session or a user
+  with no verified factor. Every RLS table gets a restrictive policy
+  requiring it, and the membership helpers (`is_workspace_member`,
+  `can_edit_workspace`, `can_admin_workspace`, `has_permission`,
+  `workspace_role_for`, `shares_workspace_with`) include it, so a
+  password-only session reads nothing. **`mfa_recovery_codes`** —
+  SHA-256 hashes, `used_at`; server only.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

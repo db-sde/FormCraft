@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getClientIpFromHeaders } from "@/lib/http/client-ip";
 import { safeNextPath } from "@/lib/http/safe-next-path";
+import { needsSecondFactor } from "@/domains/identity/mfa";
 
 export type ActionResult = {
   error?: string;
@@ -128,8 +129,13 @@ export async function logInAction(
   }
 
   // Back to the page that sent them to login (the middleware passes it
-  // as ?next=), not always the dashboard.
-  redirect(safeNextPath(formData.get("next")));
+  // as ?next=), not always the dashboard — after the second factor, for
+  // accounts that have one (P3.13).
+  const next = safeNextPath(formData.get("next"));
+  if (await needsSecondFactor(supabase)) {
+    redirect(`/two-factor?next=${encodeURIComponent(next)}`);
+  }
+  redirect(next);
 }
 
 export async function logOutAction(): Promise<void> {

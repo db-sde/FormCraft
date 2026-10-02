@@ -3,6 +3,9 @@ import { buildResponsesCsv, filtersFromParams } from "@/domains/responses";
 import { ExportTooLargeError, MAX_SYNCHRONOUS_EXPORT_ROWS } from "@/domains/exports";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { audit } from "@/domains/audit";
+import { hasPermission } from "@/domains/workspaces/permissions";
 
 /**
  * Creator-only, session-scoped (never the admin client) — RLS on
@@ -26,6 +29,11 @@ export async function GET(
     a: search.get("a"),
   });
   const { supabase, workspace } = await getCurrentWorkspace();
+  if (!(await hasPermission(supabase, workspace.id, "export_responses"))) {
+    return new Response("You don't have permission to export responses.", {
+      status: 403,
+    });
+  }
 
   const { data: form } = await supabase
     .from("forms")
@@ -47,6 +55,13 @@ export async function GET(
     const filename = `${base}-${view === "completed" ? "responses" : "incomplete"}.csv`;
 
     trackEvent({ formId, eventType: "export_completed", metadata: { kind: view } });
+    void audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
+      action: "export.responses",
+      target: { type: "form", id: formId },
+      metadata: { view },
+    });
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

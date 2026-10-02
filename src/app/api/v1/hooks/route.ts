@@ -6,6 +6,7 @@ import {
   resolvesToDisallowedAddress,
 } from "@/domains/webhooks";
 import { apiError, withApiKey } from "../shared";
+import { audit } from "@/domains/audit";
 
 const Body = z.object({
   formId: z.string().uuid(),
@@ -20,7 +21,7 @@ const Body = z.object({
  * Zap is turned off (DELETE) or the key is revoked.
  */
 export async function POST(request: NextRequest) {
-  return withApiKey(request, async (caller, admin) => {
+  return withApiKey(request, "hooks:write", async (caller, admin) => {
     const parsed = Body.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
       return apiError("invalid_body", "Send formId, url and source.", 400);
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
     const { id } = await createWebhookEndpoint(admin, form.id, parsed.data.url, {
       kind: parsed.data.source,
       apiKeyId: caller.keyId,
+    });
+    await audit(admin, {
+      workspaceId: caller.workspaceId,
+      actorId: null,
+      action: "api.hook_created",
+      target: { type: "webhook", id },
+      metadata: { apiKeyId: caller.keyId, source: parsed.data.source, formId: form.id },
     });
     return NextResponse.json({ id }, { status: 201 });
   });

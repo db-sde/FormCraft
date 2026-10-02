@@ -61,6 +61,12 @@ async function main() {
   if (error) throw error;
   if (!data?.length) throw new Error(`No workspace with ${column} "${target}"`);
   const [workspace] = data;
+  await admin.from("audit_logs").insert({
+    workspace_id: workspace.id,
+    actor_id: null,
+    action: "plan.changed",
+    metadata: { plan: plan.id, by: "admin script" },
+  });
   console.log(`${workspace.name} (${workspace.id}) is now on ${plan.name}.`);
   console.log(resolveEntitlements(plan.entitlements, workspace.entitlement_overrides));
 }

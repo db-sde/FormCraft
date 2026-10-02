@@ -290,3 +290,46 @@ describe("folders", () => {
     await admin.from("workspaces").delete().eq("id", other!.id);
   });
 });
+
+describe("granular permissions (P3.15)", () => {
+  it("narrow what a member can see and change, in the database", async () => {
+    // The viewer loses "see responses"; the editor loses "manage integrations".
+    await admin
+      .from("workspace_members")
+      .update({ permissions: { view_responses: false } })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", viewer.id);
+    await admin
+      .from("workspace_members")
+      .update({ permissions: { manage_integrations: false } })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", editor.id);
+
+    expect(
+      (await viewer.client.from("responses").select("id").eq("id", responseId)).data,
+    ).toEqual([]);
+    expect(
+      (await editor.client.from("responses").select("id").eq("id", responseId)).data,
+    ).toHaveLength(1);
+    const hook = await editor.client.from("webhook_endpoints").insert({
+      form_id: formId,
+      url: "https://example.com/hook2",
+      signing_secret: "s".repeat(32),
+    });
+    expect(hook.error).not.toBeNull();
+    const { data: can } = await editor.client.rpc("has_permission", {
+      target_workspace_id: workspaceId,
+      permission: "publish",
+    });
+    expect(can).toBe(true);
+    // Admins always have everything, whatever is stored.
+    await admin
+      .from("workspace_members")
+      .update({ permissions: { view_responses: false } })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", adminUser.id);
+    expect(
+      (await adminUser.client.from("responses").select("id").eq("id", responseId)).data,
+    ).toHaveLength(1);
+  });
+});

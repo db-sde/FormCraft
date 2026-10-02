@@ -13,6 +13,7 @@ import {
   removeMember,
   revokeInvitation,
   TeamError,
+  sanitizeOverrides,
   type InvitableRole,
 } from "@/domains/workspaces";
 import { sendInvitationEmail } from "@/domains/notifications/invite";
@@ -20,6 +21,7 @@ import { getCurrentWorkspace, WORKSPACE_COOKIE } from "@/lib/auth/current-worksp
 import { requireUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
+import { audit } from "@/domains/audit";
 
 export type TeamResult =
   { ok: true; message?: string; link?: string } | { ok: false; message: string };
@@ -51,6 +53,12 @@ export async function inviteMemberAction(
       invitedBy: user.id,
     });
     const link = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}${path}`;
+    await audit(admin, {
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: "member.invited",
+      metadata: { role },
+    });
     const sent = await sendInvitationEmail({
       to: parsedEmail.data.toLowerCase(),
       workspaceName: workspace.name,
@@ -83,6 +91,13 @@ export async function changeRoleAction(
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
     await changeMemberRole(supabase, workspace.id, userId, role);
+    await audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
+      action: "member.role_changed",
+      target: { type: "user", id: userId },
+      metadata: { role },
+    });
     revalidatePath("/settings");
     return { ok: true };
   } catch (error) {
@@ -99,6 +114,12 @@ export async function removeMemberAction(userId: string): Promise<TeamResult> {
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
     await removeMember(supabase, workspace.id, userId);
+    await audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
+      action: "member.removed",
+      target: { type: "user", id: userId },
+    });
     revalidatePath("/settings");
     return { ok: true };
   } catch (error) {
@@ -121,6 +142,11 @@ export async function leaveWorkspaceAction(): Promise<TeamResult> {
     .eq("workspace_id", workspace.id)
     .eq("user_id", user.id);
   if (error) return { ok: false, message: "Couldn't leave the workspace." };
+  await audit(createAdminClient(), {
+    workspaceId: workspace.id,
+    actorId: user.id,
+    action: "member.left",
+  });
   (await cookies()).delete(WORKSPACE_COOKIE);
   revalidatePath("/", "layout");
   redirect("/dashboard");
@@ -132,6 +158,12 @@ export async function revokeInvitationAction(invitationId: string): Promise<Team
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
     await revokeInvitation(supabase, workspace.id, invitationId);
+    await audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
+      action: "invitation.revoked",
+      target: { type: "invitation", id: invitationId },
+    });
     revalidatePath("/settings");
     return { ok: true };
   } catch (error) {
@@ -158,6 +190,11 @@ export async function acceptInvitationAction(token: string): Promise<TeamResult>
         error instanceof TeamError ? error.message : "Couldn't accept the invitation.",
     };
   }
+  await audit(createAdminClient(), {
+    workspaceId,
+    actorId: user.id,
+    action: "member.joined",
+  });
   (await cookies()).set(WORKSPACE_COOKIE, workspaceId, {
     httpOnly: true,
     sameSite: "lax",
@@ -167,4 +204,34 @@ export async function acceptInvitationAction(token: string): Promise<TeamResult>
   });
   revalidatePath("/", "layout");
   redirect("/dashboard");
+}
+
+/** Per-member permission overrides (P3.15), admins only (RLS). */
+export async function setMemberPermissionsAction(
+  userId: string,
+  overrides: Record<string, boolean>,
+): Promise<TeamResult> {
+  if (!z.string().uuid().safeParse(userId).success)
+    return { ok: false, message: "Not found." };
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canAdmin(workspace.role))
+    return { ok: false, message: "Only the owner and admins can do this." };
+  const clean = sanitizeOverrides(overrides);
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .update({ permissions: clean })
+    .eq("workspace_id", workspace.id)
+    .eq("user_id", userId)
+    .in("role", ["editor", "viewer"])
+    .select("id");
+  if (error || !data?.length) return { ok: false, message: "Couldn't change that." };
+  await audit(createAdminClient(), {
+    workspaceId: workspace.id,
+    actorId: user.id,
+    action: "permissions.changed",
+    target: { type: "user", id: userId },
+    metadata: Object.fromEntries(Object.entries(clean).map(([k, v]) => [k, v])),
+  });
+  revalidatePath("/settings");
+  return { ok: true };
 }

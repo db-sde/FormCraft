@@ -3,6 +3,63 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — Phase 3, Wave A: history, audit, permissions, API, insights, A/B tests, 2FA
+
+- **Version history (P3.10):** restoring copies an old version into the
+  draft; it never changes what's live or which version a response
+  belongs to. Publishing records who published.
+- **Audit log (P3.14):** server-written only (service role, no write
+  policies), readable by owners and admins, never containing secrets or
+  answers. Writing an entry never fails the action it records.
+  Account-level events (2FA) are written to every workspace the person
+  belongs to.
+- **Granular permissions (P3.15):** per-member overrides on top of the
+  role (owner/admin always have everything), enforced in RLS through
+  `has_permission`, so hiding responses from someone hides them in the
+  API and storage too — not just in the UI. Publishing goes through the
+  service role, so the publish actions check `publish` explicitly (a
+  viewer could publish before this — found while building it).
+- **Retention (P3.16):** a workspace-level window for completed
+  responses (7 days to 10 years, or keep), purged by the daily cron and
+  logged. Unfinished responses keep their per-form setting.
+- **API (P3.11):** scopes per key, cursor pagination
+  (`completed_at|id`, base64url), a single error shape and an additive-
+  only v1 policy (`docs/api.md`). The responses endpoint changed shape
+  to `{ data, next_cursor }` — acceptable now because the API hasn't
+  been listed publicly yet.
+- **Conversion insights (P3.8)** are rules over counts, not a model:
+  the bottleneck question (≥30% of drop-offs, needs 5 abandoned
+  sessions), required questions losing more than their share, and
+  traffic sources ≥15 points from the overall rate (needs 10 starts in
+  each of two sources). Below those thresholds it says there isn't
+  enough data rather than reading noise.
+- **A/B tests (P3.9)** compare two published forms (A's link sends a
+  share of new visitors to B) rather than two versions of one form —
+  keeps "published versions are immutable" and "a response belongs to
+  one version" intact, and each arm's analytics stay its own form's.
+  Assignment is a SHA-256 hash of the experiment and a random first-
+  party visitor cookie (`fc_vid`, set by the proxy, `SameSite=None;
+Secure` on HTTPS so embeds keep it). Browsers that block third-party
+  cookies in embeds may see a different arm per visit; that only adds
+  noise and is noted here. Results use a two-proportion z-test on
+  completion rate, shown only after 100 starts per arm; nothing is
+  declared before p < 0.05 and the system never picks a winner itself.
+  Choosing B copies B into A's draft for review — it doesn't go live
+  until published. Resume links skip the split (they carry their own
+  form's slug). Plan: Business and up (`ab_testing`).
+- **2FA (P3.13):** Supabase TOTP, enforced in the database
+  (`mfa_satisfied()` in a restrictive policy on every table and in the
+  membership helpers), because a password alone gets an `aal1` token
+  that could otherwise be used against the API directly. The app also
+  redirects to `/two-factor` (proxy + `requireUser`) and the login
+  action goes there itself so the address bar is right. Recovery codes
+  are ours (10, SHA-256, one use each) rather than Supabase's
+  experimental recovery-code factor; using one removes the authenticator
+  (to be set up again) instead of being a standing bypass. Turning 2FA
+  off needs a current code. Verification attempts are rate-limited.
+  **Production:** enable TOTP under Authentication → MFA in the
+  Supabase dashboard (local: `[auth.mfa.totp]` in `config.toml`).
+
 ## 2026-10-02 — Wave 5: scheduling, languages, HubSpot, Stripe
 
 - **Scheduling (P2.16)** as a booking page on an ending (Calendly or

@@ -111,6 +111,7 @@ async function startSession(
   hidden: Record<string, string>,
   seed: string,
   language: string,
+  experimentId: string | undefined,
 ): Promise<{
   responseId: string;
   formVersionId: string;
@@ -118,7 +119,14 @@ async function startSession(
   const res = await fetch("/api/responses/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ formId, ...attribution(), hidden, seed, language }),
+    body: JSON.stringify({
+      formId,
+      ...attribution(),
+      hidden,
+      seed,
+      language,
+      experimentId,
+    }),
   });
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
   return (await res.json()) as { responseId: string; formVersionId: string };
@@ -165,7 +173,10 @@ export function PublicFormRuntime({
   schedulingAllowed = false,
   languages = [],
   initialLanguage = "en",
+  experimentId,
 }: {
+  /** The A/B test whose link served this form (P3.9). */
+  experimentId?: string;
   /** Languages the respondent can choose (P2.21), default first. */
   languages?: { code: string; name: string }[];
   initialLanguage?: string;
@@ -319,6 +330,7 @@ export function PublicFormRuntime({
         urlHidden,
         freshSeed,
         languageRef.current,
+        experimentId,
       ).then(
         (data) => {
           const fresh: StoredResponse = {

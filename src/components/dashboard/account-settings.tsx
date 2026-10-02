@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
 import { cn } from "cn";
+import { TwoFactorSettings } from "@/components/dashboard/two-factor-settings";
 
 function initials(name: string): string {
   const parts = name
@@ -385,11 +386,20 @@ function DeleteAccountSection({ email }: { email: string }) {
   );
 }
 
-export function AccountSettings({ name, email }: { name: string; email: string }) {
+export function AccountSettings({
+  name,
+  email,
+  twoFactor,
+}: {
+  name: string;
+  email: string;
+  twoFactor: { enabled: boolean; remaining: number };
+}) {
   return (
     <div className="flex flex-col gap-[26px]">
       <ProfileSection name={name} email={email} />
       <PasswordSection />
+      <TwoFactorSettings {...twoFactor} />
       <AppearanceSection />
       <DeleteAccountSection email={email} />
     </div>

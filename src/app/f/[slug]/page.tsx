@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getPublicFormBySlug } from "@/domains/forms";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
@@ -16,6 +16,12 @@ import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { themeForPlan } from "@/domains/themes/fonts";
 import { formLanguages, LANGUAGES, pickLanguage } from "@/domains/forms/i18n";
+import {
+  assignArm,
+  runningExperimentFor,
+  VISITOR_COOKIE,
+  VISITOR_ID_PATTERN,
+} from "@/domains/experiments";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -42,8 +48,8 @@ export default async function PublicFormPage({
   const query = await searchParams;
   // Set by the embed code on the Share page.
   const embedded = query.embed === "1";
-  const publicForm = await loadPublicForm(slug);
-  if (!publicForm) notFound();
+  const linked = await loadPublicForm(slug);
+  if (!linked) notFound();
 
   // On a custom domain (P2.2) only that workspace's forms are served.
   const domainId = (await headers()).get(CUSTOM_DOMAIN_HEADER);
@@ -56,7 +62,7 @@ export default async function PublicFormPage({
     if (
       !domain ||
       domain.status !== "verified" ||
-      domain.workspace_id !== publicForm.workspaceId
+      domain.workspace_id !== linked.workspaceId
     ) {
       notFound();
     }
@@ -67,8 +73,39 @@ export default async function PublicFormPage({
   // Plan features are decided here, on the server (P2.1, P2.22).
   const { entitlements } = await getWorkspacePlan(
     createAdminClient(),
-    publicForm.workspaceId,
+    linked.workspaceId,
   );
+
+  // An A/B test on this link (P3.9) sends some visitors to version B —
+  // the same one every time, by their visitor id. Resume links carry
+  // their own form's slug, so they skip the split.
+  let publicForm = linked;
+  let experimentId: string | undefined;
+  const visitorId = (await cookies()).get(VISITOR_COOKIE)?.value ?? "";
+  if (
+    entitlements.ab_testing &&
+    !query[RESUME_PARAM] &&
+    VISITOR_ID_PATTERN.test(visitorId)
+  ) {
+    const admin = createAdminClient();
+    const test = await runningExperimentFor(admin, linked.formId);
+    if (test && assignArm(test.id, visitorId, test.split) === "b") {
+      const { data: variant } = await admin
+        .from("forms")
+        .select("slug")
+        .eq("id", test.variantFormId)
+        .maybeSingle();
+      const served = variant ? await loadPublicForm(variant.slug) : null;
+      // If B has gone (unpublished or deleted), A is served untagged
+      // rather than skewing the test.
+      if (served && served.workspaceId === linked.workspaceId) {
+        publicForm = served;
+        experimentId = test.id;
+      }
+    } else if (test) {
+      experimentId = test.id;
+    }
+  }
   const schema = publicForm.compiled.schema;
   const compiled = {
     ...publicForm.compiled,
@@ -157,6 +194,7 @@ export default async function PublicFormPage({
         initialLanguage={language}
         schedulingAllowed={entitlements.scheduling}
         embedded={embedded}
+        experimentId={experimentId}
       />
     </div>
   );

@@ -12,6 +12,7 @@ import {
   type AnswerMap,
 } from "@/domains/logic";
 import type { ResponseStatus } from "./state-machine";
+import { experimentForResponse } from "@/domains/experiments";
 
 type Client = SupabaseClient<Database>;
 
@@ -55,6 +56,8 @@ export type StartAttribution = {
   seed?: string;
   /** The language the respondent chose (P2.21). */
   language?: string;
+  /** The A/B test that served this form (P3.9); checked here. */
+  experimentId?: string;
 };
 
 /** Only the hidden fields the published form declares, as short strings —
@@ -116,9 +119,16 @@ export async function startResponse(
     ? pickHiddenFields(parseFormSchema(version.schema), attribution.hidden)
     : {};
 
+  const experimentId = await experimentForResponse(
+    admin,
+    attribution.experimentId,
+    formId,
+  );
+
   const { data: response, error } = await admin
     .from("responses")
     .insert({
+      experiment_id: experimentId,
       form_id: formId,
       form_version_id: version.id,
       referrer: attribution.referrer,

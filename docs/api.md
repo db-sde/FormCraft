@@ -169,16 +169,54 @@ form's Integrations tab.
 Business plan; shown once, stored as SHA-256). 120 requests a minute per
 key. Every call re-checks the plan; revoking a key removes its hooks.
 
-- `GET /api/v1/me` → `{ workspace: { id, name } }` (connection test).
-- `GET /api/v1/forms` → `{ forms: [{ id, title }] }` — live forms only.
-- `GET /api/v1/forms/:id/responses` → the latest 3 completed (non-spam)
-  responses, in the webhook payload shape (Zapier's sample).
+**Scopes (P3.11).** Each key has one or more of `forms:read`,
+`responses:read`, `hooks:write`, chosen when it's created. Keys made
+before scopes existed have all three. A call outside the key's scopes
+gets `403 forbidden`.
+
+- `GET /api/v1/me` → `{ workspace: { id, name } }` (connection test; any
+  scope).
+- `GET /api/v1/forms` (`forms:read`) → `{ forms: [{ id, title }] }` —
+  live forms only.
+- `GET /api/v1/forms/:id` (`forms:read`) → the form with its live
+  version's schema (`published.schema`), or `published: null`.
+- `GET /api/v1/forms/:id/responses` (`responses:read`) →
+  `{ data, next_cursor }`: completed (non-spam) responses, newest first,
+  in the webhook payload shape. `?limit=1..100` (default 25);
+  `?cursor=` is the previous page's `next_cursor`, which is `null` on the
+  last page. Zapier's sample uses `?limit=3`.
+- `GET /api/v1/responses/:id` (`responses:read`) → one completed
+  response in the same shape; `404` for another workspace's.
 - `POST /api/v1/hooks` `{ formId, url, source: "zapier" | "make" }` →
   `201 { id }`. Subscribes to "new completed response": an ordinary
   signed webhook endpoint (same queue, retries, HTTPS + public-address
   checks). `404` for another workspace's form, `400` for a private or
   non-HTTPS URL.
 - `DELETE /api/v1/hooks/:id` → `204`; only the key's workspace's hooks.
+  Both hook calls need `hooks:write`.
+
+**Errors.** Every error is `{ "error": { "code", "message" } }` with the
+matching status: `unauthorized` 401, `forbidden` 403 (missing scope),
+`not_found` 404 (including another workspace's ids — existence isn't
+revealed), `invalid_body` / `invalid_query` / `invalid_url` 400,
+`rate_limited` 429, `unknown` 500. `message` is for people; branch on
+`code`.
+
+**Versioning.** The version is in the path (`/api/v1`). Within v1,
+changes are additive only: new endpoints, new optional parameters, new
+fields in responses (clients must ignore fields they don't know) and new
+error codes for new situations. Removing or renaming a field, changing
+a type or a default, or tightening validation means `/api/v2`, with v1
+kept running for at least 12 months after v2 ships. The one break so far
+happened before any public listing: `GET /forms/:id/responses` went from
+a bare array to `{ data, next_cursor }` when pagination was added.
+
+## A/B tests (P3.9)
+
+No endpoint of their own. When a form's link has a running test, the
+public page picks the arm from the `fc_vid` visitor cookie (set by the
+proxy) and passes `experimentId` to `POST /api/responses/start`, which
+only records it if the test is running and the form is one of its arms.
 
 ## Scheduled jobs
 
@@ -190,8 +228,9 @@ All guarded by `Authorization: Bearer $CRON_SECRET` (`401` without it,
   (last 24 hours), then claim due jobs (`FOR UPDATE SKIP LOCKED` with a
   lease, so overlapping runs never send twice) and send them.
 - `/api/cron/retention` — daily: deletes unfinished responses past
-  their form's retention, purges forms deleted over 30 days ago
-  (including their files), prunes rate-limit rows.
+  their form's retention, completed responses past their workspace's
+  retention (P3.16, logged in the audit log), purges forms deleted over
+  30 days ago (including their files), prunes rate-limit rows.
 - `/api/cron/health` — read-only report for an uptime monitor: retries
   overdue by more than 15 minutes (the sweeps stopped), jobs that gave
   up in the last day, uploads stuck pending. `200` when healthy, `503`

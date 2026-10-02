@@ -6,11 +6,13 @@ import {
   Download,
   Flag,
   Inbox,
+  Lightbulb,
   Plus,
   Send,
   Table2,
 } from "lucide-react";
 import {
+  getConversionInsights,
   getDropoff,
   getLatestSchema,
   getResponseCounts,
@@ -25,6 +27,7 @@ import {
   type ResponseView,
 } from "@/domains/responses";
 import { getFunnelSummaryForForm } from "@/domains/analytics";
+import type { Insight } from "@/domains/analytics/insights";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { ActivityChip } from "@/components/responses/activity-chip";
@@ -41,6 +44,7 @@ import { LocalTime } from "@/components/local-time";
 import { loadFormForPage } from "../../load-form";
 import { ABANDONED_AFTER_MINUTES } from "@/domains/responses/activity";
 import { cn } from "cn";
+import { hasPermission } from "@/domains/workspaces/permissions";
 
 const PAGE_SIZE = 25;
 
@@ -129,6 +133,41 @@ function DropoffCard({ steps, total }: { steps: DropoffStep[]; total: number }) 
   );
 }
 
+const INSIGHT_TONE: Record<Insight["tone"], string> = {
+  warning: "bg-[var(--chip-changes-dot)]",
+  positive: "bg-[var(--chip-live-dot)]",
+  neutral: "bg-[var(--chip-pending-dot)]",
+};
+
+/** Conversion insights (P3.8), worked out from counts. */
+function InsightsCard({ insights }: { insights: Insight[] }) {
+  return (
+    <section className="border-ink bg-card rounded-lg border-[1.5px] p-[18px]">
+      <h2 className="font-heading mb-3 flex items-center gap-2 text-base font-bold">
+        <Lightbulb className="size-4" aria-hidden />
+        Insights
+      </h2>
+      <ul className="flex flex-col gap-3">
+        {insights.map((insight) => (
+          <li key={insight.id} className="flex gap-3 text-sm">
+            <span
+              aria-hidden
+              className={cn(
+                "mt-1.5 size-2 shrink-0 rounded-full",
+                INSIGHT_TONE[insight.tone],
+              )}
+            />
+            <div>
+              <p className="font-medium">{insight.title}</p>
+              <p className="text-muted-foreground">{insight.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function ProgressBar({ answered, total }: { answered: number; total: number }) {
   const percent = total === 0 ? 0 : Math.round((answered / total) * 100);
   return (
@@ -155,8 +194,35 @@ export default async function ResponsesPage({
 }) {
   const { id: formId } = await params;
   const sp = await searchParams;
-  const { supabase, form, isLive, publishState, hasUnpublishedChanges, viewOnly } =
-    await loadFormForPage(formId);
+  const {
+    supabase,
+    workspace,
+    form,
+    isLive,
+    publishState,
+    hasUnpublishedChanges,
+    viewOnly,
+  } = await loadFormForPage(formId);
+
+  // Granular permissions (P3.15): row-level security hides the data;
+  // say why instead of showing an empty list.
+  if (!(await hasPermission(supabase, workspace.id, "view_responses"))) {
+    return (
+      <div className="flex flex-col gap-6">
+        <FormSectionHeader
+          formId={formId}
+          title={form.title}
+          active="responses"
+          state={publishState}
+          hasChanges={hasUnpublishedChanges}
+        />
+        <p className="text-muted-foreground text-sm">
+          You don&apos;t have permission to see this form&apos;s responses. Ask a
+          workspace admin if you need it.
+        </p>
+      </div>
+    );
+  }
 
   const view: ResponseView = sp.view === "incomplete" ? "incomplete" : "completed";
   const completed = view === "completed";
@@ -186,12 +252,13 @@ export default async function ResponsesPage({
     answer,
   };
 
-  const [responses, counts, funnel, dropoff, summary] = await Promise.all([
+  const [responses, counts, funnel, dropoff, summary, insights] = await Promise.all([
     tab === "table" ? listResponses(supabase, formId, { page, view, ...filters }) : null,
     getResponseCounts(supabase, formId),
     getFunnelSummaryForForm(supabase, formId, filters.since),
     view === "incomplete" ? getDropoff(supabase, formId) : null,
     tab === "summary" ? getResponseSummary(supabase, formId, filters) : null,
+    tab === "summary" ? getConversionInsights(supabase, formId, filters.since) : null,
   ]);
 
   const base = `/forms/${formId}/responses`;
@@ -440,6 +507,8 @@ export default async function ResponsesPage({
           </div>
 
           {!completed && dropoff && <DropoffCard {...dropoff} />}
+
+          {insights && <InsightsCard insights={insights} />}
 
           {summary && (
             <SummaryView

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { apiError, withApiKey } from "../../shared";
+import { audit } from "@/domains/audit";
 
 /** Unsubscribes (the Zap / scenario was turned off). Only subscriptions
  * on the key's own workspace's forms. */
@@ -11,7 +12,7 @@ export async function DELETE(
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success)
     return apiError("not_found", "Not found.", 404);
-  return withApiKey(request, async (caller, admin) => {
+  return withApiKey(request, "hooks:write", async (caller, admin) => {
     const { data: hook } = await admin
       .from("webhook_endpoints")
       .select("id, kind, forms!inner(workspace_id)")
@@ -25,6 +26,13 @@ export async function DELETE(
       return apiError("not_found", "Not found.", 404);
     }
     await admin.from("webhook_endpoints").delete().eq("id", id);
+    await audit(admin, {
+      workspaceId: caller.workspaceId,
+      actorId: null,
+      action: "api.hook_deleted",
+      target: { type: "webhook", id },
+      metadata: { apiKeyId: caller.keyId },
+    });
     return new NextResponse(null, { status: 204 });
   });
 }

@@ -109,6 +109,7 @@ export type Database = {
           name: string;
           prefix: string;
           revoked_at: string | null;
+          scopes: string[];
           workspace_id: string;
         };
         Insert: {
@@ -120,6 +121,7 @@ export type Database = {
           name: string;
           prefix: string;
           revoked_at?: string | null;
+          scopes?: string[];
           workspace_id: string;
         };
         Update: {
@@ -131,6 +133,7 @@ export type Database = {
           name?: string;
           prefix?: string;
           revoked_at?: string | null;
+          scopes?: string[];
           workspace_id?: string;
         };
         Relationships: [
@@ -143,6 +146,54 @@ export type Database = {
           },
           {
             foreignKeyName: "api_keys_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      audit_logs: {
+        Row: {
+          action: string;
+          actor_id: string | null;
+          created_at: string;
+          id: number;
+          metadata: Json;
+          target_id: string | null;
+          target_type: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          action: string;
+          actor_id?: string | null;
+          created_at?: string;
+          id?: never;
+          metadata?: Json;
+          target_id?: string | null;
+          target_type?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string | null;
+          created_at?: string;
+          id?: never;
+          metadata?: Json;
+          target_id?: string | null;
+          target_type?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "audit_logs_workspace_id_fkey";
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspaces";
@@ -284,6 +335,77 @@ export type Database = {
           },
         ];
       };
+      experiments: {
+        Row: {
+          created_by: string | null;
+          ended_at: string | null;
+          form_id: string;
+          id: string;
+          name: string;
+          split: number;
+          started_at: string;
+          status: string;
+          variant_form_id: string;
+          winner: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          created_by?: string | null;
+          ended_at?: string | null;
+          form_id: string;
+          id?: string;
+          name: string;
+          split?: number;
+          started_at?: string;
+          status?: string;
+          variant_form_id: string;
+          winner?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          created_by?: string | null;
+          ended_at?: string | null;
+          form_id?: string;
+          id?: string;
+          name?: string;
+          split?: number;
+          started_at?: string;
+          status?: string;
+          variant_form_id?: string;
+          winner?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "experiments_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "experiments_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "experiments_variant_form_id_fkey";
+            columns: ["variant_form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "experiments_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       folders: {
         Row: {
           created_at: string;
@@ -319,6 +441,7 @@ export type Database = {
           form_id: string;
           id: string;
           published_at: string | null;
+          published_by: string | null;
           revision: number;
           schema: Json;
           status: Database["public"]["Enums"]["form_version_status"];
@@ -330,6 +453,7 @@ export type Database = {
           form_id: string;
           id?: string;
           published_at?: string | null;
+          published_by?: string | null;
           revision?: number;
           schema: Json;
           status?: Database["public"]["Enums"]["form_version_status"];
@@ -341,6 +465,7 @@ export type Database = {
           form_id?: string;
           id?: string;
           published_at?: string | null;
+          published_by?: string | null;
           revision?: number;
           schema?: Json;
           status?: Database["public"]["Enums"]["form_version_status"];
@@ -353,6 +478,13 @@ export type Database = {
             columns: ["form_id"];
             isOneToOne: false;
             referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "form_versions_published_by_fkey";
+            columns: ["published_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -476,6 +608,30 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      mfa_recovery_codes: {
+        Row: {
+          code_hash: string;
+          created_at: string;
+          id: number;
+          used_at: string | null;
+          user_id: string;
+        };
+        Insert: {
+          code_hash: string;
+          created_at?: string;
+          id?: never;
+          used_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          code_hash?: string;
+          created_at?: string;
+          id?: never;
+          used_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [];
       };
       notification_settings: {
         Row: {
@@ -633,6 +789,7 @@ export type Database = {
           created_at: string;
           embedded: boolean;
           ending_id: string | null;
+          experiment_id: string | null;
           form_id: string;
           form_version_id: string;
           hidden_fields: Json;
@@ -659,6 +816,7 @@ export type Database = {
           created_at?: string;
           embedded?: boolean;
           ending_id?: string | null;
+          experiment_id?: string | null;
           form_id: string;
           form_version_id: string;
           hidden_fields?: Json;
@@ -685,6 +843,7 @@ export type Database = {
           created_at?: string;
           embedded?: boolean;
           ending_id?: string | null;
+          experiment_id?: string | null;
           form_id?: string;
           form_version_id?: string;
           hidden_fields?: Json;
@@ -706,6 +865,13 @@ export type Database = {
           utm_term?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "responses_experiment_id_fkey";
+            columns: ["experiment_id"];
+            isOneToOne: false;
+            referencedRelation: "experiments";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "responses_form_id_fkey";
             columns: ["form_id"];
@@ -1138,6 +1304,7 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          permissions: Json;
           role: Database["public"]["Enums"]["workspace_role"];
           user_id: string;
           workspace_id: string;
@@ -1145,6 +1312,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           id?: string;
+          permissions?: Json;
           role?: Database["public"]["Enums"]["workspace_role"];
           user_id: string;
           workspace_id: string;
@@ -1152,6 +1320,7 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          permissions?: Json;
           role?: Database["public"]["Enums"]["workspace_role"];
           user_id?: string;
           workspace_id?: string;
@@ -1181,6 +1350,7 @@ export type Database = {
           name: string;
           owner_id: string;
           plan_id: string;
+          response_retention_days: number | null;
           slug: string;
           updated_at: string;
         };
@@ -1191,6 +1361,7 @@ export type Database = {
           name: string;
           owner_id: string;
           plan_id?: string;
+          response_retention_days?: number | null;
           slug: string;
           updated_at?: string;
         };
@@ -1201,6 +1372,7 @@ export type Database = {
           name?: string;
           owner_id?: string;
           plan_id?: string;
+          response_retention_days?: number | null;
           slug?: string;
           updated_at?: string;
         };
@@ -1312,6 +1484,7 @@ export type Database = {
           name: string;
           owner_id: string;
           plan_id: string;
+          response_retention_days: number | null;
           slug: string;
           updated_at: string;
         };
@@ -1321,6 +1494,18 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      experiment_stats: {
+        Args: { target_experiment_id: string };
+        Returns: {
+          completed: number;
+          form_id: string;
+          started: number;
+        }[];
+      };
+      has_permission: {
+        Args: { permission: string; target_workspace_id: string };
+        Returns: boolean;
       };
       hit_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_seconds: number };
@@ -1364,6 +1549,7 @@ export type Database = {
           value: Json;
         }[];
       };
+      mfa_satisfied: { Args: never; Returns: boolean };
       publish_form_version: {
         Args: { compiled_schema: Json; target_form_id: string };
         Returns: {
@@ -1371,6 +1557,7 @@ export type Database = {
           form_id: string;
           id: string;
           published_at: string | null;
+          published_by: string | null;
           revision: number;
           schema: Json;
           status: Database["public"]["Enums"]["form_version_status"];
@@ -1396,6 +1583,14 @@ export type Database = {
         Returns: {
           question_id: string;
           stopped: number;
+        }[];
+      };
+      response_source_conversion: {
+        Args: { since?: string; target_form_id: string };
+        Returns: {
+          completed: number;
+          source: string;
+          started: number;
         }[];
       };
       responses_missing_sheets_sync: {

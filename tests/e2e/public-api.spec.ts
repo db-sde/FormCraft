@@ -82,9 +82,10 @@ test("Zapier/Make: authenticate, list forms, sample, subscribe and unsubscribe",
       },
     });
     const sample = await (
-      await request.get(`/api/v1/forms/${formId}/responses`, { headers: auth })
+      await request.get(`/api/v1/forms/${formId}/responses?limit=3`, { headers: auth })
     ).json();
-    expect(sample[0]).toMatchObject({
+    expect(sample.next_cursor).toBeNull();
+    expect(sample.data[0]).toMatchObject({
       eventType: "response.completed",
       formId,
       responseId,
@@ -95,6 +96,60 @@ test("Zapier/Make: authenticate, list forms, sample, subscribe and unsubscribe",
         await request.get(`/api/v1/forms/${foreignFormId}/responses`, { headers: auth })
       ).status(),
     ).toBe(404);
+
+    // A second response pages newest-first, one at a time.
+    const { responseId: secondId } = await (
+      await request.post("/api/responses/start", { data: { formId } })
+    ).json();
+    await request.post(`/api/responses/${secondId}/complete`, {
+      data: {
+        clientRevision: 1,
+        lastQuestionId: "q1",
+        answers: { q1: "Grace" },
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    const page1 = await (
+      await request.get(`/api/v1/forms/${formId}/responses?limit=1`, { headers: auth })
+    ).json();
+    expect(page1.data.map((r: { responseId: string }) => r.responseId)).toEqual([
+      secondId,
+    ]);
+    expect(page1.next_cursor).toEqual(expect.any(String));
+    const page2 = await (
+      await request.get(
+        `/api/v1/forms/${formId}/responses?limit=1&cursor=${page1.next_cursor}`,
+        { headers: auth },
+      )
+    ).json();
+    expect(page2.data.map((r: { responseId: string }) => r.responseId)).toEqual([
+      responseId,
+    ]);
+    expect(page2.next_cursor).toBeNull();
+
+    // One response by id, and the form with its live schema.
+    const one = await request.get(`/api/v1/responses/${responseId}`, { headers: auth });
+    expect((await one.json()).answers).toEqual({ q1: "Ada" });
+    const formDetail = await (
+      await request.get(`/api/v1/forms/${formId}`, { headers: auth })
+    ).json();
+    expect(formDetail.published.schema.questions[0].id).toBe("q1");
+
+    // A read-only key can't subscribe.
+    const { key: readOnly } = await createApiKey(admin, {
+      workspaceId: ws!.workspace_id,
+      name: "Reader",
+      createdBy: owner.userId,
+      scopes: ["forms:read", "responses:read"],
+    });
+    expect(
+      (
+        await request.post("/api/v1/hooks", {
+          headers: { Authorization: `Bearer ${readOnly}` },
+          data: { formId, url: "https://hooks.zapier.example/catch/9" },
+        })
+      ).status(),
+    ).toBe(403);
 
     const created = await request.post("/api/v1/hooks", {
       headers: auth,

@@ -14,6 +14,10 @@ type Client = SupabaseClient<Database>;
 
 export const KEY_PREFIX = "fc_live_";
 
+/** What a key may do (P3.11). */
+export const API_SCOPES = ["forms:read", "responses:read", "hooks:write"] as const;
+export type ApiScope = (typeof API_SCOPES)[number];
+
 const hash = (key: string) => createHash("sha256").update(key).digest("hex");
 
 export class ApiKeyError extends Error {
@@ -55,8 +59,12 @@ export async function listApiKeys(
  * The returned secret is the only copy. */
 export async function createApiKey(
   admin: Client,
-  input: { workspaceId: string; name: string; createdBy: string },
+  input: { workspaceId: string; name: string; createdBy: string; scopes?: ApiScope[] },
 ): Promise<{ id: string; key: string }> {
+  const scopes = (input.scopes ?? [...API_SCOPES]).filter((s) =>
+    (API_SCOPES as readonly string[]).includes(s),
+  );
+  if (scopes.length === 0) throw new ApiKeyError("Give the key at least one permission.");
   const name = input.name.trim().slice(0, 80);
   if (!name) throw new ApiKeyError("Name the key, e.g. “Zapier”.");
   const { entitlements } = await getWorkspacePlan(admin, input.workspaceId);
@@ -71,6 +79,7 @@ export async function createApiKey(
       prefix: key.slice(0, KEY_PREFIX.length + 6),
       key_hash: hash(key),
       created_by: input.createdBy,
+      scopes,
     })
     .select("id")
     .single();
@@ -78,7 +87,7 @@ export async function createApiKey(
   return { id: data.id, key };
 }
 
-export type ApiCaller = { keyId: string; workspaceId: string };
+export type ApiCaller = { keyId: string; workspaceId: string; scopes: ApiScope[] };
 
 /** The workspace an `Authorization: Bearer fc_live_…` header belongs to,
  * if the key is live and the plan still includes the API. */
@@ -90,7 +99,7 @@ export async function authenticateApiKey(
   if (!key) return null;
   const { data } = await admin
     .from("api_keys")
-    .select("id, workspace_id, revoked_at, last_used_at")
+    .select("id, workspace_id, revoked_at, last_used_at, scopes")
     .eq("key_hash", hash(key))
     .maybeSingle();
   if (!data || data.revoked_at) return null;
@@ -103,5 +112,9 @@ export async function authenticateApiKey(
       .update({ last_used_at: new Date().toISOString() })
       .eq("id", data.id);
   }
-  return { keyId: data.id, workspaceId: data.workspace_id };
+  return {
+    keyId: data.id,
+    workspaceId: data.workspace_id,
+    scopes: (data.scopes ?? []) as ApiScope[],
+  };
 }

@@ -86,6 +86,7 @@ test.describe("smoke: every page renders cleanly", () => {
       "/forgot-password",
       "/forgot-password/check-email",
       "/reset-password",
+      "/two-factor",
     ]) {
       await expectHealthy(page, path, problems);
     }
@@ -119,6 +120,7 @@ test.describe("smoke: every page renders cleanly", () => {
         "/forgot-password",
         "/forgot-password/check-email",
         "/reset-password",
+        "/two-factor",
       ]);
       const signedIn: Record<string, string> = {
         "/dashboard": "/dashboard",

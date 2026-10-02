@@ -25,6 +25,11 @@ export function ApiKeySettings({
   appUrl: string;
 }) {
   const [name, setName] = useState("");
+  const [scopes, setScopes] = useState<string[]>([
+    "forms:read",
+    "responses:read",
+    "hooks:write",
+  ]);
   const [created, setCreated] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -41,11 +46,11 @@ export function ApiKeySettings({
       >
         {allowed && isAdmin && (
           <form
-            className="flex flex-col gap-2 sm:flex-row"
+            className="flex flex-col flex-wrap gap-2 sm:flex-row"
             onSubmit={(e) => {
               e.preventDefault();
               start(async () => {
-                const result = await createApiKeyAction(name);
+                const result = await createApiKeyAction(name, scopes as never);
                 if (result.ok && result.key) {
                   setCreated(result.key);
                   setName("");
@@ -62,7 +67,33 @@ export function ApiKeySettings({
               onChange={(e) => setName(e.target.value)}
               className="h-[38px] flex-1"
             />
-            <Button type="submit" disabled={pending || !name.trim()}>
+            <fieldset className="flex flex-wrap items-center gap-3 text-[13px]">
+              <legend className="sr-only">What the key can do</legend>
+              {[
+                ["forms:read", "Read forms"],
+                ["responses:read", "Read responses"],
+                ["hooks:write", "Subscribe to responses"],
+              ].map(([scope, label]) => (
+                <label key={scope} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={scopes.includes(scope)}
+                    onChange={(e) =>
+                      setScopes(
+                        e.target.checked
+                          ? [...scopes, scope]
+                          : scopes.filter((s) => s !== scope),
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+            <Button
+              type="submit"
+              disabled={pending || !name.trim() || scopes.length === 0}
+            >
               {pending && <ButtonSpinner />}
               Create key
             </Button>

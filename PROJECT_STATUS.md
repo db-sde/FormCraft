@@ -1,8 +1,32 @@
 # Project Status
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 
 ## Current milestone
+
+**PHASE 3 — Wave A** (2026-10-03, migrations 33–37):
+
+| Item  | What                                                                               |
+| ----- | ---------------------------------------------------------------------------------- |
+| P3.8  | Conversion insights on Summary (bottleneck question, required drop-off, sources)   |
+| P3.9  | A/B tests between two published forms; stable split, per-arm stats, z-test, winner |
+| P3.10 | Version history: who published, responses per version, restore into draft          |
+| P3.11 | API: scopes, `/forms/:id`, `/responses/:id`, cursor pagination, errors, versioning |
+| P3.13 | 2FA: TOTP + recovery codes, enforced in the database                               |
+| P3.14 | Audit log (Settings → Audit log)                                                   |
+| P3.15 | Granular permissions per member, enforced in RLS                                   |
+| P3.16 | Workspace retention for completed responses                                        |
+
+**To deploy:** `npm run db:migrate` (33–37); enable TOTP in Supabase
+(Authentication → MFA).
+
+**Next:** Wave B (AI, needs `ANTHROPIC_API_KEY`): copilot P3.2, response
+summaries P3.3, tagging P3.4, sentiment P3.5, AI lead scoring P3.6,
+adaptive follow-ups P3.7. Wave C: SSO P3.12, SCIM P3.18, compliance
+P3.17. Then the remaining logic-spec phases (adaptive assessments,
+progressive profiling, external API data, performance benchmarks).
+
+### Phase 2
 
 **PHASE 2 — CONVERT & INTEGRATE** (2026-10-02) — all 23 PRD items built,
 in six waves, each with migrations, unit + integration + E2E tests and a
@@ -28,10 +52,6 @@ listings, Google OAuth client (Sheets), `ANTHROPIC_API_KEY` (AI).
 **To deploy:** `npm run db:migrate` (migrations 24–32), set the new
 optional env vars in `.env.example`, add the `/api/cron/domains` cron
 (in vercel.json), assign plans with `npm run plan:set`.
-
-**Next:** Phase 3 (AI copilot and response analysis, conversion
-insights, A/B tests, version history, public API, SSO/2FA/audit logs,
-granular permissions, retention) and the remaining logic-spec phases.
 
 **LOGIC, SCORING & INTELLIGENCE ENGINE** (2026-10-02) — one deterministic
 event → condition → action engine shared by the builder Preview, the

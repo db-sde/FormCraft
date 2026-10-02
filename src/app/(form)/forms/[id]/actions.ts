@@ -23,7 +23,9 @@ import { proposeRule } from "@/domains/ai/propose-rule";
 import Anthropic from "@anthropic-ai/sdk";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 import { canEdit } from "@/domains/workspaces";
+import { audit } from "@/domains/audit";
 import { isWoff2, MAX_FONT_BYTES } from "@/domains/themes/fonts";
+import { hasPermission } from "@/domains/workspaces/permissions";
 
 export async function renameFormAction(
   formId: string,
@@ -98,10 +100,28 @@ export type PublishResult =
  * reaching the public runtime).
  */
 export async function publishAction(formId: string): Promise<PublishResult> {
-  const { supabase, user } = await getCurrentWorkspace();
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  // Publishing writes with the service role, so the right to edit is
+  // checked here explicitly (reading the draft alone isn't enough:
+  // viewers can read it).
+  if (
+    !canEdit(workspace.role) ||
+    !(await formInWorkspace(supabase, formId, workspace.id)) ||
+    !(await hasPermission(supabase, workspace.id, "publish"))
+  ) {
+    return { ok: false, code: "unknown", message: "You can't publish this form." };
+  }
 
   try {
-    const result = await publishForm(supabase, formId, createAdminClient());
+    const admin = createAdminClient();
+    const result = await publishForm(supabase, formId, admin, user.id);
+    await audit(admin, {
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: "form.published",
+      target: { type: "form", id: formId },
+      metadata: { version: result.versionNumber },
+    });
     revalidatePath(`/forms/${formId}`);
     trackEvent({
       formId,
@@ -125,10 +145,21 @@ export async function publishAction(formId: string): Promise<PublishResult> {
 export async function unpublishAction(
   formId: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const { supabase, user } = await getCurrentWorkspace();
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (
+    !canEdit(workspace.role) ||
+    !(await hasPermission(supabase, workspace.id, "publish"))
+  )
+    return { ok: false, message: "You can't unpublish this form." };
 
   try {
     await unpublishForm(supabase, formId);
+    await audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: "form.unpublished",
+      target: { type: "form", id: formId },
+    });
     revalidatePath(`/forms/${formId}`);
     trackEvent({ formId, eventType: "form_unpublished", actorId: user.id });
     return { ok: true };
@@ -319,4 +350,19 @@ export async function uploadThemeFontAction(
   if (error) return { ok: false, message: "The upload failed. Try again." };
   const { data } = admin.storage.from("theme-assets").getPublicUrl(path);
   return { ok: true, url: data.publicUrl, name };
+}
+
+async function formInWorkspace(
+  supabase: Awaited<ReturnType<typeof getCurrentWorkspace>>["supabase"],
+  formId: string,
+  workspaceId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return !!data;
 }

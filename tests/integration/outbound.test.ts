@@ -165,6 +165,7 @@ describe("API keys", () => {
     expect(await authenticateApiKey(admin, `Bearer ${key}`)).toEqual({
       keyId: id,
       workspaceId,
+      scopes: ["forms:read", "responses:read", "hooks:write"],
     });
     expect(await authenticateApiKey(admin, `Bearer ${key.slice(0, -1)}x`)).toBeNull();
     expect(await authenticateApiKey(admin, key)).toBeNull();

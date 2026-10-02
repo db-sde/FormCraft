@@ -13,6 +13,7 @@ import {
 import { z } from "zod";
 import { EntitlementError, requireFeature, type Feature } from "@/domains/billing";
 import { canEdit } from "@/domains/workspaces";
+import { audit } from "@/domains/audit";
 import { PaymentConfig } from "@/domains/payments/stripe";
 import { mappingProblems, verifyHubspotToken } from "@/domains/integrations/hubspot";
 import { loadCredential } from "@/domains/integrations/credentials";
@@ -25,6 +26,7 @@ import {
 import { setSpreadsheetId, setConnectionEnabled, disconnectForm } from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
+import { hasPermission } from "@/domains/workspaces/permissions";
 
 const MAX_URL_LENGTH = 2000;
 
@@ -62,9 +64,16 @@ export async function createWebhookEndpointAction(
     };
   }
 
-  const { supabase } = await getCurrentWorkspace();
+  const { supabase, user, workspace } = await getCurrentWorkspace();
   try {
     const result = await createWebhookEndpoint(supabase, formId, url);
+    await audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: "integration.connected",
+      target: { type: "form", id: formId },
+      metadata: { provider: "webhook", host: parsed.hostname },
+    });
     revalidatePath(`/forms/${formId}/integrations`);
     trackEvent({
       formId,
@@ -97,8 +106,15 @@ export async function deleteWebhookEndpointAction(
   formId: string,
   endpointId: string,
 ): Promise<void> {
-  const { supabase } = await getCurrentWorkspace();
+  const { supabase, user, workspace } = await getCurrentWorkspace();
   await deleteWebhookEndpoint(supabase, endpointId);
+  await audit(createAdminClient(), {
+    workspaceId: workspace.id,
+    actorId: user.id,
+    action: "integration.disconnected",
+    target: { type: "form", id: formId },
+    metadata: { endpointId },
+  });
   revalidatePath(`/forms/${formId}/integrations`);
 }
 
@@ -155,7 +171,7 @@ export type FeatureResult = { ok: true } | { ok: false; message: string };
 /** The form, in a workspace the caller can edit, whose plan includes
  * `feature` — or why not. */
 async function editableFormWithFeature(formId: string, feature: Feature) {
-  const { supabase, workspace } = await getCurrentWorkspace();
+  const { supabase, workspace, user } = await getCurrentWorkspace();
   if (!canEdit(workspace.role)) return { error: "You have view-only access." } as const;
   const { data: form } = await supabase
     .from("forms")
@@ -164,13 +180,16 @@ async function editableFormWithFeature(formId: string, feature: Feature) {
     .eq("workspace_id", workspace.id)
     .maybeSingle();
   if (!form) return { error: "Form not found." } as const;
+  if (!(await hasPermission(supabase, workspace.id, "manage_integrations"))) {
+    return { error: "You don't have permission to manage integrations." } as const;
+  }
   try {
     await requireFeature(supabase, workspace.id, feature);
   } catch (error) {
     if (error instanceof EntitlementError) return { error: error.message } as const;
     throw error;
   }
-  return { supabase, workspace } as const;
+  return { supabase, workspace, user } as const;
 }
 
 const QuestionIds = z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)).max(10);
@@ -202,6 +221,13 @@ export async function createSlackAction(
     trackEvent({
       formId,
       eventType: "integration_connected",
+      metadata: { provider: "slack" },
+    });
+    await audit(createAdminClient(), {
+      workspaceId: ctx.workspace.id,
+      actorId: ctx.user.id,
+      action: "integration.connected",
+      target: { type: "form", id: formId },
       metadata: { provider: "slack" },
     });
     return { ok: true };
@@ -376,6 +402,13 @@ export async function saveHubspotSyncAction(
     .eq("form_id", formId)
     .eq("kind", "hubspot")
     .maybeSingle();
+  await audit(createAdminClient(), {
+    workspaceId: ctx.workspace.id,
+    actorId: ctx.user.id,
+    action: mapping === null ? "integration.disconnected" : "integration.connected",
+    target: { type: "form", id: formId },
+    metadata: { provider: "hubspot" },
+  });
   if (mapping === null) {
     if (existing)
       await ctx.supabase.from("webhook_endpoints").delete().eq("id", existing.id);

@@ -30,6 +30,8 @@ const StartBody = z.object({
     .string()
     .regex(/^[a-z]{2}$/)
     .optional(),
+  /** The A/B test whose link served the form (P3.9). */
+  experimentId: z.string().uuid().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
       hidden: parsed.data.hidden,
       seed: parsed.data.seed,
       language: parsed.data.language,
+      experimentId: parsed.data.experimentId,
     });
 
     // A response row only gets created here — never on a resumed

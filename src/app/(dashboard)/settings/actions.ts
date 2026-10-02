@@ -105,3 +105,40 @@ export async function deleteAccountAction(confirmEmail: string): Promise<Account
   await supabase.auth.signOut();
   redirect("/?account=deleted");
 }
+
+const RETENTION_DAYS = [null, 30, 90, 180, 365, 730] as const;
+
+/** Workspace retention policy for completed responses (P3.16), owner
+ * and admins only. Applied by the daily retention job. */
+export async function setResponseRetentionAction(
+  days: number | null,
+): Promise<AccountResult> {
+  if (!RETENTION_DAYS.includes(days as never)) {
+    return { ok: false, message: "Choose one of the listed periods." };
+  }
+  const { getCurrentWorkspace } = await import("@/lib/auth/current-workspace");
+  const { canAdmin } = await import("@/domains/workspaces");
+  const { audit } = await import("@/domains/audit");
+  const { user, workspace } = await getCurrentWorkspace();
+  if (!canAdmin(workspace.role))
+    return { ok: false, message: "Only the owner and admins can change this." };
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("workspaces")
+    .update({ response_retention_days: days })
+    .eq("id", workspace.id);
+  if (error) return { ok: false, message: "Couldn't save that." };
+  await audit(admin, {
+    workspaceId: workspace.id,
+    actorId: user.id,
+    action: "retention.changed",
+    metadata: { days },
+  });
+  revalidatePath("/settings");
+  return {
+    ok: true,
+    message: days
+      ? `Responses older than ${days} days will be deleted.`
+      : "Responses are kept.",
+  };
+}

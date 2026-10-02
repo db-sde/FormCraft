@@ -3,7 +3,7 @@ import { withApiKey } from "../shared";
 
 /** The workspace's live forms, for choosing one in Zapier / Make. */
 export async function GET(request: NextRequest) {
-  return withApiKey(request, async (caller, admin) => {
+  return withApiKey(request, "forms:read", async (caller, admin) => {
     const { data, error } = await admin
       .from("forms")
       .select("id, title, form_versions!inner(status)")

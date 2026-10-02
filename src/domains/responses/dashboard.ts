@@ -11,6 +11,7 @@ import {
 import { hasAnswer } from "@/domains/logic/validate-answer";
 import { ABANDONED_AFTER_MINUTES, describeSource } from "./activity";
 import { computeResponseResults, type ResponseResults } from "./results";
+import { buildInsights, type Insight } from "@/domains/analytics/insights";
 import {
   toCsv,
   ExportTooLargeError,
@@ -400,6 +401,8 @@ export type ResponseDetail = {
   /** Computed variables (by name) and URL values; empty when the form
    * has none. Re-derived for completed responses only. */
   results: ResponseResults;
+  /** The published version this response was given on (P3.10). */
+  versionNumber: number;
 };
 
 export async function getResponseDetail(
@@ -418,7 +421,7 @@ export async function getResponseDetail(
 
   const { data: versionRow, error: versionError } = await supabase
     .from("form_versions")
-    .select("schema")
+    .select("schema, version_number")
     .eq("id", response.form_version_id)
     .single();
   if (versionError) throw versionError;
@@ -463,6 +466,7 @@ export async function getResponseDetail(
     utmTerm: response.utm_term,
     utmContent: response.utm_content,
     answers,
+    versionNumber: versionRow.version_number,
     results:
       response.status === "completed"
         ? computeResponseResults({
@@ -716,6 +720,7 @@ export async function buildResponsesCsv(
 export type DropoffStep = {
   questionId: string;
   label: string;
+  required: boolean;
   /** Abandoned respondents whose last step was this question. */
   stopped: number;
 };
@@ -745,7 +750,26 @@ export async function getDropoff(
     .map((q) => ({
       questionId: q.id,
       label: questionColumnLabel(q),
+      required: q.required,
       stopped: counts.get(q.id) ?? 0,
     }));
   return { steps, total: steps.reduce((sum, s) => sum + s.stopped, 0) };
+}
+
+/** Conversion insights (P3.8) for a form: where people leave and which
+ * traffic sources finish, turned into plain-language observations. */
+export async function getConversionInsights(
+  supabase: Client,
+  formId: string,
+  since?: Date,
+): Promise<Insight[]> {
+  const [dropoff, { data: sources, error }] = await Promise.all([
+    getDropoff(supabase, formId),
+    supabase.rpc("response_source_conversion", {
+      target_form_id: formId,
+      since: since?.toISOString(),
+    }),
+  ]);
+  if (error) throw error;
+  return buildInsights({ steps: dropoff.steps, sources: sources ?? [] });
 }

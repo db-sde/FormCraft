@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { authenticateApiKey, type ApiCaller } from "@/domains/api";
+import { authenticateApiKey, type ApiCaller, type ApiScope } from "@/domains/api";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -15,6 +15,7 @@ export function apiError(code: string, message: string, status: number) {
  */
 export async function withApiKey(
   request: NextRequest,
+  scope: ApiScope,
   handler: (
     caller: ApiCaller,
     admin: ReturnType<typeof createAdminClient>,
@@ -23,6 +24,9 @@ export async function withApiKey(
   const admin = createAdminClient();
   const caller = await authenticateApiKey(admin, request.headers.get("authorization"));
   if (!caller) return apiError("unauthorized", "A valid API key is required.", 401);
+  if (!caller.scopes.includes(scope)) {
+    return apiError("forbidden", `This key doesn't have the ${scope} permission.`, 403);
+  }
   if (!(await hitRateLimit(admin, `api:${caller.keyId}`, 120, 60_000)).allowed) {
     return apiError("rate_limited", "Too many requests. Slow down a little.", 429);
   }

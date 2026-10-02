@@ -14,8 +14,13 @@ import { listFormsForWorkspace } from "@/domains/forms";
 import { DomainSettings } from "@/components/dashboard/domain-settings";
 import { ApiKeySettings } from "@/components/dashboard/api-key-settings";
 import { ConnectionSettings } from "@/components/dashboard/connection-settings";
+import { RetentionSettings } from "@/components/dashboard/retention-settings";
+import { AuditLog } from "@/components/dashboard/audit-log";
+import { listAuditLog } from "@/domains/audit";
 import { listApiKeys } from "@/domains/api";
 import { getUsage, getWorkspacePlan } from "@/domains/billing";
+import { remainingRecoveryCodes, verifiedTotpFactor } from "@/domains/identity/mfa";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const TITLES = {
   account: "Account settings",
@@ -25,6 +30,7 @@ const TITLES = {
   domains: "Domains",
   api: "API keys",
   connections: "Connections",
+  audit: "Audit log",
 };
 
 export async function generateMetadata({
@@ -44,15 +50,16 @@ const TABS = [
   ["connections", "Connections"],
   ["api", "API"],
   ["plan", "Plan"],
+  ["audit", "Audit log"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; before?: string; notice?: string }>;
 }) {
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab, before, notice } = await searchParams;
   const tab: Tab = TABS.some(([key]) => key === rawTab) ? (rawTab as Tab) : "account";
   const { supabase, user, workspace } = await getCurrentWorkspace();
   const name = (user.user_metadata?.full_name as string | undefined) ?? "";
@@ -90,6 +97,33 @@ export default async function SettingsPage({
         ])
       : null;
 
+  const auditRecords =
+    tab === "audit" && canAdmin(workspace.role)
+      ? await listAuditLog(
+          supabase,
+          workspace.id,
+          before ? Number(before) || undefined : undefined,
+        )
+      : null;
+  const retentionDays =
+    tab === "workspace"
+      ? ((
+          await supabase
+            .from("workspaces")
+            .select("response_retention_days")
+            .eq("id", workspace.id)
+            .single()
+        ).data?.response_retention_days ?? null)
+      : null;
+
+  const twoFactorEnabled = tab === "account" && !!(await verifiedTotpFactor(supabase));
+  const twoFactor = {
+    enabled: twoFactorEnabled,
+    remaining: twoFactorEnabled
+      ? await remainingRecoveryCodes(createAdminClient(), user.id)
+      : 0,
+  };
+
   const planData =
     tab === "plan"
       ? await Promise.all([
@@ -105,7 +139,7 @@ export default async function SettingsPage({
       </h1>
       <nav
         aria-label="Settings sections"
-        className="border-border flex gap-7 border-b-[1.5px] text-[15px]"
+        className="border-border flex gap-7 overflow-x-auto border-b-[1.5px] text-[15px] whitespace-nowrap"
       >
         {TABS.map(([key, label]) => (
           <Link
@@ -124,7 +158,18 @@ export default async function SettingsPage({
         ))}
       </nav>
 
-      {tab === "account" && <AccountSettings name={name} email={user.email ?? ""} />}
+      {tab === "account" && notice === "two_factor_reset" && (
+        <p
+          role="status"
+          className="border-ink rounded-lg border-[1.5px] bg-[var(--chip-draft-bg)] p-3 text-sm text-[var(--chip-draft-fg)]"
+        >
+          You used a recovery code, so two-factor authentication is now off. Set it up
+          again below to keep your account protected.
+        </p>
+      )}
+      {tab === "account" && (
+        <AccountSettings name={name} email={user.email ?? ""} twoFactor={twoFactor} />
+      )}
 
       {tab === "workspace" && (
         <WorkspaceSettings
@@ -133,6 +178,24 @@ export default async function SettingsPage({
           isOwner={workspace.role === "owner"}
         />
       )}
+      {tab === "workspace" && (
+        <RetentionSettings days={retentionDays} isAdmin={canAdmin(workspace.role)} />
+      )}
+      {tab === "audit" &&
+        (auditRecords ? (
+          <AuditLog
+            records={auditRecords}
+            olderHref={
+              auditRecords.length === 50
+                ? `/settings?tab=audit&before=${auditRecords[auditRecords.length - 1].id}`
+                : null
+            }
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Only owners and admins can see the audit log.
+          </p>
+        ))}
 
       {planData && <PlanUsage plan={planData[0]} usage={planData[1]} />}
 

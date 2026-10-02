@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { removeUploadFiles } from "@/domains/uploads/cleanup";
+import { audit } from "@/domains/audit";
 
 type Client = SupabaseClient<Database>;
 
@@ -48,6 +49,60 @@ export async function purgeExpiredUnfinishedResponses(
       deleted += ids.length;
       if (ids.length < BATCH) break;
     }
+  }
+  return { deleted };
+}
+
+/**
+ * Workspace retention policy for completed responses (PRD P3.16):
+ * deletes those submitted more than `response_retention_days` ago, with
+ * their files and answers (cascade), and records each run in the audit
+ * log. Derived copies outside the database — exports already downloaded,
+ * rows already sent to Sheets, webhook consumers, provider backups — are
+ * outside this job; DECISIONS.md says so.
+ */
+export async function purgeExpiredCompletedResponses(
+  admin: Client,
+  now: Date = new Date(),
+): Promise<{ deleted: number }> {
+  const { data: workspaces, error } = await admin
+    .from("workspaces")
+    .select("id, response_retention_days")
+    .not("response_retention_days", "is", null);
+  if (error) throw error;
+
+  let deleted = 0;
+  for (const workspace of workspaces ?? []) {
+    const cutoff = new Date(
+      now.getTime() - (workspace.response_retention_days ?? 0) * 86_400_000,
+    ).toISOString();
+    let forWorkspace = 0;
+    for (;;) {
+      const { data: expired, error: expiredError } = await admin
+        .from("responses")
+        .select("id, forms!inner(workspace_id)")
+        .eq("forms.workspace_id", workspace.id)
+        .eq("status", "completed")
+        .lt("completed_at", cutoff)
+        .limit(BATCH);
+      if (expiredError) throw expiredError;
+      if (!expired?.length) break;
+      const ids = expired.map((r) => r.id);
+      await removeUploadFiles(admin, { responseIds: ids });
+      const { error: deleteError } = await admin.from("responses").delete().in("id", ids);
+      if (deleteError) throw deleteError;
+      forWorkspace += ids.length;
+      if (ids.length < BATCH) break;
+    }
+    if (forWorkspace > 0) {
+      await audit(admin, {
+        workspaceId: workspace.id,
+        actorId: null,
+        action: "retention.purged",
+        metadata: { deleted: forWorkspace, days: workspace.response_retention_days },
+      });
+    }
+    deleted += forWorkspace;
   }
   return { deleted };
 }

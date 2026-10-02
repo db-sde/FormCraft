@@ -8,6 +8,7 @@ import {
   leaveWorkspaceAction,
   removeMemberAction,
   revokeInvitationAction,
+  setMemberPermissionsAction,
 } from "@/app/(dashboard)/settings/team-actions";
 import type {
   InvitableRole,
@@ -228,6 +229,16 @@ export function TeamSettings({
                     >
                       <Trash2 />
                     </Button>
+                    <PermissionsEditor
+                      member={m}
+                      disabled={pending}
+                      onSave={(overrides) =>
+                        run(
+                          () => setMemberPermissionsAction(m.userId, overrides),
+                          "Permissions saved.",
+                        )
+                      }
+                    />
                   </>
                 ) : (
                   <span className="text-[13.5px] font-semibold">
@@ -293,5 +304,74 @@ export function TeamSettings({
         </SettingsSection>
       )}
     </>
+  );
+}
+
+const PERMISSION_ROWS: [string, string][] = [
+  ["view_responses", "See responses"],
+  ["export_responses", "Export responses"],
+  ["publish", "Publish forms"],
+  ["manage_integrations", "Manage integrations"],
+];
+
+/** What one editor or viewer may do (P3.15), beyond their role's defaults. */
+function PermissionsEditor({
+  member,
+  disabled,
+  onSave,
+}: {
+  member: TeamMember;
+  disabled: boolean;
+  onSave: (overrides: Record<string, boolean>) => void;
+}) {
+  const defaults = (p: string) => member.role === "editor" || p === "view_responses";
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      PERMISSION_ROWS.map(([p]) => [p, member.permissions[p] ?? defaults(p)]),
+    ),
+  );
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        Permissions
+      </Button>
+    );
+  }
+  return (
+    <div className="bg-background basis-full rounded-sm p-3">
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {PERMISSION_ROWS.map(([p, label]) => (
+          <label key={p} className="flex items-center gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              checked={values[p]}
+              onChange={(e) => setValues({ ...values, [p]: e.target.checked })}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Button
+          size="sm"
+          disabled={disabled}
+          onClick={() => {
+            // Store only what differs from the role's defaults.
+            onSave(
+              Object.fromEntries(
+                Object.entries(values).filter(([p, v]) => v !== defaults(p)),
+              ),
+            );
+            setOpen(false);
+          }}
+        >
+          Save permissions
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }

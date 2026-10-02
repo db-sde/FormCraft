@@ -7,6 +7,7 @@ import { canAdmin } from "@/domains/workspaces";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { audit } from "@/domains/audit";
 
 export type DomainResult =
   { ok: true; message?: string } | { ok: false; message: string };
@@ -23,7 +24,14 @@ export async function addDomainAction(hostname: string): Promise<DomainResult> {
   if (!ctx)
     return { ok: false, message: "Only the owner and admins can connect domains." };
   try {
-    await addDomain(createAdminClient(), ctx.workspace.id, hostname);
+    const domain = await addDomain(createAdminClient(), ctx.workspace.id, hostname);
+    await audit(createAdminClient(), {
+      workspaceId: ctx.workspace.id,
+      actorId: ctx.user.id,
+      action: "domain.added",
+      target: { type: "domain", id: domain.id },
+      metadata: { hostname: domain.hostname },
+    });
     revalidatePath("/settings");
     return { ok: true, message: "Added. Now set up the DNS records below." };
   } catch (error) {
@@ -52,6 +60,15 @@ export async function verifyDomainAction(domainId: string): Promise<DomainResult
     };
   }
   const result = await verifyDomain(admin, domainId);
+  if (result.status === "verified") {
+    await audit(admin, {
+      workspaceId: ctx.workspace.id,
+      actorId: ctx.user.id,
+      action: "domain.verified",
+      target: { type: "domain", id: domainId },
+      metadata: { hostname: result.hostname },
+    });
+  }
   revalidatePath("/settings");
   return result.status === "verified"
     ? { ok: true, message: "Verified. Your forms are live on this domain." }
@@ -92,6 +109,12 @@ export async function removeDomainAction(domainId: string): Promise<DomainResult
     .eq("workspace_id", ctx.workspace.id)
     .select("id");
   if (error || !data?.length) return { ok: false, message: "Couldn't remove it." };
+  await audit(createAdminClient(), {
+    workspaceId: ctx.workspace.id,
+    actorId: ctx.user.id,
+    action: "domain.removed",
+    target: { type: "domain", id: domainId },
+  });
   revalidatePath("/settings");
   return { ok: true, message: "Domain removed. It no longer shows your forms." };
 }

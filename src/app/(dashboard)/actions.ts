@@ -25,6 +25,7 @@ import { generateForm } from "@/domains/ai/generate-form";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
+import { audit } from "@/domains/audit";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -187,6 +188,12 @@ export async function deleteFormAction(
   }
   try {
     await softDeleteForm(supabase, formId, workspace.id);
+    await audit(createAdminClient(), {
+      workspaceId: workspace.id,
+      actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
+      action: "form.deleted",
+      target: { type: "form", id: formId },
+    });
     revalidatePath("/dashboard");
     return { ok: true };
   } catch {

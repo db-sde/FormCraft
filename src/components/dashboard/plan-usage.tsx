@@ -22,6 +22,7 @@ const FEATURES: Feature[] = [
   "crm",
   "payments",
   "api_access",
+  "ab_testing",
 ];
 
 function Meter({

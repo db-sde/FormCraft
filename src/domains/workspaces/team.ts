@@ -51,6 +51,8 @@ export type TeamMember = {
   role: WorkspaceRole;
   name: string;
   email: string;
+  /** Per-member overrides of the role's permissions (P3.15). */
+  permissions: Record<string, boolean>;
 };
 
 export type PendingInvitation = {
@@ -69,7 +71,7 @@ export async function listTeam(
   const [members, invitations] = await Promise.all([
     supabase
       .from("workspace_members")
-      .select("user_id, role, profiles(full_name, email)")
+      .select("user_id, role, permissions, profiles(full_name, email)")
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: true }),
     supabase
@@ -90,6 +92,7 @@ export async function listTeam(
         role: m.role as WorkspaceRole,
         name: profile?.full_name ?? "",
         email: profile?.email ?? "",
+        permissions: (m.permissions ?? {}) as Record<string, boolean>,
       };
     }),
     invitations: (invitations.data ?? []).map((i) => ({
