@@ -3,6 +3,43 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — AI-assisted logic and forms: the model proposes, code decides
+
+- **Flat drafts, not the AST.** Structured outputs can't express
+  recursive schemas, and a model writing ids is error-prone. The model
+  fills a flat draft (questions by number, options by label, variables
+  by name, values in words); `draftToRule` / `buildGeneratedForm`
+  translate it deterministically and the result must pass the same Zod
+  schema and `analyzeLogic` as hand-made logic. One level of All/Any.
+- **Nothing is applied automatically.** A rule proposal is shown in the
+  builder's own words with any new variables and warnings; the creator
+  adds or discards it, and autosave validates it again. A generated form
+  opens as an ordinary unpublished draft.
+- **One repair round** for rules: a draft that doesn't translate is sent
+  back with the exact problem once; then the problem is shown.
+  Generated forms drop rules that don't fit and say so instead of failing.
+- **Our own JSON schema.** `@anthropic-ai/sdk` 0.131's zod helper moves
+  `enum` into the description, so values would be suggested, not
+  enforced; `output-format.ts` builds the schema from Zod and keeps
+  enums, and replies are validated with the full Zod schema.
+- **Model and safety.** `claude-opus-5-5`, effort medium, server-side
+  fallbacks on. Server-only key (`ANTHROPIC_API_KEY`); without it the UI
+  says AI isn't set up. Rate-limited per user (30 rule drafts, 10 forms
+  per hour, shared Postgres limiter), form ownership checked, input
+  length capped. Form content sent to the model is the creator's own.
+- **Tested without a model:** translators by unit test; the request
+  shape, repair loop and refusal handling against a stand-in Messages
+  API (`ANTHROPIC_BASE_URL`). Not yet run against the real model here
+  (no key on this machine).
+
+## 2026-10-02 — Summary "Results": replay, don't store
+
+Endings come from `responses.ending_id`; variables are replayed per
+response with the form version it was served, its URL values and its
+submission time (same as the response detail and webhooks), so no
+derived value is stored as truth. Capped by the Summary's existing
+2,000-response limit. Ending titles show recall tokens by name.
+
 ## 2026-10-02 — Logic engine: one model, additive schema
 
 Asked for explicitly (a full logic/scoring engine), which goes beyond the

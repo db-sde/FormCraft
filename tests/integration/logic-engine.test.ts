@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { startResponse, completeResponse } from "@/domains/responses";
+import { startResponse, completeResponse, getResponseSummary } from "@/domains/responses";
 import { parseFormSchema } from "@/domains/forms/schema";
 
 /**
@@ -25,7 +25,7 @@ const schema = parseFormSchema({
   variables: [{ id: "points", name: "points", type: "number" }],
   endings: [
     { id: "end_default", title: "Thanks", isDefault: true },
-    { id: "end_pro", title: "Pro welcome, {{points}} points" },
+    { id: "end_pro", title: "Pro welcome, [points] points" },
     { id: "end_no", title: "Not eligible" },
   ],
   questions: [
@@ -267,5 +267,36 @@ describe("logic engine on the server (integration)", () => {
       q_confirm: "a@b.co",
     });
     expect(result).toMatchObject({ ok: true, endingId: "end_no" });
+  });
+
+  // Runs last: summarises the responses the tests above completed.
+  it("summarises endings reached and variables across completed responses", async () => {
+    const summary = await getResponseSummary(supabase, formId, {});
+    expect(summary.total).toBe(4);
+    expect(summary.outcomes.endings).toEqual([
+      { endingId: "end_default", title: "Thanks", count: 2, percent: 50 },
+      {
+        endingId: "end_pro",
+        title: "Pro welcome, [points] points",
+        count: 1,
+        percent: 25,
+      },
+      { endingId: "end_no", title: "Not eligible", count: 1, percent: 25 },
+    ]);
+    // points = age × 2, replayed per response: 60, 60, 60 and 24.
+    expect(summary.outcomes.variables).toEqual([
+      {
+        variableId: "points",
+        name: "points",
+        kind: "number",
+        count: 4,
+        average: 51,
+        min: 24,
+        max: 60,
+      },
+    ]);
+
+    const filtered = await getResponseSummary(supabase, formId, { endingId: "end_no" });
+    expect(filtered.outcomes.variables[0]).toMatchObject({ count: 1, average: 24 });
   });
 });

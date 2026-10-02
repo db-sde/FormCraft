@@ -34,7 +34,11 @@ FormSchemaV1 = {
   theme: ThemeV1,
   endings: EndingV1[],          // at least 1, default ending required
   questions: QuestionV1[],       // stable id, type, order index
-  logic: LogicRuleV1[],
+  logic: LogicRuleV1[],          // legacy single-question rules, still evaluated
+  // Logic engine additions (2026-10-02), all optional, still schemaVersion 1:
+  variables?: VariableV1[],      // { id, name, type: number|string|boolean|date|list, initial? }
+  rules?: RuleV1[],              // { id, name?, on, when?: Condition, then: ActionV1[], disabled? }
+  hiddenFields?: HiddenFieldV1[],// { name, default? } — URL values, never trusted for auth
 }
 
 QuestionV1 = {
@@ -77,6 +81,29 @@ type, since a form can have multiple endings reachable by logic.)
 Each type's `settings` is a discriminated-union member validated
 independently (e.g. `short_text` settings: `placeholder?`, `minLength?`,
 `maxLength?`; `number` settings: `min?`, `max?`, `decimals?`).
+
+### Logic engine fields
+
+Full model and evaluation order: `docs/logic-engine.md`. In short:
+
+- **Questions** gain `visibleIf?: Condition` (hidden = skipped and never
+  required), `validations?: { id, when?, check: Condition, message }[]`
+  and `weight?` (multiplies option points). **Options** gain
+  `scores?: { variableId, points }[]` and `correct?`. **`meta`** gains
+  `timezone?` (date conditions; UTC by default).
+- **Conditions** are `all` / `any` / `not` / `compare`; both sides of a
+  comparison are expressions (literal, answer[.field], variable, hidden
+  field, `+ - * / %`, whitelisted functions), so cross-field checks work.
+  Nothing is ever evaluated as code.
+- **Actions**: `jump_to_question` (forward only), `jump_to_ending`,
+  `set_variable` (set/add/subtract/multiply/divide/append/remove),
+  `go_to_highest` (outcome quizzes).
+- **Triggers**: `question_answered`, `form_started`, `form_completed`.
+- Variables are derived, never stored: replayed from answers on the
+  server at completion, for webhooks, the response detail and the
+  Summary view's Results, with the clock pinned to submission time.
+- `analyzeLogic` errors block saving (`validateSemantics`); warnings are
+  shown in the builder's Check tab.
 
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 

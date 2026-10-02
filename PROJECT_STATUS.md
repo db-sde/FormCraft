@@ -4,6 +4,32 @@ Last updated: 2026-10-02
 
 ## Current milestone
 
+**LOGIC, SCORING & INTELLIGENCE ENGINE** (2026-10-02) — one deterministic
+event → condition → action engine shared by the builder Preview, the
+live form and the server's authoritative walk; legacy rules keep
+working (translated at evaluation). Details, status per spec phase and
+what's not built: `docs/logic-engine.md` §4. Decisions: `DECISIONS.md`
+(2026-10-02, three entries).
+
+- Engine: conditions, expressions/formulas, typed variables, rules,
+  visibility, cross-field validation, scoring, outcomes, recall, URL
+  fields (migration 24), static analysis.
+- Builder: Logic view (Rules, Variables, Map, Check), per-question show
+  condition / checks / scoring, Preview simulator with a "why" trace,
+  five logic templates.
+- AI: "Describe a rule" and "Describe your form" — proposals validated
+  like hand-made logic, gated on `ANTHROPIC_API_KEY`.
+- Results: variables and URL values on the response detail and in
+  webhooks; Summary "Results" (endings reached, variable stats).
+
+Not yet: running the AI features against the real model (no key here);
+spec phases 8, 19, 20, 23, 24, payments, 36 (see `docs/logic-engine.md`).
+
+**To deploy:** `npm run db:migrate` (migration 24), optional
+`ANTHROPIC_API_KEY`, `npm run db:seed-templates` for the logic templates.
+
+### Earlier milestone
+
 **NEW UI — "Index Card" design handoff** (2026-10-01 → 10-02) — every
 page restyled to the handoff (`design_handoff_formcraft`, Parts 1–8),
 light and dark. Where a board shows something the product doesn't do,

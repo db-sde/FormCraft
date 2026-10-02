@@ -111,3 +111,26 @@ then server integration (walk, completion, hidden fields), builder UI
 (simple → advanced), simulator + trace, static analysis, recall /
 dynamic text, AI-assisted rule writing. Status of each lives in
 `PROJECT_STATUS.md`.
+
+## 4. Status (2026-10-02)
+
+Built and tested (unit, integration and E2E as noted in `docs/testing.md`):
+
+| Spec phases      | What exists                                                                                                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1–7, 9–15, 17–18 | Conditions (27 operators, groups, cross-field), actions, typed variables, formulas, branching, visibility, conditional validation, option scoring with weights, outcomes (`go_to_highest`), quizzes, eligibility, lead scoring, segmentation, pricing, date logic |
+| 21–22            | Recall (`{{name}}`, `{{answer:qid}}`) in labels, endings and redirects (host kept); URL / hidden fields stored per response                                                                                                                                       |
+| 25               | Variables and URL values in the webhook payload (async, as before)                                                                                                                                                                                                |
+| 26–29            | Preview simulator with the path, variables and a "why" trace; logic map; static analysis (Check tab; errors block saving)                                                                                                                                         |
+| 30–31            | "Describe a rule" and "Describe your form" (Claude). The model fills flat drafts that are translated here and must pass Zod and `analyzeLogic`; the creator accepts or discards. Needs `ANTHROPIC_API_KEY`; off (and says so) without it                          |
+| 32–33            | Simple editor by default (sentences, one group level), formulas for advanced use; five logic templates                                                                                                                                                            |
+| 37               | Summary view "Results": endings reached, number-variable average/min/max, value shares for text, boolean and list variables — replayed per response with its own version                                                                                          |
+
+Not built (would each need a decision in `DECISIONS.md` first):
+dynamic options from data (8), randomisation and question pools (19),
+adaptive assessments (20), progressive profiling across visits (23),
+external API calls during a response (24 — a respondent-triggered
+outbound request needs SSRF, latency and secret handling designed), automations beyond
+the existing webhooks/Sheets/email (25), payment events, and
+performance benchmarks (36; the walk is linear in questions × rules and
+is replayed per response in the Summary, capped at 2,000 responses).

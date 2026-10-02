@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { BarChart3, Star } from "lucide-react";
-import type { QuestionSummary, ResponseSummary } from "@/domains/responses";
+import type {
+  OutcomeSummary,
+  QuestionSummary,
+  ResponseSummary,
+} from "@/domains/responses";
 import { SUMMARY_RESPONSE_LIMIT } from "@/domains/responses";
 import { EmptyState } from "@/components/shared/empty-state";
 import { cn } from "cn";
@@ -34,6 +38,7 @@ export function SummaryView({
           {summary.total.toLocaleString()} responses. Add a date filter to narrow it down.
         </p>
       )}
+      <Outcomes outcomes={summary.outcomes} />
       <div className="grid gap-[18px] md:grid-cols-2">
         {summary.questions.map((q) => (
           <SummaryCard key={q.questionId} question={q} tableHref={tableHref} />
@@ -72,28 +77,7 @@ function SummaryCard({
 function Body({ q, tableHref }: { q: QuestionSummary; tableHref: string }) {
   switch (q.kind) {
     case "choice":
-      return (
-        <ul className="flex flex-col gap-2.5">
-          {q.bars.map((bar, i) => (
-            <li key={bar.label} className="flex flex-col gap-1">
-              <div className="flex justify-between gap-3 text-[13.5px]">
-                <span className="min-w-0 truncate">{bar.label}</span>
-                <b className="tabular-nums">{bar.percent}%</b>
-              </div>
-              <div className="bg-muted h-[22px] overflow-hidden rounded-[5px]">
-                <div
-                  className={cn(
-                    "border-ink h-full",
-                    bar.percent > 0 && "border-r-[1.5px]",
-                    i === 0 && bar.count > 0 ? "bg-primary" : "bg-card",
-                  )}
-                  style={{ width: `${bar.percent}%` }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      );
+      return <Bars bars={q.bars} />;
 
     case "rating": {
       const filled = q.average === null ? 0 : Math.round(q.average);
@@ -224,4 +208,87 @@ function Body({ q, tableHref }: { q: QuestionSummary; tableHref: string }) {
         </Link>
       );
   }
+}
+
+function Bars({ bars }: { bars: { label: string; count: number; percent: number }[] }) {
+  return (
+    <ul className="flex flex-col gap-2.5">
+      {bars.map((bar, i) => (
+        <li key={bar.label} className="flex flex-col gap-1">
+          <div className="flex justify-between gap-3 text-[13.5px]">
+            <span className="min-w-0 truncate">{bar.label}</span>
+            <b className="tabular-nums">{bar.percent}%</b>
+          </div>
+          <div className="bg-muted h-[22px] overflow-hidden rounded-[5px]">
+            <div
+              className={cn(
+                "border-ink h-full",
+                bar.percent > 0 && "border-r-[1.5px]",
+                i === 0 && bar.count > 0 ? "bg-primary" : "bg-card",
+              )}
+              style={{ width: `${bar.percent}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Logic results (Phase 37): which endings people reached and what the
+ * form worked out for them — only when the form has more than one place
+ * to end or keeps variables. */
+function Outcomes({ outcomes }: { outcomes: OutcomeSummary }) {
+  const showEndings = outcomes.endings.length > 1;
+  if (!showEndings && outcomes.variables.length === 0) return null;
+  const card =
+    "border-ink bg-card flex min-w-0 flex-col gap-3 rounded-lg border-[1.5px] p-[18px]";
+  return (
+    <section aria-labelledby="outcomes-heading" className="flex flex-col gap-3">
+      <h2
+        id="outcomes-heading"
+        className="text-muted-foreground text-[11px] font-bold tracking-[0.1em] uppercase"
+      >
+        Results
+      </h2>
+      <div className="grid gap-[18px] md:grid-cols-2">
+        {showEndings && (
+          <section className={card}>
+            <h3 className="font-heading text-base font-bold">Endings reached</h3>
+            <Bars
+              bars={outcomes.endings.map((e) => ({
+                label: e.title,
+                count: e.count,
+                percent: e.percent,
+              }))}
+            />
+          </section>
+        )}
+        {outcomes.variables.map((v) => (
+          <section key={v.variableId} className={card}>
+            <div className="flex items-start justify-between gap-2.5">
+              <h3 className="min-w-0 font-mono text-[15px] font-bold">{v.name}</h3>
+              <span className="text-muted-foreground shrink-0 text-[13px]">
+                {v.count.toLocaleString()} response{v.count === 1 ? "" : "s"}
+              </span>
+            </div>
+            {v.count === 0 ? (
+              <p className="text-muted-foreground text-sm">Not set for anyone yet.</p>
+            ) : v.kind === "number" ? (
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <span className="font-heading text-[40px] leading-none font-bold">
+                  {fmt(v.average)}
+                </span>
+                <span className="text-muted-foreground text-[13px]">
+                  average · lowest {fmt(v.min)}, highest {fmt(v.max)}
+                </span>
+              </div>
+            ) : (
+              <Bars bars={v.bars} />
+            )}
+          </section>
+        ))}
+      </div>
+    </section>
+  );
 }
