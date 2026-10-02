@@ -6,6 +6,7 @@ import { toast } from "@/lib/toast";
 import {
   updateSlugAction,
   updateUnfinishedSettingsAction,
+  setResumeLinksAction,
 } from "@/app/(form)/forms/[id]/(sections)/settings/actions";
 import type { FormSettings } from "@/domains/forms";
 import { SettingsSection } from "@/components/dashboard/account-settings";
@@ -44,6 +45,20 @@ export function FormSettingsPanel({
   const [savingSlug, startSavingSlug] = useTransition();
   const [savePartial, setSavePartial] = useState(initial.savePartialResponses);
   const [retention, setRetention] = useState<number | null>(initial.partialRetentionDays);
+  const [resumeLinks, setResumeLinks] = useState(initial.resumeLinksEnabled);
+
+  function saveResumeLinks(enabled: boolean) {
+    setResumeLinks(enabled);
+    startTransition(async () => {
+      const result = await setResumeLinksAction(formId, enabled);
+      if (result.ok) {
+        toast.success("Saved.");
+      } else {
+        setResumeLinks(!enabled);
+        toast.error("Couldn't save that.", { description: result.message });
+      }
+    });
+  }
   const [slug, setSlug] = useState(initial.slug);
   const [savedSlug, setSavedSlug] = useState(initial.slug);
 
@@ -107,6 +122,23 @@ export function FormSettingsPanel({
                   partialRetentionDays: retention,
                 })
               }
+            />
+          </label>
+          <label className="bg-background flex cursor-pointer items-start justify-between gap-4 rounded-sm px-3 py-2.5">
+            <span className="flex flex-col gap-0.5">
+              <b className="text-sm">Let people finish later</b>
+              <span className="text-muted-foreground text-[12.5px] leading-normal">
+                {!savePartial
+                  ? "Needs answers to be saved as people go."
+                  : resumeLinks
+                    ? "On: respondents can get a private link to pick up where they left off, on any device, for 30 days."
+                    : "Off: respondents can only continue in the same browser."}
+              </span>
+            </span>
+            <Switch
+              checked={resumeLinks && savePartial}
+              disabled={pending || !savePartial}
+              onCheckedChange={saveResumeLinks}
             />
           </label>
           <div className="grid gap-1.5 sm:max-w-xs">

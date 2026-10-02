@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { EyeOff, FlaskConical, Monitor, Smartphone, Workflow, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LogicTrace } from "./logic/logic-trace";
+import { newSeed } from "@/domains/logic/random";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
   parseFormSchema,
@@ -50,9 +51,12 @@ export function PreviewDialog({
   // What the respondent has answered so far, for the logic read-out.
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [hidden, setHidden] = useState<Record<string, string>>({});
+  // Each run is a new respondent: new pool picks and option order.
+  const [seed, setSeed] = useState(newSeed);
   const restart = () => {
     setRun((n) => n + 1);
     setAnswers({});
+    setSeed(newSeed());
   };
 
   const result = useMemo(() => {
@@ -183,6 +187,7 @@ export function PreviewDialog({
                   key={`d-${run}-${JSON.stringify(hidden)}`}
                   compiled={result.compiled}
                   hidden={hidden}
+                  seed={seed}
                   onAnswerChange={(next) => setAnswers(next)}
                   mode="desktop"
                   className="h-full"
@@ -194,6 +199,7 @@ export function PreviewDialog({
                   key={`p-${run}-${JSON.stringify(hidden)}`}
                   compiled={result.compiled}
                   hidden={hidden}
+                  seed={seed}
                   onAnswerChange={(next) => setAnswers(next)}
                   mode="phone"
                   className="h-full"
@@ -230,7 +236,12 @@ export function PreviewDialog({
                   </span>
                 </div>
               )}
-              <LogicTrace compiled={result.compiled} answers={answers} hidden={hidden} />
+              <LogicTrace
+                compiled={result.compiled}
+                answers={answers}
+                hidden={hidden}
+                seed={seed}
+              />
             </aside>
           )}
         </div>

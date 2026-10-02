@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isLikelyBot } from "@/lib/http/bots";
 import { PublicFormRuntime } from "./public-form-runtime";
+import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -30,13 +31,21 @@ export default async function PublicFormPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ embed?: string }>;
+  searchParams: Promise<{ embed?: string; [RESUME_PARAM]?: string }>;
 }) {
   const { slug } = await params;
+  const query = await searchParams;
   // Set by the embed code on the Share page.
-  const embedded = (await searchParams).embed === "1";
+  const embedded = query.embed === "1";
   const publicForm = await loadPublicForm(slug);
   if (!publicForm) notFound();
+
+  // A resume link (P2.8) opens the same unfinished response; a link that
+  // no longer works starts fresh, with a note saying why.
+  const resume =
+    typeof query[RESUME_PARAM] === "string"
+      ? await resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
+      : null;
 
   // A view is counted on every render of this page, including a
   // refresh mid-response — distinct from a start, which is the first
@@ -92,6 +101,8 @@ export default async function PublicFormPage({
         formVersionId={publicForm.formVersionId}
         compiled={publicForm.compiled}
         savesProgress={publicForm.savePartialResponses}
+        resumeLinks={publicForm.resumeLinksEnabled && publicForm.savePartialResponses}
+        resume={resume}
         embedded={embedded}
       />
     </div>

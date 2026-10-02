@@ -20,6 +20,8 @@ export function computeResponseResults(input: {
   answers: Record<string, unknown>;
   hidden: unknown;
   completedAt: string | null;
+  /** The response's random seed (question pools). */
+  seed?: string | null;
 }): ResponseResults {
   const hidden =
     input.hidden && typeof input.hidden === "object" && !Array.isArray(input.hidden)
@@ -34,6 +36,7 @@ export function computeResponseResults(input: {
   const walk = walkForm(compileFormSchema(schema), input.answers, {
     hidden,
     now: input.completedAt ? new Date(input.completedAt) : undefined,
+    seed: input.seed ?? undefined,
   });
   return {
     variables: Object.fromEntries(

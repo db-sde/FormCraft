@@ -329,6 +329,7 @@ type CompletedRow = {
   form_version_id: string;
   hidden_fields: unknown;
   completed_at: string | null;
+  random_seed: string | null;
 };
 
 function storedHidden(value: unknown): Record<string, string> {
@@ -448,12 +449,14 @@ async function walkResponses(
     const walk = walkForm(form, Object.fromEntries(answers.get(r.id) ?? new Map()), {
       hidden: storedHidden(r.hidden_fields),
       now: r.completed_at ? new Date(r.completed_at) : undefined,
+      seed: r.random_seed ?? undefined,
     });
     return { endingId: r.ending_id, variables: walk.variables };
   });
 }
 
-const COMPLETED_COLUMNS = "id, ending_id, form_version_id, hidden_fields, completed_at";
+const COMPLETED_COLUMNS =
+  "id, ending_id, form_version_id, hidden_fields, completed_at, random_seed";
 
 function completedQuery(supabase: Client, formId: string, filters: ResponseFilters) {
   const answer: AnswerFilter | undefined = filters.answer;

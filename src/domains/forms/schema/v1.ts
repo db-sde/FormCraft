@@ -12,6 +12,7 @@ import {
   QuestionValidationV1,
   RuleV1,
   VariableV1,
+  QuestionPoolV1,
 } from "./logic-model";
 
 /**
@@ -96,15 +97,28 @@ const NumberSettings = z
     "min can't be greater than max",
   );
 
+/** Options carried forward from an earlier choice question (logic spec
+ * phase 8): its options, kept in sync by the builder, shown filtered by
+ * what the respondent picked there. */
+const OptionsFrom = z.object({
+  questionId: stableId,
+  include: z.enum(["selected", "not_selected"]),
+});
+
 const SingleSelectSettings = z.object({
   options: z.array(OptionV1).min(1).max(100),
   allowOther: z.boolean().default(false),
+  /** Shown in a random order per respondent (answers are option ids). */
+  randomizeOptions: z.boolean().optional(),
+  optionsFrom: OptionsFrom.optional(),
 });
 
 const MultiSelectSettings = z
   .object({
     options: z.array(OptionV1).min(1).max(100),
     allowOther: z.boolean().default(false),
+    randomizeOptions: z.boolean().optional(),
+    optionsFrom: OptionsFrom.optional(),
     minSelections: z.number().int().min(0).optional(),
     maxSelections: z.number().int().min(1).optional(),
   })
@@ -118,6 +132,8 @@ const MultiSelectSettings = z
 
 const DropdownSettings = z.object({
   options: z.array(OptionV1).min(1).max(200),
+  randomizeOptions: z.boolean().optional(),
+  optionsFrom: OptionsFrom.optional(),
 });
 
 const YesNoSettings = z.object({
@@ -246,6 +262,8 @@ export const EndingV1 = z.object({
   description: optionalSafeText(2000),
   buttonLabel: optionalSafeText(100),
   redirectUrl: webUrl.optional(),
+  /** Seconds the ending shows before redirecting (P2.9); 3 when unset. */
+  redirectDelaySeconds: z.number().int().min(0).max(30).optional(),
   isDefault: z.boolean().default(false),
   /** The "Made with FormCraft" badge on this ending; shown unless false. */
   showMadeWith: z.boolean().optional(),
@@ -301,6 +319,13 @@ export const FormSchemaV1 = z.object({
     description: optionalSafeText(2000),
     /** IANA zone for date logic ("today", "this week"); UTC when unset. */
     timezone: z.string().max(64).optional(),
+    /** Where people go after any ending without its own redirect (P2.9). */
+    defaultRedirect: z
+      .object({
+        url: webUrl.refine((v) => /^https:\/\//i.test(v), "must start with https://"),
+        delaySeconds: z.number().int().min(0).max(30).default(3),
+      })
+      .optional(),
   }),
   theme: ThemeV1,
   endings: z.array(EndingV1).min(1).max(20),
@@ -310,6 +335,8 @@ export const FormSchemaV1 = z.object({
   variables: z.array(VariableV1).max(100).optional(),
   rules: z.array(RuleV1).max(500).optional(),
   hiddenFields: z.array(HiddenFieldV1).max(20).optional(),
+  /** Ask a random few of a group of questions (logic spec phase 19). */
+  pools: z.array(QuestionPoolV1).max(20).optional(),
 });
 export type FormSchemaV1 = z.infer<typeof FormSchemaV1>;
 

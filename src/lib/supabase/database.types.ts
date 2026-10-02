@@ -151,6 +151,7 @@ export type Database = {
           description: string | null;
           id: string;
           partial_retention_days: number | null;
+          resume_links_enabled: boolean;
           save_partial_responses: boolean;
           slug: string;
           title: string;
@@ -164,6 +165,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           partial_retention_days?: number | null;
+          resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug: string;
           title: string;
@@ -177,6 +179,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           partial_retention_days?: number | null;
+          resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug?: string;
           title?: string;
@@ -310,6 +313,7 @@ export type Database = {
           is_preview: boolean;
           last_active_at: string;
           last_question_id: string | null;
+          random_seed: string | null;
           referrer: string | null;
           spam_suspected: boolean;
           started_at: string;
@@ -334,6 +338,7 @@ export type Database = {
           is_preview?: boolean;
           last_active_at?: string;
           last_question_id?: string | null;
+          random_seed?: string | null;
           referrer?: string | null;
           spam_suspected?: boolean;
           started_at?: string;
@@ -358,6 +363,7 @@ export type Database = {
           is_preview?: boolean;
           last_active_at?: string;
           last_question_id?: string | null;
+          random_seed?: string | null;
           referrer?: string | null;
           spam_suspected?: boolean;
           started_at?: string;
@@ -381,6 +387,38 @@ export type Database = {
             columns: ["form_version_id"];
             isOneToOne: false;
             referencedRelation: "form_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      resume_tokens: {
+        Row: {
+          created_at: string;
+          expires_at: string;
+          response_id: string;
+          revoked_at: string | null;
+          token_hash: string;
+        };
+        Insert: {
+          created_at?: string;
+          expires_at?: string;
+          response_id: string;
+          revoked_at?: string | null;
+          token_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          expires_at?: string;
+          response_id?: string;
+          revoked_at?: string | null;
+          token_hash?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "resume_tokens_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
             referencedColumns: ["id"];
           },
         ];

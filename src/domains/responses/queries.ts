@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
+import { SEED_PATTERN } from "@/domains/logic/random";
+import { answerUsesAvailableOptions } from "@/domains/forms/options";
 import {
   walkForm,
   validateAnswer,
@@ -49,6 +51,8 @@ export type StartAttribution = {
   embedded?: boolean;
   /** Values for the form's declared hidden fields, from its URL. */
   hidden?: Record<string, string>;
+  /** The browser's random seed for pools and option order. */
+  seed?: string;
 };
 
 /** Only the hidden fields the published form declares, as short strings —
@@ -123,6 +127,8 @@ export async function startResponse(
       utm_content: attribution.utmContent,
       embedded: attribution.embedded ?? false,
       hidden_fields: hidden,
+      random_seed:
+        attribution.seed && SEED_PATTERN.test(attribution.seed) ? attribution.seed : null,
     })
     .select("id, form_version_id")
     .single();
@@ -288,7 +294,7 @@ export async function completeResponse(
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
-    .select("status, form_id, form_version_id, ending_id, hidden_fields")
+    .select("status, form_id, form_version_id, ending_id, hidden_fields, random_seed")
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
@@ -315,6 +321,7 @@ export async function completeResponse(
   const walk = walkForm(compiled, knownAnswers, {
     hidden: storedHidden(response.hidden_fields),
     now: new Date(),
+    seed: response.random_seed ?? undefined,
   });
   const reached = new Set(walk.visitedQuestionIds);
   // Only questions on the path actually taken are validated: an answer
@@ -323,7 +330,12 @@ export async function completeResponse(
   const pathQuestions = compiled.schema.questions.filter((q) => reached.has(q.id));
   const errors = pathQuestions.flatMap((q) => {
     const result = validateAnswer(q, knownAnswers[q.id]);
-    return result.ok ? [] : [{ questionId: q.id, message: result.message }];
+    if (!result.ok) return [{ questionId: q.id, message: result.message }];
+    // Carried-forward options: only the ones this respondent was offered.
+    if (!answerUsesAvailableOptions(q, knownAnswers[q.id], knownAnswers)) {
+      return [{ questionId: q.id, message: "Choose one of the options shown." }];
+    }
+    return [];
   });
   // The form's own conditional / cross-field checks, on the path taken.
   for (const failure of walk.validationErrors) {

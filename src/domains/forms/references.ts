@@ -1,3 +1,4 @@
+import { optionsFromOf } from "./options";
 import type { Condition, Expr, RuleV1 } from "./schema/logic-model";
 import type { FormSchemaV1, QuestionV1 } from "./schema/v1";
 import { legacyToRule } from "@/domains/logic/engine";
@@ -113,7 +114,7 @@ export function removeQuestionReferences(
   questionId: string,
 ): FormSchemaV1 {
   const refs = questionReferences(schema, questionId);
-  const next = withoutRules(schema, new Set(refs.ruleIds));
+  const next = withoutRules(detachOptionsFrom(schema, questionId), new Set(refs.ruleIds));
   return {
     ...next,
     questions: next.questions.map((q) => {
@@ -129,7 +130,52 @@ export function removeQuestionReferences(
       );
       return { ...q, visibleIf, validations } as QuestionV1;
     }),
+    pools: withoutPoolMember(next.pools, questionId),
   };
+}
+
+/** Questions that carry options forward from `questionId`. */
+export function optionsFromReferences(
+  schema: FormSchemaV1,
+  questionId: string,
+): string[] {
+  return schema.questions
+    .filter((q) => optionsFromOf(q)?.questionId === questionId)
+    .map((q) => q.id);
+}
+
+/** When a source question is deleted (or stops being a choice
+ * question), its dependents keep the options they had as their own. */
+export function detachOptionsFrom(
+  schema: FormSchemaV1,
+  questionId: string,
+): FormSchemaV1 {
+  const dependents = new Set(optionsFromReferences(schema, questionId));
+  if (dependents.size === 0) return schema;
+  return {
+    ...schema,
+    questions: schema.questions.map((q) => {
+      if (!dependents.has(q.id)) return q;
+      const settings = { ...(q.settings as Record<string, unknown>) };
+      delete settings.optionsFrom;
+      return { ...q, settings } as QuestionV1;
+    }),
+  };
+}
+
+/** A deleted question leaves its random group; a group left with fewer
+ * than two questions goes, and `pick` shrinks to stay below the size. */
+function withoutPoolMember(
+  pools: FormSchemaV1["pools"],
+  questionId: string,
+): FormSchemaV1["pools"] {
+  if (!pools) return pools;
+  return pools.flatMap((pool) => {
+    if (!pool.questionIds.includes(questionId)) return [pool];
+    const questionIds = pool.questionIds.filter((id) => id !== questionId);
+    if (questionIds.length < 2) return [];
+    return [{ ...pool, questionIds, pick: Math.min(pool.pick, questionIds.length - 1) }];
+  });
 }
 
 export function removeEndingReferences(

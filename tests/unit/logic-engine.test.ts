@@ -592,6 +592,7 @@ describe("visibility", () => {
     expect(result.trace).toContainEqual({
       kind: "question_skipped",
       questionId: "employer",
+      reason: "condition",
     });
   });
 

@@ -53,7 +53,10 @@ export function SettingsPanel({
   workspaceId,
   formId,
   invalid = false,
+  earlierChoices = [],
 }: {
+  /** Earlier choice questions this one could take its options from. */
+  earlierChoices?: { id: string; number: number; label: string }[];
   /** For uploading a welcome/statement image. */
   workspaceId: string;
   formId: string;
@@ -336,17 +339,84 @@ export function SettingsPanel({
         question.type === "dropdown") && (
         <>
           <SectionHead>Choices</SectionHead>
-          <PanelField label="Options">
-            <OptionsEditor
-              options={question.settings.options}
-              onChange={(options) =>
-                onChange({
-                  ...question,
-                  settings: { ...question.settings, options },
-                } as QuestionV1)
+          {earlierChoices.length > 0 && (
+            <PanelField
+              label="Options come from"
+              hint={
+                question.settings.optionsFrom
+                  ? "People see only what applies to them; if nothing does, the question is skipped."
+                  : undefined
               }
-            />
-          </PanelField>
+            >
+              <Select
+                value={
+                  question.settings.optionsFrom
+                    ? `${question.settings.optionsFrom.include}:${question.settings.optionsFrom.questionId}`
+                    : "own"
+                }
+                onValueChange={(value) => {
+                  const settings = { ...question.settings };
+                  if (value === "own") {
+                    delete settings.optionsFrom;
+                  } else {
+                    const [include, questionId] = value.split(/:(.+)/) as [
+                      "selected" | "not_selected",
+                      string,
+                    ];
+                    settings.optionsFrom = { questionId, include };
+                  }
+                  onChange({ ...question, settings } as QuestionV1);
+                }}
+              >
+                <SelectTrigger className="h-[38px] w-full" aria-label="Options come from">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="own">This question&apos;s own list</SelectItem>
+                  {earlierChoices.flatMap((c) => [
+                    <SelectItem key={`s-${c.id}`} value={`selected:${c.id}`}>
+                      What they picked in {c.number} · {c.label.slice(0, 24)}
+                    </SelectItem>,
+                    <SelectItem key={`n-${c.id}`} value={`not_selected:${c.id}`}>
+                      What they didn&apos;t pick in {c.number} · {c.label.slice(0, 24)}
+                    </SelectItem>,
+                  ])}
+                </SelectContent>
+              </Select>
+            </PanelField>
+          )}
+          {question.settings.optionsFrom ? (
+            <p className="text-muted-foreground col-span-full text-[12.5px]">
+              Options are kept in step with question{" "}
+              {earlierChoices.find(
+                (c) => c.id === question.settings.optionsFrom?.questionId,
+              )?.number ?? "?"}
+              : edit them there.
+            </p>
+          ) : (
+            <PanelField label="Options">
+              <OptionsEditor
+                options={question.settings.options}
+                onChange={(options) =>
+                  onChange({
+                    ...question,
+                    settings: { ...question.settings, options },
+                  } as QuestionV1)
+                }
+              />
+            </PanelField>
+          )}
+          <SwitchRow
+            label="Shuffle options"
+            hint="Each respondent sees them in a different order"
+            checked={!!question.settings.randomizeOptions}
+            onCheckedChange={(randomizeOptions) =>
+              onChange({
+                ...question,
+                settings: { ...question.settings, randomizeOptions },
+              } as QuestionV1)
+            }
+          />
           {question.type !== "dropdown" && (
             <SwitchRow
               label="Allow “Other”"

@@ -7,6 +7,8 @@ import type {
   VariableV1,
 } from "@/domains/forms/schema/logic-model";
 import type { FormSchemaV1, LogicRuleV1, QuestionV1 } from "@/domains/forms/schema/v1";
+import { questionsLeftOut } from "./random";
+import { availableOptionIds } from "@/domains/forms/options";
 import { evaluateCondition } from "./conditions";
 import { asDate, asNumber, evaluateExpr, todayIn, type ExprContext } from "./expressions";
 
@@ -25,7 +27,7 @@ export type NextStep =
 
 export type TraceEntry =
   | { kind: "question_shown"; questionId: string }
-  | { kind: "question_skipped"; questionId: string }
+  | { kind: "question_skipped"; questionId: string; reason?: "condition" | "pool" }
   | { kind: "rule_matched"; ruleId: string }
   | { kind: "rule_not_matched"; ruleId: string }
   | {
@@ -51,6 +53,8 @@ export type EngineOptions = {
   hidden?: Record<string, string | undefined>;
   /** The clock for date logic; pin it to replay a past evaluation. */
   now?: Date;
+  /** The response's random seed: which pool questions it's asked. */
+  seed?: string;
 };
 
 export type EngineState = {
@@ -68,6 +72,8 @@ type Run = {
   schema: FormSchemaV1;
   answers: AnswerMap;
   ctxBase: Omit<ExprContext, "variables">;
+  /** Pool questions this response isn't asked. */
+  leftOut: Set<string>;
   rules: NormalizedRule[];
   variables: Map<string, VariableV1>;
   questions: Map<string, QuestionV1>;
@@ -149,6 +155,9 @@ function createRun(
       today: todayIn(options.now ?? new Date(), schema.meta.timezone),
     },
     rules: normalizedRules(schema),
+    leftOut: schema.pools?.length
+      ? questionsLeftOut(schema, options.seed ?? "")
+      : new Set(),
     variables: new Map((schema.variables ?? []).map((v) => [v.id, v])),
     questions: new Map(schema.questions.map((q) => [q.id, q])),
   };
@@ -404,6 +413,9 @@ function rulesFor(run: Run, trigger: RuleV1["on"]): NormalizedRule[] {
 // --- visibility & order ---------------------------------------------------------------
 
 function isQuestionVisible(run: Run, state: EngineState, question: QuestionV1): boolean {
+  if (run.leftOut.has(question.id)) return false;
+  // Carried-forward options with nothing left to choose from: skip it.
+  if (availableOptionIds(question, run.answers)?.size === 0) return false;
   return !question.visibleIf || evaluateCondition(question.visibleIf, ctxOf(run, state));
 }
 
@@ -422,7 +434,11 @@ function nextVisible(
     const question = run.questions.get(id);
     if (!question) continue;
     if (isQuestionVisible(run, state, question)) return id;
-    trace(state, { kind: "question_skipped", questionId: id });
+    trace(state, {
+      kind: "question_skipped",
+      questionId: id,
+      reason: run.leftOut.has(id) ? "pool" : "condition",
+    });
   }
   return null;
 }

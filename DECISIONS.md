@@ -3,6 +3,35 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Wave 1: redirects, resume links, randomness, carry-forward
+
+- **Redirect after submission (P2.9).** The ending's redirect wins, else
+  the form's default (new, https only). Delay 0–30 s, 3 by default — the
+  countdown the live form already had, so existing forms are unchanged.
+- **Resume links (P2.8)** are off per form until the creator turns them
+  on, and need "save answers as people go". The respondent gets the link
+  on screen to copy (no email: "Email me a link" stays out, see the UI
+  entry). 30-day expiry; completing revokes; republishing makes old
+  links start fresh ("the form has changed") rather than mix versions.
+  A link that no longer works also discards this browser's copy of that
+  session, as its note says.
+- **Randomness is a per-response seed** made in the browser and stored
+  at start. Pools and option order are drawn from it, so the browser and
+  the server's walk agree and a refresh doesn't reshuffle. A respondent
+  could choose their own seed; that only chooses among questions the
+  creator pooled, so it isn't treated as a security boundary. Old
+  responses without a seed replay with an empty seed.
+- **Carry-forward copies options.** Rather than resolving options at
+  every read (exports, charts, logic UI, analysis), the builder keeps
+  the carried question's options a copy of the source's ids and labels
+  and the analyser enforces it. Points and "correct" stay the carried
+  question's own so a pick isn't scored twice. If the source question
+  loses an option a rule on the carried question uses, that rule shows
+  in Check as broken, as it would for any removed option.
+- **Not built in this wave:** options from an external data source
+  (that is "external API data", logic spec phase 24, with SSRF and
+  secret handling to design) and adaptive assessments (phase 20).
+
 ## 2026-10-02 — Phase 2 starts: defaults, and Wave 0 (plans and usage)
 
 The user asked to build all remaining phases, starting with Phase 2.

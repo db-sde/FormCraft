@@ -266,3 +266,16 @@ export const OptionScoreV1 = z.object({
   points: z.number().finite().min(-100000).max(100000),
 });
 export type OptionScoreV1 = z.infer<typeof OptionScoreV1>;
+
+// --- question pools ---------------------------------------------------------
+
+/** Each respondent is asked `pick` of these questions, chosen at random
+ * but fixed for the response (seeded), so the browser and the server
+ * agree on which were asked. Unpicked ones are skipped like hidden ones. */
+export const QuestionPoolV1 = z.object({
+  id: stableId,
+  name: safeText(80).optional(),
+  questionIds: z.array(stableId).min(2).max(50),
+  pick: z.number().int().min(1).max(49),
+});
+export type QuestionPoolV1 = z.infer<typeof QuestionPoolV1>;

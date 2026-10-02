@@ -17,11 +17,20 @@ All responses use a consistent error shape:
 `GET /f/:slug` — page. Server-resolves the published `form_versions`
 row for the workspace's form with that slug; 404 (rendered, not raw)
 if no published version exists or the form was unpublished.
+`?resume=<token>` (P2.8) opens that unfinished response — same row,
+answers, position and seed — when the link is valid; otherwise the
+page starts fresh with a note (expired, already submitted, form
+changed, turned off). The browser removes the token from the address
+bar straight away.
 
 `POST /api/responses/start`
 
 - body: `{ formId, referrer?, utmSource?, utmMedium?, utmCampaign?,
-utmTerm?, utmContent?, embedded? }`
+utmTerm?, utmContent?, embedded?, hidden?, seed? }` — `hidden`: the
+  form's URL fields (undeclared names dropped); `seed`
+  (`^[A-Za-z0-9_-]{8,64}$`, ignored otherwise): the browser's random
+  seed, stored on the response so the server asks the same pool
+  questions the respondent saw.
 - creates a `responses` row (`status=in_progress`) for the form's live
   version and returns `{ responseId, formVersionId }`. The browser calls
   it on the respondent's first interaction, not on page load.
@@ -65,6 +74,14 @@ trap? }`
 - after the response is sent, independent steps run (analytics,
   notification, webhook enqueue + dispatch, Sheets enqueue + dispatch);
   one failing never affects another or the respondent's 200.
+
+`POST /api/responses/:id/resume-link` (P2.8)
+
+- no body. Returns `{ path, expiresAt }` — `/f/:slug?resume=<token>`,
+  valid 30 days. `409 unavailable` when the form has resume links off,
+  the response is submitted, or it doesn't exist. The token is 256
+  random bits; only its SHA-256 is stored. Completing the response
+  revokes its links. 20 per hour per address.
 
 `POST /api/responses/:id/uploads/:questionId`
 

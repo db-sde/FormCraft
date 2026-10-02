@@ -1,7 +1,7 @@
 "use client";
 
 import type { RuleProposal } from "@/domains/ai/rule-draft";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -56,10 +56,16 @@ import { QUESTION_TYPE_META, TypeTile } from "./question-meta";
 import { AddQuestionMenu } from "./add-question-menu";
 import { SettingsPanel } from "./settings-panel";
 import { EndingSettingsPanel } from "./ending-editor";
+import { CHOICE_TYPES, syncCarriedOptions } from "@/domains/forms/options";
 import { ThemeSettingsPanel } from "./theme-settings-panel";
 import { LogicEditor } from "./logic-editor";
 import { QuestionLogicPanel } from "./logic/question-logic-panel";
-import { describeRule, questionKind, questionName } from "./logic/logic-ui";
+import {
+  describeRule,
+  numberedQuestions,
+  questionKind,
+  questionName,
+} from "./logic/logic-ui";
 import {
   allRules,
   conditionUsesQuestion,
@@ -69,6 +75,7 @@ import {
   removeEndingReferences,
   removeQuestionReferences,
   removeRules,
+  detachOptionsFrom,
   rulesBrokenByOptionChange,
 } from "@/domains/forms/references";
 import { PreviewDialog } from "./preview-dialog";
@@ -199,7 +206,16 @@ export function FormBuilder({
       added: false,
     };
   });
-  const [schema, setSchema] = useState(opening.schema);
+  const [schema, setRawSchema] = useState(opening.schema);
+  // Every edit goes through here, so carried-forward options always
+  // match the question they come from (domains/forms/options.ts).
+  const setSchema = useCallback(
+    (update: FormSchemaV1 | ((current: FormSchemaV1) => FormSchemaV1)) =>
+      setRawSchema((current) =>
+        syncCarriedOptions(typeof update === "function" ? update(current) : update),
+      ),
+    [],
+  );
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(openPreviewOnLoad);
@@ -434,15 +450,18 @@ export function FormBuilder({
   function applyTypeChange(question: QuestionV1, to: QuestionType) {
     const converted = convertQuestion(question, to).question;
     const broken = rulesBrokenByTypeChangeAll(question, to);
-    setSchema((s) =>
-      removeRules(
+    setSchema((s) => {
+      const next = removeRules(
         {
           ...s,
           questions: s.questions.map((q) => (q.id === question.id ? converted : q)),
         },
         broken,
-      ),
-    );
+      );
+      // No longer a choice question: anything carrying its options forward
+      // keeps the options it had, as its own.
+      return CHOICE_TYPES.has(to) ? next : detachOptionsFrom(next, question.id);
+    });
   }
 
   function requestTypeChange(question: QuestionV1, to: QuestionType) {
@@ -1116,6 +1135,16 @@ export function FormBuilder({
                   invalid={!!selectedProblem}
                   onChange={updateQuestion}
                   onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
+                  earlierChoices={numberedQuestions(schema)
+                    .filter(
+                      ({ question: q }) =>
+                        CHOICE_TYPES.has(q.type) && q.order < selectedQuestion.order,
+                    )
+                    .map(({ question: q, number }) => ({
+                      id: q.id,
+                      number,
+                      label: q.label.trim() || "Untitled",
+                    }))}
                 />
               )}
               {selectedQuestion && (
@@ -1127,7 +1156,13 @@ export function FormBuilder({
                 />
               )}
               {selectedEnding && (
-                <EndingSettingsPanel ending={selectedEnding} onChange={updateEnding} />
+                <EndingSettingsPanel
+                  key={selectedEnding.id}
+                  ending={selectedEnding}
+                  onChange={updateEnding}
+                  meta={schema.meta}
+                  onMetaChange={(meta) => setSchema((s) => ({ ...s, meta }))}
+                />
               )}
               {selection.kind === "theme" && (
                 <ThemeSettingsPanel

@@ -1,3 +1,4 @@
+import { optionsFromOf } from "../options";
 import type { FormSchemaV1, QuestionV1 } from "./v1";
 import {
   NAVIGATION_ACTIONS,
@@ -461,6 +462,82 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
       });
     }
     ruleIds.add(rule.id);
+  }
+
+  // Carried-forward options.
+  for (const question of ordered) {
+    const from = optionsFromOf(question);
+    if (!from) continue;
+    const label = question.label.trim() || "A question";
+    const source = ctx.questions.get(from.questionId);
+    if (!source || !CHOICE_TYPES.has(source.type)) {
+      push({
+        severity: "error",
+        code: "options_from_missing",
+        message: `${label} takes its options from a question that isn't a choice question any more.`,
+        questionId: question.id,
+      });
+      continue;
+    }
+    if ((ctx.position.get(source.id) ?? 0) >= (ctx.position.get(question.id) ?? 0)) {
+      push({
+        severity: "error",
+        code: "options_from_later",
+        message: `${label} takes its options from a question that comes after it.`,
+        questionId: question.id,
+      });
+    }
+    const mine = (question.settings as { options?: { id: string }[] }).options ?? [];
+    const theirs = (source.settings as { options?: { id: string }[] }).options ?? [];
+    if (mine.length !== theirs.length || mine.some((o, i) => o.id !== theirs[i].id)) {
+      push({
+        severity: "error",
+        code: "options_from_out_of_sync",
+        message: `${label}'s options no longer match the question they come from.`,
+        questionId: question.id,
+      });
+    }
+  }
+
+  // Question pools.
+  const inPool = new Map<string, string>();
+  for (const pool of schema.pools ?? []) {
+    const name = pool.name?.trim() || "A random group";
+    const members = pool.questionIds.filter((id) => ctx.questions.has(id));
+    if (members.length < pool.questionIds.length) {
+      push({
+        severity: "error",
+        code: "pool_missing_question",
+        message: `${name} lists a question that no longer exists.`,
+      });
+    }
+    if (pool.pick >= members.length) {
+      push({
+        severity: "error",
+        code: "pool_pick_too_many",
+        message: `${name} asks ${pool.pick} of ${members.length} questions; pick fewer than it has.`,
+      });
+    }
+    for (const id of members) {
+      const question = ctx.questions.get(id)!;
+      if (question.type === "welcome_screen") {
+        push({
+          severity: "error",
+          code: "pool_welcome",
+          message: `${name} can't include the welcome screen.`,
+          questionId: id,
+        });
+      }
+      if (inPool.has(id)) {
+        push({
+          severity: "error",
+          code: "pool_overlap",
+          message: `${question.label.trim() || "A question"} is in two random groups.`,
+          questionId: id,
+        });
+      }
+      inPool.set(id, name);
+    }
   }
 
   // Rules.

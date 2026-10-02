@@ -552,6 +552,8 @@ export type PublicForm = {
   compiled: CompiledFormV1;
   /** Creator setting: autosave answers from respondents who don't finish. */
   savePartialResponses: boolean;
+  /** Creator setting: respondents can get a link to finish later (P2.8). */
+  resumeLinksEnabled: boolean;
 };
 
 export type FormSettings = {
@@ -560,6 +562,8 @@ export type FormSettings = {
   savePartialResponses: boolean;
   /** Days after last activity before unfinished responses are deleted; null = keep. */
   partialRetentionDays: number | null;
+  /** Respondents can get a link to finish later (P2.8). */
+  resumeLinksEnabled: boolean;
 };
 
 export async function getFormSettings(
@@ -569,7 +573,9 @@ export async function getFormSettings(
 ): Promise<FormSettings | null> {
   const { data, error } = await supabase
     .from("forms")
-    .select("title, slug, save_partial_responses, partial_retention_days")
+    .select(
+      "title, slug, save_partial_responses, partial_retention_days, resume_links_enabled",
+    )
     .eq("id", formId)
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
@@ -581,8 +587,23 @@ export async function getFormSettings(
         slug: data.slug,
         savePartialResponses: data.save_partial_responses,
         partialRetentionDays: data.partial_retention_days,
+        resumeLinksEnabled: data.resume_links_enabled,
       }
     : null;
+}
+
+export async function setResumeLinksEnabled(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+  enabled: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ resume_links_enabled: enabled })
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId);
+  if (error) throw error;
 }
 
 export async function updatePartialResponseSettings(
@@ -615,7 +636,7 @@ export async function getPublicFormBySlug(
 ): Promise<PublicForm | null> {
   const { data: form, error: formError } = await supabase
     .from("forms")
-    .select("id, save_partial_responses")
+    .select("id, save_partial_responses, resume_links_enabled")
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
@@ -637,6 +658,7 @@ export async function getPublicFormBySlug(
     formVersionId: version.id,
     compiled,
     savePartialResponses: form.save_partial_responses,
+    resumeLinksEnabled: form.resume_links_enabled,
   };
 }
 

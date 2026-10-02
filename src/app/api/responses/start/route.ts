@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SEED_PATTERN } from "@/domains/logic/random";
 import type { NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
 import { startResponse, FormNotAvailableError } from "@/domains/responses";
@@ -22,6 +23,8 @@ const StartBody = z.object({
     .record(z.string().max(40), z.string().max(500))
     .refine((v) => Object.keys(v).length <= 20, "too many hidden fields")
     .optional(),
+  /** The browser's random seed (question pools, option order). */
+  seed: z.string().regex(SEED_PATTERN).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -56,6 +59,7 @@ export async function POST(request: NextRequest) {
       utmContent: parsed.data.utmContent,
       embedded: parsed.data.embedded,
       hidden: parsed.data.hidden,
+      seed: parsed.data.seed,
     });
 
     // A response row only gets created here — never on a resumed

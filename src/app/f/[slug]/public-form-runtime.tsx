@@ -5,6 +5,16 @@ import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
 import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
+import type { ResumeResult } from "@/domains/responses/resume";
+import { newSeed } from "@/domains/logic/random";
+
+const RESUME_NOTICE: Record<Exclude<ResumeResult, { ok: true }>["reason"], string> = {
+  invalid: "That link doesn't work, so you're starting fresh.",
+  expired: "That link has expired, so you're starting fresh.",
+  submitted: "Those answers were already submitted. You can fill the form again.",
+  changed: "The form has changed since, so you're starting fresh.",
+  disabled: "That link no longer works, so you're starting fresh.",
+};
 
 type StoredResponse = {
   responseId: string;
@@ -21,6 +31,8 @@ type StoredResponse = {
   history: string[];
   /** The hidden-field values this session started with. */
   hidden?: Record<string, string>;
+  /** Random seed for question pools and option order (kept on resume). */
+  seed?: string;
 };
 
 /** What the respondent has done so far, before or after a response
@@ -91,6 +103,7 @@ function hiddenFromUrl(compiled: CompiledFormV1): Record<string, string> {
 async function startSession(
   formId: string,
   hidden: Record<string, string>,
+  seed: string,
 ): Promise<{
   responseId: string;
   formVersionId: string;
@@ -98,7 +111,7 @@ async function startSession(
   const res = await fetch("/api/responses/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ formId, ...attribution(), hidden }),
+    body: JSON.stringify({ formId, ...attribution(), hidden, seed }),
   });
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
   return (await res.json()) as { responseId: string; formVersionId: string };
@@ -139,7 +152,13 @@ export function PublicFormRuntime({
   compiled,
   savesProgress = true,
   embedded = false,
+  resumeLinks = false,
+  resume = null,
 }: {
+  /** Creator setting: respondents can get a link to finish later (P2.8). */
+  resumeLinks?: boolean;
+  /** A resume link this page was opened with, already checked on the server. */
+  resume?: ResumeResult | null;
   /** Rendered inside another site's iframe (Share → Embed). */
   embedded?: boolean;
   formId: string;
@@ -171,6 +190,9 @@ export function PublicFormRuntime({
     typeof window === "undefined" ? {} : hiddenFromUrl(compiled),
   );
 
+  // A new respondent's seed; a resumed session keeps the one it had.
+  const [freshSeed] = useState(newSeed);
+
   const theme = compiled.schema.theme;
 
   useEffect(() => {
@@ -192,6 +214,27 @@ export function PublicFormRuntime({
 
   useEffect(() => {
     let cancelled = false;
+    if (!resumeCheckRef.current && resume) {
+      // The link's token shouldn't linger in the address bar, history or
+      // a later page's referrer.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("resume");
+      window.history.replaceState(null, "", url);
+    }
+    if (!resumeCheckRef.current && resume?.ok) {
+      const fromLink: StoredResponse = {
+        ...resume.response,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      if (savesProgress) writeStored(formId, fromLink);
+      resumeCheckRef.current = Promise.resolve(fromLink);
+    }
+    if (!resumeCheckRef.current && resume && !resume.ok) {
+      // A link that no longer works starts fresh, as its note says —
+      // including over this browser's copy of that same response.
+      clearStored(formId);
+      resumeCheckRef.current = Promise.resolve(null);
+    }
     if (!resumeCheckRef.current) {
       const existing = savesProgress ? readStored(formId) : null;
       // A response started against an older published version can't be
@@ -218,7 +261,7 @@ export function PublicFormRuntime({
     return () => {
       cancelled = true;
     };
-  }, [formId, formVersionId, savesProgress]);
+  }, [formId, formVersionId, savesProgress, resume]);
 
   function updateSession(patch: Partial<StoredResponse>) {
     const current = sessionRef.current;
@@ -244,7 +287,7 @@ export function PublicFormRuntime({
       return Promise.reject(new Error("start recently failed"));
     }
     if (!startPromiseRef.current) {
-      startPromiseRef.current = startSession(formId, urlHidden).then(
+      startPromiseRef.current = startSession(formId, urlHidden, freshSeed).then(
         (data) => {
           const fresh: StoredResponse = {
             responseId: data.responseId,
@@ -252,6 +295,7 @@ export function PublicFormRuntime({
             idempotencyKey: crypto.randomUUID(),
             revision: 0,
             hidden: urlHidden,
+            seed: freshSeed,
             ...progressRef.current,
           };
           sessionRef.current = fresh;
@@ -418,6 +462,34 @@ export function PublicFormRuntime({
     }
   }
 
+  async function finishLater(): Promise<
+    { ok: true; url: string } | { ok: false; message: string }
+  > {
+    try {
+      const session = await ensureSession({ force: true });
+      // The link should open with everything answered so far.
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      dirtyRef.current = true;
+      await flushSaves();
+      const res = await fetch(`/api/responses/${session.responseId}/resume-link`, {
+        method: "POST",
+      });
+      const body = (await res.json().catch(() => null)) as {
+        path?: string;
+        error?: { message?: string };
+      } | null;
+      if (!res.ok || !body?.path) {
+        return {
+          ok: false,
+          message: body?.error?.message ?? "Couldn't make a link. Try again.",
+        };
+      }
+      return { ok: true, url: new URL(body.path, window.location.origin).toString() };
+    } catch {
+      return { ok: false, message: "Couldn't reach the server. Try again." };
+    }
+  }
+
   function sendStepEvent(
     type: "question_viewed" | "question_answered",
     questionId: string,
@@ -463,12 +535,15 @@ export function PublicFormRuntime({
       initialHistory={resumed?.history}
       welcomeBack={!!resumed && !!resumed.lastQuestionId}
       hidden={resumed?.hidden ?? urlHidden}
+      seed={resumed?.seed ?? freshSeed}
       redirectOnEnding
       onAnswerChange={handleAnswerChange}
       onComplete={handleComplete}
       getResponseId={() => ensureSession().then((s) => s.responseId)}
       savesProgress={savesProgress}
       onStepEvent={sendStepEvent}
+      onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
+      notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
       // Embedded: natural height, reported to the host page so its
       // iframe grows/shrinks to fit (full-viewport height would pin the
       // iframe at whatever size it started with).

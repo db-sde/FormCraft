@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   updatePartialResponseSettings,
+  setResumeLinksEnabled,
   updateFormSlug,
   SlugTakenError,
 } from "@/domains/forms";
@@ -40,6 +41,21 @@ export async function updateUnfinishedSettingsAction(
       savePartialResponses: Boolean(settings.savePartialResponses),
       partialRetentionDays: settings.partialRetentionDays,
     });
+    revalidatePath(`/forms/${formId}/settings`);
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Couldn't save the setting. Please try again." };
+  }
+}
+
+export async function setResumeLinksAction(
+  formId: string,
+  enabled: boolean,
+): Promise<SettingsResult> {
+  const ctx = await ownFormOrFail(formId);
+  if (!ctx) return { ok: false, message: "Form not found." };
+  try {
+    await setResumeLinksEnabled(ctx.supabase, formId, ctx.workspace.id, Boolean(enabled));
     revalidatePath(`/forms/${formId}/settings`);
     return { ok: true };
   } catch {

@@ -118,7 +118,7 @@ async function loadResponseForDelivery(admin: Client, responseId: string) {
   const { data: response, error } = await admin
     .from("responses")
     .select(
-      "form_id, form_version_id, status, spam_suspected, ending_id, completed_at, hidden_fields",
+      "form_id, form_version_id, status, spam_suspected, ending_id, completed_at, hidden_fields, random_seed",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -152,6 +152,7 @@ async function loadResponseForDelivery(admin: Client, responseId: string) {
       answers,
       hidden: response.hidden_fields,
       completedAt: response.completed_at,
+      seed: response.random_seed,
     }),
   };
 }

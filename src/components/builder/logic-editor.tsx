@@ -9,6 +9,7 @@ import {
   Flag,
   List,
   Plus,
+  Shuffle,
   Split,
   Trash2,
   TriangleAlert,
@@ -34,6 +35,7 @@ import { TypeTile } from "./question-meta";
 import { ConditionEditor } from "./logic/condition-editor";
 import { ActionsEditor } from "./logic/actions-editor";
 import { VariablesPanel } from "./logic/variables-panel";
+import { PoolsPanel } from "./logic/pools-panel";
 import { DescribeRule, type ProposeRule } from "./logic/describe-rule";
 import {
   defaultCompare,
@@ -45,7 +47,7 @@ import {
 
 export { describeRule };
 
-type View = "rules" | "variables" | "map" | "check";
+type View = "rules" | "variables" | "pools" | "map" | "check";
 
 /** The builder's Logic view (Part 4): rules (simple by default, grouped
  * conditions when needed), variables and URL fields, a map generated from
@@ -114,6 +116,7 @@ export function LogicEditor({
             [
               ["rules", "Rules", List],
               ["variables", "Variables", Braces],
+              ["pools", "Random", Shuffle],
               ["map", "Map", Workflow],
               ["check", "Check", errors > 0 ? CircleAlert : CircleCheck],
             ] as const
@@ -189,6 +192,8 @@ export function LogicEditor({
       )}
 
       {view === "variables" && <VariablesPanel schema={schema} onChange={onChange} />}
+
+      {view === "pools" && <PoolsPanel schema={schema} onChange={onChange} />}
 
       {view === "map" && <LogicMap schema={schema} rules={rules} />}
 

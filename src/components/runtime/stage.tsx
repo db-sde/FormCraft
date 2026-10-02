@@ -131,6 +131,19 @@ export function WelcomeBackBanner() {
   );
 }
 
+/** A short note above the form, e.g. why a resume link didn't open. */
+export function NoticeBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      className="flex max-w-full items-center gap-2 rounded-full border border-(--st-primary) bg-(--st-sel) px-3.5 py-[7px] text-[13px] font-semibold"
+    >
+      <span aria-hidden className="size-[7px] shrink-0 rounded-full bg-(--st-primary)" />
+      {children}
+    </div>
+  );
+}
+
 /** "3 →" above a question. */
 export function StageNumber({ n }: { n: number }) {
   return (

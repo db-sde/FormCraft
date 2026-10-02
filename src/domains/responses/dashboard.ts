@@ -409,7 +409,7 @@ export async function getResponseDetail(
   const { data: response, error } = await supabase
     .from("responses")
     .select(
-      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content, hidden_fields",
+      "id, form_id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content, hidden_fields, random_seed",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -470,6 +470,7 @@ export async function getResponseDetail(
             answers: Object.fromEntries(answersByQuestion),
             hidden: response.hidden_fields,
             completedAt: response.completed_at,
+            seed: response.random_seed,
           })
         : { variables: {}, hidden: {} },
   };

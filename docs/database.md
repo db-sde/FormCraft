@@ -72,6 +72,18 @@ this doc needs fixing.
   execute is revoked from users). Members can read their workspace's
   counters. Seats and storage are measured from rows, not counted.
 
+## Resume links and random seeds (migrations 26–27)
+
+- **`forms.resume_links_enabled`** (default false) — creator switch for
+  P2.8.
+- **`resume_tokens`** — `token_hash` (SHA-256 hex, the token itself is
+  only in the link), `response_id`, `created_at`, `expires_at` (+30
+  days), `revoked_at`. RLS on with no policies: server only. The
+  `responses_revoke_resume_tokens` trigger revokes a response's links
+  when it completes.
+- **`responses.random_seed`** — the seed a response's question pools
+  and option order were drawn from (null for older responses).
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

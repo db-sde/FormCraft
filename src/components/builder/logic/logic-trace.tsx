@@ -30,7 +30,11 @@ function describeEntry(
     case "question_skipped":
       return {
         icon: <MinusCircle className="size-3.5" />,
-        text: `Skipped ${questionName(schema, entry.questionId)}: its show condition isn't met`,
+        text: `Skipped ${questionName(schema, entry.questionId)}: ${
+          entry.reason === "pool"
+            ? "not picked from its random group this time"
+            : "its show condition isn't met"
+        }`,
       };
     case "rule_matched": {
       const rule = rules.find((r) => r.id === entry.ruleId);
@@ -85,13 +89,15 @@ export function LogicTrace({
   compiled,
   answers,
   hidden,
+  seed,
 }: {
   compiled: CompiledFormV1;
   answers: Record<string, unknown>;
   hidden: Record<string, string>;
+  seed?: string;
 }) {
   const schema = compiled.schema;
-  const walk = walkForm(compiled, answers, { hidden });
+  const walk = walkForm(compiled, answers, { hidden, seed });
   const variables = schema.variables ?? [];
   const entries = walk.trace
     .map((e) => describeEntry(e, schema))

@@ -105,6 +105,27 @@ Full model and evaluation order: `docs/logic-engine.md`. In short:
 - `analyzeLogic` errors block saving (`validateSemantics`); warnings are
   shown in the builder's Check tab.
 
+### Phase 2 additions (all optional, still schemaVersion 1)
+
+- `meta.defaultRedirect?: { url (https only), delaySeconds 0–30 = 3 }` —
+  where endings without their own redirect send people (P2.9); endings
+  gain `redirectDelaySeconds?` (0–30, 3 when unset). Resolved by
+  `endingRedirect()` in `src/domains/forms/redirect.ts`.
+- Choice settings gain `randomizeOptions?` (shuffled per response by
+  its seed — presentation only, answers are option ids) and
+  `optionsFrom?: { questionId, include: "selected" | "not_selected" }`
+  (carry-forward, logic spec phase 8). A carried question's `options`
+  are a builder-maintained copy of the source's ids and labels (never
+  its points); `analyzeLogic` rejects a copy that's out of sync, a
+  source that comes later or isn't a choice question. The respondent is
+  offered only the filtered options; with none left the question is
+  skipped; the server rejects an option they weren't offered.
+- `pools?: { id, name?, questionIds (2–50), pick }[]` — ask `pick` of a
+  group, chosen per response from `responses.random_seed`
+  (`src/domains/logic/random.ts`); unpicked questions are skipped like
+  hidden ones. A question can be in one pool; `pick` must be below the
+  group's size; deleting a question shrinks or removes its pool.
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

@@ -1,5 +1,8 @@
 "use client";
 
+import { seededShuffle } from "@/domains/logic/random";
+import { availableOptionIds } from "@/domains/forms/options";
+import { endingRedirect } from "@/domains/forms/redirect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { EndingV1, QuestionV1 } from "@/domains/forms/schema/v1";
@@ -26,6 +29,7 @@ import {
   StageError,
   StageNumber,
   WelcomeBackBanner,
+  NoticeBanner,
   stageDescClass,
   stageLabelClass,
   stageTitleClass,
@@ -109,7 +113,21 @@ export function FormRuntime({
   welcomeBack = false,
   redirectOnEnding = false,
   hidden,
+  onFinishLater,
+  notice,
+  seed,
 }: {
+  /** The response's random seed: which pool questions are asked and the
+   * order of shuffled options. */
+  seed?: string;
+  /** Public runtime, when the creator allows it: a link to finish later
+   * (PRD P2.8). */
+  onFinishLater?: () => Promise<
+    { ok: true; url: string } | { ok: false; message: string }
+  >;
+  /** A note shown above the first question (e.g. a resume link that
+   * no longer works). */
+  notice?: string;
   /** Values for the form's hidden fields (from the page URL). */
   hidden?: Record<string, string>;
   /** Sizes: "auto" (the public form) follows the screen; Preview forces
@@ -145,11 +163,11 @@ export function FormRuntime({
    * page so the theme background covers the whole viewport. */
   className?: string;
 }) {
-  const engineOptions = useMemo(() => ({ hidden }), [hidden]);
+  const engineOptions = useMemo(() => ({ hidden, seed }), [hidden, seed]);
   const [currentId, setCurrentId] = useState(
     initialQuestionId && compiled.orderedQuestionIds.includes(initialQuestionId)
       ? initialQuestionId
-      : (firstQuestionId(compiled, initialAnswers ?? {}, { hidden }) ??
+      : (firstQuestionId(compiled, initialAnswers ?? {}, { hidden, seed }) ??
           compiled.orderedQuestionIds[0]),
   );
   const [answers, setAnswers] = useState<AnswerMap>(initialAnswers ?? {});
@@ -408,6 +426,7 @@ export function FormRuntime({
     return (
       <EndingScreen
         ending={ending}
+        meta={compiled.schema.meta}
         recallSource={endingRecall}
         theme={theme}
         mode={mode}
@@ -448,7 +467,13 @@ export function FormRuntime({
       theme={theme}
       mode={mode}
       progress={progress}
-      banner={welcomeBack && history.length === 0 ? <WelcomeBackBanner /> : undefined}
+      banner={
+        notice && history.length === 0 ? (
+          <NoticeBanner>{notice}</NoticeBanner>
+        ) : welcomeBack && history.length === 0 ? (
+          <WelcomeBackBanner />
+        ) : undefined
+      }
       className={cn("min-h-[420px]", className)}
     >
       {/* Spam trap: invisible to people and skipped by keyboard and screen
@@ -551,7 +576,7 @@ export function FormRuntime({
 
             <RuntimeQuestionInput
               key={question.id}
-              question={question}
+              question={withDisplayOrder(question, seed, answers)}
               value={answers[question.id]}
               onChange={setAnswer}
               getResponseId={getResponseId}
@@ -579,18 +604,115 @@ export function FormRuntime({
               : "Your answers are saved as you go."}
           </p>
         )}
+        {onFinishLater && !entry && history.length > 0 && (
+          <FinishLater key={question.id} create={onFinishLater} />
+        )}
       </div>
     </Stage>
   );
 }
 
-const REDIRECT_SECONDS = 3;
+/** A choice question's options as this respondent sees them: only the
+ * carried-forward ones they're offered, and shuffled (fixed by the seed,
+ * so a refresh doesn't reshuffle) when "Shuffle options" is on. */
+function withDisplayOrder(
+  question: QuestionV1,
+  seed: string | undefined,
+  answers: AnswerMap,
+): QuestionV1 {
+  const settings = question.settings as {
+    options?: { id: string }[];
+    randomizeOptions?: boolean;
+  };
+  if (!settings.options) return question;
+  const available = availableOptionIds(question, answers);
+  let options = available
+    ? settings.options.filter((o) => available.has(o.id))
+    : settings.options;
+  if (settings.randomizeOptions && seed) {
+    options = seededShuffle(options, `${seed}:${question.id}`);
+  }
+  if (options === settings.options) return question;
+  return { ...question, settings: { ...settings, options } } as QuestionV1;
+}
+
+/** "Finish later" (PRD P2.8): makes a resume link and shows it to copy. */
+function FinishLater({
+  create,
+}: {
+  create: () => Promise<{ ok: true; url: string } | { ok: false; message: string }>;
+}) {
+  const [state, setState] = useState<
+    | { kind: "idle" }
+    | { kind: "pending" }
+    | { kind: "link"; url: string; copied: boolean }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  if (state.kind === "link") {
+    return (
+      <div className="flex w-full max-w-[520px] flex-col gap-2 rounded-[10px] border border-(--st-line) p-3 text-[13.5px]">
+        <label htmlFor="fc-resume-link" className="font-semibold">
+          Your link to finish later
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="fc-resume-link"
+            readOnly
+            value={state.url}
+            onFocus={(e) => e.currentTarget.select()}
+            className="min-w-0 flex-1 rounded-[6px] border border-(--st-line) bg-transparent px-2.5 py-1.5 text-[13px]"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(state.url).then(
+                () => setState({ ...state, copied: true }),
+                () => undefined,
+              );
+            }}
+            className="rounded-[6px] border border-(--st-primary) px-3 py-1.5 font-semibold text-(--st-primary)"
+          >
+            {state.copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <span className="text-xs text-(--st-muted)">
+          Open it on any device within 30 days to pick up where you left off. Anyone with
+          the link can see your answers, so keep it to yourself.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <p className="text-xs text-(--st-muted)">
+      <button
+        type="button"
+        disabled={state.kind === "pending"}
+        onClick={async () => {
+          setState({ kind: "pending" });
+          const result = await create();
+          setState(
+            result.ok
+              ? { kind: "link", url: result.url, copied: false }
+              : { kind: "error", message: result.message },
+          );
+        }}
+        className="font-semibold text-(--st-primary) underline underline-offset-2"
+      >
+        {state.kind === "pending" ? "Making your link…" : "Finish later"}
+      </button>
+      {state.kind === "error" && <span role="alert"> {state.message}</span>}
+    </p>
+  );
+}
 
 /** An ending (Part 6 §6.4, Part 8 §3). With a redirect URL on the live
- * form: the response is already saved, so count down 3s, then go in
- * the same tab; if the browser blocks it, the button stays. */
+ * form: the response is already saved, so count down (the ending's or
+ * the form's delay, 3s by default), then go in the same tab; if the
+ * browser blocks it, the button stays. */
 function EndingScreen({
   ending,
+  meta,
   recallSource,
   theme,
   mode,
@@ -599,6 +721,7 @@ function EndingScreen({
   redirect,
 }: {
   ending: EndingV1;
+  meta: CompiledFormV1["schema"]["meta"];
   /** Final answers and variables, for {{score}}-style recall. */
   recallSource: RecallSource | null;
   theme: CompiledFormV1["schema"]["theme"];
@@ -609,12 +732,13 @@ function EndingScreen({
 }) {
   const recall = (text: string | undefined) =>
     recallSource ? renderRecall(text, recallSource) : text;
+  const destination = endingRedirect({ meta }, ending);
   const target =
-    ending.redirectUrl && recallSource
-      ? renderRecallUrl(ending.redirectUrl, recallSource)
-      : ending.redirectUrl;
+    destination && recallSource
+      ? renderRecallUrl(destination.url, recallSource)
+      : destination?.url;
   const counting = redirect && !!target;
-  const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(destination?.delaySeconds ?? 0);
   const host = target ? safeHost(target) : null;
 
   useEffect(() => {
