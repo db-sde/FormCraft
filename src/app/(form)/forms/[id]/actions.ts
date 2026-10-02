@@ -22,6 +22,8 @@ import { aiConfigured, MAX_INSTRUCTION_LENGTH } from "@/domains/ai/config";
 import { proposeRule } from "@/domains/ai/propose-rule";
 import Anthropic from "@anthropic-ai/sdk";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
+import { canEdit } from "@/domains/workspaces";
+import { isWoff2, MAX_FONT_BYTES } from "@/domains/themes/fonts";
 
 export async function renameFormAction(
   formId: string,
@@ -262,4 +264,59 @@ export async function proposeRuleAction(
       message: "The AI couldn't be reached. Try again.",
     };
   }
+}
+
+export type FontUploadResult =
+  { ok: true; url: string; name: string } | { ok: false; message: string };
+
+/**
+ * Uploads a licensed WOFF2 font for this form's theme (P2.22). Checked
+ * here, not in the browser: the plan includes custom fonts, the caller
+ * can edit the form, the file really is WOFF2 and small, and the
+ * creator confirmed they may use it on the web. Stored in the
+ * workspace's theme folder, the only place a theme font may come from.
+ */
+export async function uploadThemeFontAction(
+  formId: string,
+  formData: FormData,
+): Promise<FontUploadResult> {
+  const { supabase, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role))
+    return { ok: false, message: "You have view-only access." };
+  const { data: form } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (!form) return { ok: false, message: "Form not found." };
+
+  const admin = createAdminClient();
+  const { entitlements } = await getWorkspacePlan(admin, workspace.id);
+  if (!entitlements.custom_fonts) {
+    return { ok: false, message: "Your own fonts are part of paid plans." };
+  }
+  if (formData.get("licensed") !== "yes") {
+    return { ok: false, message: "Confirm you're licensed to use this font on the web." };
+  }
+  const name = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, 60);
+  if (!name) return { ok: false, message: "Give the font a name." };
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, message: "Choose a .woff2 file." };
+  }
+  if (file.size > MAX_FONT_BYTES)
+    return { ok: false, message: "Fonts can be up to 2 MB." };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!isWoff2(bytes)) return { ok: false, message: "That isn't a WOFF2 font file." };
+
+  const path = `${workspace.id}/fonts/${crypto.randomUUID()}.woff2`;
+  const { error } = await admin.storage
+    .from("theme-assets")
+    .upload(path, bytes, { contentType: "font/woff2", upsert: false });
+  if (error) return { ok: false, message: "The upload failed. Try again." };
+  const { data } = admin.storage.from("theme-assets").getPublicUrl(path);
+  return { ok: true, url: data.publicUrl, name };
 }

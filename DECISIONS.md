@@ -3,6 +3,36 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-02 — Wave 3: branding, fonts, custom domains
+
+- **Badge (P2.1):** the existing per-ending switch stays, but it only
+  takes effect when the plan includes `remove_branding`. The server that
+  renders the public form decides; the builder disables the switch with
+  a note. Grandfathered workspaces keep no badge.
+- **Fonts (P2.22):** five more Google fonts (Poppins, Lora, Playfair
+  Display, Nunito, DM Serif Display) self-hosted by next/font and not
+  preloaded, plus uploaded WOFF2 fonts (≤ 2 MB, signature-checked,
+  licence confirmation required, stored in the workspace's theme
+  folder). The server swaps any paid font for Inter when the plan lacks
+  `custom_fonts`. An uploaded font's CSS uses a fixed internal family
+  name and only a URL in our own storage, so neither the name nor a
+  crafted URL can inject CSS or make respondents' browsers call a
+  third-party server.
+- **Custom domains (P2.2):** ownership by a TXT record
+  (`_formcraft-challenge.<host>` = `formcraft-verify=<token>`), traffic
+  by CNAME to the app. Only verified domains are routed; the proxy looks
+  them up through a definer function (no service key in the proxy) and
+  caches for a minute. A domain serves only its workspace's published
+  forms (`/` = chosen default, `/<slug>` = any of them) and the
+  respondent API — never the app, so no sign-in cookies on customer
+  domains. Re-checked every 30 minutes: a domain whose record vanished
+  goes to "error" and stops routing. TLS is the host's job: with Vercel
+  credentials the app adds the domain to the project (which issues the
+  certificate); otherwise the domain must be added on the host by hand.
+- **Not live-verified here:** real DNS and certificate issuance need a
+  public domain and the hosting account; the flow is tested with a fake
+  resolver, a fake Vercel API and `*.localhost` routing in the browser.
+
 ## 2026-10-02 — Wave 2: teams and folders
 
 - **Four roles (P2.19).** Owner (the workspace's creator, exactly one),

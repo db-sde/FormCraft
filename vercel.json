@@ -1,8 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/cron/webhooks/dispatch", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/sheets/dispatch", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/retention", "schedule": "30 3 * * *" }
+    {
+      "path": "/api/cron/webhooks/dispatch",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/sheets/dispatch",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/retention",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/domains",
+      "schedule": "*/30 * * * *"
+    }
   ]
 }

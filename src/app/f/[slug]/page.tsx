@@ -10,8 +10,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isLikelyBot } from "@/lib/http/bots";
 import { PublicFormRuntime } from "./public-form-runtime";
+import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
 import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import { themeForPlan } from "@/domains/themes/fonts";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -41,6 +43,23 @@ export default async function PublicFormPage({
   const publicForm = await loadPublicForm(slug);
   if (!publicForm) notFound();
 
+  // On a custom domain (P2.2) only that workspace's forms are served.
+  const domainId = (await headers()).get(CUSTOM_DOMAIN_HEADER);
+  if (domainId) {
+    const { data: domain } = await createAdminClient()
+      .from("custom_domains")
+      .select("workspace_id, status")
+      .eq("id", domainId)
+      .maybeSingle();
+    if (
+      !domain ||
+      domain.status !== "verified" ||
+      domain.workspace_id !== publicForm.workspaceId
+    ) {
+      notFound();
+    }
+  }
+
   // A resume link (P2.8) opens the same unfinished response; a link that
   // no longer works starts fresh, with a note saying why.
   // Plan features are decided here, on the server (P2.1, P2.22).
@@ -48,6 +67,18 @@ export default async function PublicFormPage({
     createAdminClient(),
     publicForm.workspaceId,
   );
+  const schema = publicForm.compiled.schema;
+  const compiled = {
+    ...publicForm.compiled,
+    schema: {
+      ...schema,
+      theme: themeForPlan(
+        schema.theme,
+        entitlements.custom_fonts,
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+      ),
+    },
+  };
 
   const resume =
     typeof query[RESUME_PARAM] === "string"
@@ -106,7 +137,7 @@ export default async function PublicFormPage({
       <PublicFormRuntime
         formId={publicForm.formId}
         formVersionId={publicForm.formVersionId}
-        compiled={publicForm.compiled}
+        compiled={compiled}
         savesProgress={publicForm.savePartialResponses}
         resumeLinks={publicForm.resumeLinksEnabled && publicForm.savePartialResponses}
         resume={resume}

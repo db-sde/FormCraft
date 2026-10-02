@@ -70,6 +70,7 @@ export default async function FormBuilderPage({
       onRename={renameFormAction}
       aiEnabled={aiConfigured()}
       brandingRemovable={entitlements.remove_branding}
+      customFonts={entitlements.custom_fonts}
       onProposeRule={proposeRuleAction}
     />
   );

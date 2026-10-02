@@ -285,7 +285,24 @@ export const ThemeV1 = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
-  fontFamily: z.enum(["inter", "system", "georgia", "mono"]).default("inter"),
+  /** The first four are on every plan; the rest need custom fonts
+   * (P2.22) — the server shows Inter instead when the plan lacks them. */
+  fontFamily: z
+    .enum([
+      "inter",
+      "system",
+      "georgia",
+      "mono",
+      "poppins",
+      "lora",
+      "playfair",
+      "nunito",
+      "dm_serif",
+      "custom",
+    ])
+    .default("inter"),
+  /** An uploaded, licensed WOFF2 font (with fontFamily "custom"). */
+  customFont: z.object({ name: safeText(60), url: webUrl }).optional(),
   buttonStyle: z.enum(["rounded", "square", "pill"]).default("rounded"),
   logoUrl: webUrl.optional(),
   backgroundImageUrl: webUrl.optional(),

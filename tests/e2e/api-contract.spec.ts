@@ -215,6 +215,7 @@ test("cron routes require the shared secret", async ({ request }) => {
   test.skip(!secret, "CRON_SECRET not set");
   for (const path of [
     "/api/cron/retention",
+    "/api/cron/domains",
     "/api/cron/webhooks/dispatch",
     "/api/cron/sheets/dispatch",
   ]) {

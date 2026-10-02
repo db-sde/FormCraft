@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { Check, Contrast } from "lucide-react";
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
 import { THEME_PRESETS, contrastRatio } from "@/domains/themes";
 import { THEME_FONT_STACK } from "@/components/theme-styles";
+import { FONT_LABEL, isPaidFont } from "@/domains/themes/fonts";
+import { uploadThemeFontAction } from "@/app/(form)/forms/[id]/actions";
 import { stageTextColor } from "@/components/runtime/stage-theme";
 import { ColorField } from "./color-field";
 import { ImageUploadField } from "./image-upload-field";
@@ -28,7 +31,10 @@ export function ThemeSettingsPanel({
   workspaceId,
   formId,
   onChange,
+  customFonts = true,
 }: {
+  /** The plan includes paid and uploaded fonts (P2.22). */
+  customFonts?: boolean;
   theme: ThemeV1;
   workspaceId: string;
   formId: string;
@@ -136,7 +142,10 @@ export function ThemeSettingsPanel({
       )}
 
       <SectionHead>Type &amp; shape</SectionHead>
-      <PanelField label="Font">
+      <PanelField
+        label="Font"
+        hint={customFonts ? undefined : "Fonts marked “Paid” need a paid plan."}
+      >
         <Select
           value={theme.fontFamily}
           onValueChange={(fontFamily) =>
@@ -147,21 +156,29 @@ export function ThemeSettingsPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="inter" style={{ fontFamily: THEME_FONT_STACK.inter }}>
-              Inter
-            </SelectItem>
-            <SelectItem value="system" style={{ fontFamily: THEME_FONT_STACK.system }}>
-              System
-            </SelectItem>
-            <SelectItem value="georgia" style={{ fontFamily: THEME_FONT_STACK.georgia }}>
-              Georgia
-            </SelectItem>
-            <SelectItem value="mono" style={{ fontFamily: THEME_FONT_STACK.mono }}>
-              Mono
-            </SelectItem>
+            {(Object.keys(FONT_LABEL) as ThemeV1["fontFamily"][]).map((font) => (
+              <SelectItem
+                key={font}
+                value={font}
+                disabled={!customFonts && isPaidFont(font)}
+                style={{ fontFamily: THEME_FONT_STACK[font] }}
+              >
+                {FONT_LABEL[font]}
+                {!customFonts && isPaidFont(font) && (
+                  <span className="text-muted-foreground ml-1 text-xs">Paid</span>
+                )}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </PanelField>
+      {theme.fontFamily === "custom" && customFonts && (
+        <FontUpload
+          formId={formId}
+          current={theme.customFont}
+          onUploaded={(customFont) => set({ fontFamily: "custom", customFont })}
+        />
+      )}
       <Segmented
         label="Button style"
         value={theme.buttonStyle}
@@ -193,5 +210,76 @@ export function ThemeSettingsPanel({
         onChange={(backgroundImageUrl) => onChange({ ...theme, backgroundImageUrl })}
       />
     </div>
+  );
+}
+
+/** Upload a licensed WOFF2 font (P2.22); checked again on the server. */
+function FontUpload({
+  formId,
+  current,
+  onUploaded,
+}: {
+  formId: string;
+  current: ThemeV1["customFont"];
+  onUploaded: (font: NonNullable<ThemeV1["customFont"]>) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <form
+      className="col-span-full flex flex-col gap-2 rounded-[8px] border-[1.5px] border-dashed p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        setError(null);
+        start(async () => {
+          const result = await uploadThemeFontAction(formId, data);
+          if (result.ok) onUploaded({ name: result.name, url: result.url });
+          else setError(result.message);
+        });
+      }}
+    >
+      {current && (
+        <p className="text-[13px]">
+          Using <b>{current.name}</b>. Upload another to replace it.
+        </p>
+      )}
+      <label className="flex flex-col gap-1 text-[13px] font-semibold">
+        Font name
+        <input
+          name="name"
+          required
+          maxLength={60}
+          defaultValue={current?.name}
+          className="border-input bg-field h-[34px] rounded-sm border-[1.5px] px-2 font-normal"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-[13px] font-semibold">
+        WOFF2 file, up to 2 MB
+        <input
+          name="file"
+          type="file"
+          accept=".woff2,font/woff2"
+          required
+          className="text-xs"
+        />
+      </label>
+      <label className="flex items-start gap-2 text-[12.5px]">
+        <input name="licensed" type="checkbox" value="yes" required className="mt-0.5" />
+        I&apos;m licensed to use this font on the web.
+      </label>
+      {error && (
+        <p role="alert" className="text-destructive text-[12.5px]">
+          {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={pending}
+        className="fc-focus border-ink self-start rounded-sm border-[1.5px] px-3 py-1 text-[13px] font-semibold"
+      >
+        {pending ? "Uploading…" : "Upload font"}
+      </button>
+    </form>
   );
 }

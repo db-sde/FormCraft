@@ -57,6 +57,7 @@ import { AddQuestionMenu } from "./add-question-menu";
 import { SettingsPanel } from "./settings-panel";
 import { EndingSettingsPanel } from "./ending-editor";
 import { CHOICE_TYPES, syncCarriedOptions } from "@/domains/forms/options";
+import { themeForPlan } from "@/domains/themes/fonts";
 import { ThemeSettingsPanel } from "./theme-settings-panel";
 import { LogicEditor } from "./logic-editor";
 import { QuestionLogicPanel } from "./logic/question-logic-panel";
@@ -161,9 +162,12 @@ export function FormBuilder({
   aiEnabled = false,
   onProposeRule,
   brandingRemovable = true,
+  customFonts = true,
 }: {
   /** The plan allows switching off the "Made with FormCraft" badge. */
   brandingRemovable?: boolean;
+  /** The plan includes paid and uploaded fonts. */
+  customFonts?: boolean;
   /** AI is configured on the server ("Describe a rule"). */
   aiEnabled?: boolean;
   onProposeRule?: (
@@ -856,7 +860,14 @@ export function FormBuilder({
 
       <PreviewDialog
         brandingRemovable={brandingRemovable}
-        schema={schema}
+        schema={{
+          ...schema,
+          theme: themeForPlan(
+            schema.theme,
+            customFonts,
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+          ),
+        }}
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         onShowProblem={(target) => {
@@ -1079,7 +1090,11 @@ export function FormBuilder({
           ) : (
             <BuilderCanvas
               brandingRemovable={brandingRemovable}
-              theme={schema.theme}
+              theme={themeForPlan(
+                schema.theme,
+                customFonts,
+                process.env.NEXT_PUBLIC_SUPABASE_URL,
+              )}
               item={
                 selectedQuestion
                   ? {
@@ -1176,6 +1191,7 @@ export function FormBuilder({
                   workspaceId={workspaceId}
                   formId={formId}
                   onChange={updateTheme}
+                  customFonts={customFonts}
                 />
               )}
             </div>

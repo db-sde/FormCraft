@@ -109,6 +109,20 @@ this doc needs fixing.
   `forms_check_folder` trigger keeps a form out of another workspace's
   folder.
 
+## Custom domains (migration 29)
+
+- **`custom_domains`** — `workspace_id`, `hostname` (unique, lowercase),
+  `status` (pending / verified / error), `verification_token` (32 hex,
+  published in a TXT record), `default_form_id` (what the bare domain
+  opens; same workspace, enforced by trigger), `verified_at`,
+  `last_checked_at`, `last_error`. Members read; admins pick the default
+  form and delete; adding and every status change go through the server
+  (the `custom_domains_protect_status` trigger pins status, token,
+  hostname and workspace for user sessions).
+- **`resolve_custom_domain(hostname)`** — security definer, callable
+  without a session: returns `(domain_id, default_slug)` for a
+  _verified_ domain only. Used by `src/proxy.ts`.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

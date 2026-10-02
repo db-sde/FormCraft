@@ -39,6 +39,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/leads/export.csv": "access-control.spec.ts",
   "/api/cron/health": "api-contract.spec.ts",
   "/api/cron/retention": "api-contract.spec.ts",
+  "/api/cron/domains": "api-contract.spec.ts",
   "/api/cron/sheets/dispatch": "api-contract.spec.ts",
   "/api/cron/webhooks/dispatch": "api-contract.spec.ts",
   "/api/integrations/google/authorize": "access-control.spec.ts",

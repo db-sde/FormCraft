@@ -5,6 +5,13 @@ export const THEME_FONT_STACK: Record<ThemeV1["fontFamily"], string> = {
   system: "system-ui, sans-serif",
   georgia: "Georgia, serif",
   mono: "var(--font-jetbrains-mono), monospace",
+  poppins: "var(--font-poppins), sans-serif",
+  lora: "var(--font-lora), serif",
+  playfair: "var(--font-playfair), serif",
+  nunito: "var(--font-nunito), sans-serif",
+  dm_serif: "var(--font-dm-serif), serif",
+  // Stage declares the uploaded face as "fc-custom" (stage.tsx).
+  custom: '"fc-custom", var(--font-inter), sans-serif',
 };
 
 export const THEME_BUTTON_RADIUS: Record<ThemeV1["buttonStyle"], string> = {

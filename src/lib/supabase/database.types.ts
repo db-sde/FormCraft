@@ -99,6 +99,60 @@ export type Database = {
           },
         ];
       };
+      custom_domains: {
+        Row: {
+          created_at: string;
+          default_form_id: string | null;
+          hostname: string;
+          id: string;
+          last_checked_at: string | null;
+          last_error: string | null;
+          status: string;
+          verification_token: string;
+          verified_at: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          default_form_id?: string | null;
+          hostname: string;
+          id?: string;
+          last_checked_at?: string | null;
+          last_error?: string | null;
+          status?: string;
+          verification_token: string;
+          verified_at?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          default_form_id?: string | null;
+          hostname?: string;
+          id?: string;
+          last_checked_at?: string | null;
+          last_error?: string | null;
+          status?: string;
+          verification_token?: string;
+          verified_at?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "custom_domains_default_form_id_fkey";
+            columns: ["default_form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "custom_domains_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       folders: {
         Row: {
           created_at: string;
@@ -1067,6 +1121,13 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      resolve_custom_domain: {
+        Args: { p_hostname: string };
+        Returns: {
+          default_slug: string;
+          domain_id: string;
+        }[];
+      };
       response_dropoff: {
         Args: { idle_minutes: number; target_form_id: string };
         Returns: {
@@ -1101,6 +1162,10 @@ export type Database = {
           outcome: string;
           status: Database["public"]["Enums"]["response_status"];
         }[];
+      };
+      shares_workspace_with: {
+        Args: { target_user_id: string };
+        Returns: boolean;
       };
       unpublish_form: { Args: { target_form_id: string }; Returns: undefined };
       workspace_role_for: {

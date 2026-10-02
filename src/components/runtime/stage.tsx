@@ -2,6 +2,7 @@ import { ArrowRight, ArrowUp, Check, TriangleAlert } from "lucide-react";
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
 import { cn } from "cn";
 import { stageVars } from "./stage-theme";
+import { isAllowedFontUrl } from "@/domains/themes/fonts";
 
 export type StageMode = "auto" | "desktop" | "phone" | "canvas";
 
@@ -39,6 +40,7 @@ export function Stage({
       className={cn("fc-stage relative flex flex-col overflow-hidden", className)}
       style={stageVars(theme)}
     >
+      <CustomFontFace theme={theme} />
       {theme.backgroundImageUrl && (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL */}
@@ -128,6 +130,23 @@ export function WelcomeBackBanner() {
       <span aria-hidden className="size-[7px] rounded-full bg-(--st-primary)" />
       Welcome back. Picking up where you left off.
     </div>
+  );
+}
+
+/** The uploaded font (P2.22), declared under a fixed internal name so
+ * nothing the creator typed reaches the CSS, and only for a URL in our
+ * own storage (anything else is skipped and the fallback font shows). */
+function CustomFontFace({ theme }: { theme: ThemeV1 }) {
+  const url = theme.customFont?.url;
+  if (
+    theme.fontFamily !== "custom" ||
+    !url ||
+    !isAllowedFontUrl(url, process.env.NEXT_PUBLIC_SUPABASE_URL)
+  ) {
+    return null;
+  }
+  return (
+    <style>{`@font-face{font-family:"fc-custom";src:url("${url}") format("woff2");font-display:swap}`}</style>
   );
 }
 

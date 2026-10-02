@@ -8,7 +8,10 @@ import {
 import { cn } from "cn";
 import { PlanUsage } from "@/components/dashboard/plan-usage";
 import { TeamSettings } from "@/components/dashboard/team-settings";
-import { listTeam } from "@/domains/workspaces";
+import { canAdmin, listTeam } from "@/domains/workspaces";
+import { dnsInstructions, listDomains } from "@/domains/domains";
+import { listFormsForWorkspace } from "@/domains/forms";
+import { DomainSettings } from "@/components/dashboard/domain-settings";
 import { getUsage, getWorkspacePlan } from "@/domains/billing";
 
 const TITLES = {
@@ -16,6 +19,7 @@ const TITLES = {
   workspace: "Workspace settings",
   members: "Members",
   plan: "Plan and usage",
+  domains: "Domains",
 };
 
 export async function generateMetadata({
@@ -31,6 +35,7 @@ const TABS = [
   ["account", "Account"],
   ["workspace", "Workspace"],
   ["members", "Members"],
+  ["domains", "Domains"],
   ["plan", "Plan"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -49,6 +54,15 @@ export default async function SettingsPage({
     tab === "members"
       ? await Promise.all([
           listTeam(supabase, workspace.id),
+          getWorkspacePlan(supabase, workspace.id),
+        ])
+      : null;
+
+  const domainData =
+    tab === "domains"
+      ? await Promise.all([
+          listDomains(supabase, workspace.id),
+          listFormsForWorkspace(supabase, workspace.id),
           getWorkspacePlan(supabase, workspace.id),
         ])
       : null;
@@ -98,6 +112,22 @@ export default async function SettingsPage({
       )}
 
       {planData && <PlanUsage plan={planData[0]} usage={planData[1]} />}
+
+      {domainData && (
+        <DomainSettings
+          domains={domainData[0].map((d) => ({
+            id: d.id,
+            hostname: d.hostname,
+            status: d.status,
+            defaultFormId: d.defaultFormId,
+            lastError: d.lastError,
+            dns: dnsInstructions(d),
+          }))}
+          forms={domainData[1].map((f) => ({ id: f.id, title: f.title }))}
+          isAdmin={canAdmin(workspace.role)}
+          limit={domainData[2].entitlements.custom_domains}
+        />
+      )}
 
       {team && (
         <TeamSettings
