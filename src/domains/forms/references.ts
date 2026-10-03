@@ -174,7 +174,20 @@ function withoutPoolMember(
     if (!pool.questionIds.includes(questionId)) return [pool];
     const questionIds = pool.questionIds.filter((id) => id !== questionId);
     if (questionIds.length < 2) return [];
-    return [{ ...pool, questionIds, pick: Math.min(pool.pick, questionIds.length - 1) }];
+    const adaptive = pool.adaptive && {
+      ...pool.adaptive,
+      levels: Object.fromEntries(
+        Object.entries(pool.adaptive.levels).filter(([id]) => id !== questionId),
+      ),
+    };
+    return [
+      {
+        ...pool,
+        questionIds,
+        pick: Math.min(pool.pick, questionIds.length - 1),
+        ...(adaptive ? { adaptive } : {}),
+      },
+    ];
   });
 }
 

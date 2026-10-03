@@ -20,6 +20,7 @@
     "db:seed-templates": "tsx scripts/seed-templates.ts",
     "plan:set": "tsx scripts/set-plan.ts",
     "sso:set": "tsx scripts/set-sso.ts",
+    "bench:logic": "tsx scripts/bench-logic.ts",
     "emails:build": "tsx scripts/build-auth-emails.ts",
     "check": "npm run lint && npm run typecheck && npm run format:check && npm run test",
     "verify": "npm run check && npm run test:integration && playwright test --project=chromium --project=mobile",

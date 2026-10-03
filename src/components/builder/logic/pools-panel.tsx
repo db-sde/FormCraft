@@ -1,11 +1,13 @@
 "use client";
 
-import { Plus, Shuffle, Trash2 } from "lucide-react";
+import { Plus, Shuffle, Trash2, TrendingUp } from "lucide-react";
 import { nanoid } from "nanoid";
 import type { QuestionPoolV1 } from "@/domains/forms/schema/logic-model";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { ADAPTIVE_LEVELS, DEFAULT_ADAPTIVE_LEVEL } from "@/domains/logic/adaptive";
 import { cn } from "cn";
 import { numberedQuestions } from "./logic-ui";
 
@@ -13,7 +15,8 @@ import { numberedQuestions } from "./logic-ui";
  * Random groups (question pools, logic spec phase 19): each respondent
  * is asked a few questions picked at random from a group — fixed for
  * their response, so the server asks the same ones. Skipped questions
- * are never required.
+ * are never required. A group can instead be adaptive (phase 20): asked
+ * one at a time by difficulty, following right and wrong answers.
  */
 export function PoolsPanel({
   schema,
@@ -48,7 +51,11 @@ export function PoolsPanel({
             className="border-ink bg-card flex flex-col gap-3 rounded-lg border-[1.5px] p-4"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <Shuffle className="size-4" aria-hidden />
+              {pool.adaptive ? (
+                <TrendingUp className="size-4" aria-hidden />
+              ) : (
+                <Shuffle className="size-4" aria-hidden />
+              )}
               <Input
                 aria-label="Group name"
                 value={pool.name ?? ""}
@@ -115,6 +122,88 @@ export function PoolsPanel({
                 );
               })}
             </ul>
+            <div className="border-border flex flex-col gap-3 border-t pt-3">
+              <label className="flex items-start gap-3 text-sm">
+                <Switch
+                  aria-label={`Make ${label} adaptive`}
+                  checked={!!pool.adaptive}
+                  onCheckedChange={(on) =>
+                    update(pool.id, {
+                      adaptive: on
+                        ? { start: DEFAULT_ADAPTIVE_LEVEL, levels: {} }
+                        : undefined,
+                    })
+                  }
+                />
+                <span className="flex flex-col gap-0.5">
+                  <b>Adaptive</b>
+                  <span className="text-muted-foreground">
+                    Instead of a random draw, ask one at a time by difficulty: a harder
+                    question after a right answer, an easier one after a wrong one. Mark
+                    the right answers on each question.
+                  </span>
+                </span>
+              </label>
+              {pool.adaptive && (
+                <>
+                  <label className="flex items-center gap-2 text-sm">
+                    Start at difficulty
+                    <select
+                      aria-label={`Starting difficulty for ${label}`}
+                      value={pool.adaptive.start}
+                      onChange={(e) =>
+                        update(pool.id, {
+                          adaptive: { ...pool.adaptive!, start: Number(e.target.value) },
+                        })
+                      }
+                      className="border-input bg-background h-[34px] rounded-md border px-2 text-sm"
+                    >
+                      {ADAPTIVE_LEVELS.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-muted-foreground">(1 easiest, 5 hardest)</span>
+                  </label>
+                  <ul className="flex flex-col gap-1.5">
+                    {questions
+                      .filter(({ question }) => pool.questionIds.includes(question.id))
+                      .map(({ question, number }) => (
+                        <li key={question.id} className="flex items-center gap-2 text-sm">
+                          <span className="min-w-0 flex-1 truncate">
+                            {number} · {question.label.trim() || "Untitled"}
+                          </span>
+                          <select
+                            aria-label={`Difficulty of question ${number}`}
+                            value={
+                              pool.adaptive!.levels[question.id] ?? DEFAULT_ADAPTIVE_LEVEL
+                            }
+                            onChange={(e) =>
+                              update(pool.id, {
+                                adaptive: {
+                                  ...pool.adaptive!,
+                                  levels: {
+                                    ...pool.adaptive!.levels,
+                                    [question.id]: Number(e.target.value),
+                                  },
+                                },
+                              })
+                            }
+                            className="border-input bg-background h-[32px] rounded-md border px-2 text-sm"
+                          >
+                            {ADAPTIVE_LEVELS.map((n) => (
+                              <option key={n} value={n}>
+                                Level {n}
+                              </option>
+                            ))}
+                          </select>
+                        </li>
+                      ))}
+                  </ul>
+                </>
+              )}
+            </div>
           </section>
         );
       })}

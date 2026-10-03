@@ -2,12 +2,14 @@ import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type {
   ActionV1,
   CompareOperator,
+  QuestionPoolV1,
   RuleV1,
   Value,
   VariableV1,
 } from "@/domains/forms/schema/logic-model";
 import type { FormSchemaV1, LogicRuleV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import { questionsLeftOut } from "./random";
+import { adaptiveSequence } from "./adaptive";
 import { availableOptionIds } from "@/domains/forms/options";
 import { evaluateCondition } from "./conditions";
 import { asDate, asNumber, evaluateExpr, todayIn, type ExprContext } from "./expressions";
@@ -74,9 +76,20 @@ type Run = {
   ctxBase: Omit<ExprContext, "variables">;
   /** Pool questions this response isn't asked. */
   leftOut: Set<string>;
+  /** Adaptive groups: for each member question, its group and where the
+   * group starts in the form's order. */
+  adaptive: Map<string, AdaptiveGroup>;
+  seed: string;
   rules: NormalizedRule[];
   variables: Map<string, VariableV1>;
   questions: Map<string, QuestionV1>;
+};
+
+type AdaptiveGroup = {
+  pool: QuestionPoolV1;
+  firstIndex: number;
+  /** Worked out once per run: the answers don't change during one. */
+  sequence?: { asked: string[]; complete: boolean };
 };
 
 // --- rule normalisation ------------------------------------------------------
@@ -145,10 +158,21 @@ function createRun(
   options: EngineOptions,
 ): Run {
   const schema = compiled.schema;
+  const adaptive = new Map<string, AdaptiveGroup>();
+  for (const pool of schema.pools ?? []) {
+    if (!pool.adaptive) continue;
+    const indexes = pool.questionIds
+      .map((id) => compiled.orderedQuestionIds.indexOf(id))
+      .filter((i) => i >= 0);
+    const group: AdaptiveGroup = { pool, firstIndex: Math.min(...indexes) };
+    for (const id of pool.questionIds) adaptive.set(id, group);
+  }
   return {
     compiled,
     schema,
     answers,
+    adaptive,
+    seed: options.seed ?? "",
     ctxBase: {
       answers,
       hidden: resolveHidden(schema, options.hidden),
@@ -412,8 +436,16 @@ function rulesFor(run: Run, trigger: RuleV1["on"]): NormalizedRule[] {
 
 // --- visibility & order ---------------------------------------------------------------
 
+/** The questions an adaptive group asks, as far as the answers say. */
+function sequenceOf(run: Run, group: AdaptiveGroup) {
+  group.sequence ??= adaptiveSequence(group.pool, run.questions, run.answers, run.seed);
+  return group.sequence;
+}
+
 function isQuestionVisible(run: Run, state: EngineState, question: QuestionV1): boolean {
   if (run.leftOut.has(question.id)) return false;
+  const group = run.adaptive.get(question.id);
+  if (group && !sequenceOf(run, group).asked.includes(question.id)) return false;
   // Carried-forward options with nothing left to choose from: skip it.
   if (availableOptionIds(question, run.answers)?.size === 0) return false;
   return !question.visibleIf || evaluateCondition(question.visibleIf, ctxOf(run, state));
@@ -426,6 +458,9 @@ function nextVisible(
   state: EngineState,
   fromIndex: number,
   visited: ReadonlySet<string>,
+  /** When looking back over an adaptive group: ordinary questions at or
+   * before this index have been passed and aren't offered again. */
+  passedIndex = -1,
 ): string | null {
   const ordered = run.compiled.orderedQuestionIds;
   for (let i = Math.max(0, fromIndex); i < ordered.length; i += 1) {
@@ -433,11 +468,23 @@ function nextVisible(
     if (visited.has(id)) continue;
     const question = run.questions.get(id);
     if (!question) continue;
-    if (isQuestionVisible(run, state, question)) return id;
+    if (i <= passedIndex && !run.adaptive.has(id)) continue;
+    // Reaching any question of an adaptive group means "ask the group's
+    // next question" — wherever that one sits in the form's order.
+    const group = run.adaptive.get(id);
+    if (group) {
+      const due = sequenceOf(run, group).asked.find((member) => !visited.has(member));
+      const dueQuestion = due ? run.questions.get(due) : undefined;
+      if (dueQuestion && isQuestionVisible(run, state, dueQuestion)) return due!;
+    }
+    if (!group && isQuestionVisible(run, state, question)) return id;
+    // Looking back over an adaptive group re-reads questions already
+    // recorded as skipped.
+    if (i <= passedIndex) continue;
     trace(state, {
       kind: "question_skipped",
       questionId: id,
-      reason: run.leftOut.has(id) ? "pool" : "condition",
+      reason: run.leftOut.has(id) || group ? "pool" : "condition",
     });
   }
   return null;
@@ -497,7 +544,19 @@ function resolveNext(
     if (target) return { type: "question", questionId: target };
     return { type: "ending", endingId: finish(run, state, null) };
   }
-  const next = nextVisible(run, state, ordered.indexOf(questionId) + 1, visited);
+  // After a question of an adaptive group, look again from the group's
+  // start: its next question may sit earlier in the form's order.
+  const group = run.adaptive.get(questionId);
+  const index = ordered.indexOf(questionId);
+  const lookBack =
+    group && sequenceOf(run, group).asked.some((member) => !visited.has(member));
+  const next = nextVisible(
+    run,
+    state,
+    lookBack ? group.firstIndex : index + 1,
+    visited,
+    lookBack ? index : -1,
+  );
   if (next) return { type: "question", questionId: next };
   return { type: "ending", endingId: finish(run, state, null) };
 }

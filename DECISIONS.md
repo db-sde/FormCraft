@@ -3,6 +3,39 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — Logic engine: adaptive assessments and benchmarks
+
+- **Adaptive assessments (spec phase 20) extend question pools** rather
+  than adding a new concept: a pool can be marked adaptive, with a
+  difficulty (1–5) per question and a starting level. It asks `pick`
+  questions one at a time; a right answer raises the target level by
+  one, a wrong one lowers it, and the next question is the unasked one
+  nearest the target (ties: the easier one, then a seeded shuffle so
+  respondents at the same level don't all get the same question).
+- **"Right" means exactly the options marked correct** (single choice,
+  dropdown, multi-select). A question with nothing marked doesn't move
+  the level; the Check tab warns about it, about optional questions
+  (skipping one ends the group) and about groups with a single level.
+- **Still deterministic and server-authoritative.** The sequence is a
+  pure function of the answers and the response's seed, so the browser's
+  step-by-step path and the server's walk are the same (tested for every
+  answer pattern across seeds). Extra answers sent for questions that
+  weren't asked are ignored; an answer changed after the fact re-plans
+  the sequence, and a question that then lacks an answer fails the
+  required check instead of being scored.
+- **The next question can sit earlier in the form's order** than the
+  current one. That's the one place the engine looks backwards; it only
+  offers that group's due question, and termination still holds because
+  no question is shown twice.
+- **Not item-response theory.** No per-question statistics or ability
+  estimate, just levels and a staircase — simple enough for a creator to
+  predict, and enough for placement-style quizzes. Scoring is unchanged:
+  option points and rules, on the questions actually asked.
+- **Benchmarks (phase 36):** `npm run bench:logic` and a budget test.
+  At the schema's limits (200 questions, 500 rules) a server walk takes
+  under half a millisecond and 2,000 replays about 0.7 s, so no caching
+  or incremental evaluation is warranted; the replay design stays.
+
 ## 2026-10-03 — Phase 3, Wave C: SSO, SCIM, compliance
 
 - **SSO (P3.12) rides on Supabase Auth's SAML support** rather than a

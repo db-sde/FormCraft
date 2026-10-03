@@ -128,6 +128,11 @@ Full model and evaluation order: `docs/logic-engine.md`. In short:
   (`src/domains/logic/random.ts`); unpicked questions are skipped like
   hidden ones. A question can be in one pool; `pick` must be below the
   group's size; deleting a question shrinks or removes its pool.
+  With `adaptive?: { start (1–5), levels: { [questionId]: 1–5 } }` the
+  group is an adaptive assessment instead of a random draw: `pick`
+  questions asked one at a time, a level up after a right answer and
+  down after a wrong one (`src/domains/logic/adaptive.ts`). A question
+  with no level counts as 3.
 
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 

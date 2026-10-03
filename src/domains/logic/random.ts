@@ -60,6 +60,8 @@ export function questionsLeftOut(
   const out = new Set<string>();
   const existing = new Set(schema.questions.map((q) => q.id));
   for (const pool of schema.pools ?? []) {
+    // Adaptive groups choose by the answers, not a draw (see adaptive.ts).
+    if (pool.adaptive) continue;
     const members = pool.questionIds.filter((id) => existing.has(id));
     const picked = new Set(
       seededShuffle(members, `${seed}:${pool.id}`).slice(0, pool.pick),

@@ -537,6 +537,48 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
         });
       }
       inPool.set(id, name);
+      if (pool.adaptive) {
+        const options =
+          question.type === "single_select" ||
+          question.type === "multi_select" ||
+          question.type === "dropdown"
+            ? question.settings.options
+            : null;
+        if (!options?.some((o) => o.correct)) {
+          push({
+            severity: "warning",
+            code: "adaptive_ungraded",
+            message: `${question.label.trim() || "A question"} is in the adaptive group ${name} but has no answer marked correct, so it can't make the next question harder or easier.`,
+            questionId: id,
+          });
+        }
+        if (!question.required) {
+          push({
+            severity: "warning",
+            code: "adaptive_optional",
+            message: `${question.label.trim() || "A question"} is in the adaptive group ${name} but isn't required; skipping it ends the group early.`,
+            questionId: id,
+          });
+        }
+        if (question.visibleIf) {
+          push({
+            severity: "warning",
+            code: "adaptive_conditional",
+            message: `${question.label.trim() || "A question"} is in the adaptive group ${name} and also has a show condition; if it's hidden when its turn comes, the rest of the group is skipped.`,
+            questionId: id,
+          });
+        }
+      }
+    }
+    if (
+      pool.adaptive &&
+      new Set(members.map((id) => pool.adaptive!.levels[id] ?? 3)).size < 2
+    ) {
+      push({
+        severity: "warning",
+        code: "adaptive_one_level",
+        message: `${name} is adaptive but all its questions have the same difficulty, so it can't adapt. Give them different levels.`,
+      });
     }
   }
 

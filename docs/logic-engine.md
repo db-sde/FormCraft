@@ -126,11 +126,36 @@ Built and tested (unit, integration and E2E as noted in `docs/testing.md`):
 | 32–33            | Simple editor by default (sentences, one group level), formulas for advanced use; five logic templates                                                                                                                                                            |
 | 37               | Summary view "Results": endings reached, number-variable average/min/max, value shares for text, boolean and list variables — replayed per response with its own version                                                                                          |
 
+Added 2026-10-03:
+
+| Spec phase | What exists                                                                                                                                                                                                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 19         | Random groups (question pools) and shuffled options, seeded per response                                                                                                                                                                                                   |
+| 20         | Adaptive groups: a pool whose questions have a difficulty (1–5); asks `pick` one at a time, harder after a right answer and easier after a wrong one (`src/domains/logic/adaptive.ts`). The sequence is derived from the answers and the seed, so browser and server agree |
+| 36         | Benchmarks (`npm run bench:logic`) and budgets (`tests/unit/logic-performance.test.ts`), below                                                                                                                                                                             |
+
+### Performance (phase 36)
+
+The engine replays a response from its answers instead of keeping state,
+so the cost that matters is one replay. Measured on an Apple-silicon
+laptop (medians; `npm run bench:logic`), at and beyond real form sizes —
+the schema allows at most 200 questions and 500 rules:
+
+| Questions × rules | Server walk | Slowest single step | Whole session (every step) | 2,000 replays (Summary cap) |
+| ----------------- | ----------- | ------------------- | -------------------------- | --------------------------- |
+| 20 × 20           | 0.12 ms     | 0.08 ms             | 1 ms                       | 92 ms                       |
+| 50 × 100          | 0.10 ms     | 0.09 ms             | 3 ms                       | 171 ms                      |
+| 100 × 200         | 0.36 ms     | 0.31 ms             | 10 ms                      | 405 ms                      |
+| 200 × 200         | 0.30 ms     | 0.26 ms             | 28 ms                      | 530 ms                      |
+| 100 × 500         | 0.48 ms     | 0.48 ms             | 19 ms                      | 692 ms                      |
+
+A step replays the path so far, so a session is quadratic in the number
+of questions — still under 30 ms in total at the maximum. The unit test
+holds budgets 25–50× looser than these (25 ms per walk or step, 1 s per
+session, 5 s per 500 replays) so only a real regression trips them.
+
 Not built (would each need a decision in `DECISIONS.md` first):
-dynamic options from data (8), randomisation and question pools (19),
-adaptive assessments (20), progressive profiling across visits (23),
+dynamic options from data (8), progressive profiling across visits (23),
 external API calls during a response (24 — a respondent-triggered
-outbound request needs SSRF, latency and secret handling designed), automations beyond
-the existing webhooks/Sheets/email (25), payment events, and
-performance benchmarks (36; the walk is linear in questions × rules and
-is replayed per response in the Summary, capped at 2,000 responses).
+outbound request needs SSRF, latency and secret handling designed), and automations beyond
+the existing webhooks/Sheets/email (25).

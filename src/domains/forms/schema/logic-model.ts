@@ -277,5 +277,14 @@ export const QuestionPoolV1 = z.object({
   name: safeText(80).optional(),
   questionIds: z.array(stableId).min(2).max(50),
   pick: z.number().int().min(1).max(49),
+  /** Adaptive assessment (phase 20): instead of a random draw, ask one
+   * at a time by difficulty (1–5) — harder after a right answer, easier
+   * after a wrong one. Questions without a level count as 3. */
+  adaptive: z
+    .object({
+      start: z.number().int().min(1).max(5),
+      levels: z.record(stableId, z.number().int().min(1).max(5)),
+    })
+    .optional(),
 });
 export type QuestionPoolV1 = z.infer<typeof QuestionPoolV1>;
