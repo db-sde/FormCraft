@@ -159,7 +159,15 @@ export function FormRuntime({
   language,
   followUps,
   known,
+  lookups,
 }: {
+  /** Public runtime only: external data (phase 24). Leaving one of the
+   * `triggers` runs the form's lookups on the server; the values come
+   * back through `hidden`. */
+  lookups?: {
+    triggers: ReadonlySet<string>;
+    run: (questionId: string, answers: AnswerMap) => Promise<unknown>;
+  };
   /** Public runtime only: answers this visitor already gave to "ask
    * once" questions (progressive profiling), by question id. */
   known?: Record<string, unknown>;
@@ -278,6 +286,10 @@ export function FormRuntime({
   // re-rendered with `thinking` back to false.
   const thinkingRef = useRef(false);
   const askedFollowUpsRef = useRef(new Set<string>());
+  // Lookups already run, by question and answer (a changed answer looks
+  // up again), and a counter that resumes the step once one returns.
+  const ranLookupsRef = useRef(new Set<string>());
+  const [resumeAfterLookup, setResumeAfterLookup] = useState(0);
   // Which way the last step moved, for the slide direction.
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -388,6 +400,27 @@ export function FormRuntime({
     );
     if (logicError) {
       setError(logicError);
+      return;
+    }
+
+    // External data: fetch it before deciding where to go, since rules
+    // may read it. Slow or failed lookups never hold the form up for
+    // long — the server gives up after a few seconds.
+    const lookupKey = `${question.id}:${JSON.stringify(currentAnswers[question.id] ?? null)}`;
+    if (lookups?.triggers.has(question.id) && !ranLookupsRef.current.has(lookupKey)) {
+      ranLookupsRef.current.add(lookupKey);
+      setError(null);
+      thinkingRef.current = true;
+      setThinking(true);
+      void lookups
+        .run(question.id, currentAnswers)
+        .catch(() => null)
+        .then(() => {
+          thinkingRef.current = false;
+          setThinking(false);
+          // Continue in an effect, after the new values have rendered.
+          setResumeAfterLookup((n) => n + 1);
+        });
       return;
     }
 
@@ -536,6 +569,11 @@ export function FormRuntime({
   useEffect(() => {
     goNextRef.current = goNext;
   });
+  // Declared after the effect above, so it runs with the newest goNext —
+  // the one that sees the values a lookup just returned.
+  useEffect(() => {
+    if (resumeAfterLookup > 0) goNextRef.current();
+  }, [resumeAfterLookup]);
 
   useEffect(() => {
     // Listening on the document (not the form container) so Enter

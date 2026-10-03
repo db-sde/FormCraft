@@ -65,6 +65,7 @@ Which of these are in use depends on the deployment's configuration.
 | Sentry                                 | Error reports                                                                  | If configured                             |
 | Anthropic                              | Form text; for response analysis and follow-ups, written answers (minimised)   | Only if an API key is set and a user asks |
 | Stripe                                 | Amount, description, response id — on the creator's own account                | Forms with payments                       |
+| The creator's own API (data lookups)   | The answers the creator puts in the lookup's URL                               | Forms with a data lookup                  |
 | Google Sheets, HubSpot, Slack, Zapier… | Whatever the creator maps or sends                                             | Integrations the creator turns on         |
 
 An operator offering FormCraft to others is the party that would sign

@@ -15,6 +15,7 @@ import type { ResponseStatus } from "./state-machine";
 import { experimentForResponse } from "@/domains/experiments";
 import { VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
 import { usesProfiles } from "./profile";
+import { lookupPlan } from "@/domains/integrations/lookups";
 
 type Client = SupabaseClient<Database>;
 
@@ -123,6 +124,11 @@ export async function startResponse(
   const hidden = attribution.hidden
     ? pickHiddenFields(parseFormSchema(version.schema), attribution.hidden)
     : {};
+  // Fields a data lookup fills come from the creator's API, never from
+  // the respondent's URL.
+  if (Object.keys(hidden).length > 0) {
+    for (const field of (await lookupPlan(admin, formId)).fields) delete hidden[field];
+  }
 
   const experimentId = await experimentForResponse(
     admin,

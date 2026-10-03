@@ -3,6 +3,41 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — External data: lookups fill URL fields, on the server
+
+- **Shape.** A data lookup runs when the respondent leaves a chosen
+  question: the server GETs the creator's API and copies fields from the
+  JSON reply into the form's **URL fields**. Rules, formulas and recall
+  already read those, and they're already stored per response, so the
+  engine needed no new concept and the server's walk at submission reads
+  the looked-up value from the database — never from the browser.
+- **A respondent triggers an outbound request, so it's boxed in.** The
+  host comes only from the saved URL (validated like a webhook: HTTPS,
+  public address, checked again at call time); answers are inserted
+  percent-encoded into the path or query and can't change the host,
+  add path segments or parameters. GET only, no redirects, 4 seconds,
+  64 KB, JSON only. At most 10 calls per response and 20 an hour per
+  address. Only declared URL fields are written, as strings of at most
+  500 characters; objects and lists in the reply are ignored.
+- **The secret header** is encrypted like other credentials and never
+  leaves the server. The lookup itself lives in `form_lookups`, not in
+  the form's schema, because the schema is sent to browsers. That makes
+  lookups form-level settings that apply to the live form at once (like
+  payment settings) rather than part of an immutable version.
+- **A looked-up field can't be spoofed from the URL**: values for fields
+  a lookup fills are dropped at start, in the browser and on the server.
+  If the lookup fails the field is simply empty (or its default).
+- **Looked-up values are visible to the respondent's browser** — the
+  form's logic runs there too. The panel says so: only fetch what a
+  respondent may see.
+- **Failure never blocks the form.** A slow or failing API means no
+  values; the respondent waits at most a few seconds, once per answer.
+- **Limits accepted.** Like webhooks, the address check and the request
+  are separate DNS lookups (a rebinding window); no retries; no POST; no
+  "test this lookup" button yet. Needs answers saved as they're given
+  (a form that keeps nothing until submit has no response to attach
+  values to). Business plan and up (`data_lookups`).
+
 ## 2026-10-03 — Progressive profiling: remembered by browser, filled in, never shown
 
 - **Who is "the same person"?** The random first-party visitor id the

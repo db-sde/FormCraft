@@ -238,6 +238,19 @@ existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
 - **`responses.visitor_id`** — set only for forms that have "ask once"
   questions, so their remembered answers can be updated and erased.
 
+## Data lookups (migration 42)
+
+- **`form_lookups`** — per form: `name`, `trigger_question_id`, `url`
+  (a template with `{{answer:<id>}}` tokens), `header_name` +
+  `encrypted_header` (AES-256-GCM), `outputs`
+  (`[{ field, path }]`: URL field ← JSON path), `enabled`. Server only.
+  Form-level like payment settings — not in the versioned schema, which
+  is sent to browsers.
+- **`responses.lookup_calls`** — how many lookups a response has
+  triggered (capped at 10). Looked-up values are merged into
+  `responses.hidden_fields`; a field a lookup fills is never accepted
+  from the respondent's URL.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

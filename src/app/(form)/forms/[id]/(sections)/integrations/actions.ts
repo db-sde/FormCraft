@@ -27,6 +27,12 @@ import { setSpreadsheetId, setConnectionEnabled, disconnectForm } from "@/domain
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
 import { hasPermission } from "@/domains/workspaces/permissions";
+import {
+  deleteLookup,
+  LookupError,
+  saveLookup,
+  type LookupInput,
+} from "@/domains/integrations/lookups";
 
 const MAX_URL_LENGTH = 2000;
 
@@ -467,5 +473,74 @@ export async function testHubspotAction(
       message: "HubSpot rejected the token. Reconnect it in Settings → Connections.",
     };
   }
+  return { ok: true };
+}
+
+/** Data lookups (logic spec phase 24): an API call after a question,
+ * whose reply fills the form's URL fields. The URL is checked like a
+ * webhook's (HTTPS, public address); its secret header is encrypted. */
+export async function saveLookupAction(
+  formId: string,
+  input: LookupInput,
+  lookupId?: string,
+): Promise<FeatureResult> {
+  if (lookupId !== undefined && !z.string().uuid().safeParse(lookupId).success)
+    return { ok: false, message: "Lookup not found." };
+  const ctx = await editableFormWithFeature(formId, "data_lookups");
+  if ("error" in ctx) return { ok: false, message: ctx.error as string };
+  const admin = createAdminClient();
+  try {
+    const id = await saveLookup(admin, formId, input, {
+      id: lookupId,
+      createdBy: ctx.user.id,
+    });
+    await audit(admin, {
+      workspaceId: ctx.workspace.id,
+      actorId: ctx.user.id,
+      action: "integration.connected",
+      target: { type: "form", id: formId },
+      metadata: { provider: "lookup", lookup: id },
+    });
+    revalidatePath(`/forms/${formId}/integrations`);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof LookupError ? error.message : "Couldn't save the lookup.",
+    };
+  }
+}
+
+export async function deleteLookupAction(
+  formId: string,
+  lookupId: string,
+): Promise<FeatureResult> {
+  if (!z.string().uuid().safeParse(lookupId).success)
+    return { ok: false, message: "Lookup not found." };
+  // Removing one is allowed on any plan (after a downgrade, say).
+  const { supabase, workspace, user } = await getCurrentWorkspace();
+  const { data: form } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (
+    !form ||
+    !canEdit(workspace.role) ||
+    !(await hasPermission(supabase, workspace.id, "manage_integrations"))
+  ) {
+    return { ok: false, message: "You don't have permission to manage integrations." };
+  }
+  const admin = createAdminClient();
+  await deleteLookup(admin, formId, lookupId);
+  await audit(admin, {
+    workspaceId: workspace.id,
+    actorId: user.id,
+    action: "integration.disconnected",
+    target: { type: "form", id: formId },
+    metadata: { provider: "lookup", lookup: lookupId },
+  });
+  revalidatePath(`/forms/${formId}/integrations`);
   return { ok: true };
 }

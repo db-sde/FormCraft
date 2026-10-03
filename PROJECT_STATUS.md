@@ -35,9 +35,20 @@ needs an identity provider.
 (Authentication → MFA); set `ANTHROPIC_API_KEY` for the AI features;
 for SSO, `supabase sso add` then `npm run sso:set`.
 
-**Phase 3 is complete.** Next: the remaining logic-spec phases
-(adaptive assessments, progressive profiling, external API data,
-performance benchmarks).
+**Phase 3 is complete.**
+
+**LOGIC SPEC — remaining phases** (2026-10-03, migrations 41–42):
+adaptive assessments (20), progressive profiling (23), external data
+lookups (24) and performance benchmarks (36) — see
+`docs/logic-engine.md` §4 and four `DECISIONS.md` entries.
+
+**Nothing from the phase lists is left unbuilt.** What still needs real
+accounts or keys to verify end to end: the AI features against the real
+model (`ANTHROPIC_API_KEY`), a real SAML identity provider, and the
+Phase 2 providers (Stripe, HubSpot, Resend, Vercel domains, Google
+OAuth, Zapier/Make listings). Still deliberately not built: dynamic
+options from data (spec phase 8) and automations beyond
+webhooks/Sheets/email (25).
 
 ### Phase 2
 
@@ -84,8 +95,8 @@ what's not built: `docs/logic-engine.md` §4. Decisions: `DECISIONS.md`
 - Results: variables and URL values on the response detail and in
   webhooks; Summary "Results" (endings reached, variable stats).
 
-Not yet: running the AI features against the real model (no key here);
-spec phases 8, 19, 20, 23, 24, payments, 36 (see `docs/logic-engine.md`).
+Not yet: running the AI features against the real model (no key here).
+Spec phases 19, 20, 23, 24 and 36 were added on 2026-10-03 (above).
 
 **To deploy:** `npm run db:migrate` (migration 24), optional
 `ANTHROPIC_API_KEY`, `npm run db:seed-templates` for the logic templates.

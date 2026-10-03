@@ -13,13 +13,23 @@ import { NotificationsPanel } from "@/components/integrations/notifications-pane
 import { FormSectionHeader } from "@/components/forms/form-top-bar";
 import { FormPageActions } from "@/components/forms/form-page-actions";
 import { cn } from "cn";
-import { ChartLine, Contact, CreditCard, MailCheck, MessageSquare } from "lucide-react";
+import {
+  ChartLine,
+  Contact,
+  CreditCard,
+  DatabaseZap,
+  MailCheck,
+  MessageSquare,
+} from "lucide-react";
 import { PaymentPanel } from "@/components/integrations/payment-panel";
 import { HubspotPanel } from "@/components/integrations/hubspot-panel";
 import { readPaymentConfig } from "@/domains/payments/stripe";
 import { SlackPanel } from "@/components/integrations/slack-panel";
 import { ConfirmationPanel } from "@/components/integrations/confirmation-panel";
 import { TrackingPanel } from "@/components/integrations/tracking-panel";
+import { LookupsPanel } from "@/components/integrations/lookups-panel";
+import { listLookups } from "@/domains/integrations/lookups";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspacePlan } from "@/domains/billing";
 import { parseFormSchema } from "@/domains/forms/schema";
 import {
@@ -149,6 +159,9 @@ export default async function IntegrationsPage({
         .eq("id", hubspotEndpoint.id)
         .single()
     : { data: null };
+  // Lookups are server-only rows; this page is for editors of the form
+  // (loadFormForPage checked), and the list carries no secret.
+  const lookups = await listLookups(createAdminClient(), formId);
   const endpoints = allEndpoints.filter((e) => e.kind === "webhook");
   const slackEndpoints = allEndpoints.filter((e) => e.kind === "slack");
   const schema = draft ? parseFormSchema(draft.schema) : null;
@@ -305,6 +318,27 @@ export default async function IntegrationsPage({
             if (q.type === "statement" || q.type === "file_upload") return [];
             return [{ value: q.id, label }];
           })}
+        />
+      </Section>
+
+      <Section
+        icon={<DatabaseZap />}
+        tint="choice"
+        title="Data lookups"
+        description="Call your own API after a question and use what it returns in the form's logic."
+      >
+        <LookupsPanel
+          formId={formId}
+          allowed={entitlements.data_lookups}
+          lookups={lookups}
+          questions={numbered
+            .filter(({ question: q }) => q.type !== "statement")
+            .map(({ question: q, number }) => ({
+              id: q.id,
+              number,
+              label: q.label.trim() || "Untitled",
+            }))}
+          fields={(schema?.hiddenFields ?? []).map((f) => f.name)}
         />
       </Section>
 

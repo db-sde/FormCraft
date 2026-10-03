@@ -96,10 +96,15 @@ function attribution() {
 /** Values for the form's declared hidden fields from the page URL
  * (`?source=linkedin`). Respondent-controlled: for routing and
  * personalisation only; the server keeps declared names only. */
-function hiddenFromUrl(compiled: CompiledFormV1): Record<string, string> {
+function hiddenFromUrl(
+  compiled: CompiledFormV1,
+  /** Fields a data lookup fills: never taken from the URL. */
+  reserved: readonly string[] = [],
+): Record<string, string> {
   const params = new URLSearchParams(window.location.search);
   const out: Record<string, string> = {};
   for (const field of compiled.schema.hiddenFields ?? []) {
+    if (reserved.includes(field.name)) continue;
     const value = params.get(field.name);
     if (value) out[field.name] = value.slice(0, 500);
   }
@@ -175,7 +180,11 @@ export function PublicFormRuntime({
   initialLanguage = "en",
   experimentId,
   known,
+  lookup,
 }: {
+  /** External data (phase 24): the questions that trigger a lookup and
+   * the URL fields lookups fill. */
+  lookup?: { triggers: string[]; fields: string[] };
   /** Answers this visitor already gave to "ask once" questions
    * (progressive profiling), by question id. */
   known?: Record<string, unknown>;
@@ -220,7 +229,7 @@ export function PublicFormRuntime({
   const startFailedAtRef = useRef(0);
   // Read once: a resumed session keeps the values it started with.
   const [urlHidden] = useState<Record<string, string>>(() =>
-    typeof window === "undefined" ? {} : hiddenFromUrl(compiled),
+    typeof window === "undefined" ? {} : hiddenFromUrl(compiled, lookup?.fields),
   );
 
   // A new respondent's seed; a resumed session keeps the one it had.
@@ -239,6 +248,39 @@ export function PublicFormRuntime({
 
   const ensureSessionRef = useRef(ensureSession);
   ensureSessionRef.current = ensureSession;
+
+  // External data (phase 24): values the server looked up for this
+  // response, layered over the URL's. Needs a saved response, so — like
+  // follow-ups — only on forms that save answers as they're given.
+  const [lookupValues, setLookupValues] = useState<Record<string, string>>({});
+  const shownHidden = useMemo(
+    () => ({ ...(resumed?.hidden ?? urlHidden), ...lookupValues }),
+    [resumed, urlHidden, lookupValues],
+  );
+  const lookups = useMemo(() => {
+    if (!lookup?.triggers.length || !savesProgress) return undefined;
+    return {
+      triggers: new Set(lookup.triggers),
+      run: async (questionId: string, answers: AnswerMap) => {
+        const session = await ensureSessionRef.current();
+        const res = await fetch(`/api/responses/${session.responseId}/lookup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questionId, answers }),
+        });
+        if (!res.ok) return;
+        const { values } = (await res.json()) as { values: Record<string, string> };
+        if (!values || Object.keys(values).length === 0) return;
+        setLookupValues((prev) => ({ ...prev, ...values }));
+        // Kept with the session so a refresh has them too.
+        const current = sessionRef.current;
+        if (current) {
+          sessionRef.current = { ...current, hidden: { ...current.hidden, ...values } };
+          if (savesProgress) writeStored(formId, sessionRef.current);
+        }
+      },
+    };
+  }, [lookup, savesProgress, formId]);
 
   // AI follow-ups (P3.7): only where the creator switched them on, and
   // only when answers are saved as they're given — a form that keeps
@@ -648,7 +690,7 @@ export function PublicFormRuntime({
         initialQuestionId={resumed?.lastQuestionId}
         initialHistory={resumed?.history}
         welcomeBack={!!resumed && !!resumed.lastQuestionId}
-        hidden={resumed?.hidden ?? urlHidden}
+        hidden={shownHidden}
         seed={resumed?.seed ?? freshSeed}
         brandingRemovable={brandingRemovable}
         schedulingAllowed={schedulingAllowed}
@@ -660,6 +702,7 @@ export function PublicFormRuntime({
         onStepEvent={sendStepEvent}
         followUps={followUps}
         known={known}
+        lookups={lookups}
         onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
         notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
         // Embedded: natural height, reported to the host page so its

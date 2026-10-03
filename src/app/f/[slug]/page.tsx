@@ -23,6 +23,7 @@ import {
   VISITOR_ID_PATTERN,
 } from "@/domains/experiments";
 import { knownAnswersFor } from "@/domains/responses/profile";
+import { lookupPlan } from "@/domains/integrations/lookups";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -131,6 +132,11 @@ export default async function PublicFormPage({
       )
     : {};
 
+  // External data (phase 24): which questions trigger a lookup.
+  const lookup = entitlements.data_lookups
+    ? await lookupPlan(createAdminClient(), publicForm.formId)
+    : null;
+
   const resume =
     typeof query[RESUME_PARAM] === "string"
       ? await resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
@@ -208,6 +214,7 @@ export default async function PublicFormPage({
         embedded={embedded}
         experimentId={experimentId}
         known={known}
+        lookup={lookup?.triggers.length ? lookup : undefined}
       />
     </div>
   );

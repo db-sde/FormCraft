@@ -95,6 +95,20 @@ trap? }`
   that was asked (`404` otherwise). Editable until the response is
   submitted.
 
+`POST /api/responses/:id/lookup` (logic phase 24)
+
+- `{ questionId, answers }` → `{ values }`: runs the form's data lookups
+  triggered by that question and returns the URL fields they filled
+  (also stored on the response, which is what the server's walk reads at
+  submission). Empty when there are none, the API failed, the response
+  is submitted or doesn't exist, the plan doesn't include lookups, or a
+  limit was hit (20 an hour per address and response; 10 calls per
+  response) — never an error the form has to handle.
+- The request the server makes is fixed by the creator's saved lookup:
+  GET, HTTPS to a public address, no redirects, 4 seconds, 64 KB of
+  JSON. Answers are inserted percent-encoded into the path or query and
+  cannot change the host.
+
 `POST /api/responses/:id/uploads/:questionId`
 
 - multipart. Rejected with `411` without a `Content-Length`, `413` when

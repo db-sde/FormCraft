@@ -32,6 +32,7 @@ export const ENTITLEMENT_DEFAULTS = {
   ab_testing: false,
   sso: false,
   scim: false,
+  data_lookups: false,
 };
 
 export type Entitlements = typeof ENTITLEMENT_DEFAULTS;
@@ -128,6 +129,7 @@ const FEATURE_NAMES: Record<Feature, string> = {
   ab_testing: "A/B tests",
   sso: "Single sign-on",
   scim: "SCIM provisioning",
+  data_lookups: "Data lookups",
 };
 
 /** Throws when the workspace's plan doesn't include a feature. */

@@ -210,6 +210,38 @@ test("uploads and events: validate input", async ({ request }) => {
   expect(event.status()).toBe(204);
 });
 
+test("lookups and follow-ups: validate input, and answer 'nothing' rather than fail", async ({
+  request,
+}) => {
+  const { responseId } = await start(request);
+  for (const path of ["lookup", "follow-up"]) {
+    expect(
+      (await request.post(`/api/responses/${responseId}/${path}`, { data: {} })).status(),
+    ).toBe(400);
+    expect(
+      (
+        await request.post(`/api/responses/not-a-uuid/${path}`, {
+          data: { questionId: "q_email", answers: {}, answer: "x" },
+        })
+      ).status(),
+    ).toBe(400);
+  }
+  // A form with no lookups, and a question without follow-ups.
+  const lookup = await request.post(`/api/responses/${responseId}/lookup`, {
+    data: { questionId: "q_email", answers: { q_email: "a@b.co" } },
+  });
+  expect(await lookup.json()).toEqual({ values: {} });
+  const followUp = await request.post(`/api/responses/${responseId}/follow-up`, {
+    data: { questionId: "q_email", answer: "a@b.co" },
+  });
+  expect(await followUp.json()).toEqual({ question: null });
+  // A response that doesn't exist looks the same.
+  const missing = await request.post(`/api/responses/${crypto.randomUUID()}/lookup`, {
+    data: { questionId: "q_email", answers: {} },
+  });
+  expect(await missing.json()).toEqual({ values: {} });
+});
+
 test("cron routes require the shared secret", async ({ request }) => {
   const secret = process.env.CRON_SECRET;
   test.skip(!secret, "CRON_SECRET not set");

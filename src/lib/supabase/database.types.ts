@@ -474,6 +474,63 @@ export type Database = {
           },
         ];
       };
+      form_lookups: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          enabled: boolean;
+          encrypted_header: Json | null;
+          form_id: string;
+          header_name: string | null;
+          id: string;
+          name: string;
+          outputs: Json;
+          trigger_question_id: string;
+          url: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          enabled?: boolean;
+          encrypted_header?: Json | null;
+          form_id: string;
+          header_name?: string | null;
+          id?: string;
+          name: string;
+          outputs: Json;
+          trigger_question_id: string;
+          url: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          enabled?: boolean;
+          encrypted_header?: Json | null;
+          form_id?: string;
+          header_name?: string | null;
+          id?: string;
+          name?: string;
+          outputs?: Json;
+          trigger_question_id?: string;
+          url?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_lookups_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "form_lookups_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_versions: {
         Row: {
           created_at: string;
@@ -924,6 +981,7 @@ export type Database = {
           language: string | null;
           last_active_at: string;
           last_question_id: string | null;
+          lookup_calls: number;
           random_seed: string | null;
           referrer: string | null;
           spam_suspected: boolean;
@@ -952,6 +1010,7 @@ export type Database = {
           language?: string | null;
           last_active_at?: string;
           last_question_id?: string | null;
+          lookup_calls?: number;
           random_seed?: string | null;
           referrer?: string | null;
           spam_suspected?: boolean;
@@ -980,6 +1039,7 @@ export type Database = {
           language?: string | null;
           last_active_at?: string;
           last_question_id?: string | null;
+          lookup_calls?: number;
           random_seed?: string | null;
           referrer?: string | null;
           spam_suspected?: boolean;
