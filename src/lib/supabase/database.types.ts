@@ -435,6 +435,45 @@ export type Database = {
           },
         ];
       };
+      form_ai_summaries: {
+        Row: {
+          form_id: string;
+          generated_at: string;
+          generated_by: string | null;
+          response_count: number;
+          summary: Json;
+        };
+        Insert: {
+          form_id: string;
+          generated_at?: string;
+          generated_by?: string | null;
+          response_count: number;
+          summary: Json;
+        };
+        Update: {
+          form_id?: string;
+          generated_at?: string;
+          generated_by?: string | null;
+          response_count?: number;
+          summary?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_ai_summaries_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: true;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "form_ai_summaries_generated_by_fkey";
+            columns: ["generated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_versions: {
         Row: {
           created_at: string;
@@ -491,6 +530,7 @@ export type Database = {
       };
       forms: {
         Row: {
+          ai_lead_criteria: string | null;
           created_at: string;
           created_by: string;
           deleted_at: string | null;
@@ -510,6 +550,7 @@ export type Database = {
           workspace_id: string;
         };
         Insert: {
+          ai_lead_criteria?: string | null;
           created_at?: string;
           created_by: string;
           deleted_at?: string | null;
@@ -529,6 +570,7 @@ export type Database = {
           workspace_id: string;
         };
         Update: {
+          ai_lead_criteria?: string | null;
           created_at?: string;
           created_by?: string;
           deleted_at?: string | null;
@@ -781,6 +823,89 @@ export type Database = {
           window_start?: string;
         };
         Relationships: [];
+      };
+      response_followups: {
+        Row: {
+          answer: string | null;
+          answered_at: string | null;
+          created_at: string;
+          id: string;
+          prompt: string;
+          question_id: string;
+          response_id: string;
+        };
+        Insert: {
+          answer?: string | null;
+          answered_at?: string | null;
+          created_at?: string;
+          id?: string;
+          prompt: string;
+          question_id: string;
+          response_id: string;
+        };
+        Update: {
+          answer?: string | null;
+          answered_at?: string | null;
+          created_at?: string;
+          id?: string;
+          prompt?: string;
+          question_id?: string;
+          response_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_followups_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      response_insights: {
+        Row: {
+          analyzed_at: string;
+          form_id: string;
+          lead_reason: string | null;
+          lead_score: number | null;
+          response_id: string;
+          sentiment: string | null;
+          tags: string[];
+        };
+        Insert: {
+          analyzed_at?: string;
+          form_id: string;
+          lead_reason?: string | null;
+          lead_score?: number | null;
+          response_id: string;
+          sentiment?: string | null;
+          tags?: string[];
+        };
+        Update: {
+          analyzed_at?: string;
+          form_id?: string;
+          lead_reason?: string | null;
+          lead_score?: number | null;
+          response_id?: string;
+          sentiment?: string | null;
+          tags?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_insights_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_insights_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: true;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       responses: {
         Row: {

@@ -190,6 +190,24 @@ description }` or null.
   password-only session reads nothing. **`mfa_recovery_codes`** —
   SHA-256 hashes, `used_at`; server only.
 
+## AI analysis (migration 38)
+
+All written by the server only; readable with `view_responses`.
+
+- **`response_insights`** — one per analysed response: `sentiment`
+  (positive / neutral / negative / mixed), `tags` (≤ 5), `lead_score`
+  (0–100) and `lead_reason` when the form has lead criteria.
+- **`form_ai_summaries`** — one per form: `summary`
+  (`{ overview, themes: [{ title, description, quotes }] }`),
+  `response_count`, `generated_by`, `generated_at`.
+- **`forms.ai_lead_criteria`** — what a good lead looks like, in words.
+- **`response_followups`** — `(response_id, question_id)` unique:
+  the AI-written `prompt` and the respondent's `answer`.
+
+**New tables** must add the `"mfa: second factor when enrolled"`
+restrictive policy themselves (migration 37 only covered tables that
+existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

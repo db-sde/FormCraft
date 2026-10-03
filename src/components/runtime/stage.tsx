@@ -230,7 +230,10 @@ export function StageActions({
   disabled = false,
   inert = false,
   backLabel = "Back",
+  busyLabel = "Submitting…",
 }: {
+  /** What the button says while `submitting`. */
+  busyLabel?: string;
   backLabel?: string;
   showBack: boolean;
   onBack?: () => void;
@@ -272,7 +275,7 @@ export function StageActions({
         {submitting && (
           <span className="size-[15px] animate-spin rounded-full border-2 border-current border-t-transparent" />
         )}
-        {submitting ? "Submitting…" : label}
+        {submitting ? busyLabel : label}
         {showCheck && !submitting && <Check aria-hidden className="size-4" />}
       </StageButton>
       {enterHint && !submitting && (

@@ -123,7 +123,14 @@ export function FormRuntime({
   brandingRemovable = true,
   schedulingAllowed = true,
   language,
+  followUps,
 }: {
+  /** Public runtime only: AI follow-up questions (P3.7). `ask` returns a
+   * question about an answer (or null), `reply` saves what they say. */
+  followUps?: {
+    ask: (questionId: string, answer: string) => Promise<string | null>;
+    reply: (questionId: string, text: string) => Promise<void>;
+  };
   /** The respondent's language, for FormCraft's own words (P2.21); the
    * form's text arrives already translated in `compiled`. */
   language?: string;
@@ -194,6 +201,17 @@ export function FormRuntime({
   const [endingRecall, setEndingRecall] = useState<RecallSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // An AI follow-up on the current question: asked at most once each.
+  const [followUp, setFollowUp] = useState<{
+    questionId: string;
+    prompt: string;
+    reply: string;
+  } | null>(null);
+  const [thinking, setThinking] = useState(false);
+  // The guard reads the ref: the continuation runs before React has
+  // re-rendered with `thinking` back to false.
+  const thinkingRef = useRef(false);
+  const askedFollowUpsRef = useRef(new Set<string>());
   // Which way the last step moved, for the slide direction.
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -287,7 +305,7 @@ export function FormRuntime({
   }
 
   function goNext(currentAnswers: AnswerMap = answers) {
-    if (!question || submitting) return;
+    if (!question || submitting || thinkingRef.current) return;
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
 
     const validation = validateAnswer(question, currentAnswers[question.id]);
@@ -304,6 +322,37 @@ export function FormRuntime({
     );
     if (logicError) {
       setError(logicError);
+      return;
+    }
+
+    // A follow-up that's showing: save the reply (if any) and move on.
+    if (followUp?.questionId === question.id) {
+      const reply = followUp.reply.trim();
+      if (reply) void followUps?.reply(question.id, reply).catch(() => {});
+      setFollowUp(null);
+    } else if (
+      followUps &&
+      question.type === "long_text" &&
+      question.settings.aiFollowUp &&
+      !askedFollowUpsRef.current.has(question.id) &&
+      typeof currentAnswers[question.id] === "string" &&
+      (currentAnswers[question.id] as string).trim().length >= 3
+    ) {
+      // Ask once; whatever happens, the respondent is never held up.
+      askedFollowUpsRef.current.add(question.id);
+      const questionId = question.id;
+      setError(null);
+      thinkingRef.current = true;
+      setThinking(true);
+      void followUps
+        .ask(questionId, currentAnswers[questionId] as string)
+        .catch(() => null)
+        .then((prompt) => {
+          thinkingRef.current = false;
+          setThinking(false);
+          if (prompt) setFollowUp({ questionId, prompt, reply: "" });
+          else goNextRef.current();
+        });
       return;
     }
 
@@ -341,7 +390,8 @@ export function FormRuntime({
   }
 
   function goBack() {
-    if (history.length === 0 || submitting) return;
+    if (history.length === 0 || submitting || thinkingRef.current) return;
+    setFollowUp(null);
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     const prev = history[history.length - 1];
     const prevHistory = history.slice(0, -1);
@@ -615,6 +665,32 @@ export function FormRuntime({
                 invalid={!!error}
               />
 
+              {followUp?.questionId === question.id && (
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    htmlFor="fc-follow-up"
+                    className="text-(length:--st-tile) font-semibold text-(--st-text)"
+                  >
+                    <span className="block text-xs font-normal text-(--st-muted)">
+                      {t.followUp}
+                    </span>
+                    {followUp.prompt}
+                  </label>
+                  <textarea
+                    id="fc-follow-up"
+                    autoFocus
+                    rows={2}
+                    maxLength={5000}
+                    value={followUp.reply}
+                    onChange={(e) =>
+                      setFollowUp((f) => (f ? { ...f, reply: e.target.value } : f))
+                    }
+                    className="field-sizing-content w-full min-w-0 resize-none rounded-none border-0 border-b-2 border-(--st-line) bg-transparent py-2 text-(length:--st-input) leading-[1.45] text-(--st-text) outline-none focus:border-(--st-primary) focus-visible:shadow-none"
+                  />
+                  <p className="text-xs text-(--st-muted)">{t.followUpHint}</p>
+                </div>
+              )}
+
               {error && <StageError>{error}</StageError>}
 
               <StageActions
@@ -623,7 +699,8 @@ export function FormRuntime({
                 onBack={goBack}
                 onNext={() => goNext()}
                 label={primaryLabel}
-                submitting={submitting}
+                submitting={submitting || thinking}
+                busyLabel={thinking ? t.thinking : undefined}
                 showCheck={!isLastStep && !autoAdvances}
                 enterHint={enterHint}
               />

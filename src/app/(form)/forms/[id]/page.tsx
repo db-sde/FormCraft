@@ -10,6 +10,7 @@ import {
   unpublishAction,
   renameFormAction,
   proposeRuleAction,
+  reviewFormAction,
 } from "./actions";
 import { aiConfigured } from "@/domains/ai/config";
 import { getWorkspacePlan } from "@/domains/billing";
@@ -73,6 +74,7 @@ export default async function FormBuilderPage({
       customFonts={entitlements.custom_fonts}
       multilingual={entitlements.multilingual}
       onProposeRule={proposeRuleAction}
+      onReviewForm={reviewFormAction}
     />
   );
 }

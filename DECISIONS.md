@@ -3,6 +3,52 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — Phase 3, Wave B: AI over responses, copilot, follow-ups
+
+- **The model reads; code decides and stores.** Sentiment, tags and lead
+  scores (P3.4–P3.6), summaries (P3.3) and copilot suggestions (P3.2)
+  never change a response or a form by themselves. Analysis lives in its
+  own tables beside the responses; a copilot rewording is applied only
+  when the creator clicks Apply, and then goes through autosave's normal
+  validation.
+- **Creator-started, one credit per call.** Nothing is analysed in the
+  background: "Analyze new responses" does up to 20 per click (one
+  credit each, stopping when the plan's credits run out), a summary is
+  one credit, a review is one credit. Editors who can see responses can
+  run them; reading follows `view_responses`.
+- **Data minimisation.** Sent to the model: question labels and written
+  answers. Not sent: file uploads, email and phone answers, and from a
+  contact step only the company. A free-text answer can still contain
+  personal details the respondent typed — creators should say so in
+  their privacy notice if they use these features.
+- **Answers are data, not instructions.** Every prompt says so and
+  wraps respondent text in tags; replies are constrained by a JSON
+  schema and re-validated (enums, lengths, tag normalisation, scores
+  clamped 0–100 and dropped without criteria).
+- **Quotes are verified.** A summary's quotes are kept only if they
+  appear word for word in a response it was given (ignoring case and
+  spacing); the rest are dropped rather than shown as something a
+  respondent said.
+- **Lead scoring is the creator's criteria in words** (per form), giving
+  a 0–100 score with a one-sentence reason. It sits beside the
+  deterministic scoring from the logic engine, never replacing it.
+- **Follow-ups (P3.7)** are a per-question switch on long-text
+  questions. One optional follow-up per question, at most 3 per
+  response, asked once (a refresh returns the same question), with an
+  8-second limit and no retries. Any failure — no key, no credits, slow
+  or refused model — just means no follow-up; the form never waits or
+  errors. They are stored in `response_followups`, not as answers, so
+  the form's questions, validation, logic and exports are unchanged.
+  The model is told not to ask for personal details. Off when the form
+  doesn't save answers before submit (nothing is sent early then).
+  They cost the workspace a credit each, so a busy form can use its
+  credits up; then follow-ups simply stop.
+- **Tested without a model:** a stand-in Messages API for unit,
+  integration and E2E (`ANTHROPIC_BASE_URL`; the E2E config always
+  overrides it so a real key can't reach the real API from tests).
+  **Not yet run against the real model** — there is no key on this
+  machine, so prompt quality is unverified.
+
 ## 2026-10-03 — Phase 3, Wave A: history, audit, permissions, API, insights, A/B tests, 2FA
 
 - **Version history (P3.10):** restoring copies an old version into the

@@ -67,6 +67,8 @@ const ShortTextSettings = z.object({
 const LongTextSettings = z.object({
   placeholder: optionalSafeText(200),
   maxLength: z.number().int().min(1).max(50000).optional(),
+  /** Ask one AI-written follow-up question about the answer (P3.7). */
+  aiFollowUp: z.boolean().optional(),
 });
 
 const EmailSettings = z.object({});

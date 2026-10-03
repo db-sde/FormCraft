@@ -16,6 +16,9 @@ import {
 import { getUploadSignedUrl } from "@/domains/uploads";
 import { formatValue } from "@/domains/logic/recall";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
+import { ResponseInsightCard } from "@/components/responses/ai-insights-panel";
+import { insightsFor } from "@/domains/responses/ai-insights";
+import { aiConfigured } from "@/domains/ai/config";
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { LocalTime } from "@/components/local-time";
 import { cn } from "cn";
@@ -94,6 +97,15 @@ export default async function ResponseDetailPage({
 
   const completed = detail.status === "completed";
   const activity = responseActivity(detail);
+  const [insights, { data: followUpRows }] = await Promise.all([
+    insightsFor(supabase, [responseId]),
+    supabase
+      .from("response_followups")
+      .select("question_id, prompt, answer")
+      .eq("response_id", responseId),
+  ]);
+  const insight = insights.get(responseId) ?? null;
+  const followUps = new Map((followUpRows ?? []).map((f) => [f.question_id, f]));
   const adjacent = await getAdjacentResponseIds(supabase, formId, detail);
 
   // Show the respondent's original file name, not the internal upload
@@ -247,6 +259,16 @@ export default async function ResponseDetailPage({
         </section>
       )}
 
+      {completed && (
+        <ResponseInsightCard
+          formId={formId}
+          responseId={responseId}
+          enabled={aiConfigured()}
+          canRun={!viewOnly}
+          insight={insight}
+        />
+      )}
+
       {(Object.keys(detail.results.variables).length > 0 ||
         Object.keys(detail.results.hidden).length > 0) && (
         <section className="border-ink bg-card rounded-lg border-[1.5px] px-[18px] py-4">
@@ -353,6 +375,18 @@ export default async function ResponseDetailPage({
                 <p className="text-subtle-foreground text-[17px] leading-[1.45] font-semibold italic">
                   {completed ? "Skipped" : "Not answered yet"}
                 </p>
+              )}
+              {followUps.get(answer.questionId) && (
+                <div className="border-border mt-1 border-t pt-2.5">
+                  <p className="text-muted-foreground text-[13px]">
+                    Follow-up (written by AI): {followUps.get(answer.questionId)!.prompt}
+                  </p>
+                  <p className="mt-1 text-[15px] leading-[1.45] font-semibold break-words whitespace-pre-wrap">
+                    {followUps.get(answer.questionId)!.answer || (
+                      <span className="text-subtle-foreground italic">Skipped</span>
+                    )}
+                  </p>
+                </div>
               )}
             </section>
           );

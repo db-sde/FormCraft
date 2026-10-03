@@ -20,6 +20,14 @@ import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import type { RuleProposal } from "@/domains/ai/rule-draft";
 import { aiConfigured, MAX_INSTRUCTION_LENGTH } from "@/domains/ai/config";
 import { proposeRule } from "@/domains/ai/propose-rule";
+import { describeFormForAi } from "@/domains/ai/rule-draft";
+import { reviewForm, type CopilotSuggestion } from "@/domains/ai/response-analysis";
+import {
+  aiFailure,
+  AI_NOT_CONFIGURED,
+  AI_OUT_OF_CREDITS,
+  type AiFailure,
+} from "@/domains/ai/errors";
 import Anthropic from "@anthropic-ai/sdk";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 import { canEdit } from "@/domains/workspaces";
@@ -294,6 +302,63 @@ export async function proposeRuleAction(
       code: "failed",
       message: "The AI couldn't be reached. Try again.",
     };
+  }
+}
+
+export type ReviewFormResult = { ok: true; suggestions: CopilotSuggestion[] } | AiFailure;
+
+/**
+ * Copilot (P3.2): the model reads the form and suggests changes. Nothing
+ * is applied here — suggestions go back to the builder, where the
+ * creator applies the ones they want and autosave validates them like
+ * any other edit.
+ */
+export async function reviewFormAction(
+  formId: string,
+  schema: FormSchemaV1,
+): Promise<ReviewFormResult> {
+  if (!aiConfigured()) return AI_NOT_CONFIGURED;
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  const { data } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (!data || !canEdit(workspace.role))
+    return { ok: false, code: "failed", message: "Form not found." };
+
+  let parsed: FormSchemaV1;
+  try {
+    parsed = parseFormSchema(schema);
+  } catch {
+    return { ok: false, code: "failed", message: "Save your form's changes first." };
+  }
+  if (parsed.questions.filter((q) => q.type !== "welcome_screen").length === 0)
+    return { ok: false, code: "failed", message: "Add a question first." };
+
+  const admin = createAdminClient();
+  const limit = await hitRateLimit(admin, `ai-review:${user.id}`, 10, 3_600_000);
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      code: "limited",
+      message: "That's a lot of reviews for one hour. Try again later.",
+    };
+  }
+  const { entitlements } = await getWorkspacePlan(admin, workspace.id);
+  if (!(await spendAiCredit(admin, workspace.id, entitlements))) return AI_OUT_OF_CREDITS;
+
+  try {
+    const suggestions = await reviewForm({
+      schema: parsed,
+      describedForm: describeFormForAi(parsed),
+    });
+    return suggestions
+      ? { ok: true, suggestions }
+      : { ok: false, code: "failed", message: "The review didn't come back. Try again." };
+  } catch (error) {
+    return aiFailure(error);
   }
 }
 

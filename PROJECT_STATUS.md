@@ -17,14 +17,19 @@ Last updated: 2026-10-03
 | P3.15 | Granular permissions per member, enforced in RLS                                   |
 | P3.16 | Workspace retention for completed responses                                        |
 
-**To deploy:** `npm run db:migrate` (33–37); enable TOTP in Supabase
-(Authentication → MFA).
+**PHASE 3 — Wave B** (2026-10-03, migration 38): AI, gated on
+`ANTHROPIC_API_KEY` and plan credits — copilot review with one-click
+rewordings (P3.2), response summaries with verified quotes (P3.3), tags
+(P3.4), sentiment (P3.5), AI lead score from the creator's criteria
+(P3.6), optional follow-up questions for respondents (P3.7). Tested
+against a stand-in model only; not yet run against the real one.
 
-**Next:** Wave B (AI, needs `ANTHROPIC_API_KEY`): copilot P3.2, response
-summaries P3.3, tagging P3.4, sentiment P3.5, AI lead scoring P3.6,
-adaptive follow-ups P3.7. Wave C: SSO P3.12, SCIM P3.18, compliance
-P3.17. Then the remaining logic-spec phases (adaptive assessments,
-progressive profiling, external API data, performance benchmarks).
+**To deploy:** `npm run db:migrate` (33–38); enable TOTP in Supabase
+(Authentication → MFA); set `ANTHROPIC_API_KEY` for the AI features.
+
+**Next:** Wave C: SSO P3.12, SCIM P3.18, compliance P3.17. Then the
+remaining logic-spec phases (adaptive assessments, progressive
+profiling, external API data, performance benchmarks).
 
 ### Phase 2
 

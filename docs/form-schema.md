@@ -81,6 +81,9 @@ type, since a form can have multiple endings reachable by logic.)
 Each type's `settings` is a discriminated-union member validated
 independently (e.g. `short_text` settings: `placeholder?`, `minLength?`,
 `maxLength?`; `number` settings: `min?`, `max?`, `decimals?`).
+`long_text` also has `aiFollowUp?` (P3.7): ask one optional AI-written
+follow-up about the answer. It adds no question to the schema — the
+follow-up and its reply are stored beside the response.
 
 ### Logic engine fields
 

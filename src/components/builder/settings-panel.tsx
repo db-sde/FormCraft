@@ -228,6 +228,17 @@ export function SettingsPanel({
               }
             />
           </PanelField>
+          <SwitchRow
+            label="AI follow-up"
+            hint="Ask one optional follow-up about what they wrote. Uses an AI credit each time; their answer is sent to the AI."
+            checked={question.settings.aiFollowUp ?? false}
+            onCheckedChange={(aiFollowUp) =>
+              onChange({
+                ...question,
+                settings: { ...question.settings, aiFollowUp: aiFollowUp || undefined },
+              })
+            }
+          />
         </>
       )}
 

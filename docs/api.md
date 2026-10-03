@@ -83,6 +83,18 @@ trap? }`
   random bits; only its SHA-256 is stored. Completing the response
   revokes its links. 20 per hour per address.
 
+`POST /api/responses/:id/follow-up` (P3.7)
+
+- `{ questionId, answer }` → `{ question }`: one AI-written follow-up
+  about a long-text answer, or `null`. Only for questions with
+  `aiFollowUp` in the version the response was served; at most 3 per
+  response; asking again returns the same question. Never an error to
+  the respondent: no key, no credits, a slow or refused model and rate
+  limits (10 an hour per address and response) all mean `null`.
+- `PUT` `{ questionId, reply }` → `204`. Saves the reply to a follow-up
+  that was asked (`404` otherwise). Editable until the response is
+  submitted.
+
 `POST /api/responses/:id/uploads/:questionId`
 
 - multipart. Rejected with `411` without a `Content-Length`, `413` when

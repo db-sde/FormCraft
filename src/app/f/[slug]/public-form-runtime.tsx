@@ -233,6 +233,37 @@ export function PublicFormRuntime({
 
   const theme = compiled.schema.theme;
 
+  const ensureSessionRef = useRef(ensureSession);
+  ensureSessionRef.current = ensureSession;
+
+  // AI follow-ups (P3.7): only where the creator switched them on, and
+  // only when answers are saved as they're given — a form that keeps
+  // nothing until submit sends nothing early either.
+  const followUps = useMemo(() => {
+    const wanted = compiled.schema.questions.some(
+      (q) => q.type === "long_text" && q.settings.aiFollowUp,
+    );
+    if (!wanted || !savesProgress) return undefined;
+    const call = async (method: "POST" | "PUT", body: unknown) => {
+      const { responseId } = await ensureSessionRef.current();
+      return fetch(`/api/responses/${responseId}/follow-up`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    };
+    return {
+      ask: async (questionId: string, answer: string) => {
+        const res = await call("POST", { questionId, answer });
+        if (!res.ok) return null;
+        return ((await res.json()) as { question: string | null }).question;
+      },
+      reply: async (questionId: string, reply: string) => {
+        await call("PUT", { questionId, reply });
+      },
+    };
+  }, [compiled, savesProgress]);
+
   useEffect(() => {
     if (!embedded || window.parent === window) return;
     const report = () =>
@@ -623,6 +654,7 @@ export function PublicFormRuntime({
         getResponseId={() => ensureSession().then((s) => s.responseId)}
         savesProgress={savesProgress}
         onStepEvent={sendStepEvent}
+        followUps={followUps}
         onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
         notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
         // Embedded: natural height, reported to the host page so its

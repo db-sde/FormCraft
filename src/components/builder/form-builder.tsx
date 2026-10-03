@@ -60,6 +60,7 @@ import { EndingSettingsPanel } from "./ending-editor";
 import { CHOICE_TYPES, syncCarriedOptions } from "@/domains/forms/options";
 import { themeForPlan } from "@/domains/themes/fonts";
 import { ThemeSettingsPanel } from "./theme-settings-panel";
+import type { CopilotSuggestion } from "@/domains/ai/response-analysis";
 import { LogicEditor } from "./logic-editor";
 import { TranslationsEditor } from "./translations-editor";
 import { QuestionLogicPanel } from "./logic/question-logic-panel";
@@ -164,6 +165,7 @@ export function FormBuilder({
   openPreviewOnLoad = false,
   aiEnabled = false,
   onProposeRule,
+  onReviewForm,
   brandingRemovable = true,
   customFonts = true,
   multilingual = true,
@@ -181,6 +183,13 @@ export function FormBuilder({
     instruction: string,
     schema: FormSchemaV1,
   ) => Promise<{ ok: true; proposal: RuleProposal } | { ok: false; message: string }>;
+  /** Copilot review of the whole form (P3.2). */
+  onReviewForm?: (
+    formId: string,
+    schema: FormSchemaV1,
+  ) => Promise<
+    { ok: true; suggestions: CopilotSuggestion[] } | { ok: false; message: string }
+  >;
   /** Opened from a dashboard "Preview" (`?preview=1`). */
   openPreviewOnLoad?: boolean;
   /** Opened from "Add lead capture" elsewhere (`?leadCapture=1`). */
@@ -1104,6 +1113,9 @@ export function FormBuilder({
                       enabled: aiEnabled,
                       propose: (instruction) =>
                         onProposeRule(formId, instruction, schema),
+                      review: onReviewForm
+                        ? () => onReviewForm(formId, schema)
+                        : undefined,
                     }
                   : undefined
               }

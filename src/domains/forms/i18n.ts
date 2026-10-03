@@ -42,6 +42,9 @@ export type UiStrings = {
   detailsSaved: string;
   finishLater: string;
   language: string;
+  followUp: string;
+  followUpHint: string;
+  thinking: string;
 };
 
 const EN: UiStrings = {
@@ -59,6 +62,9 @@ const EN: UiStrings = {
   detailsSaved: "Your details are saved when you continue, even if you don't finish.",
   finishLater: "Finish later",
   language: "Language",
+  followUp: "One more question",
+  followUpHint: "Optional. Leave it blank to skip.",
+  thinking: "One moment…",
 };
 
 const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {

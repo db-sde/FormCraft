@@ -37,6 +37,7 @@ import { ActionsEditor } from "./logic/actions-editor";
 import { VariablesPanel } from "./logic/variables-panel";
 import { PoolsPanel } from "./logic/pools-panel";
 import { DescribeRule, type ProposeRule } from "./logic/describe-rule";
+import { CopilotReview, type ReviewForm } from "./logic/copilot-review";
 import {
   defaultCompare,
   describeAction,
@@ -62,7 +63,7 @@ export function LogicEditor({
   onChange: (patch: Partial<FormSchemaV1>) => void;
   onSelectQuestion?: (questionId: string) => void;
   /** "Describe a rule": whether AI is set up, and the server call. */
-  ai?: { enabled: boolean; propose: ProposeRule };
+  ai?: { enabled: boolean; propose: ProposeRule; review?: ReviewForm };
 }) {
   const [view, setView] = useState<View>("rules");
   const rules = useMemo(() => allRules(schema), [schema]);
@@ -235,6 +236,13 @@ export function LogicEditor({
             Problems marked “Fix this” stop the form saving until they&apos;re fixed.
             “Check this” items are allowed but probably not what you meant.
           </p>
+          <CopilotReview
+            schema={schema}
+            enabled={ai?.enabled ?? false}
+            review={ai?.review}
+            onChange={onChange}
+            onSelectQuestion={onSelectQuestion}
+          />
         </div>
       )}
     </div>

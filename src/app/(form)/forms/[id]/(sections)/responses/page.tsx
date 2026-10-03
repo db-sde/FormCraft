@@ -33,6 +33,9 @@ import { DeleteResponseButton } from "@/components/responses/delete-response-but
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { FilterChip, type FilterGroup } from "@/components/responses/filter-chip";
 import { SummaryView } from "@/components/responses/summary-view";
+import { AiInsightsPanel } from "@/components/responses/ai-insights-panel";
+import { getFormSummary, insightTotals } from "@/domains/responses/ai-insights";
+import { aiConfigured } from "@/domains/ai/config";
 import { FormSectionHeader } from "@/components/forms/form-top-bar";
 import { FormPageActions } from "@/components/forms/form-page-actions";
 import { CopyLinkField } from "@/components/forms/copy-link-field";
@@ -252,13 +255,20 @@ export default async function ResponsesPage({
     answer,
   };
 
-  const [responses, counts, funnel, dropoff, summary, insights] = await Promise.all([
+  const [responses, counts, funnel, dropoff, summary, insights, ai] = await Promise.all([
     tab === "table" ? listResponses(supabase, formId, { page, view, ...filters }) : null,
     getResponseCounts(supabase, formId),
     getFunnelSummaryForForm(supabase, formId, filters.since),
     view === "incomplete" ? getDropoff(supabase, formId) : null,
     tab === "summary" ? getResponseSummary(supabase, formId, filters) : null,
     tab === "summary" ? getConversionInsights(supabase, formId, filters.since) : null,
+    tab === "summary"
+      ? Promise.all([
+          getFormSummary(supabase, formId),
+          insightTotals(supabase, formId),
+          supabase.from("forms").select("ai_lead_criteria").eq("id", formId).single(),
+        ])
+      : null,
   ]);
 
   const base = `/forms/${formId}/responses`;
@@ -509,6 +519,17 @@ export default async function ResponsesPage({
           {!completed && dropoff && <DropoffCard {...dropoff} />}
 
           {insights && <InsightsCard insights={insights} />}
+
+          {ai && (
+            <AiInsightsPanel
+              formId={formId}
+              enabled={aiConfigured()}
+              canRun={!viewOnly}
+              summary={ai[0]}
+              totals={ai[1]}
+              leadCriteria={ai[2].data?.ai_lead_criteria ?? ""}
+            />
+          )}
 
           {summary && (
             <SummaryView

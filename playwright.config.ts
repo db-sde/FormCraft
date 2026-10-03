@@ -7,6 +7,13 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 export const FAKE_STRIPE_PORT = 4600;
 process.env.STRIPE_API_BASE ??= `http://127.0.0.1:${FAKE_STRIPE_PORT}`;
 
+// Likewise the AI features talk to a stand-in Messages API that
+// ai.spec.ts runs. The base URL is always overridden, so a real key in
+// the environment can never reach the real API from a test run.
+export const FAKE_AI_PORT = 4601;
+process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${FAKE_AI_PORT}`;
+process.env.ANTHROPIC_API_KEY ??= "e2e-test-key";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
