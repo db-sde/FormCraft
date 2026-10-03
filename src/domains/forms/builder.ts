@@ -429,3 +429,37 @@ export function rulesBrokenByTypeChange(
       (!sameFamily || !operators.includes(rule.operator)),
   );
 }
+
+/** Starter wording that was never meant to be published as is. */
+const PLACEHOLDER_LABELS = new Set(
+  (
+    [
+      "welcome_screen",
+      "short_text",
+      "long_text",
+      "number",
+      "single_select",
+      "multi_select",
+      "dropdown",
+      "statement",
+    ] as const
+  )
+    .map((type) => DEFAULT_LABEL[type])
+    // A new form's welcome screen carries the form's unnamed title.
+    .concat("Untitled form"),
+);
+const PLACEHOLDER_OPTION = /^Option \d+$/;
+
+/** Questions still carrying starter wording ("Pick one", "Option 2"),
+ * in form order — so a creator can be told before respondents see it. */
+export function questionsWithPlaceholders(questions: QuestionV1[]): QuestionV1[] {
+  return [...questions]
+    .sort((a, b) => a.order - b.order)
+    .filter((question) => {
+      if (PLACEHOLDER_LABELS.has(question.label.trim())) return true;
+      const options = (question.settings as { options?: { label: string }[] }).options;
+      // Carried-forward options are another question's, checked there.
+      const carried = (question.settings as { optionsFrom?: unknown }).optionsFrom;
+      return !carried && !!options?.some((o) => PLACEHOLDER_OPTION.test(o.label.trim()));
+    });
+}

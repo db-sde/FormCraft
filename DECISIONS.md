@@ -3,6 +3,51 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — UX pass: the build loop is typing, not clicking
+
+A walkthrough of every creator journey as a new user, counting clicks.
+Most of the app was already one click per intent; the waste was in the
+builder's most repeated loop and in three hand-offs. From the dashboard
+to a named, published form with a choice question is now **two clicks**
+("New form", "Publish"); before it was about fourteen plus manual
+select-and-replace on every starter text.
+
+- **Adding a question puts the cursor in it.** The new question's (or
+  duplicated question's, or ending's) text is focused with its starter
+  wording selected, so typing replaces it. Before, focus stayed on "Add
+  question" — typing did nothing, and a space re-opened the menu and
+  added stray questions.
+- **Enter moves on** from a question's text: to the first option of a
+  choice question, otherwise to "Add question" (Shift+Enter is still a
+  new line). "Add question" opens on a search field, so a type is a few
+  letters and Enter; matches on a type's name rank above matches in its
+  description ("check" is Checkboxes, not Email's "Checked
+  automatically").
+- **Options are a typed list.** Enter goes to the next option — an
+  unedited starter one first, then a new one; a final Enter on an
+  untouched option ends the list and removes it; Backspace on an empty
+  option removes it; arrows move between them. Starter wording
+  ("Option 2") is selected on focus. Pasting several lines still splits.
+- **A form is named once.** Its name follows the welcome screen's title
+  for as long as the two are the same; renaming it in the top bar to
+  something else unlinks them. An unnamed form opens with that title
+  selected.
+- **Publishing hands over the link.** The first publish copies the live
+  link and says so; later publishes offer "Copy link" instead of writing
+  to the clipboard unasked again. If the clipboard isn't available the
+  toast offers the button.
+- **A heads-up, not a gate, for starter wording.** Publishing with
+  "Pick one" or "Option 2" still in the form shows a warning that jumps
+  to the first such question. It doesn't block: the creator may mean it.
+- **The welcome dialog's cards act on click** (was select, then
+  confirm), and its copy now describes the starter form accurately.
+- **The dashboard's response count is a link** to that form's responses
+  (was: open the form, then the Responses tab).
+- **Kept as is:** the starter form's three questions (a working contact
+  form with lead capture, which the publish-and-respond tests cover).
+  Someone wanting something else deletes them; a truly blank start would
+  be a product change, not a click fix.
+
 ## 2026-10-03 — External data: lookups fill URL fields, on the server
 
 - **Shape.** A data lookup runs when the respondent leaves a chosen

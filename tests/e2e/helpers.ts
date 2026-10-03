@@ -187,8 +187,7 @@ export async function publishFromBuilder(page: Page): Promise<string> {
 export async function startFromScratch(page: Page) {
   const dialog = page.getByRole("dialog", { name: "How do you want to start?" });
   if (await dialog.isVisible()) {
-    await dialog.getByRole("radio", { name: /Start from scratch/ }).click();
-    await dialog.getByRole("button", { name: "Create blank form" }).click();
+    await dialog.getByRole("button", { name: /Start from scratch/ }).click();
   } else {
     await page.getByRole("button", { name: "Start from scratch" }).click();
   }

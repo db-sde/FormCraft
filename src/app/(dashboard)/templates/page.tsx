@@ -48,7 +48,7 @@ export default async function TemplatesPage() {
               Start from scratch
             </span>
             <span className="text-muted-foreground text-sm">
-              A blank form with a welcome screen and one question.
+              A short contact form to reshape: a welcome, a question and contact details.
             </span>
           </span>
         </button>

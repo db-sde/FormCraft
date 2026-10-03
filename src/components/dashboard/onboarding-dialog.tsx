@@ -5,8 +5,7 @@ import { useStoredValue } from "@/lib/hooks/use-stored-value";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LayoutTemplate, Plus, Sparkles } from "lucide-react";
 import { createFormAction, createSampleFormAction } from "@/app/(dashboard)/actions";
-import { cn } from "cn";
-import { Button, ButtonSpinner } from "@/components/ui/button";
+import { ButtonSpinner } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +44,7 @@ const CHOICES: {
   {
     id: "scratch",
     title: "Start from scratch",
-    body: "A blank form with a welcome screen and one question.",
+    body: "A short contact form to reshape: a welcome, a question and contact details.",
     icon: Plus,
     tint: "var(--qt-screens-bg)",
     cta: "Create blank form",
@@ -54,7 +53,8 @@ const CHOICES: {
 
 /**
  * First sign-in (Part 3 §10.9): a welcome dialog over the empty
- * dashboard asking how to start. Shown once per browser.
+ * dashboard asking how to start — each card starts that way with one
+ * click. Shown once per browser.
  */
 export function OnboardingDialog({ firstName }: { firstName: string }) {
   const router = useRouter();
@@ -62,7 +62,8 @@ export function OnboardingDialog({ firstName }: { firstName: string }) {
   const [seen, markSeen] = useStoredValue(SEEN_KEY, "1");
   const [closed, setClosed] = useState(false);
   const open = seen !== "1" && !closed;
-  const [choice, setChoice] = useState<Choice>("sample");
+  // The card that was clicked, while its form is being made.
+  const [starting, setStarting] = useState<Choice | null>(null);
   const [pending, startTransition] = useTransition();
 
   function close() {
@@ -70,20 +71,20 @@ export function OnboardingDialog({ firstName }: { firstName: string }) {
     markSeen("1");
   }
 
-  function go() {
-    const selected = choice;
+  /** Each card does its thing straight away: one click, no confirm. */
+  function go(selected: Choice) {
+    if (pending) return;
     if (selected === "template") {
       close();
       router.push("/templates");
       return;
     }
+    setStarting(selected);
     startTransition(async () => {
       markSeen("1");
       await (selected === "sample" ? createSampleFormAction() : createFormAction());
     });
   }
-
-  const cta = CHOICES.find((c) => c.id === choice)!.cta;
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
@@ -99,43 +100,37 @@ export function OnboardingDialog({ firstName }: { firstName: string }) {
             You can always do the others later.
           </DialogDescription>
         </div>
-        <div
-          role="radiogroup"
-          aria-label="How to start"
-          className="grid gap-3.5 sm:grid-cols-3"
-        >
+        <div className="grid gap-3.5 sm:grid-cols-3">
           {CHOICES.map((c) => {
-            const selected = c.id === choice;
+            const busy = pending && starting === c.id;
             return (
               <button
                 key={c.id}
                 type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setChoice(c.id)}
-                onDoubleClick={go}
-                className={cn(
-                  "fc-focus border-ink flex flex-col items-start gap-2.5 rounded-lg border-[1.5px] p-4 text-left transition-[transform,box-shadow]",
-                  selected
-                    ? "shadow-lift dark:bg-accent -translate-x-0.5 -translate-y-0.5 bg-[#fff4d6]"
-                    : "bg-card hover:bg-accent",
-                )}
+                disabled={pending}
+                data-loading={busy || undefined}
+                onClick={() => go(c.id)}
+                className="fc-focus border-ink bg-card hover:bg-accent hover:shadow-lift flex flex-col items-start gap-2.5 rounded-lg border-[1.5px] p-4 text-left transition-[transform,box-shadow] hover:-translate-x-0.5 hover:-translate-y-0.5 disabled:opacity-60 data-[loading=true]:opacity-100"
               >
                 <span
                   className="border-ink grid size-10 place-items-center rounded-lg border-[1.5px] text-[#2b2118]"
                   style={{ background: c.tint }}
                 >
-                  <c.icon className="size-5 stroke-[1.75]" />
+                  {busy ? <ButtonSpinner /> : <c.icon className="size-5 stroke-[1.75]" />}
                 </span>
                 <b className="font-heading text-[17px]">{c.title}</b>
                 <span className="text-muted-foreground text-[13.5px] leading-[1.45]">
                   {c.body}
                 </span>
+                <span className="mt-auto flex items-center gap-1 pt-1 text-[13.5px] font-bold">
+                  {busy ? "Creating…" : c.cta}{" "}
+                  {!busy && <ArrowRight className="size-4" />}
+                </span>
               </button>
             );
           })}
         </div>
-        <div className="flex items-center justify-between">
+        <div>
           <button
             type="button"
             onClick={close}
@@ -143,16 +138,6 @@ export function OnboardingDialog({ firstName }: { firstName: string }) {
           >
             Skip for now
           </button>
-          <Button
-            onClick={go}
-            disabled={pending}
-            data-loading={pending || undefined}
-            className="shadow-card h-11 px-5 text-[15px]"
-          >
-            {pending ? <ButtonSpinner /> : null}
-            {pending ? "Creating…" : cta}
-            {!pending && <ArrowRight />}
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

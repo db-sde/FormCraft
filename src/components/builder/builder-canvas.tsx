@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { showsMadeWith } from "@/domains/forms/branding";
 import { Flag, Palette } from "lucide-react";
 import type { EndingV1, QuestionV1, ThemeV1 } from "@/domains/forms/schema/v1";
@@ -58,7 +59,14 @@ export function BuilderCanvas({
   onChangeQuestion,
   onChangeEnding,
   brandingRemovable = true,
+  focusLabelId = null,
+  onLabelFocused,
 }: {
+  /** A question whose text should take focus, selected, as soon as it's
+   * on the stage (one just added) — so typing replaces the placeholder
+   * wording without a click. */
+  focusLabelId?: string | null;
+  onLabelFocused?: () => void;
   /** The plan allows switching off the "Made with FormCraft" badge. */
   brandingRemovable?: boolean;
   theme: ThemeV1;
@@ -76,7 +84,7 @@ export function BuilderCanvas({
     const q = item.question;
     chip = <TypeTile type={q.type} size={20} bordered={false} />;
     typeLabel = QUESTION_TYPE_META[q.type].label;
-    hint = "Click the text to edit it.";
+    hint = "Click the text to edit it. Enter ↵ moves on.";
     if (
       q.type !== "welcome_screen" &&
       q.type !== "statement" &&
@@ -135,6 +143,8 @@ export function BuilderCanvas({
             total={item.total}
             isLast={item.isLast}
             onChange={onChangeQuestion}
+            focusLabel={focusLabelId === item.question.id}
+            onLabelFocused={onLabelFocused}
           />
         )}
         {item.kind === "ending" && (
@@ -143,6 +153,8 @@ export function BuilderCanvas({
             ending={item.ending}
             onChange={onChangeEnding}
             brandingRemovable={brandingRemovable}
+            focusTitle={focusLabelId === item.ending.id}
+            onTitleFocused={onLabelFocused}
           />
         )}
         {item.kind === "theme" && (
@@ -187,6 +199,8 @@ function QuestionStage({
   total,
   isLast,
   onChange,
+  focusLabel = false,
+  onLabelFocused,
 }: {
   theme: ThemeV1;
   question: QuestionV1;
@@ -194,16 +208,42 @@ function QuestionStage({
   total: number;
   isLast: boolean;
   onChange: (next: QuestionV1) => void;
+  focusLabel?: boolean;
+  onLabelFocused?: () => void;
 }) {
   const entry = question.type === "welcome_screen" || question.type === "statement";
+  const labelRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (!focusLabel) return;
+    const el = labelRef.current;
+    if (el) {
+      el.focus({ preventScroll: true });
+      el.select();
+    }
+    onLabelFocused?.();
+  }, [focusLabel, question.id, onLabelFocused]);
+
   const label = (
     <textarea
       key={`l-${question.id}`}
+      ref={labelRef}
       rows={1}
       value={question.label}
       placeholder="Question text"
       aria-label="Question text"
       onChange={(e) => onChange({ ...question, label: e.target.value })}
+      onKeyDown={(e) => {
+        // Enter moves on (Shift+Enter is a new line): to the first option
+        // of a choice question, otherwise to "Add question".
+        if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+        e.preventDefault();
+        const next =
+          document.querySelector<HTMLElement>("[data-option-input]") ??
+          document.querySelector<HTMLElement>("[data-add-question]");
+        if (!next) return;
+        next.focus();
+        if (next instanceof HTMLInputElement) next.select();
+      }}
       className={cn(EDITABLE, entry ? stageTitleClass : stageLabelClass)}
     />
   );
@@ -302,12 +342,24 @@ function EndingStage({
   ending,
   onChange,
   brandingRemovable,
+  focusTitle = false,
+  onTitleFocused,
 }: {
   theme: ThemeV1;
   ending: EndingV1;
   onChange: (next: EndingV1) => void;
   brandingRemovable: boolean;
+  /** A new ending: its title takes focus, selected, ready to type over. */
+  focusTitle?: boolean;
+  onTitleFocused?: () => void;
 }) {
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (!focusTitle) return;
+    titleRef.current?.focus({ preventScroll: true });
+    titleRef.current?.select();
+    onTitleFocused?.();
+  }, [focusTitle, ending.id, onTitleFocused]);
   return (
     <Stage
       theme={theme}
@@ -319,6 +371,7 @@ function EndingStage({
       <div className="flex flex-col items-start gap-4 pb-10">
         <textarea
           key={`l-${ending.id}`}
+          ref={titleRef}
           rows={1}
           value={ending.title}
           placeholder="Thank you!"

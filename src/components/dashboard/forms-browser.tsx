@@ -44,9 +44,19 @@ const VIEW_KEY = "fc-forms-view";
 function meta(form: FormListItem) {
   return (
     <>
-      {form.responseCount > 0
-        ? `${form.responseCount.toLocaleString()} response${form.responseCount === 1 ? "" : "s"}`
-        : "No responses yet"}{" "}
+      {form.responseCount > 0 ? (
+        // Straight to the responses: above the card's own link (which
+        // opens the builder), so it's one click from the dashboard.
+        <Link
+          href={`/forms/${form.id}/responses`}
+          className="fc-focus text-foreground relative z-10 rounded-xs font-semibold underline decoration-[var(--border)] underline-offset-[3px] hover:decoration-current"
+        >
+          {form.responseCount.toLocaleString()} response
+          {form.responseCount === 1 ? "" : "s"}
+        </Link>
+      ) : (
+        "No responses yet"
+      )}{" "}
       · Edited <LocalTime iso={form.updatedAt} variant="relative" />
     </>
   );

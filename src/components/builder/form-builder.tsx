@@ -41,6 +41,7 @@ import {
   insertLeadCapture,
   convertQuestion,
   rulesBrokenByTypeChange,
+  questionsWithPlaceholders,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
@@ -148,6 +149,9 @@ function deleteSummary(pending: {
   return `It's used by ${parts.join(" and ")}. Deleting the question also removes what depends on it.`;
 }
 
+/** What a form is called until someone names it (see createFormAction). */
+const UNNAMED_FORM = "Untitled form";
+
 export function FormBuilder({
   formTitle,
   workspaceId,
@@ -251,6 +255,23 @@ export function FormBuilder({
     kind: "question",
     id: opening.selectedId,
   });
+  // The question whose text takes focus (selected) when it reaches the
+  // stage: one just added or duplicated, so typing names it right away.
+  // A form nobody has named yet opens with its title selected.
+  const [focusLabelId, setFocusLabelId] = useState<string | null>(() => {
+    const welcome = initialSchema.questions.find((q) => q.type === "welcome_screen");
+    return formTitle === UNNAMED_FORM && welcome?.label === formTitle ? welcome.id : null;
+  });
+  // The form's name (top bar, dashboard). It follows the welcome
+  // screen's title for as long as the two are the same, so a form is
+  // named once; renaming it to something else in the top bar unlinks them.
+  const [formName, setFormName] = useState(formTitle);
+  const nameLinkedRef = useRef(
+    initialSchema.questions.find((q) => q.type === "welcome_screen")?.label.trim() ===
+      formTitle.trim(),
+  );
+  const renameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearFocusLabel = useCallback(() => setFocusLabelId(null), []);
   const router = useRouter();
   const announcedLeadCaptureRef = useRef(false);
 
@@ -409,8 +430,16 @@ export function FormBuilder({
       );
       return;
     }
+    const title = next.type === "welcome_screen" ? next.label.trim().slice(0, 200) : "";
+    const followsTitle = nameLinkedRef.current && title !== "" && title !== formName;
+    if (followsTitle) {
+      setFormName(title);
+      if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
+      renameTimerRef.current = setTimeout(() => void onRename(formId, title), 600);
+    }
     setSchema((s) => ({
       ...s,
+      ...(followsTitle ? { meta: { ...s.meta, title } } : {}),
       questions: s.questions.map((q) => (q.id === next.id ? next : q)),
     }));
   }
@@ -467,6 +496,7 @@ export function FormBuilder({
       questions: insertQuestion(s.questions, question, at),
     }));
     setSelection({ kind: "question", id: question.id });
+    setFocusLabelId(question.id);
   }
 
   function applyTypeChange(question: QuestionV1, to: QuestionType) {
@@ -569,6 +599,7 @@ export function FormBuilder({
     const ending = createEnding(`Ending ${schema.endings.length + 1}`);
     setSchema((s) => ({ ...s, endings: [...s.endings, ending] }));
     setSelection({ kind: "ending", id: ending.id });
+    setFocusLabelId(ending.id);
   }
 
   function handleDuplicate(id: string) {
@@ -577,7 +608,10 @@ export function FormBuilder({
       if (questions === s.questions) return s; // e.g. the pinned welcome screen
       const original = s.questions.findIndex((q) => q.id === id);
       const copy = questions[original + 1];
-      if (copy) setSelection({ kind: "question", id: copy.id });
+      if (copy) {
+        setSelection({ kind: "question", id: copy.id });
+        setFocusLabelId(copy.id);
+      }
       return { ...s, questions };
     });
   }
@@ -648,13 +682,59 @@ export function FormBuilder({
         publishedVersionNumber: result.publishedVersionNumber,
         hasUnpublishedChanges: false,
       });
-      toast.success(publishInfo.isPublished ? "Republished." : "Published.", {
-        description: "Your form is live.",
-        action: {
-          label: "View live",
-          onClick: () => window.open(`/f/${slug}`, "_blank", "noopener"),
-        },
-      });
+      // Starter wording that slipped through ("Option 2"): say so, and
+      // take them to it — it's live, but one click from fixed.
+      const leftovers = questionsWithPlaceholders(latestSchemaRef.current.questions);
+      if (leftovers.length > 0) {
+        const first = leftovers[0];
+        toast.warning(
+          leftovers.length === 1
+            ? "One question still has starter wording"
+            : `${leftovers.length} questions still have starter wording`,
+          {
+            description: `“${first.label.trim() || "Untitled"}” looks unfinished. Respondents will see it as it is.`,
+            duration: 10_000,
+            action: {
+              label: "Show me",
+              onClick: () => setSelection({ kind: "question", id: first.id }),
+            },
+          },
+        );
+      }
+      // The link is what's needed next. The first publish puts it on the
+      // clipboard; later ones offer it (never overwriting the clipboard
+      // unasked a second time).
+      const link = publicFormUrl(slug);
+      const copy = () => navigator.clipboard.writeText(link);
+      const viewLive = {
+        label: "View live",
+        onClick: () => window.open(`/f/${slug}`, "_blank", "noopener"),
+      };
+      const copied = publishInfo.isPublished
+        ? false
+        : await copy().then(
+            () => true,
+            () => false,
+          );
+      if (copied) {
+        toast.success("Published.", {
+          description: "Link copied. Paste it anywhere to share.",
+          action: viewLive,
+        });
+      } else {
+        toast.success(publishInfo.isPublished ? "Republished." : "Published.", {
+          description: "Your form is live.",
+          action: {
+            label: "Copy link",
+            onClick: () =>
+              void copy().then(
+                () => toast.success("Link copied."),
+                () => toast.error("Couldn't copy the link."),
+              ),
+          },
+          cancel: viewLive,
+        });
+      }
     } else {
       toast.error("Couldn't publish.", { description: result.message });
     }
@@ -760,8 +840,20 @@ export function FormBuilder({
             <TooltipContent>Back to forms</TooltipContent>
           </Tooltip>
           <FormTitleInput
-            title={formTitle}
-            onRename={(title) => onRename(formId, title)}
+            // Remounts when the name changes from outside the field (it
+            // follows the welcome screen's title until renamed here).
+            key={formName}
+            title={formName}
+            onRename={async (title) => {
+              if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
+              const result = await onRename(formId, title);
+              if (result.ok) {
+                const welcome = schema.questions.find((q) => q.type === "welcome_screen");
+                nameLinkedRef.current = welcome?.label.trim() === result.title;
+                setFormName(result.title);
+              }
+              return result;
+            }}
             onTitleChange={(title) =>
               setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
             }
@@ -1143,6 +1235,8 @@ export function FormBuilder({
               }
               onChangeQuestion={updateQuestion}
               onChangeEnding={updateEnding}
+              focusLabelId={focusLabelId}
+              onLabelFocused={clearFocusLabel}
             />
           )}
         </main>
