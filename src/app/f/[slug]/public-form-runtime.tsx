@@ -174,7 +174,11 @@ export function PublicFormRuntime({
   languages = [],
   initialLanguage = "en",
   experimentId,
+  known,
 }: {
+  /** Answers this visitor already gave to "ask once" questions
+   * (progressive profiling), by question id. */
+  known?: Record<string, unknown>;
   /** The A/B test whose link served this form (P3.9). */
   experimentId?: string;
   /** Languages the respondent can choose (P2.21), default first. */
@@ -655,6 +659,7 @@ export function PublicFormRuntime({
         savesProgress={savesProgress}
         onStepEvent={sendStepEvent}
         followUps={followUps}
+        known={known}
         onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
         notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
         // Embedded: natural height, reported to the host page so its

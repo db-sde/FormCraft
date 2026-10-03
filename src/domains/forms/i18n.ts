@@ -45,6 +45,8 @@ export type UiStrings = {
   followUp: string;
   followUpHint: string;
   thinking: string;
+  skippedKnown: string;
+  answerAgain: string;
 };
 
 const EN: UiStrings = {
@@ -65,6 +67,8 @@ const EN: UiStrings = {
   followUp: "One more question",
   followUpHint: "Optional. Leave it blank to skip.",
   thinking: "One moment…",
+  skippedKnown: "We skipped what you've answered before.",
+  answerAgain: "Answer again",
 };
 
 const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {

@@ -30,6 +30,11 @@ import {
   CONTACT_FIELD_LABELS,
   type ContactField,
 } from "@/domains/forms/schema/question-types";
+import {
+  PROFILE_KEY_PATTERN,
+  PROFILE_QUESTION_TYPES,
+  profileKeyFromLabel,
+} from "@/domains/responses/profile";
 
 /** Accepted-file chips → the MIME patterns uploads are checked against.
  * Only types the server can verify from the file's bytes are offered. */
@@ -102,6 +107,40 @@ export function SettingsPanel({
             onCheckedChange={(required) => onChange({ ...question, required })}
           />
         )}
+
+      {(PROFILE_QUESTION_TYPES as readonly string[]).includes(question.type) && (
+        <>
+          <SwitchRow
+            label="Ask once per person"
+            hint="Skip this for someone who already answered it on any of your forms (same browser). Their earlier answer is filled in."
+            checked={!!question.profileKey}
+            onCheckedChange={(on) =>
+              onChange({
+                ...question,
+                profileKey: on ? profileKeyFromLabel(question.label) : undefined,
+              })
+            }
+          />
+          {question.profileKey && (
+            <PanelField
+              label="Remembered as"
+              hint="Questions with the same name share one answer across your forms. Lowercase letters, numbers and _."
+            >
+              <Input
+                className={PANEL_INPUT}
+                aria-label="Remembered as"
+                value={question.profileKey}
+                maxLength={40}
+                onChange={(e) => {
+                  const key = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+                  if (PROFILE_KEY_PATTERN.test(key))
+                    onChange({ ...question, profileKey: key });
+                }}
+              />
+            </PanelField>
+          )}
+        </>
+      )}
 
       {(question.type === "welcome_screen" || question.type === "statement") && (
         <>

@@ -57,6 +57,40 @@ const AUTO_ADVANCE_TYPES = new Set<QuestionV1["type"]>([
 ]);
 const AUTO_ADVANCE_DELAY_MS = 350;
 
+/**
+ * Progressive profiling: starting at `id`, fills in answers this visitor
+ * already gave ("ask once" questions) and steps past them — as long as
+ * the remembered answer is still valid and another question follows, so
+ * the last step always waits for an explicit click. Each filled question
+ * joins the path, exactly as if it had been answered by hand.
+ */
+function passKnown(
+  compiled: CompiledFormV1,
+  known: Record<string, unknown> | undefined,
+  options: { hidden?: Record<string, string>; seed?: string },
+  id: string,
+  answers: AnswerMap,
+  history: string[],
+): { id: string; answers: AnswerMap; history: string[]; filled: string[] } {
+  const filled: string[] = [];
+  if (!known) return { id, answers, history, filled };
+  for (let guard = 0; guard < compiled.orderedQuestionIds.length; guard += 1) {
+    const question = compiled.schema.questions.find((q) => q.id === id);
+    if (!question || !(id in known)) break;
+    const candidate = { ...answers, [id]: known[id] };
+    const path = [...history, id];
+    if (!validateAnswer(question, known[id]).ok) break;
+    if (questionLogicError(compiled, candidate, path, options)) break;
+    const next = evaluateNextStep(compiled, id, candidate, new Set(path), options);
+    if (next.type !== "question") break;
+    filled.push(id);
+    answers = candidate;
+    history = path;
+    id = next.questionId;
+  }
+  return { id, answers, history, filled };
+}
+
 function isEntryScreen(question: QuestionV1) {
   return question.type === "welcome_screen" || question.type === "statement";
 }
@@ -124,7 +158,11 @@ export function FormRuntime({
   schedulingAllowed = true,
   language,
   followUps,
+  known,
 }: {
+  /** Public runtime only: answers this visitor already gave to "ask
+   * once" questions (progressive profiling), by question id. */
+  known?: Record<string, unknown>;
   /** Public runtime only: AI follow-up questions (P3.7). `ask` returns a
    * question about an answer (or null), `reply` saves what they say. */
   followUps?: {
@@ -187,14 +225,42 @@ export function FormRuntime({
 }) {
   const engineOptions = useMemo(() => ({ hidden, seed }), [hidden, seed]);
   const t = useMemo(() => uiStrings(language), [language]);
-  const [currentId, setCurrentId] = useState(
-    initialQuestionId && compiled.orderedQuestionIds.includes(initialQuestionId)
-      ? initialQuestionId
-      : (firstQuestionId(compiled, initialAnswers ?? {}, { hidden, seed }) ??
-          compiled.orderedQuestionIds[0]),
+  // Where the form opens. A fresh visit starts at the first question —
+  // past any the visitor has answered before; a resumed one where it was.
+  const [opening] = useState(() => {
+    const resumedAt =
+      initialQuestionId && compiled.orderedQuestionIds.includes(initialQuestionId)
+        ? initialQuestionId
+        : null;
+    const start = {
+      id:
+        resumedAt ??
+        firstQuestionId(compiled, initialAnswers ?? {}, { hidden, seed }) ??
+        compiled.orderedQuestionIds[0],
+      answers: initialAnswers ?? {},
+      history: initialHistory ?? [],
+      filled: [] as string[],
+    };
+    return resumedAt
+      ? start
+      : passKnown(
+          compiled,
+          known,
+          { hidden, seed },
+          start.id,
+          start.answers,
+          start.history,
+        );
+  });
+  const [currentId, setCurrentId] = useState(opening.id);
+  const [answers, setAnswers] = useState<AnswerMap>(opening.answers);
+  const [history, setHistory] = useState<string[]>(opening.history);
+  // "Ask once" questions filled in from what the visitor said before.
+  const [autoFilled, setAutoFilled] = useState<ReadonlySet<string>>(
+    () => new Set(opening.filled),
   );
-  const [answers, setAnswers] = useState<AnswerMap>(initialAnswers ?? {});
-  const [history, setHistory] = useState<string[]>(initialHistory ?? []);
+  // Set by "Answer again": from then on every question is asked.
+  const [askEverything, setAskEverything] = useState(false);
   const [ending, setEnding] = useState<EndingV1 | null>(null);
   const [completedResponseId, setCompletedResponseId] = useState<string | undefined>();
   // What the ending's recall reads: the final variables for these answers.
@@ -365,11 +431,43 @@ export function FormRuntime({
     } else {
       setError(null);
       setDirection("forward");
-      const nextHistory = [...history, question.id];
-      setHistory(nextHistory);
-      setCurrentId(next.questionId);
-      onAnswerChange?.(currentAnswers, next.questionId, nextHistory);
+      const moved = passKnown(
+        compiled,
+        askEverything ? undefined : known,
+        engineOptions,
+        next.questionId,
+        currentAnswers,
+        [...history, question.id],
+      );
+      if (moved.filled.length > 0) {
+        setAnswers(moved.answers);
+        setAutoFilled((prev) => new Set([...prev, ...moved.filled]));
+      }
+      setHistory(moved.history);
+      setCurrentId(moved.id);
+      onAnswerChange?.(moved.answers, moved.id, moved.history);
     }
+  }
+
+  /** "Answer again": forget the filled-in answers and ask from the first
+   * of those questions (someone else may be using this browser). */
+  function answerKnownAgain() {
+    const first = history.findIndex((id) => autoFilled.has(id));
+    if (first < 0 || submitting || thinkingRef.current) return;
+    const cleared = Object.fromEntries(
+      Object.entries(answers).filter(([id]) => !autoFilled.has(id)),
+    );
+    const backTo = history[first];
+    const earlier = history.slice(0, first);
+    setAskEverything(true);
+    setAutoFilled(new Set());
+    setFollowUp(null);
+    setAnswers(cleared);
+    setHistory(earlier);
+    setCurrentId(backTo);
+    setError(null);
+    setDirection("back");
+    onAnswerChange?.(cleared, backTo, earlier);
   }
 
   function setAnswer(value: unknown) {
@@ -393,8 +491,13 @@ export function FormRuntime({
     if (history.length === 0 || submitting || thinkingRef.current) return;
     setFollowUp(null);
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
-    const prev = history[history.length - 1];
-    const prevHistory = history.slice(0, -1);
+    // Back to the last question they answered themselves; ones that were
+    // filled in for them are stepped over (and never shown).
+    let back = history.length - 1;
+    while (back >= 0 && autoFilled.has(history[back])) back -= 1;
+    if (back < 0) return;
+    const prev = history[back];
+    const prevHistory = history.slice(0, back);
     setDirection("back");
     setHistory(prevHistory);
     setCurrentId(prev);
@@ -695,7 +798,7 @@ export function FormRuntime({
 
               <StageActions
                 backLabel={t.back}
-                showBack={history.length > 0}
+                showBack={history.some((id) => !autoFilled.has(id))}
                 onBack={goBack}
                 onNext={() => goNext()}
                 label={primaryLabel}
@@ -707,6 +810,18 @@ export function FormRuntime({
             </>
           )}
 
+          {autoFilled.size > 0 && !entry && (
+            <p className="text-xs text-(--st-muted)">
+              {t.skippedKnown}{" "}
+              <button
+                type="button"
+                onClick={answerKnownAgain}
+                className="underline underline-offset-2"
+              >
+                {t.answerAgain}
+              </button>
+            </p>
+          )}
           {savesProgress && currentIndex >= 0 && !entry && (
             <p className="text-xs text-(--st-muted)">
               {question.type === "contact_info" ? t.detailsSaved : t.savedAsYouGo}

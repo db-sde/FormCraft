@@ -3,6 +3,31 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — Progressive profiling: remembered by browser, filled in, never shown
+
+- **Who is "the same person"?** The random first-party visitor id the
+  proxy already sets on form pages (`fc_vid`, httpOnly). No sign-in and
+  no matching by email — an email typed into a form isn't proof of who
+  is typing. So it's really "the same browser", and the copy says so.
+- **Scope is one workspace.** A creator's forms share what a visitor
+  told them; nothing crosses to another customer's workspace.
+- **A remembered answer is filled in, not treated specially.** The
+  runtime puts it into the answers and steps past the question, so the
+  response is complete on its own and the server's walk, validation,
+  exports and integrations need no special case. It's reused only by a
+  question of the same type and only while it's still a valid answer
+  there; choice questions are excluded because option ids belong to one
+  form.
+- **Never shown, never auto-submitted.** Going back steps over filled-in
+  questions, so someone else at the same browser can't read them. A
+  remembered question that is the last step is asked again rather than
+  submitted automatically. "Answer again" clears them for this response.
+- **Minimal by default.** The visitor id is stored on a response only if
+  the form has "ask once" questions; the id comes from the cookie on the
+  server, never from the request body; remembered answers expire after
+  395 days without use; a privacy request that erases someone's
+  responses also forgets their browser.
+
 ## 2026-10-03 — Logic engine: adaptive assessments and benchmarks
 
 - **Adaptive assessments (spec phase 20) extend question pools** rather

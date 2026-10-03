@@ -185,6 +185,12 @@ const baseQuestionFields = {
   validations: z.array(QuestionValidationV1).max(10).optional(),
   /** Multiplies the option scores this question adds (default 1). */
   weight: z.number().finite().min(0).max(100).optional(),
+  /** "Ask once per person" (phase 23): skipped for a visitor who already
+   * answered a question with this key on any form in the workspace. */
+  profileKey: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,39}$/)
+    .optional(),
 };
 
 export const QuestionV1 = z.discriminatedUnion("type", [

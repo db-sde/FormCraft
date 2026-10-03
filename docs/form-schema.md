@@ -134,6 +134,11 @@ Full model and evaluation order: `docs/logic-engine.md`. In short:
   down after a wrong one (`src/domains/logic/adaptive.ts`). A question
   with no level counts as 3.
 
+- `questions[].profileKey?` — "ask once per person" (phase 23): a
+  lowercase name (`company`, `team_size`) shared by questions across the
+  workspace's forms. Honoured on text, email, phone, URL, number, date,
+  yes/no and contact questions; ignored on others.
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

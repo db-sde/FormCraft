@@ -128,11 +128,12 @@ Built and tested (unit, integration and E2E as noted in `docs/testing.md`):
 
 Added 2026-10-03:
 
-| Spec phase | What exists                                                                                                                                                                                                                                                                |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 19         | Random groups (question pools) and shuffled options, seeded per response                                                                                                                                                                                                   |
-| 20         | Adaptive groups: a pool whose questions have a difficulty (1–5); asks `pick` one at a time, harder after a right answer and easier after a wrong one (`src/domains/logic/adaptive.ts`). The sequence is derived from the answers and the seed, so browser and server agree |
-| 36         | Benchmarks (`npm run bench:logic`) and budgets (`tests/unit/logic-performance.test.ts`), below                                                                                                                                                                             |
+| Spec phase | What exists                                                                                                                                                                                                                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 19         | Random groups (question pools) and shuffled options, seeded per response                                                                                                                                                                                                                  |
+| 20         | Adaptive groups: a pool whose questions have a difficulty (1–5); asks `pick` one at a time, harder after a right answer and easier after a wrong one (`src/domains/logic/adaptive.ts`). The sequence is derived from the answers and the seed, so browser and server agree                |
+| 23         | Progressive profiling: questions marked "ask once per person" are filled in and passed over for a visitor who answered the same detail on another of the workspace's forms (`src/domains/responses/profile.ts`). Filled by the runtime, so the engine and the server's walk are unchanged |
+| 36         | Benchmarks (`npm run bench:logic`) and budgets (`tests/unit/logic-performance.test.ts`), below                                                                                                                                                                                            |
 
 ### Performance (phase 36)
 
@@ -155,7 +156,7 @@ holds budgets 25–50× looser than these (25 ms per walk or step, 1 s per
 session, 5 s per 500 replays) so only a real regression trips them.
 
 Not built (would each need a decision in `DECISIONS.md` first):
-dynamic options from data (8), progressive profiling across visits (23),
+dynamic options from data (8),
 external API calls during a response (24 — a respondent-triggered
 outbound request needs SSRF, latency and secret handling designed), and automations beyond
 the existing webhooks/Sheets/email (25).

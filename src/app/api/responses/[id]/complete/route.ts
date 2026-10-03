@@ -12,6 +12,7 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
+import { rememberProfile } from "@/domains/responses/profile";
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -118,6 +119,7 @@ export async function POST(
             properties: { formId: result.formId, endingId: result.endingId || null },
           }),
         );
+        await step(() => rememberProfile(admin, id));
         await step(() => notifyFormOwnerOfCompletedResponse(admin, result.formId, id));
         await step(() => sendConfirmationEmail(admin, id));
         await step(async () => {

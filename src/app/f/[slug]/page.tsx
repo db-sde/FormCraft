@@ -22,6 +22,7 @@ import {
   VISITOR_COOKIE,
   VISITOR_ID_PATTERN,
 } from "@/domains/experiments";
+import { knownAnswersFor } from "@/domains/responses/profile";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -119,6 +120,17 @@ export default async function PublicFormPage({
     },
   };
 
+  // Progressive profiling: answers this visitor already gave to "ask
+  // once" questions on this workspace's forms.
+  const known = VISITOR_ID_PATTERN.test(visitorId)
+    ? await knownAnswersFor(
+        createAdminClient(),
+        publicForm.workspaceId,
+        visitorId,
+        compiled.schema,
+      )
+    : {};
+
   const resume =
     typeof query[RESUME_PARAM] === "string"
       ? await resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
@@ -195,6 +207,7 @@ export default async function PublicFormPage({
         schedulingAllowed={entitlements.scheduling}
         embedded={embedded}
         experimentId={experimentId}
+        known={known}
       />
     </div>
   );

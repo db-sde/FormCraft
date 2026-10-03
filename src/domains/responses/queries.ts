@@ -13,6 +13,8 @@ import {
 } from "@/domains/logic";
 import type { ResponseStatus } from "./state-machine";
 import { experimentForResponse } from "@/domains/experiments";
+import { VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
+import { usesProfiles } from "./profile";
 
 type Client = SupabaseClient<Database>;
 
@@ -58,6 +60,9 @@ export type StartAttribution = {
   language?: string;
   /** The A/B test that served this form (P3.9); checked here. */
   experimentId?: string;
+  /** The browser's visitor id; kept only for forms with "ask once"
+   * questions (progressive profiling). */
+  visitorId?: string;
 };
 
 /** Only the hidden fields the published form declares, as short strings —
@@ -129,6 +134,12 @@ export async function startResponse(
     .from("responses")
     .insert({
       experiment_id: experimentId,
+      visitor_id:
+        attribution.visitorId &&
+        VISITOR_ID_PATTERN.test(attribution.visitorId) &&
+        usesProfiles(parseFormSchema(version.schema))
+          ? attribution.visitorId
+          : null,
       form_id: formId,
       form_version_id: version.id,
       referrer: attribution.referrer,

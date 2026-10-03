@@ -7,6 +7,7 @@ import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { VISITOR_COOKIE } from "@/domains/experiments/visitor";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
 const StartBody = z.object({
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
       seed: parsed.data.seed,
       language: parsed.data.language,
       experimentId: parsed.data.experimentId,
+      // From the cookie, never the body: it's httpOnly, so a page script
+      // can't choose whose remembered answers a response updates.
+      visitorId: request.cookies.get(VISITOR_COOKIE)?.value,
     });
 
     // A response row only gets created here — never on a resumed

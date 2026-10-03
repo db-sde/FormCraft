@@ -229,6 +229,15 @@ existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
 - **`responses_by_email(workspace, email)`** — responses where an answer
   is exactly that address or a contact step has it (security invoker).
 
+## Progressive profiling (migration 41)
+
+- **`visitor_profiles`** — `(workspace_id, visitor_id, key)` → `value`,
+  `question_type`, `updated_at`. What a browser (the `fc_vid` cookie)
+  has answered to "ask once" questions. Server only; rows untouched for
+  395 days are deleted by the retention cron.
+- **`responses.visitor_id`** — set only for forms that have "ask once"
+  questions, so their remembered answers can be updated and erased.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

@@ -4,6 +4,7 @@ import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { deleteResponse } from "./dashboard";
 import { formatAnswerValue } from "./format";
+import { forgetVisitors } from "./profile";
 
 type Client = SupabaseClient<Database>;
 
@@ -147,6 +148,20 @@ export async function deletePersonData(
     const batch = await findPersonResponses(supabase, workspaceId, email);
     if (batch.length === 0) break;
     found += batch.length;
+    // What their browser was remembered by ("ask once" answers) goes too.
+    const { data: visitors } = await supabase
+      .from("responses")
+      .select("visitor_id")
+      .in(
+        "id",
+        batch.map((r) => r.responseId),
+      )
+      .not("visitor_id", "is", null);
+    await forgetVisitors(
+      admin,
+      workspaceId,
+      (visitors ?? []).map((v) => v.visitor_id!),
+    );
     let removed = 0;
     for (const r of batch) {
       if (await deleteResponse(supabase, r.responseId, admin)) removed += 1;

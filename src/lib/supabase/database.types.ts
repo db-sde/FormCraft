@@ -934,6 +934,7 @@ export type Database = {
           utm_medium: string | null;
           utm_source: string | null;
           utm_term: string | null;
+          visitor_id: string | null;
         };
         Insert: {
           client_revision?: number;
@@ -961,6 +962,7 @@ export type Database = {
           utm_medium?: string | null;
           utm_source?: string | null;
           utm_term?: string | null;
+          visitor_id?: string | null;
         };
         Update: {
           client_revision?: number;
@@ -988,6 +990,7 @@ export type Database = {
           utm_medium?: string | null;
           utm_source?: string | null;
           utm_term?: string | null;
+          visitor_id?: string | null;
         };
         Relationships: [
           {
@@ -1343,6 +1346,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "usage_counters_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      visitor_profiles: {
+        Row: {
+          key: string;
+          question_type: string;
+          updated_at: string;
+          value: Json;
+          visitor_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          key: string;
+          question_type: string;
+          updated_at?: string;
+          value: Json;
+          visitor_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          key?: string;
+          question_type?: string;
+          updated_at?: string;
+          value?: Json;
+          visitor_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "visitor_profiles_workspace_id_fkey";
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspaces";

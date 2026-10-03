@@ -5,6 +5,7 @@ import {
   purgeExpiredUnfinishedResponses,
 } from "@/domains/responses";
 import { pruneRateLimits } from "@/domains/abuse";
+import { purgeStaleProfiles } from "@/domains/responses/profile";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
@@ -22,7 +23,13 @@ async function run(request: NextRequest) {
   const completed = await purgeExpiredCompletedResponses(admin);
   const forms = await purgeDeletedForms(admin);
   await pruneRateLimits(admin);
-  return NextResponse.json({ ...expired, completedDeleted: completed.deleted, ...forms });
+  const profilesDeleted = await purgeStaleProfiles(admin);
+  return NextResponse.json({
+    ...expired,
+    completedDeleted: completed.deleted,
+    ...forms,
+    profilesDeleted,
+  });
 }
 
 export const GET = run;
