@@ -21,6 +21,8 @@ import { listApiKeys } from "@/domains/api";
 import { getUsage, getWorkspacePlan } from "@/domains/billing";
 import { remainingRecoveryCodes, verifiedTotpFactor } from "@/domains/identity/mfa";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { SecuritySettings } from "@/components/dashboard/security-settings";
+import { getSsoSettings } from "@/domains/identity/sso";
 
 const TITLES = {
   account: "Account settings",
@@ -31,6 +33,7 @@ const TITLES = {
   api: "API keys",
   connections: "Connections",
   audit: "Audit log",
+  security: "Security",
 };
 
 export async function generateMetadata({
@@ -50,6 +53,7 @@ const TABS = [
   ["connections", "Connections"],
   ["api", "API"],
   ["plan", "Plan"],
+  ["security", "Security"],
   ["audit", "Audit log"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -124,6 +128,15 @@ export default async function SettingsPage({
       : 0,
   };
 
+  const securityData =
+    tab === "security" && canAdmin(workspace.role)
+      ? await Promise.all([
+          getSsoSettings(supabase, workspace.id),
+          supabase.rpc("scim_status", { p_workspace_id: workspace.id }),
+          getWorkspacePlan(supabase, workspace.id),
+        ])
+      : null;
+
   const planData =
     tab === "plan"
       ? await Promise.all([
@@ -181,6 +194,29 @@ export default async function SettingsPage({
       {tab === "workspace" && (
         <RetentionSettings days={retentionDays} isAdmin={canAdmin(workspace.role)} />
       )}
+      {tab === "security" &&
+        (securityData ? (
+          <SecuritySettings
+            sso={securityData[0]}
+            ssoAllowed={securityData[2].entitlements.sso}
+            scim={
+              securityData[1].data?.[0]
+                ? {
+                    prefix: securityData[1].data[0].prefix,
+                    createdAt: securityData[1].data[0].created_at,
+                    lastUsedAt: securityData[1].data[0].last_used_at,
+                  }
+                : null
+            }
+            scimAllowed={securityData[2].entitlements.scim}
+            appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+            supabaseUrl={process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Only the owner and admins can see security settings.
+          </p>
+        ))}
       {tab === "audit" &&
         (auditRecords ? (
           <AuditLog

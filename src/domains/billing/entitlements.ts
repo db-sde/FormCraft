@@ -30,6 +30,8 @@ export const ENTITLEMENT_DEFAULTS = {
   ai_credits_per_month: 20 as number | null,
   api_access: false,
   ab_testing: false,
+  sso: false,
+  scim: false,
 };
 
 export type Entitlements = typeof ENTITLEMENT_DEFAULTS;
@@ -124,6 +126,8 @@ const FEATURE_NAMES: Record<Feature, string> = {
   multilingual: "Multiple languages",
   api_access: "The API",
   ab_testing: "A/B tests",
+  sso: "Single sign-on",
+  scim: "SCIM provisioning",
 };
 
 /** Throws when the workspace's plan doesn't include a feature. */

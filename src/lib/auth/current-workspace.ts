@@ -5,6 +5,8 @@ import {
   ensureDefaultWorkspace,
   listWorkspacesForCurrentUser,
 } from "@/domains/workspaces";
+import { redirect } from "next/navigation";
+import { workspacesNeedingSso } from "@/domains/identity/sso";
 import { requireUser } from "./require-user";
 
 /** Which of the user's workspaces they're working in (set by the
@@ -18,6 +20,12 @@ export const getCurrentWorkspace = cache(async () => {
   const { supabase, user } = await requireUser();
   const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
   const workspaces = await listWorkspacesForCurrentUser(supabase);
+  // Their only workspaces require SSO (P3.12) and this isn't an SSO
+  // session: send them to sign in that way instead of quietly creating
+  // an empty personal workspace.
+  if (workspaces.length === 0 && (await workspacesNeedingSso(supabase)) > 0) {
+    redirect("/login/sso?notice=required");
+  }
   const chosen = (await cookies()).get(WORKSPACE_COOKIE)?.value;
   const workspace =
     workspaces.find((w) => w.id === chosen) ??

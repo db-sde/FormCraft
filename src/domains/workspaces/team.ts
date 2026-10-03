@@ -105,7 +105,7 @@ export async function listTeam(
 }
 
 /** Seats in use: members plus invitations still open. */
-async function seatsTaken(admin: Client, workspaceId: string): Promise<number> {
+export async function seatsTaken(admin: Client, workspaceId: string): Promise<number> {
   const [members, invitations] = await Promise.all([
     admin
       .from("workspace_members")

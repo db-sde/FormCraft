@@ -1045,6 +1045,99 @@ export type Database = {
           },
         ];
       };
+      scim_tokens: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          last_used_at: string | null;
+          prefix: string;
+          token_hash: string;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          last_used_at?: string | null;
+          prefix: string;
+          token_hash: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          last_used_at?: string | null;
+          prefix?: string;
+          token_hash?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "scim_tokens_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "scim_tokens_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: true;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      scim_users: {
+        Row: {
+          active: boolean;
+          created_at: string;
+          display_name: string | null;
+          email: string;
+          external_id: string | null;
+          id: string;
+          updated_at: string;
+          user_id: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          active?: boolean;
+          created_at?: string;
+          display_name?: string | null;
+          email: string;
+          external_id?: string | null;
+          id?: string;
+          updated_at?: string;
+          user_id?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          active?: boolean;
+          created_at?: string;
+          display_name?: string | null;
+          email?: string;
+          external_id?: string | null;
+          id?: string;
+          updated_at?: string;
+          user_id?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "scim_users_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "scim_users_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       sheets_connections: {
         Row: {
           created_at: string;
@@ -1467,6 +1560,41 @@ export type Database = {
           },
         ];
       };
+      workspace_sso: {
+        Row: {
+          created_at: string;
+          default_role: string;
+          domain: string;
+          enforced: boolean;
+          provider_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          default_role?: string;
+          domain: string;
+          enforced?: boolean;
+          provider_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          default_role?: string;
+          domain?: string;
+          enforced?: boolean;
+          provider_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workspace_sso_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: true;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       workspaces: {
         Row: {
           created_at: string;
@@ -1653,6 +1781,7 @@ export type Database = {
         Args: { target_workspace_id: string };
         Returns: boolean;
       };
+      jwt_has_sso: { Args: { claims: Json }; Returns: boolean };
       list_leads: {
         Args: {
           p_form_id?: string;
@@ -1718,6 +1847,17 @@ export type Database = {
           started: number;
         }[];
       };
+      responses_by_email: {
+        Args: { p_email: string; p_workspace_id: string };
+        Returns: {
+          completed_at: string;
+          form_id: string;
+          form_title: string;
+          response_id: string;
+          started_at: string;
+          status: Database["public"]["Enums"]["response_status"];
+        }[];
+      };
       responses_missing_sheets_sync: {
         Args: { p_limit: number };
         Returns: {
@@ -1746,15 +1886,25 @@ export type Database = {
           status: Database["public"]["Enums"]["response_status"];
         }[];
       };
+      scim_status: {
+        Args: { p_workspace_id: string };
+        Returns: {
+          created_at: string;
+          last_used_at: string;
+          prefix: string;
+        }[];
+      };
       shares_workspace_with: {
         Args: { target_user_id: string };
         Returns: boolean;
       };
+      sso_satisfied: { Args: { target_workspace_id: string }; Returns: boolean };
       unpublish_form: { Args: { target_form_id: string }; Returns: undefined };
       workspace_role_for: {
         Args: { target_workspace_id: string };
         Returns: Database["public"]["Enums"]["workspace_role"];
       };
+      workspaces_requiring_sso: { Args: never; Returns: number };
     };
     Enums: {
       form_version_status: "draft" | "published" | "archived";

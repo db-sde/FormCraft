@@ -14,6 +14,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getClientIpFromHeaders } from "@/lib/http/client-ip";
 import { safeNextPath } from "@/lib/http/safe-next-path";
 import { needsSecondFactor } from "@/domains/identity/mfa";
+import { emailDomain } from "@/domains/identity/sso";
 
 export type ActionResult = {
   error?: string;
@@ -194,4 +195,43 @@ export async function resetPasswordAction(
   }
 
   redirect("/dashboard");
+}
+
+/**
+ * "Log in with SSO" (P3.12): the work email's domain picks the identity
+ * provider registered with Supabase Auth, which sends the browser there.
+ * Coming back lands on /auth/confirm, which signs them in and adds them
+ * to their company's workspace.
+ */
+export async function ssoLogInAction(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const email = String(formData.get("email") ?? "").trim();
+  const values = { email };
+  const domain = emailDomain(email);
+  if (!domain) return { fieldErrors: { email: "Enter your work email." }, values };
+
+  const ip = await getClientIpFromHeaders();
+  if (
+    !(await hitRateLimit(createAdminClient(), `sso:${ip}`, 20, 10 * 60 * 1000)).allowed
+  ) {
+    return { error: RATE_LIMITED_MESSAGE, errorTone: "warn", values };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const next = safeNextPath(formData.get("next"));
+  const { data, error } = await supabase.auth.signInWithSSO({
+    domain,
+    options: {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=${encodeURIComponent(next)}`,
+    },
+  });
+  if (error || !data?.url) {
+    return {
+      error: `Single sign-on isn't set up for ${domain}. Log in with your password, or ask your workspace admin.`,
+      values,
+    };
+  }
+  redirect(data.url);
 }

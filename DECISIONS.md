@@ -3,6 +3,47 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-03 — Phase 3, Wave C: SSO, SCIM, compliance
+
+- **SSO (P3.12) rides on Supabase Auth's SAML support** rather than a
+  SAML implementation of our own. An operator registers the identity
+  provider (`supabase sso add`, Pro plan) and maps it to a workspace
+  with `npm run sso:set` (service role). Workspace admins can only
+  choose the default role and whether SSO is required — if they could
+  set the provider themselves, one workspace could point another
+  company's provider at itself and collect its people.
+- **"Require SSO" is enforced in the database** (`sso_satisfied` inside
+  every membership helper, reading the session's `amr` claim), so a
+  password session can't reach the workspace through the API either.
+  The owner is exempt: a misconfigured or down identity provider must
+  not lock a workspace out of itself. A member locked out this way is
+  sent to "Log in with SSO" instead of being given an empty personal
+  workspace.
+- **SSO sign-ins join on arrival** (just-in-time), with the default
+  role, within the plan's seats.
+- **SCIM (P3.18) lists who may join; it doesn't create accounts.**
+  Supabase never links an SSO sign-in to an existing account with the
+  same email, so an account created ahead of time would be a different
+  user from the one who later signs in. `scim_users` is therefore the
+  workspace's directory: a listed, active person becomes a member at
+  their first SSO sign-in; deactivating or deleting them removes the
+  membership of every account with that email (never the owner) and
+  blocks rejoining. Users only — no Groups; roles stay in FormCraft.
+- **Compliance (P3.17) is tooling plus an honest description, with no
+  claims.** Privacy requests (find / export / erase by email) and
+  `docs/compliance.md`, which lists the controls that exist, what's
+  missing, and states plainly that FormCraft holds no certifications.
+  The lookup matches an answer that is exactly the address (any
+  question type) or a contact step's email — not addresses mentioned
+  inside longer answers. The audit log records that a request was
+  handled and how many responses, never the address.
+- **Not verified end to end:** a real SAML sign-in. Local Supabase has
+  no identity provider, so the sign-in redirect, the `amr` claim on a
+  real SSO session and the `sso:<id>` provider metadata are implemented
+  from Supabase's documented behaviour and tested with constructed
+  values; they need one real provider (Okta/Entra developer tenant) to
+  confirm.
+
 ## 2026-10-03 — Phase 3, Wave B: AI over responses, copilot, follow-ups
 
 - **The model reads; code decides and stores.** Sentiment, tags and lead

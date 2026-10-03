@@ -24,12 +24,20 @@ rewordings (P3.2), response summaries with verified quotes (P3.3), tags
 (P3.6), optional follow-up questions for respondents (P3.7). Tested
 against a stand-in model only; not yet run against the real one.
 
-**To deploy:** `npm run db:migrate` (33–38); enable TOTP in Supabase
-(Authentication → MFA); set `ANTHROPIC_API_KEY` for the AI features.
+**PHASE 3 — Wave C** (2026-10-03, migrations 39–40): SAML SSO through
+Supabase Auth with a "require SSO" switch enforced in the database
+(P3.12), SCIM 2.0 user provisioning (P3.18), privacy requests and an
+honest controls document with no certification claims (P3.17,
+`docs/compliance.md`). A real SAML sign-in has not been exercised — it
+needs an identity provider.
 
-**Next:** Wave C: SSO P3.12, SCIM P3.18, compliance P3.17. Then the
-remaining logic-spec phases (adaptive assessments, progressive
-profiling, external API data, performance benchmarks).
+**To deploy:** `npm run db:migrate` (33–40); enable TOTP in Supabase
+(Authentication → MFA); set `ANTHROPIC_API_KEY` for the AI features;
+for SSO, `supabase sso add` then `npm run sso:set`.
+
+**Phase 3 is complete.** Next: the remaining logic-spec phases
+(adaptive assessments, progressive profiling, external API data,
+performance benchmarks).
 
 ### Phase 2
 

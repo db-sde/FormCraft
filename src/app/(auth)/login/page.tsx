@@ -90,6 +90,10 @@ export default function LoginPage() {
             text="Don't have an account?"
             link={{ href: "/signup", label: "Sign up" }}
           />
+          <AuthFooter
+            text="Company account?"
+            link={{ href: "/login/sso", label: "Log in with SSO" }}
+          />
         </AuthActions>
       </form>
     </AuthCard>

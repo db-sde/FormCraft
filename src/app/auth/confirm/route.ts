@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { safeNextPath } from "@/lib/http/safe-next-path";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { joinSsoWorkspace } from "@/domains/identity/sso";
+import { audit } from "@/domains/audit";
+import { WORKSPACE_COOKIE } from "@/lib/auth/current-workspace";
 
 const OTP_TYPES: EmailOtpType[] = [
   "signup",
@@ -37,7 +41,39 @@ export async function GET(request: NextRequest) {
     ok = !(await supabase.auth.verifyOtp({ type, token_hash: tokenHash })).error;
   }
 
-  if (ok) return NextResponse.redirect(new URL(next, request.url));
+  if (ok) {
+    const response = NextResponse.redirect(new URL(next, request.url));
+    // An SSO sign-in (P3.12) lands in the company's workspace, joining
+    // it on the first visit. Never blocks signing in.
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const admin = createAdminClient();
+      const joined = user ? await joinSsoWorkspace(admin, user) : null;
+      if (user && joined) {
+        if (joined.joined) {
+          await audit(admin, {
+            workspaceId: joined.workspaceId,
+            actorId: user.id,
+            action: "member.joined",
+            target: { type: "user", id: user.id },
+            metadata: { via: "sso" },
+          });
+        }
+        response.cookies.set(WORKSPACE_COOKIE, joined.workspaceId, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365,
+        });
+      }
+    } catch {
+      // Signed in either way; they can be invited the usual way.
+    }
+    return response;
+  }
 
   // A signup link opened in a different browser can't complete the PKCE
   // exchange, but Supabase has still confirmed the email by this point —

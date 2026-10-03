@@ -223,6 +223,33 @@ kept running for at least 12 months after v2 ships. The one break so far
 happened before any public listing: `GET /forms/:id/responses` went from
 a bare array to `{ data, next_cursor }` when pagination was added.
 
+## SCIM 2.0 (P3.18)
+
+Base URL `/api/scim/v2`, `Authorization: Bearer scim_…` (one token per
+workspace, made in Settings → Security, Enterprise plan; shown once,
+stored as SHA-256). 300 requests a minute. Bodies and replies are
+`application/scim+json`; errors use the SCIM error schema
+(`{ schemas, status, detail, scimType? }`).
+
+- `GET /ServiceProviderConfig`, `/ResourceTypes`, `/Schemas` — discovery.
+  Patch and filter are supported; bulk, sort, ETags and password change
+  are not. Only the User resource exists.
+- `GET /Users` — `?filter=userName eq "a@b.co"` (the only filter),
+  `startIndex` (1-based), `count` (max 100).
+- `POST /Users` → `201`. `userName` must be an email (else the primary
+  entry of `emails`); `displayName` / `name`, `externalId`, `active` are
+  kept, other attributes ignored. `409 uniqueness` if already listed.
+- `GET` / `PUT` / `PATCH` / `DELETE /Users/:id`. PATCH takes `add` and
+  `replace` by path or as a value object (what Okta and Entra send).
+
+A listed user is someone who _may_ join: Supabase never links an SSO
+sign-in to an existing account, so accounts aren't created here.
+They become a member, with the workspace's default SSO role, the first
+time they sign in through SSO. Setting `active: false` or deleting them
+removes their membership immediately (never the owner's) and stops them
+rejoining. While a token exists, only listed, active people can join
+through SSO.
+
 ## A/B tests (P3.9)
 
 No endpoint of their own. When a form's link has a running test, the

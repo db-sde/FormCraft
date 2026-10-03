@@ -38,6 +38,11 @@ export type AuditAction =
   | "retention.changed"
   | "retention.purged"
   | "permissions.changed"
+  | "security.sso_changed"
+  | "security.scim_token_created"
+  | "security.scim_token_revoked"
+  | "privacy.data_exported"
+  | "privacy.data_deleted"
   | "security.mfa_enabled"
   | "security.mfa_disabled"
   | "security.recovery_code_used";

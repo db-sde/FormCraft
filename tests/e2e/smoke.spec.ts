@@ -81,6 +81,7 @@ test.describe("smoke: every page renders cleanly", () => {
     for (const path of [
       "/",
       "/login",
+      "/login/sso",
       "/signup",
       "/signup/check-email",
       "/forgot-password",
@@ -115,6 +116,7 @@ test.describe("smoke: every page renders cleanly", () => {
       const visited = new Set<string>([
         "/",
         "/login",
+        "/login/sso",
         "/signup",
         "/signup/check-email",
         "/forgot-password",

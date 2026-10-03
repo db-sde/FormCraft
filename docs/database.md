@@ -208,6 +208,27 @@ All written by the server only; readable with `view_responses`.
 restrictive policy themselves (migration 37 only covered tables that
 existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
 
+## SSO, SCIM and privacy requests (migrations 39–40)
+
+- **`workspace_sso`** — `workspace_id`, `domain`, `provider_id` (the
+  Supabase SSO provider), `enforced`, `default_role`. Members read;
+  admins may update only `enforced` and `default_role` (column grant) —
+  the mapping itself is written with the service role
+  (`npm run sso:set`).
+- **`sso_satisfied(workspace)`** — true unless the workspace requires
+  SSO and this session isn't one (`jwt_has_sso(auth.jwt())` reads the
+  `amr` claim); the owner is always let in. It is part of every
+  membership helper, alongside `mfa_satisfied()`.
+  `workspaces_requiring_sso()` tells the app how many of the caller's
+  workspaces are locked this way.
+- **`scim_tokens`** — one per workspace, SHA-256, server only
+  (`scim_status(workspace)` gives admins the prefix and dates).
+- **`scim_users`** — the directory the identity provider maintains:
+  `email` (lowercase, unique per workspace), `display_name`,
+  `external_id`, `active`, `user_id` once they've signed in. Server only.
+- **`responses_by_email(workspace, email)`** — responses where an answer
+  is exactly that address or a contact step has it (security invoker).
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at
