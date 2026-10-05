@@ -87,8 +87,8 @@ export async function signUpAction(
 
   if (error) {
     const mapped = mapAuthError(error.message);
-    // The message shown is deliberately vague; the host's logs get the cause.
-    if (mapped.code === "unknown") {
+    // The message shown is deliberately generic; the host's logs get the cause.
+    if (mapped.code !== "duplicate_email") {
       console.error(
         "signUp failed:",
         error.name,
