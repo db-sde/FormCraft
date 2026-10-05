@@ -60,9 +60,11 @@ First E2E run: `npx playwright install chromium webkit`. See
    missing, Supabase silently redirects to the Site URL instead and
    the links never sign anyone in.
 4. Scheduled jobs are defined in `vercel.json` (Vercel Cron sends
-   `Authorization: Bearer $CRON_SECRET` automatically): webhook and
-   Google Sheets retry sweeps every 5 minutes, and the daily retention
-   job that deletes expired unfinished responses and old rate-limit
+   `Authorization: Bearer $CRON_SECRET` automatically): webhook,
+   Google Sheets and custom-domain sweeps run daily (Vercel Hobby's
+   limit; on Pro, or any scheduler that can call the paths, run the
+   webhook and Sheets retry sweeps every 5 minutes and the domain check
+   every 30), plus the daily retention job that deletes expired unfinished responses and old rate-limit
    rows. On other hosts, call the same `/api/cron/*` paths (GET or
    POST) with that header.
 5. Set `RESEND_API_KEY` and `EMAIL_FROM` for owner notifications.
