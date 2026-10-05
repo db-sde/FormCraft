@@ -753,8 +753,8 @@ function ContactInfoSettings({
       <SectionHead>Lead details</SectionHead>
       <div className="col-span-full flex flex-col gap-2">
         <p className="text-muted-foreground text-[12.5px]">
-          Saved as soon as the respondent moves on — you keep the lead even if they
-          don&apos;t finish the form.
+          Each detail is asked on its own screen, in this order. They&apos;re saved as the
+          respondent moves on — you keep the lead even if they don&apos;t finish the form.
         </p>
         <div className="divide-border border-border bg-card divide-y overflow-hidden rounded-sm border-[1.5px]">
           {CONTACT_FIELDS.map((field) => {

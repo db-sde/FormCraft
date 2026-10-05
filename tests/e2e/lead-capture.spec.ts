@@ -54,8 +54,20 @@ test("a respondent who leaves before the last question is still a lead", async (
     const respondentContext = await browser.newContext();
     const r = await respondentContext.newPage();
     await r.goto(liveLink);
+    // One detail per screen: only the name is asked first.
+    await expect(r.getByLabel("Email")).toHaveCount(0);
+    await expect(r.getByLabel("Phone")).toHaveCount(0);
+    // A required detail can't be skipped.
+    await r.getByRole("button", { name: "OK" }).click();
+    await expect(r.getByText("Enter your name.")).toBeVisible();
     await r.getByLabel("Name").fill("Grace Hopper");
-    // Enter moves between the contact fields rather than skipping ahead.
+    // Enter moves on to the next detail rather than skipping the question.
+    await r.keyboard.press("Enter");
+    await expect(r.getByLabel("Email")).toBeFocused();
+    await expect(r.getByLabel("Name")).toHaveCount(0);
+    // Back returns to the previous detail, as it was left.
+    await r.getByRole("button", { name: "Back" }).click();
+    await expect(r.getByLabel("Name")).toHaveValue("Grace Hopper");
     await r.keyboard.press("Enter");
     await r.keyboard.type("grace@example.com");
     await r.keyboard.press("Enter");

@@ -74,24 +74,46 @@ function validateContactInfo(
     return fail("Enter your contact details.");
   }
   for (const field of settings.fields) {
-    const raw = record[field];
-    if (raw !== undefined && typeof raw !== "string") {
-      return fail("Enter your contact details.");
-    }
-    const text = (raw ?? "").trim();
-    const label = CONTACT_FIELD_LABELS[field].toLowerCase();
-    if (!text) {
-      if (settings.requiredFields.includes(field)) return fail(`Enter your ${label}.`);
-      continue;
-    }
-    if (text.length > MAX_CONTACT_FIELD_LENGTH) return fail(`That ${label} is too long.`);
-    if (field === "email" && !EMAIL_PATTERN.test(text)) {
-      return fail("Enter a valid email address.");
-    }
-    if (field === "phone" && !validPhone(text))
-      return fail("Enter a valid phone number.");
+    const result = checkContactField(settings, field, record[field]);
+    if (!result.ok) return result;
   }
   return OK;
+}
+
+function checkContactField(
+  settings: { requiredFields: ContactField[] },
+  field: ContactField,
+  raw: unknown,
+): AnswerValidation {
+  if (raw !== undefined && typeof raw !== "string") {
+    return fail("Enter your contact details.");
+  }
+  const text = (raw ?? "").trim();
+  const label = CONTACT_FIELD_LABELS[field].toLowerCase();
+  if (!text) {
+    return settings.requiredFields.includes(field) ? fail(`Enter your ${label}.`) : OK;
+  }
+  if (text.length > MAX_CONTACT_FIELD_LENGTH) return fail(`That ${label} is too long.`);
+  if (field === "email" && !EMAIL_PATTERN.test(text)) {
+    return fail("Enter a valid email address.");
+  }
+  if (field === "phone" && !validPhone(text)) return fail("Enter a valid phone number.");
+  return OK;
+}
+
+/** One field of a lead-capture block, for runtimes that ask them one at a
+ * time. The whole block is still checked by validateAnswer (here and on
+ * the server) before anything is submitted. */
+export function validateContactField(
+  question: Extract<QuestionV1, { type: "contact_info" }>,
+  field: ContactField,
+  value: unknown,
+): AnswerValidation {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  return checkContactField(question.settings, field, record[field]);
 }
 
 function isValidUrl(raw: string): boolean {

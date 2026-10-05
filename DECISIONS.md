@@ -1260,4 +1260,19 @@ working product name in docs/UI) while the directory itself is left
 unchanged. No functional impact — the directory name is never read by
 the app.
 
+## 2026-10-05 — Lead capture asks one detail per screen
+
+A `contact_info` question with several fields is shown to respondents
+one field at a time (name, then email, then phone…), Typeform-style,
+instead of all fields on one slide. It stays **one question** with one
+answer record: the schema, leads, CRM sync, exports, logic and
+recall are unchanged, and nothing needs migrating. Only the runtime
+presents it in steps — each is checked as the respondent goes
+(`validateContactField`), Back steps through the details before leaving
+the question, the progress bar advances per detail, and the whole block
+is still validated by `validateAnswer` on the last detail and again on
+the server. The builder canvas still draws the fields together as a
+preview. Not a per-form setting: asking one at a time is the single
+behaviour, which keeps the settings panel small.
+
 <!-- Add new decisions above this line, newest first. -->

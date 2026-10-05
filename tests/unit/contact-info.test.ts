@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { parseFormSchema } from "@/domains/forms/schema";
-import { validateAnswer, hasAnswer } from "@/domains/logic/validate-answer";
+import {
+  validateAnswer,
+  validateContactField,
+  hasAnswer,
+} from "@/domains/logic/validate-answer";
 import { isAnswered } from "@/domains/logic/evaluate";
 import {
   answerCells,
@@ -18,6 +22,37 @@ const contact: QuestionV1 = {
   required: true,
   settings: { fields: ["name", "email", "phone"], requiredFields: ["name", "email"] },
 };
+
+describe("one contact detail at a time", () => {
+  const block = contact as Extract<QuestionV1, { type: "contact_info" }>;
+
+  it("checks only the detail on screen", () => {
+    // Email is still empty and required, but the name screen doesn't care.
+    expect(validateContactField(block, "name", { name: "Ada" })).toEqual({ ok: true });
+    expect(validateContactField(block, "email", { name: "Ada" })).toEqual({
+      ok: false,
+      message: "Enter your email.",
+    });
+  });
+
+  it("lets an optional detail be skipped but not malformed", () => {
+    expect(validateContactField(block, "phone", {})).toEqual({ ok: true });
+    expect(validateContactField(block, "phone", { phone: "abc" })).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("holds the same rules as the whole-block check", () => {
+    expect(validateContactField(block, "email", { email: "nope" })).toEqual({
+      ok: false,
+      message: "Enter a valid email address.",
+    });
+    expect(validateContactField(block, "name", undefined)).toEqual({
+      ok: false,
+      message: "Enter your name.",
+    });
+  });
+});
 
 describe("contact info validation", () => {
   it("requires each required field, naming the missing one", () => {

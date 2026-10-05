@@ -64,6 +64,7 @@ test("an autofilled hidden field never costs a person their submission", async (
     const { formId, liveLink } = await createPublishedForm(user, schema);
     await page.goto(liveLink);
     await page.getByLabel("Name").fill("Ada Lovelace");
+    await page.getByRole("button", { name: "OK" }).click();
     await page.getByLabel("Email").fill("ada@example.com");
 
     // Simulate a browser/password manager filling the hidden field.
@@ -98,6 +99,7 @@ test("idling for a long time mid-form still completes", async ({ page }) => {
     await page.clock.install();
     await page.goto(liveLink);
     await page.getByLabel("Name").fill("Grace Hopper");
+    await page.getByRole("button", { name: "OK" }).click();
     await page.getByLabel("Email").fill("grace@example.com");
     await page.getByRole("button", { name: "OK" }).click();
     await expect(page.getByText("Last one")).toBeVisible();
@@ -134,6 +136,7 @@ test("submitting while slow autosaves are still in flight completes", async ({
     });
     await page.goto(liveLink);
     await page.getByLabel("Name").fill("Alan Turing");
+    await page.getByRole("button", { name: "OK" }).click();
     await page.getByLabel("Email").fill("alan@example.com");
     await page.getByRole("button", { name: "OK" }).click();
     await page.getByRole("textbox").fill("quick");
@@ -164,6 +167,7 @@ test("a failing start isn't retried on every keystroke, and submitting still get
 
     await page.goto(liveLink);
     await page.getByLabel("Name").pressSequentially("Ada Lovelace", { delay: 20 });
+    await page.getByRole("button", { name: "OK" }).click();
     await page.getByLabel("Email").pressSequentially("ada@example.com", { delay: 20 });
     // Many answer changes later, the server was asked once — not once each.
     expect(starts).toBe(1);

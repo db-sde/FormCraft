@@ -105,6 +105,8 @@ test.describe("accessibility", () => {
       await audit(page, "public form: contact step");
 
       await page.getByLabel("Name").fill("Ada");
+
+      await page.getByRole("button", { name: "OK" }).click();
       await page.getByLabel("Email").fill("ada@example.com");
       await page.getByRole("button", { name: "OK" }).click();
       await expect(page.getByText("Pick one")).toBeVisible();

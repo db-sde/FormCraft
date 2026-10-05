@@ -63,6 +63,7 @@ export function RuntimeQuestionInput({
   getResponseId,
   preview = false,
   invalid = false,
+  contactField,
 }: {
   question: QuestionV1;
   value: unknown;
@@ -75,6 +76,9 @@ export function RuntimeQuestionInput({
   /** Builder canvas: drawn as respondents see it, but not interactive. */
   preview?: boolean;
   invalid?: boolean;
+  /** Lead capture asked one detail at a time: only this field is shown
+   * (the answer is still the one record holding every detail). */
+  contactField?: ContactField;
 }) {
   const strings = useRuntimeStrings();
   const control = renderControl();
@@ -262,7 +266,7 @@ export function RuntimeQuestionInput({
       case "contact_info":
         return (
           <ContactInfoInput
-            fields={question.settings.fields}
+            fields={contactField ? [contactField] : question.settings.fields}
             requiredFields={question.settings.requiredFields}
             value={value}
             onChange={onChange}
@@ -944,9 +948,10 @@ const CONTACT_INPUT: Record<
   company: { type: "text", autoComplete: "organization", placeholder: "Acme Inc." },
 };
 
-/** Lead capture: a few labelled fields on one step. Enter moves to the
- * next field (the last one continues the form, via the runtime's own
- * Enter handling). */
+/** Lead capture: labelled fields (all of them in the builder's preview,
+ * one at a time for respondents). Enter moves to the next field when
+ * several are showing; on the last one the runtime's own Enter handling
+ * continues the form. */
 function ContactInfoInput({
   fields,
   requiredFields,

@@ -67,8 +67,9 @@ LogicRuleV1 = {
 `contact_info`, `number`, `single_select`, `multi_select`, `dropdown`,
 `yes_no`, `date`, `rating`, `opinion_scale`, `file_upload`, `statement`.
 
-`contact_info` is lead capture: one step asking for several contact
-details. Settings: `fields` (subset of `name`, `email`, `phone`,
+`contact_info` is lead capture: one question holding several contact
+details, which respondents are asked one per screen (name, then email,
+then phone…) while the answer stays a single record. Settings: `fields` (subset of `name`, `email`, `phone`,
 `company`, at least one) and `requiredFields` (must be a subset of
 `fields`). Its answer is an object `{ name?, email?, phone?, company? }`
 holding only the configured fields; required-ness and email/phone

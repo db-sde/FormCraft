@@ -19,6 +19,7 @@ import {
   renderRecallUrl,
   stateAt,
   validateAnswer,
+  validateContactField,
   walkForm,
   hasAnswer,
   OTHER_PREFIX,
@@ -261,6 +262,8 @@ export function FormRuntime({
         );
   });
   const [currentId, setCurrentId] = useState(opening.id);
+  // Lead capture asks one detail per screen: which one is showing.
+  const [contactStep, setContactStep] = useState(0);
   const [answers, setAnswers] = useState<AnswerMap>(opening.answers);
   const [history, setHistory] = useState<string[]>(opening.history);
   // "Ask once" questions filled in from what the visitor said before.
@@ -301,6 +304,16 @@ export function FormRuntime({
   const focusedStepRef = useRef(currentId);
 
   const question = compiled.schema.questions.find((q) => q.id === currentId);
+  const contactFields =
+    question?.type === "contact_info" ? question.settings.fields : null;
+  const onLastContactField = !contactFields || contactStep >= contactFields.length - 1;
+  /** Arriving on a question: its first detail going forward, its last
+   * going back. */
+  function landOn(id: string, way: "forward" | "back") {
+    const q = compiled.schema.questions.find((x) => x.id === id);
+    const count = q?.type === "contact_info" ? q.settings.fields.length : 1;
+    setContactStep(way === "back" ? count - 1 : 0);
+  }
   const currentIndex = compiled.orderedQuestionIds.indexOf(currentId);
   // Where the respondent goes from here, given the questions they have
   // already been shown (so a form with a legacy backward jump can't
@@ -343,7 +356,9 @@ export function FormRuntime({
     });
   }
   const isLastStep =
-    question !== undefined && stepFrom(question.id, answers).type === "ending";
+    question !== undefined &&
+    onLastContactField &&
+    stepFrom(question.id, answers).type === "ending";
 
   async function finish(finalAnswers: AnswerMap, endingId: string) {
     if (!onComplete) {
@@ -376,6 +391,7 @@ export function FormRuntime({
       const index = history.indexOf(firstError.questionId);
       if (index >= 0) setHistory((h) => h.slice(0, index));
       setCurrentId(firstError.questionId);
+      landOn(firstError.questionId, "forward");
       setError(firstError.message);
       return;
     }
@@ -385,6 +401,24 @@ export function FormRuntime({
   function goNext(currentAnswers: AnswerMap = answers) {
     if (!question || submitting || thinkingRef.current) return;
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+
+    // Lead capture: each detail gets its own screen, checked as they go;
+    // the whole block is checked again once the last one is done.
+    if (question.type === "contact_info" && !onLastContactField) {
+      const check = validateContactField(
+        question,
+        question.settings.fields[contactStep],
+        currentAnswers[question.id],
+      );
+      if (!check.ok) {
+        setError(check.message);
+        return;
+      }
+      setError(null);
+      setDirection("forward");
+      setContactStep(contactStep + 1);
+      return;
+    }
 
     const validation = validateAnswer(question, currentAnswers[question.id]);
     if (!validation.ok) {
@@ -478,6 +512,7 @@ export function FormRuntime({
       }
       setHistory(moved.history);
       setCurrentId(moved.id);
+      landOn(moved.id, "forward");
       onAnswerChange?.(moved.answers, moved.id, moved.history);
     }
   }
@@ -498,6 +533,7 @@ export function FormRuntime({
     setAnswers(cleared);
     setHistory(earlier);
     setCurrentId(backTo);
+    landOn(backTo, "forward");
     setError(null);
     setDirection("back");
     onAnswerChange?.(cleared, backTo, earlier);
@@ -521,6 +557,12 @@ export function FormRuntime({
   }
 
   function goBack() {
+    if (contactStep > 0 && !submitting) {
+      setContactStep(contactStep - 1);
+      setDirection("back");
+      setError(null);
+      return;
+    }
     if (history.length === 0 || submitting || thinkingRef.current) return;
     setFollowUp(null);
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
@@ -534,6 +576,7 @@ export function FormRuntime({
     setDirection("back");
     setHistory(prevHistory);
     setCurrentId(prev);
+    landOn(prev, "back");
     setError(null);
     onAnswerChange?.(answers, prev, prevHistory);
   }
@@ -677,7 +720,12 @@ export function FormRuntime({
       ? t.submit
       : t.ok;
   const enterHint = question.type === "long_text" ? t.newLine : t.pressEnter;
-  const progress = question.type === "welcome_screen" ? 0 : Math.min(1, number / total);
+  // Lead capture fills the bar a detail at a time.
+  const contactShare = contactFields ? (contactStep + 1) / contactFields.length : 1;
+  const progress =
+    question.type === "welcome_screen"
+      ? 0
+      : Math.min(1, (number - 1 + contactShare) / total);
   const welcome = question.type === "welcome_screen";
 
   return (
@@ -716,7 +764,7 @@ export function FormRuntime({
           className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
         />
         <div
-          key={question.id}
+          key={contactFields ? `${question.id}:${contactStep}` : question.id}
           className={cn(
             "flex flex-col gap-(--st-gap)",
             direction === "back" ? "fc-step-in-back" : "fc-step-in",
@@ -799,6 +847,11 @@ export function FormRuntime({
 
               <RuntimeQuestionInput
                 key={question.id}
+                contactField={
+                  contactFields && contactFields.length > 1
+                    ? contactFields[contactStep]
+                    : undefined
+                }
                 question={withDisplayOrder(question, seed, answers)}
                 value={answers[question.id]}
                 onChange={setAnswer}
@@ -836,7 +889,7 @@ export function FormRuntime({
 
               <StageActions
                 backLabel={t.back}
-                showBack={history.some((id) => !autoFilled.has(id))}
+                showBack={contactStep > 0 || history.some((id) => !autoFilled.has(id))}
                 onBack={goBack}
                 onNext={() => goNext()}
                 label={primaryLabel}
