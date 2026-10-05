@@ -101,3 +101,36 @@ test("a respondent who leaves before the last question is still a lead", async (
     await deleteUser(user.userId);
   }
 });
+
+test("the builder shows lead details one screen at a time", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "the builder is a desktop tool; mobile covers respondents");
+  const user = await createConfirmedUser("e2e-lead-builder");
+  try {
+    const { formId } = await createPublishedForm(user, schema);
+    await loginViaUI(page, user.email, user.password);
+    await page.goto(`/forms/${formId}`);
+    await page
+      .getByRole("button", { name: /Where can we reach you/ })
+      .first()
+      .click();
+
+    const screens = page.getByRole("tablist", { name: "Screens of this question" });
+    await expect(screens.getByRole("tab", { name: "1. Name" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // The card draws just the first detail, not all three together.
+    await expect(page.getByPlaceholder("Jane Smith")).toBeVisible();
+    await expect(page.getByPlaceholder("jane@company.com")).toHaveCount(0);
+    await expect(page.getByPlaceholder("+1 555 000 0000")).toHaveCount(0);
+
+    await screens.getByRole("tab", { name: "2. Email" }).click();
+    await expect(page.getByPlaceholder("jane@company.com")).toBeVisible();
+    await expect(page.getByPlaceholder("Jane Smith")).toHaveCount(0);
+  } finally {
+    await deleteUser(user.userId);
+  }
+});

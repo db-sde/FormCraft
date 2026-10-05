@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { showsMadeWith } from "@/domains/forms/branding";
 import { Flag, Palette } from "lucide-react";
+import { CONTACT_FIELD_LABELS } from "@/domains/forms/schema/question-types";
 import type { EndingV1, QuestionV1, ThemeV1 } from "@/domains/forms/schema/v1";
 import { RuntimeQuestionInput } from "@/components/runtime/runtime-question-input";
 import {
@@ -213,6 +214,19 @@ function QuestionStage({
 }) {
   const entry = question.type === "welcome_screen" || question.type === "statement";
   const labelRef = useRef<HTMLTextAreaElement | null>(null);
+  // Lead capture is asked one detail per screen; the card shows one of
+  // them at a time, and the creator can flip between them.
+  const [screenPick, setScreenPick] = useState({ id: question.id, index: 0 });
+  const contactFields =
+    question.type === "contact_info" && question.settings.fields.length > 1
+      ? question.settings.fields
+      : null;
+  const screen = contactFields
+    ? Math.min(
+        screenPick.id === question.id ? screenPick.index : 0,
+        contactFields.length - 1,
+      )
+    : 0;
   useEffect(() => {
     if (!focusLabel) return;
     const el = labelRef.current;
@@ -300,7 +314,10 @@ function QuestionStage({
     <Stage
       theme={theme}
       mode="canvas"
-      progress={number / Math.max(total, 1)}
+      progress={
+        (number - 1 + (contactFields ? (screen + 1) / contactFields.length : 1)) /
+        Math.max(total, 1)
+      }
       className="size-full"
     >
       <StageNumber n={number} />
@@ -315,9 +332,36 @@ function QuestionStage({
         </div>
         {description}
       </div>
+      {contactFields && (
+        <div
+          role="tablist"
+          aria-label="Screens of this question"
+          className="flex flex-wrap items-center gap-1.5 text-[12.5px]"
+        >
+          {contactFields.map((field, i) => (
+            <button
+              key={field}
+              type="button"
+              role="tab"
+              aria-selected={i === screen}
+              onClick={() => setScreenPick({ id: question.id, index: i })}
+              className={cn(
+                "rounded-full border px-2.5 py-0.5 font-semibold transition-colors",
+                i === screen
+                  ? "border-(--st-primary) text-(--st-primary)"
+                  : "border-(--st-line) text-(--st-muted) hover:text-(--st-text)",
+              )}
+            >
+              {i + 1}. {CONTACT_FIELD_LABELS[field]}
+            </button>
+          ))}
+          <span className="text-(--st-muted)">each is its own screen</span>
+        </div>
+      )}
       <RuntimeQuestionInput
-        key={question.id}
+        key={`${question.id}:${contactFields ? contactFields[screen] : ""}`}
         question={question}
+        contactField={contactFields ? contactFields[screen] : undefined}
         value={undefined}
         onChange={() => undefined}
         preview
