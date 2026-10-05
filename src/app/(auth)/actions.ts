@@ -76,7 +76,7 @@ export async function signUpAction(
   }
 
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -99,6 +99,10 @@ export async function signUpAction(
     }
     return { error: mapped.message, values };
   }
+
+  // With email confirmation switched off, Supabase signs them in right
+  // away: no inbox step, straight into the app.
+  if (data.session) redirect(safeNextPath(formData.get("next")));
 
   redirect("/signup/check-email");
 }

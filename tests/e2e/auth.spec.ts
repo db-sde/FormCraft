@@ -2,7 +2,9 @@ import { test, expect } from "@playwright/test";
 import { createConfirmedUser, deleteUser, loginViaUI, logOutViaUI } from "./helpers";
 
 test.describe("auth", () => {
-  test("signup form submits and shows the check-your-email step", async ({ page }) => {
+  test("signup with email confirmation off goes straight into the app", async ({
+    page,
+  }) => {
     await page.goto("/signup");
     const email = `e2e-signup-${crypto.randomUUID().slice(0, 8)}@example.com`;
     await page.getByLabel("Full name").fill("E2E Test User");
@@ -10,8 +12,11 @@ test.describe("auth", () => {
     await page.getByLabel("Password").fill(`Test-${crypto.randomUUID()}`);
     await page.getByRole("button", { name: "Create account" }).click();
 
-    await page.waitForURL("**/signup/check-email");
-    await expect(page.getByRole("heading", { name: /check your inbox/i })).toBeVisible();
+    // Confirmation is off here, so there's no inbox step: they're signed in.
+    await page.waitForURL("**/dashboard");
+    await expect(
+      page.getByRole("dialog", { name: "How do you want to start?" }),
+    ).toBeVisible();
   });
 
   test("login with valid credentials reaches the dashboard, logout returns to login", async ({
