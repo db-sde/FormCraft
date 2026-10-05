@@ -86,7 +86,18 @@ export async function signUpAction(
   });
 
   if (error) {
-    return { error: mapAuthError(error.message).message, values };
+    const mapped = mapAuthError(error.message);
+    // The message shown is deliberately vague; the host's logs get the cause.
+    if (mapped.code === "unknown") {
+      console.error(
+        "signUp failed:",
+        error.name,
+        error.status,
+        error.code,
+        error.message,
+      );
+    }
+    return { error: mapped.message, values };
   }
 
   redirect("/signup/check-email");
