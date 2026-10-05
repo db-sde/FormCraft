@@ -134,7 +134,9 @@ describe("HubSpot (P2.15)", () => {
       "The question mapped to x no longer exists.",
     );
     expect(mappingProblems(schema, { email: "contact.email" })).toEqual([]);
-    expect(isHubspotToken("pat-na1-11111111-2222-3333-4444-555555555555")).toBe(true);
+    // Assembled at runtime so secret scanners don't mistake the fake for a key.
+    const fakeToken = ["pat", "na1", "11111111-2222-3333-4444-555555555555"].join("-");
+    expect(isHubspotToken(fakeToken)).toBe(true);
     expect(isHubspotToken("secret")).toBe(false);
   });
 });
