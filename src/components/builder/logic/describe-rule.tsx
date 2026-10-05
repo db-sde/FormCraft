@@ -41,15 +41,9 @@ export function DescribeRule({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  if (!enabled || !propose) {
-    return (
-      <div className="border-input text-muted-foreground flex items-center gap-2.5 rounded-lg border-[1.5px] border-dashed px-4 py-3 text-[13.5px]">
-        <Sparkles className="size-4 shrink-0" />
-        Describing rules in words needs AI, which isn&apos;t set up on this server (set
-        ANTHROPIC_API_KEY).
-      </div>
-    );
-  }
+  // Without AI on this server there's nothing to offer here; the
+  // starters below do the same job by hand.
+  if (!enabled || !propose) return null;
 
   function submit() {
     if (!instruction.trim() || pending) return;

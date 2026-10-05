@@ -50,6 +50,29 @@ export { describeRule };
 
 type View = "rules" | "variables" | "pools" | "map" | "check";
 
+type StarterId = "skip" | "end" | "score";
+/** Common goals, in the creator's words. Each adds a filled-in rule. */
+const STARTERS: { id: StarterId; title: string; body: string; icon: typeof Split }[] = [
+  {
+    id: "skip",
+    title: "Skip a question",
+    body: "Depending on an answer, jump ahead past questions that don't apply.",
+    icon: Split,
+  },
+  {
+    id: "end",
+    title: "Show a different ending",
+    body: "Send some people to another ending, like “Let's talk” instead of “Thanks”.",
+    icon: Flag,
+  },
+  {
+    id: "score",
+    title: "Keep a score",
+    body: "Add points for certain answers, for quizzes or ranking leads.",
+    icon: Braces,
+  },
+];
+
 /** The builder's Logic view (Part 4): rules (simple by default, grouped
  * conditions when needed), variables and URL fields, a map generated from
  * the same rules, and the static checks. */
@@ -78,6 +101,76 @@ export function LogicEditor({
     ({ question: q }) => q.type !== "welcome_screen" && q.type !== "statement",
   );
 
+  /** A ready-made rule for a common goal, filled in with this form's own
+   * questions so there's a working sentence to adjust, not a blank. */
+  function addStarter(kind: StarterId) {
+    // Best to react to a choice question: its answers are a short list.
+    const source =
+      answerable.find(({ question: q }) =>
+        ["single_select", "dropdown", "yes_no", "multi_select"].includes(q.type),
+      )?.question ?? answerable[0]?.question;
+    if (!source) return;
+    const id = `rule_${nanoid(8)}`;
+    const on = { event: "question_answered", questionId: source.id } as const;
+    const when = defaultCompare({ type: "answer", questionId: source.id }, schema);
+    const ordered = numberedQuestions(schema).map(({ question }) => question);
+    const later = ordered.slice(ordered.findIndex((q) => q.id === source.id) + 1);
+    const otherEnding = schema.endings.find((e) => !e.isDefault) ?? schema.endings[0];
+
+    if (kind === "skip") {
+      // Jump over the next question, when there is one to land on.
+      const target = later[1] ?? later[0];
+      commit([
+        ...rules,
+        {
+          id,
+          on,
+          when,
+          then: [
+            target
+              ? { type: "jump_to_question", questionId: target.id }
+              : { type: "jump_to_ending", endingId: otherEnding.id },
+          ],
+        },
+      ]);
+      return;
+    }
+    if (kind === "end") {
+      commit([
+        ...rules,
+        { id, on, when, then: [{ type: "jump_to_ending", endingId: otherEnding.id }] },
+      ]);
+      return;
+    }
+    // Score: use the form's number variable, or make one called "score".
+    const variables = schema.variables ?? [];
+    const score = variables.find((v) => v.type === "number") ?? {
+      id: `var_${nanoid(8)}`,
+      name: variables.some((v) => v.name === "score") ? "points" : "score",
+      type: "number" as const,
+    };
+    onChange({
+      logic: [],
+      variables: variables.includes(score) ? variables : [...variables, score],
+      rules: [
+        ...rules,
+        {
+          id,
+          on,
+          when,
+          then: [
+            {
+              type: "set_variable",
+              variableId: score.id,
+              op: "add",
+              value: { type: "literal", value: 10 },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
   function addRule() {
     const first = answerable[0]?.question;
     const rule: RuleV1 = first
@@ -103,10 +196,32 @@ export function LogicEditor({
             Logic
           </h1>
           <p className="text-muted-foreground mt-2.5 max-w-[620px] text-[15px] leading-[1.55]">
-            Rules run from top to bottom. Every rule that matches updates its variables;
-            the first one that matches decides where people go. If none do, the form
-            carries on in order.
+            Change what people see based on their answers. Each rule is one sentence:{" "}
+            <b className="text-foreground">after</b> a question,{" "}
+            <b className="text-foreground">if</b> the answer is something,{" "}
+            <b className="text-foreground">then</b> do something.
           </p>
+          <details className="text-muted-foreground mt-1.5 max-w-[620px] text-[13.5px] leading-[1.55]">
+            <summary className="fc-focus text-foreground cursor-pointer rounded-xs font-semibold underline underline-offset-[3px]">
+              How rules work
+            </summary>
+            <ul className="mt-1.5 list-disc pl-5">
+              <li>Rules are checked from top to bottom.</li>
+              <li>
+                The first rule that matches decides where the person goes next. If none
+                match, the form just carries on in order.
+              </li>
+              <li>
+                A score (or any number you keep) is a <b>variable</b>: every matching rule
+                can add to it, and a rule at the end can pick an ending from it.
+              </li>
+              <li>
+                To hide one question from some people, open that question and use “Show
+                this question” on the right.
+              </li>
+              <li>Use Preview to try it: it shows which rules ran and why.</li>
+            </ul>
+          </details>
         </div>
         <div
           role="tablist"
@@ -164,18 +279,38 @@ export function LogicEditor({
               })
             }
           />
-          {rules.length === 0 && (
-            <div className="border-ink bg-card flex flex-col items-center gap-2 rounded-lg border-[1.5px] border-dashed p-9 text-center">
-              <span className="border-ink shadow-card grid size-11 -rotate-6 place-items-center rounded-[10px] border-[1.5px] bg-[var(--qt-other-bg)] text-[var(--qt-other-fg)]">
-                <Split className="size-[22px]" />
-              </span>
-              <b className="font-heading text-[19px]">No logic yet</b>
-              <span className="text-muted-foreground max-w-[380px] text-sm">
-                Skip questions, send people to different endings, keep a score or work out
-                a price, all from what they answer.
-              </span>
+          <section
+            aria-label="Add logic"
+            className="border-ink bg-card flex flex-col gap-3 rounded-lg border-[1.5px] border-dashed p-4"
+          >
+            <b className="font-heading text-[17px]">
+              {rules.length === 0 ? "What should happen?" : "Add another"}
+            </b>
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {STARTERS.map((starter) => (
+                <button
+                  key={starter.id}
+                  type="button"
+                  disabled={answerable.length === 0}
+                  onClick={() => addStarter(starter.id)}
+                  className="fc-focus border-ink bg-background hover:bg-accent flex flex-col items-start gap-1 rounded-lg border-[1.5px] p-3 text-left disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-2 text-sm font-bold">
+                    <starter.icon className="size-4" aria-hidden />
+                    {starter.title}
+                  </span>
+                  <span className="text-muted-foreground text-[12.5px] leading-[1.45]">
+                    {starter.body}
+                  </span>
+                </button>
+              ))}
             </div>
-          )}
+            {answerable.length === 0 && (
+              <p className="text-muted-foreground text-[13px]">
+                Add a question first: rules react to answers.
+              </p>
+            )}
+          </section>
           {rules.map((rule, index) => (
             <RuleCard
               key={rule.id}
@@ -186,7 +321,11 @@ export function LogicEditor({
               onDelete={() => commit(rules.filter((r) => r.id !== rule.id))}
             />
           ))}
-          <Button className="h-[42px] self-start px-[18px]" onClick={addRule}>
+          <Button
+            variant="outline"
+            className="h-[38px] self-start px-[16px]"
+            onClick={addRule}
+          >
             <Plus /> Add rule
           </Button>
         </>
@@ -306,6 +445,10 @@ function RuleCard({
         {index + 1}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {/* The rule as a sentence, first: the controls below edit it. */}
+        <p className="pt-0.5 text-[15px] leading-[1.45] font-semibold">
+          {describeRule(rule, schema)}.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={triggerValue} onValueChange={setTrigger}>
             <SelectTrigger
@@ -406,10 +549,6 @@ function RuleCard({
             />
           </div>
         </div>
-
-        <p className="text-muted-foreground border-border border-t pt-2 text-[12.5px] leading-normal">
-          {describeRule(rule, schema)}.
-        </p>
       </div>
     </div>
   );

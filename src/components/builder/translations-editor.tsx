@@ -287,7 +287,9 @@ export function TranslationsEditor({
             <Plus className="size-3.5" />
             <span>Add a language</span>
           </SelectTrigger>
-          <SelectContent>
+          {/* Popper: with nothing selected, the default placement has no
+              item to line up with and lands in the window's corner. */}
+          <SelectContent position="popper" align="start" className="max-h-80">
             {LANGUAGE_CODES.filter((c) => c !== base && !others.includes(c)).map(
               (code) => (
                 <SelectItem key={code} value={code}>
