@@ -514,6 +514,8 @@ async function main() {
     );
   }
   const admin = createClient<Database>(url, key, { auth: { persistSession: false } });
+  // So it's obvious whether this is the local stack or a hosted project.
+  console.log(`Seeding templates into ${new URL(url).host}`);
 
   const categories = [...new Set(templates.map((tpl) => tpl.category))];
   let sortOrder = 0;
