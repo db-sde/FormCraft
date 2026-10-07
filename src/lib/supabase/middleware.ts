@@ -19,7 +19,7 @@ const PROTECTED_PREFIXES = ["/dashboard", "/forms", "/leads", "/templates", "/se
 // away from it would make resetting a password impossible.
 const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
 
-/** Refreshes the Supabase session cookie on every request and redirects
+/** Refreshes the Supabase session cookie when it's due and redirects
  * unauthenticated users away from protected routes. This is a UX
  * convenience, not the authorization boundary — every server
  * action/route handler still re-establishes identity itself. */
@@ -43,11 +43,30 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
   const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
   const isAuthPage = AUTH_PAGES.includes(path);
+
+  // Everywhere but the sign-in pages, the session token is checked here
+  // without a round trip to Supabase when it can be (getClaims verifies
+  // the signature locally for asymmetric keys, and asks Supabase
+  // otherwise). That's enough for a redirect: the page itself still
+  // asks Supabase who this is (requireUser). The sign-in pages do ask,
+  // because a token that still verifies but whose session was revoked
+  // would otherwise bounce between /login and /dashboard.
+  let signedIn: boolean;
+  if (isAuthPage) {
+    signedIn = Boolean((await supabase.auth.getUser()).data.user);
+  } else {
+    const { data: verified, error } = await supabase.auth.getClaims();
+    signedIn = verified
+      ? true
+      : error
+        ? Boolean((await supabase.auth.getUser()).data.user)
+        : false;
+  }
+  const data = { user: signedIn };
 
   if (isProtected && !data.user) {
     const redirectUrl = new URL("/login", request.url);

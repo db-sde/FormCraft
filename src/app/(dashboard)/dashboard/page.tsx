@@ -18,7 +18,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function DashboardPage() {
   const { supabase, workspace, user } = await getCurrentWorkspace();
-  const forms = await listFormsForWorkspace(supabase, workspace.id);
+  const [forms, plan, usage, folders] = await Promise.all([
+    listFormsForWorkspace(supabase, workspace.id),
+    getWorkspacePlan(supabase, workspace.id),
+    getUsage(supabase, workspace.id),
+    listFolders(supabase, workspace.id),
+  ]);
 
   if (forms.length === 0) {
     const fullName = (user.user_metadata?.full_name as string | undefined) ?? "";
@@ -74,11 +79,6 @@ export default async function DashboardPage() {
     );
   }
 
-  const [plan, usage, folders] = await Promise.all([
-    getWorkspacePlan(supabase, workspace.id),
-    getUsage(supabase, workspace.id),
-    listFolders(supabase, workspace.id),
-  ]);
   const warnings = usageWarnings(usage, plan.entitlements);
 
   return (

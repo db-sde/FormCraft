@@ -121,26 +121,29 @@ export default async function PublicFormPage({
     },
   };
 
-  // Progressive profiling: answers this visitor already gave to "ask
-  // once" questions on this workspace's forms.
-  const known = VISITOR_ID_PATTERN.test(visitorId)
-    ? await knownAnswersFor(
-        createAdminClient(),
-        publicForm.workspaceId,
-        visitorId,
-        compiled.schema,
-      )
-    : {};
-
-  // External data (phase 24): which questions trigger a lookup.
-  const lookup = entitlements.data_lookups
-    ? await lookupPlan(createAdminClient(), publicForm.formId)
-    : null;
-
-  const resume =
+  // Independent of each other, so fetched together:
+  // - progressive profiling: answers this visitor already gave to "ask
+  //   once" questions on this workspace's forms;
+  // - external data (phase 24): which questions trigger a lookup;
+  // - the unfinished response a resume link points at;
+  // - who's looking (a member viewing their own form isn't a "view").
+  const [known, lookup, resume, viewer] = await Promise.all([
+    VISITOR_ID_PATTERN.test(visitorId)
+      ? knownAnswersFor(
+          createAdminClient(),
+          publicForm.workspaceId,
+          visitorId,
+          compiled.schema,
+        )
+      : {},
+    entitlements.data_lookups ? lookupPlan(createAdminClient(), publicForm.formId) : null,
     typeof query[RESUME_PARAM] === "string"
-      ? await resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
-      : null;
+      ? resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
+      : null,
+    createServerSupabaseClient().then(
+      async (client) => (await client.auth.getUser()).data.user,
+    ),
+  ]);
 
   // A view is counted on every render of this page, including a
   // refresh mid-response — distinct from a start, which is the first
@@ -159,7 +162,6 @@ export default async function PublicFormPage({
   const language = entitlements.multilingual
     ? pickLanguage(compiled.schema, query.lang, requestHeaders.get("accept-language"))
     : offered[0];
-  const viewer = (await (await createServerSupabaseClient()).auth.getUser()).data.user;
   const countsAsView = !isLikelyBot(userAgent);
 
   after(async () => {

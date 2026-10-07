@@ -43,8 +43,12 @@ test.describe("publish and respond", () => {
     await r.getByRole("textbox").fill("I need a quote for 20 seats.");
     await r.keyboard.press("Enter");
 
+    // Lead details are asked one per screen; the phone is optional.
     await r.getByLabel("Name").fill("Ada Lovelace");
+    await r.getByRole("button", { name: "OK" }).click();
     await r.getByLabel("Email").fill("ada@example.com");
+    await r.getByRole("button", { name: "OK" }).click();
+    await expect(r.getByLabel("Phone")).toBeVisible();
     await r.getByRole("button", { name: "OK" }).click();
 
     await expect(r.getByText("Anything else we should know?")).toBeVisible();

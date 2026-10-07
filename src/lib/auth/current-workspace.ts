@@ -19,7 +19,7 @@ export const WORKSPACE_COOKIE = "fc_workspace";
 export const getCurrentWorkspace = cache(async () => {
   const { supabase, user } = await requireUser();
   const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
-  const workspaces = await listWorkspacesForCurrentUser(supabase);
+  const workspaces = await listWorkspacesForCurrentUser(supabase, user.id);
   // Their only workspaces require SSO (P3.12) and this isn't an SSO
   // session: send them to sign in that way instead of quietly creating
   // an empty personal workspace.
@@ -30,7 +30,7 @@ export const getCurrentWorkspace = cache(async () => {
   const workspace =
     workspaces.find((w) => w.id === chosen) ??
     workspaces[0] ??
-    (await ensureDefaultWorkspace(supabase, fullName));
+    (await ensureDefaultWorkspace(supabase, fullName, user.id));
   return {
     supabase,
     user,

@@ -1275,4 +1275,32 @@ the server. The builder canvas still draws the fields together as a
 preview. Not a per-form setting: asking one at a time is the single
 behaviour, which keeps the settings panel small.
 
+## 2026-10-07 — Server region next to the database; fewer round trips per page
+
+Production pages were slow because the functions ran in Vercel's default
+region (Washington, `iad1`) while the Supabase project is in Singapore:
+every auth check and query crossed the Pacific, several times per page,
+one after another. `vercel.json` now pins functions to `sin1`. **If the
+database ever moves, change `regions` to match** — this matters more
+than anything in the code.
+
+Also trimmed what each page asks for:
+
+- The proxy no longer calls `auth.getUser()` on protected pages. It uses
+  `auth.getClaims()`, which verifies the session token's signature
+  locally when the project signs with asymmetric keys (and asks Supabase
+  when it can't). The proxy's redirect was already only a convenience;
+  the authorization boundary is unchanged — `requireUser()` still asks
+  Supabase on every page and action, and RLS checks every query. The
+  sign-in pages keep `getUser()`: a token that still verifies after its
+  session was revoked would otherwise bounce between `/login` and
+  `/dashboard` until it expired.
+- `getCurrentWorkspace` passes the id `requireUser()` just verified to
+  `listWorkspacesForCurrentUser` instead of asking Supabase a second
+  time. The parameter is for server-verified ids only.
+- The sidebar overview fetches each version's theme (`schema->theme`)
+  rather than whole schemas, and its queries run together. The builder
+  loads a form and its draft in one request, once per render; the
+  dashboard's lists load together.
+
 <!-- Add new decisions above this line, newest first. -->

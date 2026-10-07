@@ -280,26 +280,19 @@ export async function getDraftForEdit(
   formId: string,
   workspaceId: string,
 ): Promise<DraftForEdit | null> {
-  const { data: form, error: formError } = await supabase
+  // The form and its draft in one request.
+  const { data: form, error } = await supabase
     .from("forms")
-    .select("id, title")
+    .select("id, title, draft:form_versions(id, schema, revision)")
     .eq("id", formId)
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
+    .eq("draft.status", "draft")
     .maybeSingle();
 
-  if (formError) throw formError;
-  if (!form) return null;
-
-  const { data: draft, error: draftError } = await supabase
-    .from("form_versions")
-    .select("id, schema, revision")
-    .eq("form_id", form.id)
-    .eq("status", "draft")
-    .maybeSingle();
-
-  if (draftError) throw draftError;
-  if (!draft) return null;
+  if (error) throw error;
+  const draft = form?.draft?.[0];
+  if (!form || !draft) return null;
 
   return {
     formId: form.id,
@@ -363,19 +356,17 @@ export async function getPublishInfo(
   supabase: Client,
   formId: string,
 ): Promise<PublishInfo | null> {
-  const { data: form, error: formError } = await supabase
-    .from("forms")
-    .select("slug")
-    .eq("id", formId)
-    .maybeSingle();
+  const [{ data: form, error: formError }, { data: versions, error: versionsError }] =
+    await Promise.all([
+      supabase.from("forms").select("slug").eq("id", formId).maybeSingle(),
+      supabase
+        .from("form_versions")
+        .select("status, schema, published_at, version_number")
+        .eq("form_id", formId)
+        .in("status", ["published", "draft"]),
+    ]);
   if (formError) throw formError;
   if (!form) return null;
-
-  const { data: versions, error: versionsError } = await supabase
-    .from("form_versions")
-    .select("status, schema, published_at, version_number")
-    .eq("form_id", formId)
-    .in("status", ["published", "draft"]);
   if (versionsError) throw versionsError;
 
   const published = versions?.find((v) => v.status === "published");

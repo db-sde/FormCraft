@@ -26,16 +26,17 @@ export type WorkspaceSummary = {
  * role. The identity comes from the session, never from an argument. */
 export async function listWorkspacesForCurrentUser(
   supabase: Client,
+  /** The session's user id, when the caller has just had Supabase verify
+   * it (requireUser) — saves asking again. Never a client-supplied id. */
+  verifiedUserId?: string,
 ): Promise<WorkspaceSummary[]> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const userId = verifiedUserId ?? (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) return [];
 
   const { data, error } = await supabase
     .from("workspace_members")
     .select("role, workspaces(id, name, slug)")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
@@ -64,8 +65,9 @@ export async function listWorkspacesForCurrentUser(
 export async function ensureDefaultWorkspace(
   supabase: Client,
   fullName: string | null,
+  verifiedUserId?: string,
 ): Promise<WorkspaceSummary> {
-  const existing = await listWorkspacesForCurrentUser(supabase);
+  const existing = await listWorkspacesForCurrentUser(supabase, verifiedUserId);
   if (existing.length > 0) return existing[0];
 
   const baseName = fullName ? `${fullName}'s Workspace` : "My Workspace";

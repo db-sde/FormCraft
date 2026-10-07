@@ -25,10 +25,12 @@ export async function getWorkspaceOverview(
   supabase: Client,
   workspaceId: string,
 ): Promise<WorkspaceOverview> {
-  const [forms, members, sheets] = await Promise.all([
+  const [forms, members, sheets, total] = await Promise.all([
     supabase
       .from("forms")
-      .select("id, form_versions(status, schema)")
+      // Only the theme of each version: whole schemas are large, and
+      // this runs for the sidebar on every page.
+      .select("id, form_versions(status, theme:schema->theme)")
       .eq("workspace_id", workspaceId)
       .is("deleted_at", null)
       .in("form_versions.status", ["draft", "published"])
@@ -42,19 +44,20 @@ export async function getWorkspaceOverview(
       .from("sheets_connections")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", workspaceId),
+    supabase
+      .from("forms")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null),
   ]);
 
   const rows = forms.data ?? [];
-  const { count: totalForms } = await supabase
-    .from("forms")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null);
+  const totalForms = total.count;
 
   const first = rows[0]?.id;
   const themed = rows.some((f) =>
     (f.form_versions ?? []).some((v) => {
-      const theme = (v.schema as { theme?: Record<string, unknown> } | null)?.theme;
+      const theme = v.theme as Record<string, unknown> | null;
       return (
         !!theme &&
         (theme.primaryColor !== STARTER_THEME.primaryColor ||

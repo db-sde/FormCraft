@@ -52,6 +52,9 @@ First E2E run: `npx playwright install chromium webkit`. See
 ## Deploying
 
 1. Create a Supabase project and run `npm run db:migrate` against it.
+   Set `regions` in `vercel.json` to the Vercel region nearest that
+   project (it's `sin1`, for a Singapore database) — pages make several
+   database calls each, so a far-away region makes everything slow.
 2. Set every variable from `.env.example` in the host's secret store;
    `NEXT_PUBLIC_APP_URL` must be the public origin (no trailing slash).
 3. In Supabase → Authentication → URL Configuration, set **Site URL**

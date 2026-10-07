@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { canEdit } from "@/domains/workspaces";
 import { getDraftForEdit, getPublishInfo } from "@/domains/forms";
@@ -15,16 +16,22 @@ import {
 import { aiConfigured } from "@/domains/ai/config";
 import { getWorkspacePlan } from "@/domains/billing";
 
+// The title and the page both need the draft: load it once per request.
+const loadDraft = cache(async (formId: string) => {
+  const { supabase, workspace } = await getCurrentWorkspace();
+  return getDraftForEdit(supabase, formId, workspace.id);
+});
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const { supabase, workspace } = await getCurrentWorkspace();
+  const { workspace } = await getCurrentWorkspace();
   // Viewers can't edit; their place is the form's responses.
   if (!canEdit(workspace.role)) redirect(`/forms/${id}/responses`);
-  const draft = await getDraftForEdit(supabase, id, workspace.id);
+  const draft = await loadDraft(id);
   return { title: draft ? `${draft.formTitle} · Build` : "Build" };
 }
 
@@ -39,13 +46,12 @@ export default async function FormBuilderPage({
   const { leadCapture, preview } = await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
 
-  const draft = await getDraftForEdit(supabase, id, workspace.id);
-  if (!draft) notFound();
-
-  const [publishInfo, { entitlements }] = await Promise.all([
+  const [draft, publishInfo, { entitlements }] = await Promise.all([
+    loadDraft(id),
     getPublishInfo(supabase, id),
     getWorkspacePlan(supabase, workspace.id),
   ]);
+  if (!draft) notFound();
 
   return (
     <FormBuilder
