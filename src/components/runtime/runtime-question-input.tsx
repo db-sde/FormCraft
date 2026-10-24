@@ -22,6 +22,11 @@ import {
   type ContactField,
 } from "@/domains/forms/schema/question-types";
 import { StageError } from "./stage";
+import {
+  describeAcceptedTypes,
+  precheckUpload,
+  uploadRefusalMessage,
+} from "@/domains/uploads/precheck";
 
 /** Radio item value for the "Other" choice only — never stored. */
 const OTHER_OPTION_ID = "__other__";
@@ -337,8 +342,10 @@ function SingleSelect({
                 value={selected.slice(OTHER_PREFIX.length)}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
-                  // Typing in the box must not move the radio selection.
-                  if (e.key !== "Enter" && e.key !== "Tab") e.stopPropagation();
+                  // Typing in the box must not move the radio selection,
+                  // and Enter must reach the form (it means "OK, next"):
+                  // the radio item around this box cancels Enter.
+                  if (e.key !== "Tab") e.stopPropagation();
                 }}
                 onChange={(e) => onChange(`${OTHER_PREFIX}${e.target.value}`)}
               />
@@ -441,7 +448,9 @@ function MultiSelect({
                 value={otherEntry.slice(OTHER_PREFIX.length)}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
-                  if (e.key === " ") e.stopPropagation();
+                  // Space types a space; Enter means "OK, next" — the
+                  // checkbox around this box would cancel it.
+                  if (e.key === " " || e.key === "Enter") e.stopPropagation();
                 }}
                 onChange={(e) =>
                   onChange(
@@ -756,16 +765,6 @@ function OpinionScale({
   );
 }
 
-function describeAccepted(mimeTypes: string[]): string {
-  const labels = mimeTypes.map((t) => {
-    if (t === "image/*") return "Images";
-    if (t === "application/pdf") return "PDF files";
-    if (t.endsWith("/*")) return `${t.slice(0, -2)} files`;
-    return t.split("/")[1]?.toUpperCase() ?? t;
-  });
-  return labels.join(", ");
-}
-
 const UPLOAD_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -787,14 +786,24 @@ function FileUploadInput({
   );
   const hasStoredFile = typeof value === "string" && value.length > 0;
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const accepted = describeAccepted(question.settings.acceptedMimeTypes);
+  const accepted = describeAcceptedTypes(question.settings.acceptedMimeTypes);
   const limits = `${accepted} · up to ${question.settings.maxSizeMb} MB`;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setFileName(file.name);
+
+    // Too big or the wrong kind: say so now, without uploading it.
+    const refused = precheckUpload(file, question.settings);
+    if (refused) {
+      setErrorMessage(refused);
+      setStatus("error");
+      if (!hasStoredFile) onChange(undefined);
+      return;
+    }
 
     if (!getResponseId) {
       // Preview mode: no network calls at all (see FormRuntime's
@@ -816,6 +825,10 @@ function FileUploadInput({
       if (!res.ok) {
         // Keep an earlier successful upload as the answer; only a field
         // with nothing valid in it goes back to empty.
+        const body = (await res.json().catch(() => null)) as {
+          error?: { code?: string };
+        } | null;
+        setErrorMessage(uploadRefusalMessage(body?.error?.code, question.settings));
         setStatus("error");
         if (!hasStoredFile) onChange(undefined);
         return;
@@ -826,6 +839,7 @@ function FileUploadInput({
       // file or a public URL — see docs/api.md.
       onChange(data.uploadId);
     } catch {
+      setErrorMessage(uploadRefusalMessage(undefined, question.settings));
       setStatus("error");
       if (!hasStoredFile) onChange(undefined);
     }
@@ -923,7 +937,7 @@ function FileUploadInput({
         )}
         <span className="text-[15px] font-semibold">
           {error
-            ? (fileName ?? "The upload failed")
+            ? (fileName ?? "Not uploaded")
             : dragging
               ? "Drop it here"
               : "Choose a file or drag it here"}
@@ -933,7 +947,7 @@ function FileUploadInput({
         </span>
         {picker}
       </label>
-      {error && <StageError>The upload failed. Try again.</StageError>}
+      {error && <StageError>{errorMessage}</StageError>}
     </div>
   );
 }

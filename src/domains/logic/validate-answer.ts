@@ -129,6 +129,20 @@ function isValidUrl(raw: string): boolean {
   }
 }
 
+/** A YYYY-MM-DD date the way the browser's own date field shows it (its
+ * locale's numeric format, e.g. 11/22/2026 in the US), so an error about
+ * a limit reads like the field next to it. */
+export function displayDate(iso: string, locale?: string): string {
+  const parsed = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
 function isValidDate(raw: string): boolean {
   if (!DATE_PATTERN.test(raw)) return false;
   const parsed = new Date(`${raw}T00:00:00Z`);
@@ -266,9 +280,9 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
       const { minDate, maxDate } = question.settings;
       // ISO YYYY-MM-DD strings compare correctly as plain strings.
       if (minDate && value < minDate)
-        return fail(`Choose a date on or after ${minDate}.`);
+        return fail(`Choose a date on or after ${displayDate(minDate)}.`);
       if (maxDate && value > maxDate)
-        return fail(`Choose a date on or before ${maxDate}.`);
+        return fail(`Choose a date on or before ${displayDate(maxDate)}.`);
       return OK;
     }
 

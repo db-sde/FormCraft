@@ -222,6 +222,13 @@ export function PublicFormRuntime({
   // while it was running and need their own save afterwards.
   const inFlightRef = useRef<Promise<void> | null>(null);
   const dirtyRef = useRef(false);
+  // The last revision the server confirmed, so leaving the page can tell
+  // whether anything is still unsaved.
+  const savedRevisionRef = useRef(0);
+  // Submitted: the response is done, and nothing may be saved (or kept
+  // in this browser) for it any more.
+  const submittedRef = useRef(false);
+  const viewSentRef = useRef(false);
   // Refs survive React Strict Mode's mount → unmount → mount in dev, so
   // both runs share one localStorage read and one /start request.
   const resumeCheckRef = useRef<Promise<StoredResponse | null> | null>(null);
@@ -310,22 +317,102 @@ export function PublicFormRuntime({
     };
   }, [compiled, savesProgress]);
 
+  // One view per page load, sent by the page itself (embeds included).
   useEffect(() => {
-    if (!embedded || window.parent === window) return;
+    if (viewSentRef.current) return;
+    viewSentRef.current = true;
+    const body = JSON.stringify({ formId, embedded });
+    try {
+      if (navigator.sendBeacon?.("/api/responses/view", body)) return;
+    } catch {
+      // fall through to fetch
+    }
+    void fetch("/api/responses/view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body,
+    }).catch(() => undefined);
+  }, [formId, embedded]);
+
+  // Leaving the page (closing the tab, navigating away, switching apps on
+  // a phone): send whatever hasn't been saved yet, in a request the
+  // browser finishes after the page is gone. The debounced save would
+  // otherwise be dropped, losing the last answer.
+  useEffect(() => {
+    if (!savesProgress) return;
+    function saveBeforeLeaving() {
+      if (submittedRef.current) return;
+      const pending = saveTimerRef.current !== null || dirtyRef.current;
+      const session = sessionRef.current;
+      if (!session || (!pending && session.revision <= savedRevisionRef.current)) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      dirtyRef.current = false;
+      // Bypasses the one-at-a-time queue on purpose: a save still in the
+      // air may be cut off with the page. This one claims a newer
+      // revision, so whichever arrives second is the stale one.
+      const claimed = updateSession({
+        ...progressRef.current,
+        revision: session.revision + 1,
+      });
+      if (!claimed) return;
+      void fetch(`/api/responses/${claimed.responseId}/answers`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          clientRevision: claimed.revision,
+          lastQuestionId: claimed.lastQuestionId,
+          answers: claimed.answers,
+        }),
+      }).catch(() => undefined);
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveBeforeLeaving();
+    };
+    window.addEventListener("pagehide", saveBeforeLeaving);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", saveBeforeLeaving);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+    // updateSession only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savesProgress, formId]);
+
+  // The page behind the form takes the theme's colour, so a frame (or a
+  // window) taller than the form shows no band of the app's own colour.
+  useEffect(() => {
+    const targets = [document.documentElement, document.body];
+    const before = targets.map((el) => el.style.backgroundColor);
+    targets.forEach((el) => (el.style.backgroundColor = theme.backgroundColor));
+    return () => targets.forEach((el, i) => (el.style.backgroundColor = before[i]));
+  }, [theme.backgroundColor]);
+
+  // Embedded: tell the host page how tall the form is, on load and on
+  // every change (each step, errors, follow-ups), so its iframe grows and
+  // shrinks to fit. Measured on the form itself: the document's scroll
+  // height can never be smaller than the iframe, so it only ever grew.
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const ready = resumed !== undefined;
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!embedded || !ready || !frame || window.parent === window) return;
     const report = () =>
       window.parent.postMessage(
         {
           type: "formcraft:height",
           formId,
-          height: document.documentElement.scrollHeight,
+          height: Math.ceil(frame.getBoundingClientRect().height),
         },
         "*",
       );
     const observer = new ResizeObserver(report);
-    observer.observe(document.body);
+    observer.observe(frame);
     report();
     return () => observer.disconnect();
-  }, [embedded, formId]);
+  }, [embedded, formId, ready]);
 
   useEffect(() => {
     let cancelled = false;
@@ -439,6 +526,9 @@ export function PublicFormRuntime({
     currentQuestionId: string,
     history: string[],
   ) {
+    // Moving to another question saves straight away; typing within one
+    // waits for a pause.
+    const movedOn = currentQuestionId !== progressRef.current.lastQuestionId;
     progressRef.current = { answers, lastQuestionId: currentQuestionId, history };
     ensureSession().then(
       () => {
@@ -446,7 +536,15 @@ export function PublicFormRuntime({
         if (!savesProgress) return;
         dirtyRef.current = true;
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => void flushSaves(), AUTOSAVE_DEBOUNCE_MS);
+        saveTimerRef.current = null;
+        if (movedOn) {
+          void flushSaves();
+          return;
+        }
+        saveTimerRef.current = setTimeout(() => {
+          saveTimerRef.current = null;
+          void flushSaves();
+        }, AUTOSAVE_DEBOUNCE_MS);
       },
       () => {
         // Offline for now — the next change (or the submit) tries again.
@@ -501,6 +599,9 @@ export function PublicFormRuntime({
         await saveLatest(retriesLeft - 1);
         return;
       }
+      if (res.ok) {
+        savedRevisionRef.current = Math.max(savedRevisionRef.current, claimed.revision);
+      }
       if (res.status === 404) {
         // The response itself is gone — nothing to continue.
         clearStored(formId);
@@ -525,6 +626,7 @@ export function PublicFormRuntime({
       };
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
     // Let any in-flight autosave land first; the submit carries every
     // answer itself, so pending (unsent) changes don't need their own save.
     dirtyRef.current = false;
@@ -560,6 +662,9 @@ export function PublicFormRuntime({
           paymentError?: string;
         };
         pixel("submit");
+        // Submitted: nothing left for leaving the page to save.
+        submittedRef.current = true;
+        savedRevisionRef.current = current.revision;
         if (data.paymentUrl) {
           // Answers are saved; payment happens on Stripe, and the form
           // only shows it as paid once Stripe confirms (P2.17).
@@ -603,6 +708,7 @@ export function PublicFormRuntime({
       const session = await ensureSession({ force: true });
       // The link should open with everything answered so far.
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
       dirtyRef.current = true;
       await flushSaves();
       const res = await fetch(`/api/responses/${session.responseId}/resume-link`, {
@@ -663,6 +769,7 @@ export function PublicFormRuntime({
 
   return (
     <div
+      ref={frameRef}
       dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
       className="relative"
     >

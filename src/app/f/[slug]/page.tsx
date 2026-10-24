@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { after } from "next/server";
 import { cookies, headers } from "next/headers";
 import { getPublicFormBySlug } from "@/domains/forms";
-import { recordAnalyticsEvent } from "@/domains/analytics";
-import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { isLikelyBot } from "@/lib/http/bots";
 import { PublicFormRuntime } from "./public-form-runtime";
 import { TrackingScripts } from "./tracking-scripts";
 import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
@@ -125,9 +120,8 @@ export default async function PublicFormPage({
   // - progressive profiling: answers this visitor already gave to "ask
   //   once" questions on this workspace's forms;
   // - external data (phase 24): which questions trigger a lookup;
-  // - the unfinished response a resume link points at;
-  // - who's looking (a member viewing their own form isn't a "view").
-  const [known, lookup, resume, viewer] = await Promise.all([
+  // - the unfinished response a resume link points at.
+  const [known, lookup, resume] = await Promise.all([
     VISITOR_ID_PATTERN.test(visitorId)
       ? knownAnswersFor(
           createAdminClient(),
@@ -140,21 +134,11 @@ export default async function PublicFormPage({
     typeof query[RESUME_PARAM] === "string"
       ? resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
       : null,
-    createServerSupabaseClient().then(
-      async (client) => (await client.auth.getUser()).data.user,
-    ),
   ]);
 
-  // A view is counted on every render of this page, including a
-  // refresh mid-response — distinct from a start, which is the first
-  // interaction (see /api/responses/start). Not counted: crawlers and
-  // link-preview fetchers (sharing a link in chat apps makes their
-  // servers load it), and members of the form's own workspace looking
-  // at their live form. Request details must be read before after();
-  // analytics must never affect the page render, so everything after
-  // that is best-effort.
+  // Views are counted by the page itself once it loads (see
+  // /api/responses/view), not here: a server render isn't always a view.
   const requestHeaders = await headers();
-  const userAgent = requestHeaders.get("user-agent");
   // Languages (P2.21) only on a plan that includes them.
   const offered = entitlements.multilingual
     ? formLanguages(compiled.schema)
@@ -162,42 +146,6 @@ export default async function PublicFormPage({
   const language = entitlements.multilingual
     ? pickLanguage(compiled.schema, query.lang, requestHeaders.get("accept-language"))
     : offered[0];
-  const countsAsView = !isLikelyBot(userAgent);
-
-  after(async () => {
-    if (!countsAsView) return;
-    const admin = createAdminClient();
-    try {
-      if (viewer) {
-        const { data: form } = await admin
-          .from("forms")
-          .select("workspace_id")
-          .eq("id", publicForm.formId)
-          .single();
-        const { data: membership } = form
-          ? await admin
-              .from("workspace_members")
-              .select("user_id")
-              .eq("workspace_id", form.workspace_id)
-              .eq("user_id", viewer.id)
-              .maybeSingle()
-          : { data: null };
-        if (membership) return; // the creator checking their own form
-      }
-      await recordAnalyticsEvent(admin, {
-        formId: publicForm.formId,
-        eventType: "form_viewed",
-        metadata: { embedded },
-      });
-    } catch {
-      // Swallow — see comment above.
-    }
-    await captureServerEvent({
-      distinctId: crypto.randomUUID(),
-      event: "form_viewed",
-      properties: { formId: publicForm.formId, embedded },
-    });
-  });
 
   return (
     <div className={embedded ? undefined : "min-h-screen"}>

@@ -127,7 +127,10 @@ test("a file that isn't really a PNG is refused and can't satisfy the question",
       mimeType: "image/png",
       buffer: Buffer.from("#!/bin/sh\necho not an image\n"),
     });
-    await expect(page.getByText("The upload failed. Try again.")).toBeVisible();
+    // The server sniffs the real type and says what's allowed (QA FC-10).
+    await expect(
+      page.getByText(/That kind of file can't be uploaded here/),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "OK" }).click();
     // Still on the same question: nothing valid was attached.
