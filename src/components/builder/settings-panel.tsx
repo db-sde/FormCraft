@@ -59,7 +59,10 @@ export function SettingsPanel({
   formId,
   invalid = false,
   earlierChoices = [],
+  aiAvailable = false,
 }: {
+  /** The server has an AI key (AI features are hidden otherwise). */
+  aiAvailable?: boolean;
   /** Earlier choice questions this one could take its options from. */
   earlierChoices?: { id: string; number: number; label: string }[];
   /** For uploading a welcome/statement image. */
@@ -267,17 +270,20 @@ export function SettingsPanel({
               }
             />
           </PanelField>
-          <SwitchRow
-            label="AI follow-up"
-            hint="Ask one optional follow-up about what they wrote. Uses an AI credit each time; their answer is sent to the AI."
-            checked={question.settings.aiFollowUp ?? false}
-            onCheckedChange={(aiFollowUp) =>
-              onChange({
-                ...question,
-                settings: { ...question.settings, aiFollowUp: aiFollowUp || undefined },
-              })
-            }
-          />
+          {/* Shown when AI is set up, or to switch off one that's on. */}
+          {(aiAvailable || question.settings.aiFollowUp) && (
+            <SwitchRow
+              label="AI follow-up"
+              hint="Ask one optional follow-up about what they wrote. Uses an AI credit each time; their answer is sent to the AI."
+              checked={question.settings.aiFollowUp ?? false}
+              onCheckedChange={(aiFollowUp) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, aiFollowUp: aiFollowUp || undefined },
+                })
+              }
+            />
+          )}
         </>
       )}
 

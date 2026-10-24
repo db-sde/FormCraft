@@ -83,6 +83,17 @@ async function fetchLeads(
   return data ?? [];
 }
 
+/** How many leads a form has — for warning before the form is deleted
+ * (its leads go with it). */
+export async function countLeadsForForm(
+  supabase: Client,
+  workspaceId: string,
+  formId: string,
+): Promise<number> {
+  const rows = await fetchLeads(supabase, workspaceId, { formId, limit: 1, offset: 0 });
+  return Number(rows[0]?.total_count ?? 0);
+}
+
 /**
  * Everyone who left contact details in a lead-capture block, across the
  * workspace's forms (or one form), newest first — including respondents

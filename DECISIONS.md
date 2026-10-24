@@ -637,7 +637,8 @@ was fixed. Anything here that contradicts an older entry replaces it.
   "answered" means the same everywhere (logic, exports, drop-off).
 - **Funnel:** views come from events, starts and completions from
   `responses` (by start date), so the three numbers describe one cohort.
-  Bots and the form's own workspace members don't count as views.
+  Bots don't count as views. (Workspace members used to be excluded
+  from views but not starts; superseded 2026-10-24, see below.)
 
 **Tenancy and abuse**
 
@@ -1302,5 +1303,46 @@ Also trimmed what each page asks for:
   rather than whole schemas, and its queries run together. The builder
   loads a form and its draft in one request, once per render; the
   dashboard's lists load together.
+
+## 2026-10-24 — QA retest fixes (FC-01…FC-21)
+
+From the QA handover of 23 Oct 2026. The choices that change behaviour:
+
+- **Views are sent by the page** (`/api/responses/view`, a beacon once
+  the form has loaded), not recorded when the server renders it — a
+  render isn't always a view. **Everyone counts, the form's own
+  creators included**: they were excluded from views but not from
+  starts, which is how Starts reached 350% of Views when QA tested
+  signed in. Bots are still skipped; the form must be live.
+- **Answers are saved on every step**, not only after the 600 ms pause,
+  and anything unsaved is sent with a `keepalive` request when the page
+  is hidden or closed. The exit save bypasses the one-at-a-time queue
+  on purpose (an in-flight save may be cut off) and claims a newer
+  revision, so whichever arrives second is the stale one. Leaving
+  within the first round trip of the very first answer can still lose
+  it: there's no response id yet to save against.
+- **Features that need server setup are hidden until it exists** —
+  email notifications and confirmation emails (`RESEND_API_KEY`), Google
+  Sheets (`GOOGLE_OAUTH_*`), AI (`ANTHROPIC_API_KEY`: form generation,
+  insights, copilot, follow-up toggle, AI credits meter). Without
+  Sheets, the last "Getting started" step is "Get your first response".
+- **Responses table shows every question** (it scrolls sideways); no
+  pinned column, because a sticky cell would trap the link that makes
+  each row clickable. Endings render recall for that response (table,
+  detail, CSV); the Summary aggregates many people, so it names tokens
+  (`[score]`). CSV gets one column per result variable and a UTF-8 BOM
+  (download routes only; `toCsv` output is unchanged).
+- **Builder deletes are undone, not confirmed**: an Undo toast for 8 s
+  restores the exact earlier schema — unless the form has been edited
+  since, in which case it says so rather than dropping the newer edit.
+  Unpublish (dashboard and builder) asks first.
+- **A never-published form's link follows its name** when the link is
+  still the one made from the old name; a chosen link, or one that has
+  been live, never changes.
+- **Publish button**: "Publish" / "Publish changes" / disabled
+  "Published" — never "Republish". Edits still saving count as changes.
+- **NPS template** is now a logic template: a follow-up and an ending
+  per group, and an `nps_group` result. Hosted projects need
+  `npm run db:seed-templates` run against them to get it.
 
 <!-- Add new decisions above this line, newest first. -->

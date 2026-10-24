@@ -179,6 +179,9 @@ export default async function IntegrationsPage({
   const sheetsSyncLog = sheetsConnection
     ? await listSyncLog(supabase, sheetsConnection.id)
     : [];
+  // Features that need server setup aren't offered until it's done.
+  const sheetsAvailable = isGoogleOAuthConfigured();
+  const emailAvailable = Boolean(process.env.RESEND_API_KEY);
   const sheetsBanner = sheetsError
     ? (SHEETS_ERRORS[sheetsError] ?? SHEETS_ERRORS.exchange_failed)
     : null;
@@ -208,51 +211,53 @@ export default async function IntegrationsPage({
         />
       </Section>
 
-      <Section
-        icon={<Sheet />}
-        tint="live"
-        title="Google Sheets"
-        description="Add a row to a spreadsheet each time someone completes this form."
-      >
-        <div className="flex flex-col gap-3.5">
-          {sheetsConnected && (
-            <div
-              role="status"
-              className="flex gap-2.5 rounded-sm border-[1.5px] border-[var(--alert-success-border)] bg-[var(--alert-success-bg)] px-3 py-[11px] text-[13.5px] text-[var(--alert-success-fg)]"
-            >
-              <CircleCheck className="mt-px size-[17px] shrink-0" />
-              <span>
-                <b>Google Sheets connected.</b> Add a spreadsheet ID below to start
-                syncing.
-              </span>
-            </div>
-          )}
-          {sheetsBanner && (
-            <div
-              role="alert"
-              className={cn(
-                "flex gap-2.5 rounded-sm border-[1.5px] px-3 py-[11px] text-[13.5px] leading-[1.45]",
-                sheetsBanner.tone === "warning"
-                  ? "border-warning bg-[var(--chip-draft-bg)] text-[var(--chip-draft-fg)]"
-                  : "border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] text-[var(--alert-error-fg)]",
-              )}
-            >
-              {sheetsBanner.tone === "warning" ? (
-                <ShieldX className="mt-px size-[17px] shrink-0" />
-              ) : (
-                <CircleAlert className="mt-px size-[17px] shrink-0" />
-              )}
-              <span>{sheetsBanner.text}</span>
-            </div>
-          )}
-          <SheetsPanel
-            formId={formId}
-            configured={isGoogleOAuthConfigured()}
-            connection={sheetsConnection}
-            initialSyncLog={sheetsSyncLog}
-          />
-        </div>
-      </Section>
+      {sheetsAvailable && (
+        <Section
+          icon={<Sheet />}
+          tint="live"
+          title="Google Sheets"
+          description="Add a row to a spreadsheet each time someone completes this form."
+        >
+          <div className="flex flex-col gap-3.5">
+            {sheetsConnected && (
+              <div
+                role="status"
+                className="flex gap-2.5 rounded-sm border-[1.5px] border-[var(--alert-success-border)] bg-[var(--alert-success-bg)] px-3 py-[11px] text-[13.5px] text-[var(--alert-success-fg)]"
+              >
+                <CircleCheck className="mt-px size-[17px] shrink-0" />
+                <span>
+                  <b>Google Sheets connected.</b> Add a spreadsheet ID below to start
+                  syncing.
+                </span>
+              </div>
+            )}
+            {sheetsBanner && (
+              <div
+                role="alert"
+                className={cn(
+                  "flex gap-2.5 rounded-sm border-[1.5px] px-3 py-[11px] text-[13.5px] leading-[1.45]",
+                  sheetsBanner.tone === "warning"
+                    ? "border-warning bg-[var(--chip-draft-bg)] text-[var(--chip-draft-fg)]"
+                    : "border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] text-[var(--alert-error-fg)]",
+                )}
+              >
+                {sheetsBanner.tone === "warning" ? (
+                  <ShieldX className="mt-px size-[17px] shrink-0" />
+                ) : (
+                  <CircleAlert className="mt-px size-[17px] shrink-0" />
+                )}
+                <span>{sheetsBanner.text}</span>
+              </div>
+            )}
+            <SheetsPanel
+              formId={formId}
+              configured={sheetsAvailable}
+              connection={sheetsConnection}
+              initialSyncLog={sheetsSyncLog}
+            />
+          </div>
+        </Section>
+      )}
 
       <Section
         icon={<MessageSquare />}
@@ -342,23 +347,25 @@ export default async function IntegrationsPage({
         />
       </Section>
 
-      <Section
-        icon={<MailCheck />}
-        tint="text"
-        title="Confirmation email"
-        description="Email respondents a copy or a thank-you after they submit."
-      >
-        <ConfirmationPanel
-          formId={formId}
-          initial={confirmation}
-          allowed={entitlements.confirmation_emails}
-          emailConfigured={Boolean(process.env.RESEND_API_KEY)}
-          emailQuestions={(schema ? emailQuestions(schema) : []).map((q) => ({
-            id: q.id,
-            label: `${numbered.find((x) => x.question.id === q.id)?.number ?? ""} · ${q.label.trim() || "Untitled"}`,
-          }))}
-        />
-      </Section>
+      {emailAvailable && (
+        <Section
+          icon={<MailCheck />}
+          tint="text"
+          title="Confirmation email"
+          description="Email respondents a copy or a thank-you after they submit."
+        >
+          <ConfirmationPanel
+            formId={formId}
+            initial={confirmation}
+            allowed={entitlements.confirmation_emails}
+            emailConfigured={emailAvailable}
+            emailQuestions={(schema ? emailQuestions(schema) : []).map((q) => ({
+              id: q.id,
+              label: `${numbered.find((x) => x.question.id === q.id)?.number ?? ""} · ${q.label.trim() || "Untitled"}`,
+            }))}
+          />
+        </Section>
+      )}
 
       <Section
         icon={<ChartLine />}
@@ -377,19 +384,21 @@ export default async function IntegrationsPage({
         />
       </Section>
 
-      <Section
-        icon={<Bell />}
-        tint="text"
-        title="Email notifications"
-        description="Get an email for each completed response."
-      >
-        <NotificationsPanel
-          formId={formId}
-          initialEnabled={notificationsEnabled}
-          ownerEmail={user.email ?? ""}
-          emailConfigured={Boolean(process.env.RESEND_API_KEY)}
-        />
-      </Section>
+      {emailAvailable && (
+        <Section
+          icon={<Bell />}
+          tint="text"
+          title="Email notifications"
+          description="Get an email for each completed response."
+        >
+          <NotificationsPanel
+            formId={formId}
+            initialEnabled={notificationsEnabled}
+            ownerEmail={user.email ?? ""}
+            emailConfigured={emailAvailable}
+          />
+        </Section>
+      )}
     </div>
   );
 }

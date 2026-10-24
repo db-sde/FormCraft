@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/lib/toast";
+import { ButtonSpinner } from "@/components/ui/button";
 import { cn } from "cn";
 
 export type FolderFilter = "all" | "none" | string;
@@ -141,6 +142,7 @@ export function FolderBar({
               value={name}
               maxLength={80}
               placeholder="Folder name"
+              readOnly={pending}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => !name && setCreating(false)}
               className="border-input bg-field h-8 w-[160px] rounded-sm border-[1.5px] px-2 text-[13px]"
@@ -148,9 +150,12 @@ export function FolderBar({
             <button
               type="submit"
               disabled={pending || !name.trim()}
-              className="fc-focus h-8 rounded-sm px-2.5 text-[13px] font-semibold"
+              aria-busy={pending || undefined}
+              className="fc-focus flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-semibold disabled:opacity-60"
             >
-              Add
+              {/* Saving takes a moment; show it straight away. */}
+              {pending && <ButtonSpinner className="size-3.5" />}
+              {pending ? "Adding…" : "Add"}
             </button>
           </form>
         ) : (

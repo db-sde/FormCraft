@@ -38,10 +38,12 @@ export function ThemeSettingsPanel({
   theme: ThemeV1;
   workspaceId: string;
   formId: string;
-  onChange: (next: ThemeV1) => void;
+  /** A new theme, or a change to apply to the latest one — uploads
+   * finish later, and two at once mustn't overwrite each other. */
+  onChange: (next: ThemeV1 | ((current: ThemeV1) => ThemeV1)) => void;
 }) {
   const set = (patch: Partial<ThemeV1>) =>
-    onChange({ ...theme, ...patch, preset: undefined });
+    onChange((current) => ({ ...current, ...patch, preset: undefined }));
 
   const text = stageTextColor(theme);
   const ratio =
@@ -198,7 +200,7 @@ export function ThemeSettingsPanel({
         workspaceId={workspaceId}
         formId={formId}
         value={theme.logoUrl}
-        onChange={(logoUrl) => onChange({ ...theme, logoUrl })}
+        onChange={(logoUrl) => onChange((current) => ({ ...current, logoUrl }))}
       />
       <ImageUploadField
         label="Background image"
@@ -207,7 +209,9 @@ export function ThemeSettingsPanel({
         workspaceId={workspaceId}
         formId={formId}
         value={theme.backgroundImageUrl}
-        onChange={(backgroundImageUrl) => onChange({ ...theme, backgroundImageUrl })}
+        onChange={(backgroundImageUrl) =>
+          onChange((current) => ({ ...current, backgroundImageUrl }))
+        }
       />
     </div>
   );

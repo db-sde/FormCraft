@@ -23,7 +23,10 @@ export function DeleteResponseButton({
   redirectTo,
   who,
   variant = "icon",
+  noun = "response",
 }: {
+  /** What's being deleted, as the person sees it (a lead is a response). */
+  noun?: "response" | "lead";
   formId: string;
   responseId: string;
   /** Whose answers, for the confirmation ("Maya Rao's answers…"). */
@@ -45,11 +48,11 @@ export function DeleteResponseButton({
       const result = await deleteResponseAction(formId, responseId);
       setOpen(false);
       if (result.ok) {
-        toast.success("Response deleted.");
+        toast.success(noun === "lead" ? "Lead deleted." : "Response deleted.");
         if (redirectTo) router.push(redirectTo);
         else router.refresh();
       } else {
-        toast.error("Couldn't delete that response.", {
+        toast.error(`Couldn't delete that ${noun}.`, {
           description: "Nothing was removed. Try again.",
         });
       }
@@ -67,7 +70,7 @@ export function DeleteResponseButton({
             ? "text-destructive hover:text-destructive size-9"
             : "text-destructive hover:text-destructive hover:bg-hover-wash-strong size-8"
         }
-        aria-label="Delete response"
+        aria-label={noun === "lead" ? "Delete lead" : "Delete response"}
         onClick={() => setOpen(true)}
       >
         <Trash2 className="size-4" />
@@ -75,10 +78,11 @@ export function DeleteResponseButton({
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this response?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this {noun}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {who ? `${who}'s answers` : "These answers"} will be removed for good,
-              including any uploaded files. This can&apos;t be undone.
+              {noun === "lead"
+                ? `${who || "This person"}'s contact details and the rest of their answers to the form will be removed for good, including any uploaded files. This can't be undone.`
+                : `${who ? `${who}'s answers` : "These answers"} will be removed for good, including any uploaded files. This can't be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

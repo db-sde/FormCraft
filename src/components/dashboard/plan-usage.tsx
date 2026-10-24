@@ -72,7 +72,16 @@ function Meter({
 /** Settings → Plan (PRD §7–8): what the workspace's plan includes and
  * what it has used this month. Plans are changed by an admin for now
  * (no checkout); see DECISIONS.md. */
-export function PlanUsage({ plan, usage }: { plan: WorkspacePlan; usage: Usage }) {
+export function PlanUsage({
+  plan,
+  usage,
+  aiAvailable,
+}: {
+  plan: WorkspacePlan;
+  usage: Usage;
+  /** AI credits mean nothing until the server has an AI key. */
+  aiAvailable: boolean;
+}) {
   const e: Entitlements = plan.entitlements;
   const warnings = usageWarnings(usage, e);
   const month = new Date(`${usage.periodStart}T00:00:00Z`).toLocaleString("en", {
@@ -103,11 +112,13 @@ export function PlanUsage({ plan, usage }: { plan: WorkspacePlan; usage: Usage }
             used={usage.completedResponses}
             limit={e.responses_per_month}
           />
-          <Meter
-            label="AI credits"
-            used={usage.aiCredits}
-            limit={e.ai_credits_per_month}
-          />
+          {aiAvailable && (
+            <Meter
+              label="AI credits"
+              used={usage.aiCredits}
+              limit={e.ai_credits_per_month}
+            />
+          )}
           <Meter label="Members" used={usage.members} limit={e.members} />
           <Meter
             label="File storage"

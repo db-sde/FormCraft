@@ -43,6 +43,10 @@ function escapeCsvCell(rawValue: unknown): string {
   return `"${neutralized.replace(/"/g, '""')}"`;
 }
 
+/** Prepended to downloaded CSV files: without it Excel reads them as
+ * the system's legacy encoding and garbles any non-ASCII text. */
+export const CSV_BOM = "\uFEFF";
+
 /**
  * Serializes rows to CSV, UTF-8, one response per row, stable column
  * order taken from `columns`. Multi-choice answers should already be

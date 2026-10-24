@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
   Contact,
   Ellipsis,
@@ -217,7 +218,9 @@ export function FormBuilder({
   onRename: (
     formId: string,
     title: string,
-  ) => Promise<{ ok: true; title: string } | { ok: false; message: string }>;
+  ) => Promise<
+    { ok: true; title: string; slug?: string } | { ok: false; message: string }
+  >;
 }) {
   // Arriving via "Add lead capture" inserts the block straight away (it
   // autosaves like any other edit) and selects it.
@@ -266,6 +269,8 @@ export function FormBuilder({
   // screen's title for as long as the two are the same, so a form is
   // named once; renaming it to something else in the top bar unlinks them.
   const [formName, setFormName] = useState(formTitle);
+  // The public link: until a form is first published it follows the name.
+  const [liveSlug, setLiveSlug] = useState(slug);
   const nameLinkedRef = useRef(
     initialSchema.questions.find((q) => q.type === "welcome_screen")?.label.trim() ===
       formTitle.trim(),
@@ -435,7 +440,13 @@ export function FormBuilder({
     if (followsTitle) {
       setFormName(title);
       if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
-      renameTimerRef.current = setTimeout(() => void onRename(formId, title), 600);
+      renameTimerRef.current = setTimeout(
+        () =>
+          void onRename(formId, title).then((r) => {
+            if (r.ok && r.slug) setLiveSlug(r.slug);
+          }),
+        600,
+      );
     }
     setSchema((s) => ({
       ...s,
@@ -451,8 +462,11 @@ export function FormBuilder({
     }));
   }
 
-  function updateTheme(next: ThemeV1) {
-    setSchema((s) => ({ ...s, theme: next }));
+  function updateTheme(next: ThemeV1 | ((current: ThemeV1) => ThemeV1)) {
+    setSchema((s) => ({
+      ...s,
+      theme: typeof next === "function" ? next(s.theme) : next,
+    }));
   }
 
   function updateLogic(patch: Partial<FormSchemaV1>) {
@@ -545,9 +559,44 @@ export function FormBuilder({
     commitDeleteQuestion(id);
   }
 
+  /** A delete can be taken back for a few seconds: Undo puts the form
+   * back exactly as it was — the item, its place and any logic that went
+   * with it — unless it has been edited again since. */
+  function offerUndo(what: string, before: FormSchemaV1, after: FormSchemaV1) {
+    const selectionBefore = selection;
+    toast(`${what} deleted`, {
+      duration: 8000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (latestSchemaRef.current !== after) {
+            toast.error("Couldn't undo", {
+              description: "The form has changed since. Add it again instead.",
+            });
+            return;
+          }
+          setSchema(before);
+          setSelection(selectionBefore);
+        },
+      },
+    });
+  }
+
   function commitDeleteQuestion(id: string) {
-    setSchema((s) =>
-      removeQuestionReferences({ ...s, questions: removeQuestion(s.questions, id) }, id),
+    const question = schema.questions.find((q) => q.id === id);
+    const after = removeQuestionReferences(
+      { ...schema, questions: removeQuestion(schema.questions, id) },
+      id,
+    );
+    setSchema(after);
+    offerUndo(
+      question?.type === "welcome_screen"
+        ? "Welcome screen"
+        : question?.type === "statement"
+          ? "Statement"
+          : "Question",
+      schema,
+      after,
     );
     if (selection.kind === "question" && selection.id === id) {
       const remaining = removeQuestion(schema.questions, id);
@@ -578,9 +627,12 @@ export function FormBuilder({
   }
 
   function commitDeleteEnding(id: string) {
-    setSchema((s) =>
-      removeEndingReferences({ ...s, endings: removeEnding(s.endings, id) }, id),
+    const after = removeEndingReferences(
+      { ...schema, endings: removeEnding(schema.endings, id) },
+      id,
     );
+    setSchema(after);
+    offerUndo("Ending", schema, after);
     if (selection.kind === "ending" && selection.id === id) {
       const remaining =
         schema.endings.find((e) => e.isDefault && e.id !== id) ?? schema.endings[0];
@@ -704,11 +756,11 @@ export function FormBuilder({
       // The link is what's needed next. The first publish puts it on the
       // clipboard; later ones offer it (never overwriting the clipboard
       // unasked a second time).
-      const link = publicFormUrl(slug);
+      const link = publicFormUrl(liveSlug);
       const copy = () => navigator.clipboard.writeText(link);
       const viewLive = {
         label: "View live",
-        onClick: () => window.open(`/f/${slug}`, "_blank", "noopener"),
+        onClick: () => window.open(`/f/${liveSlug}`, "_blank", "noopener"),
       };
       const copied = publishInfo.isPublished
         ? false
@@ -740,7 +792,10 @@ export function FormBuilder({
     }
   }
 
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+
   async function handleUnpublish() {
+    setConfirmUnpublish(false);
     setPublishing(true);
     const result = await onUnpublish(formId);
     setPublishing(false);
@@ -784,14 +839,22 @@ export function FormBuilder({
   }
 
   const isLive = publishInfo.isPublished;
-  const hasChanges = publishInfo.hasUnpublishedChanges;
+  // Edits still on their way to the server count as changes too, so the
+  // button doesn't flip back and forth while each one saves.
+  const hasChanges =
+    publishInfo.hasUnpublishedChanges ||
+    (isLive &&
+      (saveState === "saving" || saveState === "error" || saveState === "invalid"));
+  // One label per state: there's nothing to publish when the live form
+  // is already up to date.
+  const upToDate = isLive && !hasChanges && !publishing;
   const publishLabel = publishing
     ? "Publishing…"
     : !isLive
       ? "Publish"
       : hasChanges
         ? "Publish changes"
-        : "Republish";
+        : "Published";
 
   // Respondent-facing numbers: every step after the welcome screen.
   const numbers = new Map<string, number>();
@@ -848,8 +911,23 @@ export function FormBuilder({
               if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
               const result = await onRename(formId, title);
               if (result.ok) {
+                if (result.slug) setLiveSlug(result.slug);
                 const welcome = schema.questions.find((q) => q.type === "welcome_screen");
-                nameLinkedRef.current = welcome?.label.trim() === result.title;
+                // A welcome screen still showing the old name (or the
+                // placeholder one) takes the new name too.
+                const welcomeFollows =
+                  !!welcome &&
+                  (nameLinkedRef.current || welcome.label.trim() === UNNAMED_FORM);
+                if (welcome && welcomeFollows) {
+                  setSchema((s) => ({
+                    ...s,
+                    questions: s.questions.map((q) =>
+                      q.id === welcome.id ? { ...q, label: result.title } : q,
+                    ),
+                  }));
+                }
+                nameLinkedRef.current =
+                  welcomeFollows || welcome?.label.trim() === result.title;
                 setFormName(result.title);
               }
               return result;
@@ -907,7 +985,7 @@ export function FormBuilder({
               </Tooltip>
               <SharePopover
                 formId={formId}
-                slug={slug}
+                slug={liveSlug}
                 title={currentTitle}
                 description={schema.meta.description}
                 primaryColor={schema.theme.primaryColor}
@@ -932,10 +1010,11 @@ export function FormBuilder({
               isLive && !hasChanges && !publishing && "border-input shadow-none",
               publishing && "bg-accent shadow-none",
             )}
-            disabled={publishing}
+            disabled={publishing || upToDate}
             onClick={handlePublish}
           >
             {publishing && <ButtonSpinner />}
+            {upToDate && <Check />}
             {publishLabel}
           </Button>
           <DropdownMenu>
@@ -953,7 +1032,7 @@ export function FormBuilder({
               <DropdownMenuItem
                 variant="destructive"
                 disabled={!isLive || publishing}
-                onSelect={() => void handleUnpublish()}
+                onSelect={() => setConfirmUnpublish(true)}
               >
                 <EyeOff /> Unpublish
               </DropdownMenuItem>
@@ -1280,6 +1359,7 @@ export function FormBuilder({
                   formId={formId}
                   question={selectedQuestion}
                   invalid={!!selectedProblem}
+                  aiAvailable={aiEnabled}
                   onChange={updateQuestion}
                   onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
                   earlierChoices={numberedQuestions(schema)
@@ -1365,7 +1445,7 @@ export function FormBuilder({
             disabled={!isLive}
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(publicFormUrl(slug));
+                await navigator.clipboard.writeText(publicFormUrl(liveSlug));
                 toast.success("Link copied.", {
                   description: "Paste it anywhere to share.",
                 });
@@ -1386,6 +1466,27 @@ export function FormBuilder({
           </p>
         )}
       </div>
+
+      <AlertDialog open={confirmUnpublish} onOpenChange={setConfirmUnpublish}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <EyeOff />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Unpublish this form?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its public link and any embeds stop working straight away. Your form and its
+              responses are kept, and you can publish it again whenever you like.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it live</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleUnpublish()}>
+              Unpublish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={pendingTypeChange !== null}

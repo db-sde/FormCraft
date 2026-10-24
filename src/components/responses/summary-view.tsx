@@ -13,6 +13,11 @@ const fmt = (n: number | null, digits = 1) =>
   n === null ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(digits);
 
 /** Per-question charts for completed responses (Part 5 §B). */
+/** The table column for a question, as a link target. */
+export function responseColumnId(questionId: string): string {
+  return `col-${questionId}`;
+}
+
 export function SummaryView({
   summary,
   tableHref,
@@ -68,7 +73,7 @@ function SummaryCard({
       {q.answered === 0 ? (
         <p className="text-muted-foreground text-sm">No answers yet.</p>
       ) : (
-        <Body q={q} tableHref={tableHref} />
+        <Body q={q} tableHref={`${tableHref}#${responseColumnId(q.questionId)}`} />
       )}
     </section>
   );

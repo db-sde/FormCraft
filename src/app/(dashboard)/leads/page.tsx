@@ -9,7 +9,6 @@ import { Pagination } from "@/components/shared/pagination";
 import { FormFilter } from "@/components/dashboard/form-filter";
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -21,6 +20,9 @@ import {
 import type { Metadata } from "next";
 import { responseActivity } from "@/domains/responses/activity";
 import { ActivityChip } from "@/components/responses/activity-chip";
+import { DeleteResponseButton } from "@/components/responses/delete-response-button";
+import { LeadsSearch } from "@/components/dashboard/leads-search";
+import { canEdit } from "@/domains/workspaces";
 
 export const metadata: Metadata = { title: "Leads" };
 
@@ -31,6 +33,7 @@ export default async function LeadsPage({
 }) {
   const { page: pageParam, form: formParam, q } = await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
+  const editable = canEdit(workspace.role);
   const forms = await listFormsForWorkspace(supabase, workspace.id);
   const formId = forms.some((f) => f.id === formParam) ? formParam : undefined;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -60,16 +63,7 @@ export default async function LeadsPage({
 
       {forms.length > 0 && (
         <div className="mb-[22px] flex flex-col gap-3 sm:flex-row">
-          <form action="/leads" className="flex-1 sm:max-w-xs">
-            {formId && <input type="hidden" name="form" value={formId} />}
-            <Input
-              type="search"
-              name="q"
-              defaultValue={q ?? ""}
-              placeholder="Search name, email, phone…"
-              aria-label="Search leads"
-            />
-          </form>
+          <LeadsSearch formId={formId} initial={q ?? ""} />
           <FormFilter
             forms={forms.map((f) => ({ id: f.id, title: f.title }))}
             value={formId}
@@ -122,6 +116,11 @@ export default async function LeadsPage({
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden xl:table-cell">Source</TableHead>
                   <TableHead className="whitespace-nowrap">Captured</TableHead>
+                  {editable && (
+                    <TableHead className="w-12">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -179,6 +178,16 @@ export default async function LeadsPage({
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       <LocalTime iso={lead.capturedAt} variant="relative" />
                     </TableCell>
+                    {editable && (
+                      <TableCell className="relative z-10 px-2 text-right">
+                        <DeleteResponseButton
+                          formId={lead.formId}
+                          responseId={lead.responseId}
+                          who={lead.name || lead.email || undefined}
+                          noun="lead"
+                        />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

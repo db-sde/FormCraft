@@ -812,7 +812,112 @@ const eligibility: LogicTemplate = {
   },
 };
 
+/** The classic loyalty question, with the follow-up and the ending that
+ * fit each group: detractors (0–6), passives (7–8), promoters (9–10).
+ * The group is kept as a result, so it shows in Responses and the CSV. */
+const nps: LogicTemplate = {
+  title: "Net Promoter Score (NPS)",
+  category: "Feedback",
+  description:
+    "The classic 0–10 loyalty question, with a different follow-up and ending for promoters, passives and detractors.",
+  schema: {
+    schemaVersion: 1,
+    meta: { title: "Net Promoter Score (NPS)" },
+    theme,
+    variables: [{ id: "v_group", name: "nps_group", type: "string", initial: "passive" }],
+    endings: [
+      {
+        id: "e_passive",
+        title: "Thanks for your feedback!",
+        description: "It helps us decide what to work on next.",
+        isDefault: true,
+      },
+      {
+        id: "e_promoter",
+        title: "Thank you, that means a lot!",
+        description: "If you have a minute, a review would help others find us.",
+      },
+      {
+        id: "e_detractor",
+        title: "Thanks for being honest",
+        description: "We read every answer, and we'll use yours to do better.",
+      },
+    ],
+    questions: [
+      {
+        id: "q_score",
+        type: "opinion_scale",
+        order: 0,
+        label: "How likely are you to recommend us to a friend or colleague?",
+        required: true,
+        settings: { min: 0, max: 10, leftLabel: "Not likely", rightLabel: "Very likely" },
+      },
+      {
+        id: "q_detractor",
+        type: "long_text",
+        order: 1,
+        label: "We're sorry to hear that. What could we have done better?",
+        required: false,
+        settings: {},
+        visibleIf: cmp(ans("q_score"), "lte", lit(6)),
+      },
+      {
+        id: "q_passive",
+        type: "long_text",
+        order: 2,
+        label: "What would make us a 9 or 10 for you?",
+        required: false,
+        settings: {},
+        visibleIf: cmp(ans("q_score"), "between", lit(7), lit(8)),
+      },
+      {
+        id: "q_promoter",
+        type: "long_text",
+        order: 3,
+        label: "Glad to hear it! What do you like most?",
+        required: false,
+        settings: {},
+        visibleIf: cmp(ans("q_score"), "gte", lit(9)),
+      },
+    ],
+    logic: [],
+    rules: [
+      {
+        id: "r_promoter",
+        name: "Promoters (9–10)",
+        on: { event: "form_completed" },
+        when: cmp(ans("q_score"), "gte", lit(9)),
+        then: [
+          {
+            type: "set_variable",
+            variableId: "v_group",
+            op: "set",
+            value: lit("promoter"),
+          },
+          { type: "jump_to_ending", endingId: "e_promoter" },
+        ],
+      },
+      {
+        id: "r_detractor",
+        name: "Detractors (0–6)",
+        on: { event: "form_completed" },
+        when: cmp(ans("q_score"), "lte", lit(6)),
+        then: [
+          {
+            type: "set_variable",
+            variableId: "v_group",
+            op: "set",
+            value: lit("detractor"),
+          },
+          { type: "jump_to_ending", endingId: "e_detractor" },
+        ],
+      },
+    ],
+  },
+};
+
 export const LOGIC_TEMPLATES: LogicTemplate[] = [
+  nps,
   knowledgeQuiz,
   outcomeQuiz,
   leadQualification,

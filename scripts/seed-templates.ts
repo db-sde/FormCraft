@@ -117,19 +117,8 @@ const templates: TemplateDef[] = [
       { type: "long_text", label: "Anything we could do better?" },
     ],
   ),
-  t(
-    "Feedback",
-    "Net Promoter Score (NPS)",
-    "The classic single-question loyalty metric, plus a follow-up.",
-    [
-      {
-        type: "opinion_scale",
-        label: "How likely are you to recommend us to a friend or colleague?",
-        required: true,
-      },
-      { type: "long_text", label: "What's the main reason for your score?" },
-    ],
-  ),
+  // Net Promoter Score (NPS) is a logic template: a follow-up and an
+  // ending for each group (see logic-templates.ts).
   t(
     "Feedback",
     "Product Feedback",

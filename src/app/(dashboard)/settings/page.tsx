@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { aiConfigured } from "@/domains/ai/config";
 import Link from "next/link";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import {
@@ -233,7 +234,9 @@ export default async function SettingsPage({
           </p>
         ))}
 
-      {planData && <PlanUsage plan={planData[0]} usage={planData[1]} />}
+      {planData && (
+        <PlanUsage plan={planData[0]} usage={planData[1]} aiAvailable={aiConfigured()} />
+      )}
 
       {connectionData && (
         <ConnectionSettings

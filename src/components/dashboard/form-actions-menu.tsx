@@ -19,6 +19,7 @@ import {
   TextCursorInput,
   Trash2,
   FolderInput,
+  UsersRound,
 } from "lucide-react";
 import {
   publishAction,
@@ -28,6 +29,7 @@ import {
 import {
   duplicateFormAction,
   deleteFormAction,
+  formLeadCountAction,
   moveFormToFolderAction,
 } from "@/app/(dashboard)/actions";
 import type { FormListItem } from "@/domains/forms";
@@ -88,6 +90,9 @@ export function FormActionsMenu({
   const canEdit = useContext(CanEditContext);
   const folders = useContext(FoldersContext);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  // Leads go with the form, so the delete dialog says how many.
+  const [leadCount, setLeadCount] = useState<number | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState(form.title);
   const [pending, startTransition] = useTransition();
@@ -117,10 +122,19 @@ export function FormActionsMenu({
     });
   }
 
+  function askToDelete() {
+    setLeadCount(null);
+    setConfirmDelete(true);
+    if (form.responseCount > 0 || form.incompleteCount > 0) {
+      void formLeadCountAction(form.id).then(setLeadCount);
+    }
+  }
+
   function togglePublished() {
     startTransition(async () => {
       if (form.publishState === "live") {
         const result = await unpublishAction(form.id);
+        setConfirmUnpublish(false);
         if (result.ok) toast("Unpublished.", { description: "The public link is off." });
         else toast.error(result.message, { duration: 8000 });
       } else {
@@ -268,7 +282,13 @@ export function FormActionsMenu({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
-              <DropdownMenuItem onSelect={togglePublished}>
+              <DropdownMenuItem
+                onSelect={() =>
+                  form.publishState === "live"
+                    ? setConfirmUnpublish(true)
+                    : togglePublished()
+                }
+              >
                 {form.publishState === "live" ? (
                   <>
                     <EyeOff /> Unpublish
@@ -279,10 +299,7 @@ export function FormActionsMenu({
                   </>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => setConfirmDelete(true)}
-              >
+              <DropdownMenuItem variant="destructive" onSelect={askToDelete}>
                 <Trash2 /> Delete
               </DropdownMenuItem>
             </>
@@ -344,6 +361,16 @@ export function FormActionsMenu({
               <span>This form is live. Its public link stops working immediately.</span>
             </div>
           )}
+          {!!leadCount && (
+            <div className="flex gap-2.5 rounded-sm border-[1.5px] border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] px-3 py-2.5 text-[13.5px] leading-[1.45] text-[var(--alert-error-fg)]">
+              <UsersRound className="mt-px size-4 shrink-0" />
+              <span>
+                Its{" "}
+                {leadCount === 1 ? "lead is" : `${leadCount.toLocaleString()} leads are`}{" "}
+                removed from Leads too. Export them first if you want to keep them.
+              </span>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -357,6 +384,36 @@ export function FormActionsMenu({
             >
               {pending && <ButtonSpinner />}
               {pending ? "Deleting…" : "Delete form"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmUnpublish} onOpenChange={setConfirmUnpublish}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <EyeOff />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Unpublish &ldquo;{form.title}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its public link and any embeds stop working straight away; people who open
+              them see that the form isn&apos;t available. Your form and its responses are
+              kept, and you can publish it again whenever you like.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Keep it live</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              data-loading={pending || undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                togglePublished();
+              }}
+            >
+              {pending && <ButtonSpinner />}
+              {pending ? "Unpublishing…" : "Unpublish"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

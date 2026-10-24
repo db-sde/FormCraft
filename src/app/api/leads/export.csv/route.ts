@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CSV_BOM } from "@/domains/exports";
 import { buildLeadsCsv } from "@/domains/leads";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
         });
       }
     }
-    return new NextResponse(csv, {
+    return new NextResponse(CSV_BOM + csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": 'attachment; filename="leads.csv"',

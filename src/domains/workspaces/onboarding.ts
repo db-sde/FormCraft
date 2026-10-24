@@ -18,14 +18,16 @@ const STARTER_THEME = {
 
 /**
  * What the sidebar needs: how many forms and members, and the four
- * "Getting started" steps (create, theme, publish, connect Sheets).
+ * "Getting started" steps (create, theme, publish, then connect Sheets —
+ * or, where this server can't connect Sheets, get a first response).
  * Runs as the signed-in user, so row-level security scopes every count.
  */
 export async function getWorkspaceOverview(
   supabase: Client,
   workspaceId: string,
+  options: { sheetsAvailable: boolean } = { sheetsAvailable: true },
 ): Promise<WorkspaceOverview> {
-  const [forms, members, sheets, total] = await Promise.all([
+  const [forms, members, sheets, total, firstResponse] = await Promise.all([
     supabase
       .from("forms")
       // Only the theme of each version: whole schemas are large, and
@@ -49,6 +51,15 @@ export async function getWorkspaceOverview(
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", workspaceId)
       .is("deleted_at", null),
+    options.sheetsAvailable
+      ? null
+      : supabase
+          .from("responses")
+          .select("id, forms!inner(workspace_id)")
+          .eq("forms.workspace_id", workspaceId)
+          .eq("status", "completed")
+          .eq("is_preview", false)
+          .limit(1),
   ]);
 
   const rows = forms.data ?? [];
@@ -82,12 +93,19 @@ export async function getWorkspaceOverview(
         href: formHref("?panel=theme"),
       },
       { id: "publish", label: "Publish it", done: live, href: formHref("/share") },
-      {
-        id: "sheets",
-        label: "Connect Google Sheets",
-        done: (sheets.count ?? 0) > 0,
-        href: formHref("/integrations"),
-      },
+      options.sheetsAvailable
+        ? {
+            id: "sheets",
+            label: "Connect Google Sheets",
+            done: (sheets.count ?? 0) > 0,
+            href: formHref("/integrations"),
+          }
+        : {
+            id: "response",
+            label: "Get your first response",
+            done: (firstResponse?.data?.length ?? 0) > 0,
+            href: formHref("/share"),
+          },
     ],
   };
 }

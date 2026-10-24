@@ -1,5 +1,6 @@
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { canEdit, getWorkspaceOverview } from "@/domains/workspaces";
+import { isGoogleOAuthConfigured } from "@/domains/sheets/oauth";
 import { AppShell } from "./app-shell";
 
 /** The signed-in app frame (sidebar + content) with the current
@@ -7,7 +8,9 @@ import { AppShell } from "./app-shell";
  * Responses / Integrations / Settings / Share pages. */
 export async function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const { supabase, workspace, workspaces, user } = await getCurrentWorkspace();
-  const overview = await getWorkspaceOverview(supabase, workspace.id);
+  const overview = await getWorkspaceOverview(supabase, workspace.id, {
+    sheetsAvailable: isGoogleOAuthConfigured(),
+  });
 
   return (
     <AppShell

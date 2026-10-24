@@ -10,7 +10,11 @@ import {
 } from "./format";
 import { hasAnswer } from "@/domains/logic/validate-answer";
 import { ABANDONED_AFTER_MINUTES, describeSource } from "./activity";
-import { computeResponseResults, type ResponseResults } from "./results";
+import {
+  computeResponseResults,
+  renderForResponse,
+  type ResponseResults,
+} from "./results";
 import { buildInsights, type Insight } from "@/domains/analytics/insights";
 import {
   toCsv,
@@ -97,8 +101,6 @@ export type ResponseListPage = {
   previewColumns: { questionId: string; label: string }[];
 };
 
-const PREVIEW_COLUMN_COUNT = 3;
-
 const ATTRIBUTION_COLUMNS = [
   "Referrer",
   "UTM source",
@@ -127,14 +129,15 @@ export async function getLatestSchema(
   return data ? parseFormSchema(data.schema) : null;
 }
 
-/** Columns shown in the list: the lead (contact) block first when the
- * form has one — it's what identifies a respondent — then the first
- * other answerable questions. */
+/** Columns shown in the list: every answerable question, the lead
+ * (contact) block first when the form has one — it's what identifies a
+ * respondent. The table scrolls sideways; every answer the single
+ * response shows is in it. */
 function pickPreviewQuestions(schema: FormSchemaV1 | null): QuestionV1[] {
   const answerable = (schema?.questions ?? []).filter(isAnswerable);
   const contact = answerable.filter((q) => q.type === "contact_info");
   const rest = answerable.filter((q) => q.type !== "contact_info");
-  return [...contact, ...rest].slice(0, PREVIEW_COLUMN_COUNT);
+  return [...contact, ...rest];
 }
 
 /**
@@ -188,6 +191,8 @@ type ResponseRow = {
   form_version_id: string;
   referrer: string | null;
   utm_source: string | null;
+  hidden_fields: unknown;
+  random_seed: string | null;
 };
 
 /**
@@ -216,7 +221,7 @@ export async function listResponses(
     formId,
     view,
     options,
-    "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source",
+    "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, hidden_fields, random_seed",
   );
   query =
     view === "completed"
@@ -266,11 +271,22 @@ export async function listResponses(
 
   for (const row of rows) {
     const schema = await getSchemaForVersion(supabase, row.form_version_id, schemaCache);
-    const endingTitle = row.ending_id
+    const answers = answersByResponse.get(row.id);
+    const rawEnding = row.ending_id
       ? (schema?.endings.find((e) => e.id === row.ending_id)?.title ?? null)
       : null;
+    // As the respondent saw it: "Your score: 10", not "{{score}}".
+    const endingTitle =
+      rawEnding !== null && schema
+        ? renderForResponse(rawEnding, {
+            schema,
+            answers: Object.fromEntries(answers ?? new Map()),
+            hidden: row.hidden_fields,
+            completedAt: row.completed_at,
+            seed: row.random_seed,
+          })
+        : rawEnding;
 
-    const answers = answersByResponse.get(row.id);
     const preview: Record<string, string> = {};
     for (const ref of previewQuestions) {
       const own = schema?.questions.find((q) => q.id === ref.id) ?? ref;
@@ -454,7 +470,17 @@ export async function getResponseDetail(
     startedAt: response.started_at,
     completedAt: response.completed_at,
     lastActiveAt: response.last_active_at,
-    endingTitle: schema.endings.find((e) => e.id === response.ending_id)?.title ?? null,
+    endingTitle: (() => {
+      const title = schema.endings.find((e) => e.id === response.ending_id)?.title;
+      if (title === undefined) return null;
+      return renderForResponse(title, {
+        schema,
+        answers: Object.fromEntries(answersByQuestion),
+        hidden: response.hidden_fields,
+        completedAt: response.completed_at,
+        seed: response.random_seed,
+      });
+    })(),
     lastQuestionLabel: (() => {
       const q = schema.questions.find((x) => x.id === response.last_question_id);
       return q ? questionColumnLabel(q) : null;
@@ -586,11 +612,18 @@ export async function buildResponsesCsv(
     .maybeSingle();
   if (latestVersionError) throw latestVersionError;
 
-  const referenceQuestions = latestVersion
-    ? parseFormSchema(latestVersion.schema).questions.filter(
-        (q) => q.type !== "welcome_screen" && q.type !== "statement",
-      )
-    : [];
+  const latestSchema = latestVersion ? parseFormSchema(latestVersion.schema) : null;
+  const referenceQuestions = (latestSchema?.questions ?? []).filter(
+    (q) => q.type !== "welcome_screen" && q.type !== "statement",
+  );
+  // Scores and other results get a column each (completed responses
+  // only: an unfinished one hasn't got a result).
+  const variableNames =
+    view === "completed" ? (latestSchema?.variables ?? []).map((v) => v.name) : [];
+  const questionLabels = new Set(referenceQuestions.flatMap(questionColumnLabels));
+  // Named after the variable; marked only if a question has that label.
+  const variableColumn = (name: string) =>
+    questionLabels.has(name) ? `${name} (result)` : name;
 
   // PostgREST caps every request at max_rows (1000 by default, locally
   // and on hosted Supabase), so a single select would silently truncate
@@ -607,6 +640,8 @@ export async function buildResponsesCsv(
     utm_campaign: string | null;
     utm_term: string | null;
     utm_content: string | null;
+    hidden_fields: unknown;
+    random_seed: string | null;
   }[] = [];
   for (let from = 0; ; from += FETCH_PAGE) {
     const { data, error } = await filteredResponses<(typeof responses)[number]>(
@@ -614,7 +649,7 @@ export async function buildResponsesCsv(
       formId,
       view,
       filters,
-      "id, completed_at, last_active_at, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content",
+      "id, completed_at, last_active_at, ending_id, form_version_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content, hidden_fields, random_seed",
       undefined,
     )
       .order(view === "completed" ? "completed_at" : "last_active_at", {
@@ -676,13 +711,26 @@ export async function buildResponsesCsv(
     );
     const answersByQuestion = answersByResponse.get(response.id);
 
+    const resultsInput = {
+      schema,
+      answers: Object.fromEntries(answersByQuestion ?? new Map()),
+      hidden: response.hidden_fields,
+      completedAt: response.completed_at,
+      seed: response.random_seed,
+    };
+    const endingTitle = schema?.endings.find((e) => e.id === response.ending_id)?.title;
     const row: Record<string, unknown> =
       view === "completed"
         ? {
             "Submitted at": response.completed_at,
-            Ending: schema?.endings.find((e) => e.id === response.ending_id)?.title ?? "",
+            Ending:
+              endingTitle && schema ? renderForResponse(endingTitle, resultsInput) : "",
           }
         : { "Last active": response.last_active_at };
+    if (variableNames.length > 0 && schema) {
+      const { variables } = computeResponseResults(resultsInput);
+      for (const name of variableNames) row[variableColumn(name)] = variables[name] ?? "";
+    }
 
     for (const refQuestion of referenceQuestions) {
       const ownQuestion =
@@ -712,6 +760,7 @@ export async function buildResponsesCsv(
   const columns = [
     ...(view === "completed" ? ["Submitted at", "Ending"] : ["Last active"]),
     ...referenceQuestions.flatMap(questionColumnLabels),
+    ...variableNames.map(variableColumn),
     ...ATTRIBUTION_COLUMNS,
   ];
   return toCsv(columns, rows);

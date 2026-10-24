@@ -479,19 +479,48 @@ export const MAX_FORM_TITLE_LENGTH = 200;
 
 /** Renames the form as creators see it on the dashboard. The slug (and
  * so any shared public link) deliberately never changes on rename. */
+/**
+ * Renames a form. A form that has never been published also gets a link
+ * that matches its new name — as long as its link is still the one made
+ * from its old name (a link someone chose themselves is never changed,
+ * and once a form has been live its link may be out in the world).
+ * Returns the form's link, changed or not.
+ */
 export async function renameForm(
   supabase: Client,
   formId: string,
   workspaceId: string,
   title: string,
-): Promise<void> {
-  const { error } = await supabase
+): Promise<{ slug: string }> {
+  const { data: form, error: readError } = await supabase
     .from("forms")
-    .update({ title })
+    .select("title, slug, form_versions(status)")
     .eq("id", formId)
     .eq("workspace_id", workspaceId)
-    .is("deleted_at", null);
-  if (error) throw error;
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!form) throw new Error("form not found");
+
+  const everLive = (form.form_versions ?? []).some((v) => v.status !== "draft");
+  const madeFromOldName = new RegExp(
+    `^${slugify(form.title).slice(0, 48) || "form"}-[a-z0-9]{6}$`,
+  ).test(form.slug);
+  const prefix = slugify(title).slice(0, 48) || "form";
+  const followName = !everLive && madeFromOldName && !form.slug.startsWith(`${prefix}-`);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const slug = followName ? `${prefix}-${slugSuffix()}` : form.slug;
+    const { error } = await supabase
+      .from("forms")
+      .update(followName ? { title, slug } : { title })
+      .eq("id", formId)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null);
+    if (!error) return { slug };
+    if (!(followName && error.code === "23505")) throw error;
+  }
+  throw new Error("failed to allocate a unique form slug after 5 attempts");
 }
 
 /** Copies a form's current *draft* into a brand-new, unpublished form,

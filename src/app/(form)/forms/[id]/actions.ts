@@ -38,7 +38,7 @@ import { hasPermission } from "@/domains/workspaces/permissions";
 export async function renameFormAction(
   formId: string,
   title: string,
-): Promise<{ ok: true; title: string } | { ok: false; message: string }> {
+): Promise<{ ok: true; title: string; slug: string } | { ok: false; message: string }> {
   const trimmed = title.trim();
   if (!trimmed) return { ok: false, message: "Give your form a name." };
   if (trimmed.length > MAX_FORM_TITLE_LENGTH) {
@@ -49,9 +49,9 @@ export async function renameFormAction(
   }
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
-    await renameForm(supabase, formId, workspace.id, trimmed);
+    const { slug } = await renameForm(supabase, formId, workspace.id, trimmed);
     revalidatePath("/dashboard");
-    return { ok: true, title: trimmed };
+    return { ok: true, title: trimmed, slug };
   } catch {
     return { ok: false, message: "Couldn't rename the form. Please try again." };
   }

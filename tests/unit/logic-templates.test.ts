@@ -165,3 +165,36 @@ describe("logic templates", () => {
     ]);
   });
 });
+
+describe("NPS template (QA FC-15)", () => {
+  const nps = load("Net Promoter Score (NPS)");
+  const run = (score: number) => {
+    const walk = walkForm(nps, { q_score: score });
+    return {
+      group: byName(nps, walk.variables).nps_group,
+      ending: walk.endingId,
+      asked: walk.visitedQuestionIds.filter((id) => id !== "q_score"),
+    };
+  };
+
+  it("routes detractors, passives and promoters to their own follow-up and ending", () => {
+    expect(run(3)).toEqual({
+      group: "detractor",
+      ending: "e_detractor",
+      asked: ["q_detractor"],
+    });
+    expect(run(6)).toMatchObject({ group: "detractor", ending: "e_detractor" });
+    expect(run(7)).toEqual({
+      group: "passive",
+      ending: "e_passive",
+      asked: ["q_passive"],
+    });
+    expect(run(8)).toMatchObject({ group: "passive", ending: "e_passive" });
+    expect(run(9)).toEqual({
+      group: "promoter",
+      ending: "e_promoter",
+      asked: ["q_promoter"],
+    });
+    expect(run(10)).toMatchObject({ group: "promoter", ending: "e_promoter" });
+  });
+});

@@ -43,15 +43,8 @@ export function AiInsightsPanel({
   const [pending, start] = useTransition();
   const [criteria, setCriteria] = useState(leadCriteria);
 
-  if (!enabled) {
-    return (
-      <div className="border-input text-muted-foreground flex items-center gap-2.5 rounded-lg border-[1.5px] border-dashed px-4 py-3 text-[13.5px]">
-        <Sparkles className="size-4 shrink-0" />
-        AI summaries, sentiment and tags aren&apos;t set up on this server (set
-        ANTHROPIC_API_KEY).
-      </div>
-    );
-  }
+  // Not offered at all until the server has an AI key.
+  if (!enabled) return null;
 
   const analyze = () =>
     start(async () => {

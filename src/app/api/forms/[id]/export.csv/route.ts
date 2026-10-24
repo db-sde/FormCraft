@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { buildResponsesCsv, filtersFromParams } from "@/domains/responses";
-import { ExportTooLargeError, MAX_SYNCHRONOUS_EXPORT_ROWS } from "@/domains/exports";
+import {
+  CSV_BOM,
+  ExportTooLargeError,
+  MAX_SYNCHRONOUS_EXPORT_ROWS,
+} from "@/domains/exports";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -62,7 +66,7 @@ export async function GET(
       target: { type: "form", id: formId },
       metadata: { view },
     });
-    return new NextResponse(csv, {
+    return new NextResponse(CSV_BOM + csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,

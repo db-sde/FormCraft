@@ -11,15 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 export function GenerateFormCard({ enabled }: { enabled: boolean }) {
   const [state, action] = useActionState(generateFormAction, null);
 
-  if (!enabled) {
-    return (
-      <div className="border-input text-muted-foreground flex items-center gap-2.5 rounded-lg border-[1.5px] border-dashed px-5 py-4 text-sm">
-        <Sparkles className="size-4 shrink-0" />
-        Generating a form from a description needs AI, which isn&apos;t set up on this
-        server (set ANTHROPIC_API_KEY).
-      </div>
-    );
-  }
+  // Not offered at all until the server has an AI key.
+  if (!enabled) return null;
 
   return (
     <form

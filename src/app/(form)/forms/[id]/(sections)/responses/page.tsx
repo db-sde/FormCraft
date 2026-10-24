@@ -32,7 +32,7 @@ import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { FilterChip, type FilterGroup } from "@/components/responses/filter-chip";
-import { SummaryView } from "@/components/responses/summary-view";
+import { SummaryView, responseColumnId } from "@/components/responses/summary-view";
 import { AiInsightsPanel } from "@/components/responses/ai-insights-panel";
 import { getFormSummary, insightTotals } from "@/domains/responses/ai-insights";
 import { aiConfigured } from "@/domains/ai/config";
@@ -181,8 +181,11 @@ function ProgressBar({ answered, total }: { answered: number; total: number }) {
           style={{ width: `${percent}%` }}
         />
       </div>
-      <span className="text-muted-foreground text-xs tabular-nums">
-        {answered}/{total}
+      <span
+        className="text-muted-foreground text-xs tabular-nums"
+        title="Statements and the welcome screen aren't questions, so they aren't counted."
+      >
+        {answered} of {total} answered
       </span>
     </div>
   );
@@ -626,7 +629,10 @@ export default async function ResponsesPage({
                 </ul>
 
                 <div className="border-ink bg-card hidden overflow-x-auto rounded-lg border-[1.5px] md:block">
-                  <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+                  {/* One column per question: wide forms scroll sideways. (No
+                      pinned column: a sticky cell would trap the link that
+                      makes the whole row clickable.) */}
+                  <table className="w-max min-w-full table-fixed border-collapse text-sm">
                     <thead>
                       <tr className="bg-background border-ink text-muted-foreground border-b-[1.5px] text-left text-[11.5px] font-bold tracking-[0.08em] uppercase">
                         <th scope="col" className="w-[170px] px-4 py-2.5 font-bold">
@@ -635,8 +641,10 @@ export default async function ResponsesPage({
                         {responses.previewColumns.map((col) => (
                           <th
                             key={col.questionId}
+                            id={responseColumnId(col.questionId)}
                             scope="col"
-                            className="truncate px-4 py-2.5 font-bold"
+                            title={col.label}
+                            className="w-[200px] truncate px-4 py-2.5 font-bold target:bg-[var(--qt-text-bg)]"
                           >
                             {col.label}
                           </th>
@@ -687,7 +695,11 @@ export default async function ResponsesPage({
                             </Link>
                           </td>
                           {responses.previewColumns.map((col) => (
-                            <td key={col.questionId} className="truncate px-4">
+                            <td
+                              key={col.questionId}
+                              className="truncate px-4"
+                              title={item.preview[col.questionId] || undefined}
+                            >
                               {item.preview[col.questionId] || (
                                 <span className="text-subtle-foreground">—</span>
                               )}

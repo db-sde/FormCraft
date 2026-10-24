@@ -26,6 +26,7 @@ import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 import { audit } from "@/domains/audit";
+import { countLeadsForForm } from "@/domains/leads";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -198,6 +199,17 @@ export async function deleteFormAction(
     return { ok: true };
   } catch {
     return { ok: false, message: "Couldn't delete the form. Please try again." };
+  }
+}
+
+/** Leads a form has, for the delete dialog's warning. */
+export async function formLeadCountAction(formId: string): Promise<number | null> {
+  if (!FormId.safeParse(formId).success) return null;
+  const { supabase, workspace } = await getCurrentWorkspace();
+  try {
+    return await countLeadsForForm(supabase, workspace.id, formId);
+  } catch {
+    return null;
   }
 }
 
