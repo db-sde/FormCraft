@@ -3,7 +3,6 @@ import Link from "next/link";
 import {
   BarChart3,
   Calendar,
-  Download,
   Flag,
   Inbox,
   Lightbulb,
@@ -14,6 +13,8 @@ import {
 import {
   getConversionInsights,
   getDropoff,
+  getReach,
+  type Reach,
   getLatestSchema,
   getResponseCounts,
   getResponseSummary,
@@ -39,6 +40,8 @@ import { aiConfigured } from "@/domains/ai/config";
 import { FormSectionHeader } from "@/components/forms/form-top-bar";
 import { FormPageActions } from "@/components/forms/form-page-actions";
 import { CopyLinkField } from "@/components/forms/copy-link-field";
+import { ExportMenu } from "@/components/shared/export-menu";
+import { SearchBox } from "@/components/shared/search-box";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
@@ -61,6 +64,7 @@ type Params = {
   ending?: string;
   q?: string;
   a?: string;
+  search?: string;
 };
 
 export async function generateMetadata({
@@ -131,6 +135,73 @@ function DropoffCard({ steps, total }: { steps: DropoffStep[]; total: number }) 
             </span>
           </li>
         ))}
+      </ol>
+    </section>
+  );
+}
+
+/** How far respondents got, question by question (QA EN-03): a funnel
+ * from everyone who started down to everyone who finished. */
+function ReachCard({ reach }: { reach: Reach }) {
+  if (reach.starts === 0 || reach.steps.length === 0) return null;
+  const pct = (n: number) => Math.round((n / reach.starts) * 100);
+  const worst = Math.max(...reach.steps.map((s) => s.stopped));
+  return (
+    <section className="border-ink bg-card rounded-lg border-[1.5px] p-[18px]">
+      <h2 className="font-heading text-base font-bold">Drop-off by question</h2>
+      <p className="text-muted-foreground mb-4 text-sm">
+        How far the {reach.starts.toLocaleString()}{" "}
+        {reach.starts === 1 ? "person" : "people"} who started got
+        {reach.beforeFirst > 0 &&
+          ` (${reach.beforeFirst.toLocaleString()} left before the first question)`}
+        . Everyone who stopped is counted, including anyone still answering.
+      </p>
+      <ol className="flex flex-col gap-2.5">
+        {reach.steps.map((step, i) => (
+          <li
+            key={step.questionId}
+            className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-3 text-sm"
+          >
+            <span className="text-muted-foreground tabular-nums">{i + 1}</span>
+            <div className="min-w-0">
+              <p className="truncate">{step.label}</p>
+              <div
+                className="bg-muted mt-1 h-2.5 overflow-hidden rounded-[4px]"
+                role="img"
+                aria-label={`${pct(step.reached)}% reached this question`}
+              >
+                <div
+                  className={cn(
+                    "border-ink bg-primary h-full",
+                    step.reached > 0 && "border-r-[1.5px]",
+                  )}
+                  style={{ width: `${pct(step.reached)}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-muted-foreground w-36 text-right text-[13px] tabular-nums">
+              {pct(step.reached)}% reached
+              {step.stopped > 0 && (
+                <span
+                  className={cn(
+                    "block",
+                    step.stopped === worst &&
+                      "font-semibold text-[var(--alert-error-fg)]",
+                  )}
+                >
+                  {step.stopped.toLocaleString()} stopped here
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+        <li className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-3 border-t pt-2.5 text-sm font-semibold">
+          <span />
+          <span>Finished</span>
+          <span className="w-36 text-right tabular-nums">
+            {pct(reach.completed)}% · {reach.completed.toLocaleString()}
+          </span>
+        </li>
       </ol>
     </section>
   );
@@ -252,27 +323,33 @@ export default async function ResponsesPage({
       ? { questionId: answerQuestion.question.id, value: answerChoice.value }
       : undefined;
 
+  const fromUrl = filtersFromParams({ period: period.id, search: sp.search });
   const filters: ResponseFilters = {
-    since: filtersFromParams({ period: period.id }).since,
+    since: fromUrl.since,
     endingId: ending?.id,
     answer,
+    search: fromUrl.search,
   };
 
-  const [responses, counts, funnel, dropoff, summary, insights, ai] = await Promise.all([
-    tab === "table" ? listResponses(supabase, formId, { page, view, ...filters }) : null,
-    getResponseCounts(supabase, formId),
-    getFunnelSummaryForForm(supabase, formId, filters.since),
-    view === "incomplete" ? getDropoff(supabase, formId) : null,
-    tab === "summary" ? getResponseSummary(supabase, formId, filters) : null,
-    tab === "summary" ? getConversionInsights(supabase, formId, filters.since) : null,
-    tab === "summary"
-      ? Promise.all([
-          getFormSummary(supabase, formId),
-          insightTotals(supabase, formId),
-          supabase.from("forms").select("ai_lead_criteria").eq("id", formId).single(),
-        ])
-      : null,
-  ]);
+  const [responses, counts, funnel, dropoff, summary, insights, ai, reach] =
+    await Promise.all([
+      tab === "table"
+        ? listResponses(supabase, formId, { page, view, ...filters })
+        : null,
+      getResponseCounts(supabase, formId),
+      getFunnelSummaryForForm(supabase, formId, filters.since),
+      view === "incomplete" ? getDropoff(supabase, formId) : null,
+      tab === "summary" ? getResponseSummary(supabase, formId, filters) : null,
+      tab === "summary" ? getConversionInsights(supabase, formId, filters.since) : null,
+      tab === "summary"
+        ? Promise.all([
+            getFormSummary(supabase, formId),
+            insightTotals(supabase, formId),
+            supabase.from("forms").select("ai_lead_criteria").eq("id", formId).single(),
+          ])
+        : null,
+      tab === "summary" ? getReach(supabase, formId, filters.since) : null,
+    ]);
 
   const base = `/forms/${formId}/responses`;
   const current = {
@@ -282,6 +359,7 @@ export default async function ResponsesPage({
     ending: ending?.id,
     q: answer?.questionId,
     a: answer ? String(answer.value) : undefined,
+    search: filters.search,
   };
   const href = (
     patch: Partial<Record<keyof typeof current | "page", string | undefined>>,
@@ -292,7 +370,7 @@ export default async function ResponsesPage({
     const s = qs.toString();
     return s ? `${base}?${s}` : base;
   };
-  const filtered = !!(filters.since || ending || answer);
+  const filtered = !!(filters.since || ending || answer || filters.search);
 
   const answerGroups: FilterGroup[] = choiceQuestions.map(({ question, choices }) => ({
     label: question.label || "Untitled question",
@@ -393,15 +471,9 @@ export default async function ResponsesPage({
               </div>
             </div>
             {tab === "table" && totalCount > 0 && (
-              <Button asChild variant="outline">
-                <a
-                  href={`/api/forms/${formId}/export.csv${href({ tab: undefined, page: undefined }).slice(base.length)}`}
-                  download
-                >
-                  <Download />
-                  Export CSV
-                </a>
-              </Button>
+              <ExportMenu
+                href={`/api/forms/${formId}/export.csv${href({ tab: undefined, page: undefined }).slice(base.length)}`}
+              />
             )}
           </div>
 
@@ -474,6 +546,14 @@ export default async function ResponsesPage({
                 ))}
               </div>
             )}
+            <SearchBox
+              baseHref={href({ search: undefined, page: undefined })}
+              param="search"
+              initial={filters.search ?? ""}
+              placeholder="Search answers…"
+              label="Search responses"
+              className="w-full sm:w-56"
+            />
             <FilterChip
               icon={<Calendar />}
               label={period.label}
@@ -523,6 +603,8 @@ export default async function ResponsesPage({
 
           {insights && <InsightsCard insights={insights} />}
 
+          {reach && <ReachCard reach={reach} />}
+
           {ai && (
             <AiInsightsPanel
               formId={formId}
@@ -546,11 +628,13 @@ export default async function ResponsesPage({
               <EmptyState
                 icon={Inbox}
                 title={
-                  filtered
-                    ? "No responses match these filters"
-                    : completed
-                      ? "No completed responses yet"
-                      : "No unfinished sessions"
+                  filters.search
+                    ? `No responses mention “${filters.search}”`
+                    : filtered
+                      ? "No responses match these filters"
+                      : completed
+                        ? "No completed responses yet"
+                        : "No unfinished sessions"
                 }
                 description={
                   filtered
@@ -568,6 +652,7 @@ export default async function ResponsesPage({
                           ending: undefined,
                           q: undefined,
                           a: undefined,
+                          search: undefined,
                           page: undefined,
                         })}
                       >

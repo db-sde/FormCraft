@@ -1345,4 +1345,34 @@ From the QA handover of 23 Oct 2026. The choices that change behaviour:
   per group, and an `nps_group` result. Hosted projects need
   `npm run db:seed-templates` run against them to get it.
 
+## 2026-10-24 — QA enhancements: search, Excel export, drop-off chart
+
+- **Search (EN-01)** matches any answer's text, case-insensitively,
+  against `answers.search_text` (a generated, lower-cased copy of the
+  JSON value, trigram-indexed). It finds what people typed, contact
+  details, numbers and dates; choices are stored as option ids, so
+  they're filtered with "Filter by answer", not searched. LIKE
+  wildcards are matched literally. The search narrows the table, the
+  Summary and both exports, like every other filter on the page.
+- **Excel (EN-02)** is the same table as the CSV (`buildResponsesTable`
+  / `buildLeadsTable`), written by a small built-in .xlsx writer rather
+  than a spreadsheet library: one sheet, bold frozen header, text as
+  inline strings (never evaluated, so no formula injection), numbers
+  as numbers. Served from the existing export URLs with
+  `?format=xlsx`, so access checks stay in one place.
+- **Drop-off (EN-03)** in Summary: of everyone who started (in the
+  chosen period; the other filters describe completed responses, so
+  they don't apply), how many reached each question and how many
+  stopped on it. A response that didn't finish stopped on the question
+  it was last on, so anyone still answering is counted there too; the
+  card says so. Counts follow the current question order — a question
+  logic skipped for someone still counts them as having passed it.
+  Aggregated in SQL (`response_reach`, migration 43). The existing
+  "Where people drop off" card on unfinished responses is unchanged
+  (abandoned sessions only).
+- `database.types.ts` gained these two entries by hand: the newer
+  Supabase CLI (2.122, needed after a macOS update broke 2.107)
+  generates stricter types that break 56 unrelated call sites.
+  Regenerate fully, and fix those, as its own change.
+
 <!-- Add new decisions above this line, newest first. -->

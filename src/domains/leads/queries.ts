@@ -151,6 +151,16 @@ export async function buildLeadsCsv(
   workspaceId: string,
   formId?: string,
 ): Promise<string> {
+  const { columns, rows } = await buildLeadsTable(supabase, workspaceId, formId);
+  return toCsv(columns, rows);
+}
+
+/** The rows behind the leads CSV and Excel exports. */
+export async function buildLeadsTable(
+  supabase: Client,
+  workspaceId: string,
+  formId?: string,
+): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
   const leads: Lead[] = [];
   for (let offset = 0; offset < MAX_LEAD_EXPORT_ROWS; offset += EXPORT_PAGE) {
     const rows = await fetchLeads(supabase, workspaceId, {
@@ -172,9 +182,9 @@ export async function buildLeadsCsv(
     "Source",
     "Captured at",
   ];
-  return toCsv(
+  return {
     columns,
-    leads.map((lead) => ({
+    rows: leads.map((lead) => ({
       Name: lead.name,
       Email: lead.email,
       Phone: lead.phone,
@@ -190,5 +200,5 @@ export async function buildLeadsCsv(
       Source: lead.source,
       "Captured at": lead.capturedAt,
     })),
-  );
+  };
 }

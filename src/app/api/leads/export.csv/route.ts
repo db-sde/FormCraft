@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { CSV_BOM } from "@/domains/exports";
-import { buildLeadsCsv } from "@/domains/leads";
+import { CSV_BOM, toCsv, toXlsx, XLSX_CONTENT_TYPE } from "@/domains/exports";
+import { buildLeadsTable } from "@/domains/leads";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/domains/audit";
 import { hasPermission } from "@/domains/workspaces/permissions";
 
-/** Creator-only, session-scoped (RLS) export of the workspace's leads. */
+/** Creator-only, session-scoped (RLS) export of the workspace's leads;
+ * `?format=xlsx` for an Excel workbook instead of CSV. */
 export async function GET(request: Request) {
   const { supabase, workspace } = await getCurrentWorkspace();
   if (!(await hasPermission(supabase, workspace.id, "export_responses"))) {
@@ -15,10 +16,12 @@ export async function GET(request: Request) {
       status: 403,
     });
   }
-  const formId = new URL(request.url).searchParams.get("form") ?? undefined;
+  const search = new URL(request.url).searchParams;
+  const formId = search.get("form") ?? undefined;
+  const excel = search.get("format") === "xlsx";
 
   try {
-    const csv = await buildLeadsCsv(supabase, workspace.id, formId);
+    const { columns, rows } = await buildLeadsTable(supabase, workspace.id, formId);
     void audit(createAdminClient(), {
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
@@ -40,7 +43,15 @@ export async function GET(request: Request) {
         });
       }
     }
-    return new NextResponse(CSV_BOM + csv, {
+    if (excel) {
+      return new NextResponse(Buffer.from(toXlsx(columns, rows, "Leads")), {
+        headers: {
+          "Content-Type": XLSX_CONTENT_TYPE,
+          "Content-Disposition": 'attachment; filename="leads.xlsx"',
+        },
+      });
+    }
+    return new NextResponse(CSV_BOM + toCsv(columns, rows), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": 'attachment; filename="leads.csv"',

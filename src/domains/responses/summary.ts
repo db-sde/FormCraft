@@ -8,7 +8,12 @@ import { hasAnswer } from "@/domains/logic/validate-answer";
 import { walkForm } from "@/domains/logic/walk";
 import { formatValue, RECALL_PATTERN } from "@/domains/logic/recall";
 import { questionColumnLabel } from "./format";
-import type { AnswerFilter, ResponseFilters } from "./dashboard";
+import {
+  SEARCH_JOIN,
+  searchPattern,
+  type AnswerFilter,
+  type ResponseFilters,
+} from "./dashboard";
 
 type Client = SupabaseClient<Database>;
 
@@ -460,16 +465,13 @@ const COMPLETED_COLUMNS =
 
 function completedQuery(supabase: Client, formId: string, filters: ResponseFilters) {
   const answer: AnswerFilter | undefined = filters.answer;
+  let select = answer
+    ? `${COMPLETED_COLUMNS}, answer_match:answers!inner(question_id)`
+    : COMPLETED_COLUMNS;
+  if (filters.search) select = `${select}, ${SEARCH_JOIN}`;
   let query = supabase
     .from("responses")
-    .select(
-      answer
-        ? `${COMPLETED_COLUMNS}, answer_match:answers!inner(question_id)`
-        : COMPLETED_COLUMNS,
-      {
-        count: "exact",
-      },
-    )
+    .select(select, { count: "exact" })
     .eq("form_id", formId)
     .eq("status", "completed");
   if (filters.since) query = query.gte("completed_at", filters.since.toISOString());
@@ -478,6 +480,9 @@ function completedQuery(supabase: Client, formId: string, filters: ResponseFilte
     query = query
       .eq("answer_match.question_id", answer.questionId)
       .contains("answer_match.value", JSON.stringify(answer.value));
+  }
+  if (filters.search) {
+    query = query.ilike("search_match.search_text", searchPattern(filters.search));
   }
   return query.returns<CompletedRow[]>();
 }

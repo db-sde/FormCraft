@@ -305,7 +305,17 @@ treated as `"unknown"`.
 `GET /api/forms/:id/export.csv` — auth + workspace check. Bounded
 (documented row limit in `docs/testing.md`/product copy); returns a
 clear `400` with guidance if the response count exceeds the safe
-synchronous bound, rather than silently truncating.
+synchronous bound, rather than silently truncating. Takes the
+responses page's filters (`view`, `period`, `ending`, `q` + `a`,
+`search`), so it holds exactly what the table shows.
+
+`GET /api/leads/export.csv` — the workspace's leads (`?form=` for one
+form's).
+
+Both accept `?format=xlsx` for the same table as an Excel workbook
+(`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`).
+CSV downloads start with a UTF-8 byte-order mark so Excel reads
+non-ASCII text correctly.
 
 ## Conventions
 

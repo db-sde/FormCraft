@@ -72,6 +72,7 @@ export type Database = {
           id: string;
           question_id: string;
           response_id: string;
+          search_text: string | null;
           updated_at: string;
           value: Json;
         };
@@ -79,6 +80,7 @@ export type Database = {
           id?: string;
           question_id: string;
           response_id: string;
+          search_text?: never;
           updated_at?: string;
           value: Json;
         };
@@ -86,6 +88,7 @@ export type Database = {
           id?: string;
           question_id?: string;
           response_id?: string;
+          search_text?: never;
           updated_at?: string;
           value?: Json;
         };
@@ -1935,6 +1938,14 @@ export type Database = {
         Returns: {
           question_id: string;
           stopped: number;
+        }[];
+      };
+      response_reach: {
+        Args: { since?: string; target_form_id: string };
+        Returns: {
+          last_question_id: string;
+          responses: number;
+          status: string;
         }[];
       };
       response_source_conversion: {

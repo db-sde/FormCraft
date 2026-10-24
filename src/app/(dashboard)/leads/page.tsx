@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Contact, Download, Mail, Phone, UsersRound } from "lucide-react";
+import { Contact, Mail, Phone, UsersRound } from "lucide-react";
 import { listLeads } from "@/domains/leads";
 import { listFormsForWorkspace } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
@@ -21,7 +21,8 @@ import type { Metadata } from "next";
 import { responseActivity } from "@/domains/responses/activity";
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
-import { LeadsSearch } from "@/components/dashboard/leads-search";
+import { SearchBox } from "@/components/shared/search-box";
+import { ExportMenu } from "@/components/shared/export-menu";
 import { canEdit } from "@/domains/workspaces";
 
 export const metadata: Metadata = { title: "Leads" };
@@ -50,20 +51,19 @@ export default async function LeadsPage({
         title="Leads"
         description="Everyone who left their contact details in one of your forms — including people who didn't finish."
         actions={
-          leads.totalCount > 0 && (
-            <Button asChild variant="outline" className="h-11 font-semibold">
-              <a href={exportHref} download>
-                <Download />
-                Export CSV
-              </a>
-            </Button>
-          )
+          leads.totalCount > 0 && <ExportMenu href={exportHref} className="h-11" />
         }
       />
 
       {forms.length > 0 && (
         <div className="mb-[22px] flex flex-col gap-3 sm:flex-row">
-          <LeadsSearch formId={formId} initial={q ?? ""} />
+          <SearchBox
+            baseHref={formId ? `/leads?form=${formId}` : "/leads"}
+            initial={q ?? ""}
+            placeholder="Search name, email, phone…"
+            label="Search leads"
+            className="flex-1 sm:max-w-xs"
+          />
           <FormFilter
             forms={forms.map((f) => ({ id: f.id, title: f.title }))}
             value={formId}

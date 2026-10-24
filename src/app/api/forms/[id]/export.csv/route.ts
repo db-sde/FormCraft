@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
-import { buildResponsesCsv, filtersFromParams } from "@/domains/responses";
+import { buildResponsesTable, filtersFromParams } from "@/domains/responses";
 import {
   CSV_BOM,
   ExportTooLargeError,
   MAX_SYNCHRONOUS_EXPORT_ROWS,
+  toCsv,
+  toXlsx,
+  XLSX_CONTENT_TYPE,
 } from "@/domains/exports";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
@@ -17,6 +20,8 @@ import { hasPermission } from "@/domains/workspaces/permissions";
  * workspace, and the explicit form/workspace check below gives a
  * clean 404 instead of a silently-empty export for a form that isn't
  * theirs or doesn't exist.
+ *
+ * `?format=xlsx` returns the same table as an Excel workbook.
  */
 export async function GET(
   request: Request,
@@ -25,12 +30,14 @@ export async function GET(
   const { id: formId } = await params;
   const search = new URL(request.url).searchParams;
   const view = search.get("view") === "incomplete" ? "incomplete" : "completed";
+  const excel = search.get("format") === "xlsx";
   // The same filters as the responses page, so the file matches the table.
   const filters = filtersFromParams({
     period: search.get("period"),
     ending: view === "completed" ? search.get("ending") : null,
     q: search.get("q"),
     a: search.get("a"),
+    search: search.get("search"),
   });
   const { supabase, workspace } = await getCurrentWorkspace();
   if (!(await hasPermission(supabase, workspace.id, "export_responses"))) {
@@ -54,11 +61,15 @@ export async function GET(
   }
 
   try {
-    const csv = await buildResponsesCsv(supabase, formId, view, filters);
+    const { columns, rows } = await buildResponsesTable(supabase, formId, view, filters);
     const base = form.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase() || "form";
-    const filename = `${base}-${view === "completed" ? "responses" : "incomplete"}.csv`;
+    const filename = `${base}-${view === "completed" ? "responses" : "incomplete"}.${excel ? "xlsx" : "csv"}`;
 
-    trackEvent({ formId, eventType: "export_completed", metadata: { kind: view } });
+    trackEvent({
+      formId,
+      eventType: "export_completed",
+      metadata: { kind: view, format: excel ? "xlsx" : "csv" },
+    });
     void audit(createAdminClient(), {
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
@@ -66,10 +77,20 @@ export async function GET(
       target: { type: "form", id: formId },
       metadata: { view },
     });
-    return new NextResponse(CSV_BOM + csv, {
+    const disposition = `attachment; filename="${filename}"`;
+    if (excel) {
+      const sheet = view === "completed" ? "Responses" : "Unfinished";
+      return new NextResponse(Buffer.from(toXlsx(columns, rows, sheet)), {
+        headers: {
+          "Content-Type": XLSX_CONTENT_TYPE,
+          "Content-Disposition": disposition,
+        },
+      });
+    }
+    return new NextResponse(CSV_BOM + toCsv(columns, rows), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": disposition,
       },
     });
   } catch (error) {
@@ -78,7 +99,7 @@ export async function GET(
         {
           error: {
             code: "export_too_large",
-            message: `CSV exports stop at ${MAX_SYNCHRONOUS_EXPORT_ROWS.toLocaleString("en-US")} rows. Add a date filter and export in parts.`,
+            message: `Exports stop at ${MAX_SYNCHRONOUS_EXPORT_ROWS.toLocaleString("en-US")} rows. Add a date filter and export in parts.`,
           },
         },
         { status: 400 },

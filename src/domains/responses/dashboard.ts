@@ -44,17 +44,23 @@ export const RESPONSE_PERIODS = [
   { id: "all", label: "Any time", days: 0 },
 ] as const;
 
+/** Longest search the responses page accepts. */
+export const MAX_RESPONSE_SEARCH = 100;
+
 /** The responses page's filters from its URL (`period`, `ending`, `q` +
- * `a`) — shared with CSV export so it exports exactly what's shown.
- * Unknown ids simply match nothing; access is still scoped by RLS. */
+ * `a`, `search`) — shared with the exports so they hold exactly what's
+ * shown. Unknown ids simply match nothing; access is still scoped by RLS. */
 export function filtersFromParams(params: {
   period?: string | null;
   ending?: string | null;
   q?: string | null;
   a?: string | null;
+  search?: string | null;
 }): ResponseFilters {
   const period = RESPONSE_PERIODS.find((p) => p.id === params.period);
+  const search = params.search?.trim().slice(0, MAX_RESPONSE_SEARCH);
   return {
+    search: search || undefined,
     since: period?.days ? new Date(Date.now() - period.days * 86_400_000) : undefined,
     endingId: params.ending || undefined,
     answer:
@@ -74,7 +80,28 @@ export type ResponseFilters = {
   /** Completed responses that reached this ending. */
   endingId?: string;
   answer?: AnswerFilter;
+  /** Text any answer contains (case-insensitive). */
+  search?: string;
 };
+
+/**
+ * Free-text search (QA EN-01): responses with any answer containing the
+ * text, case-insensitively — what people typed, contact details, numbers
+ * and dates (a choice is stored as its option id, so filter those with
+ * "Filter by answer"). Matched in the database against each answer's
+ * `search_text`, a lower-cased copy kept by Postgres with a trigram
+ * index. LIKE's own wildcards in the text are matched literally.
+ */
+export const SEARCH_JOIN = "search_match:answers!inner(question_id)";
+
+export function searchPattern(search: string): string {
+  const literal = search
+    .trim()
+    .toLowerCase()
+    .slice(0, MAX_RESPONSE_SEARCH)
+    .replace(/[\\%_]/g, (c) => `\\${c}`);
+  return `%${literal}%`;
+}
 
 export type ResponseListItem = {
   id: string;
@@ -155,9 +182,10 @@ function filteredResponses<Row = ResponseRow>(
   columns: string,
   count: "exact" | undefined = "exact",
 ) {
-  const select = filters.answer
+  let select = filters.answer
     ? `${columns}, answer_match:answers!inner(question_id)`
     : columns;
+  if (filters.search) select = `${select}, ${SEARCH_JOIN}`;
   let query = supabase
     .from("responses")
     .select(select, count ? { count } : undefined)
@@ -176,6 +204,9 @@ function filteredResponses<Row = ResponseRow>(
     query = query
       .eq("answer_match.question_id", filters.answer.questionId)
       .contains("answer_match.value", JSON.stringify(filters.answer.value));
+  }
+  if (filters.search) {
+    query = query.ilike("search_match.search_text", searchPattern(filters.search));
   }
   return query.returns<Row[]>();
 }
@@ -603,6 +634,18 @@ export async function buildResponsesCsv(
   view: ResponseView = "completed",
   filters: ResponseFilters = {},
 ): Promise<string> {
+  const { columns, rows } = await buildResponsesTable(supabase, formId, view, filters);
+  return toCsv(columns, rows);
+}
+
+/** The rows and columns behind the CSV and Excel exports (one table, two
+ * file formats, so they always agree). */
+export async function buildResponsesTable(
+  supabase: Client,
+  formId: string,
+  view: ResponseView = "completed",
+  filters: ResponseFilters = {},
+): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
   const { data: latestVersion, error: latestVersionError } = await supabase
     .from("form_versions")
     .select("schema")
@@ -763,7 +806,10 @@ export async function buildResponsesCsv(
     ...variableNames.map(variableColumn),
     ...ATTRIBUTION_COLUMNS,
   ];
-  return toCsv(columns, rows);
+  if (rows.length > MAX_SYNCHRONOUS_EXPORT_ROWS) {
+    throw new ExportTooLargeError(rows.length);
+  }
+  return { columns, rows };
 }
 
 export type DropoffStep = {
@@ -803,6 +849,83 @@ export async function getDropoff(
       stopped: counts.get(q.id) ?? 0,
     }));
   return { steps, total: steps.reduce((sum, s) => sum + s.stopped, 0) };
+}
+
+export type ReachStep = {
+  questionId: string;
+  label: string;
+  /** Respondents who got as far as this question. */
+  reached: number;
+  /** Of those, how many left on it without finishing (or are still there). */
+  stopped: number;
+};
+
+export type Reach = {
+  /** Everyone who started (preview traffic never counts). */
+  starts: number;
+  completed: number;
+  /** Started but left before the first question (e.g. on the welcome screen). */
+  beforeFirst: number;
+  steps: ReachStep[];
+};
+
+/**
+ * How far respondents got, question by question (QA EN-03): the drop-off
+ * chart in Summary. A response that didn't finish stopped on the question
+ * it was last on; everyone who started reached each question except
+ * those who stopped earlier. Counts follow the form's current order, so a
+ * question that logic skips for some people still counts them as having
+ * passed it. Aggregated in the database (response_reach), scoped by RLS.
+ */
+export async function getReach(
+  supabase: Client,
+  formId: string,
+  since?: Date,
+): Promise<Reach> {
+  const [{ data, error }, latest] = await Promise.all([
+    supabase.rpc("response_reach", {
+      target_form_id: formId,
+      since: since?.toISOString(),
+    }),
+    getLatestSchema(supabase, formId),
+  ]);
+  if (error) throw error;
+
+  const questions = (latest?.questions ?? []).filter((q) => q.type !== "welcome_screen");
+  const known = new Set(questions.map((q) => q.id));
+  let starts = 0;
+  let completed = 0;
+  let beforeFirst = 0;
+  const stoppedAt = new Map<string, number>();
+  for (const row of data ?? []) {
+    starts += row.responses;
+    if (row.status === "completed") {
+      completed += row.responses;
+    } else if (row.last_question_id && known.has(row.last_question_id)) {
+      stoppedAt.set(
+        row.last_question_id,
+        (stoppedAt.get(row.last_question_id) ?? 0) + row.responses,
+      );
+    } else {
+      // On the welcome screen, or on a question that has since been
+      // removed: they never reached one of today's questions.
+      beforeFirst += row.responses;
+    }
+  }
+
+  let remaining = starts - beforeFirst;
+  const steps = questions.map((q) => {
+    const stopped = stoppedAt.get(q.id) ?? 0;
+    const step = {
+      questionId: q.id,
+      label: questionColumnLabel(q),
+      reached: remaining,
+      stopped,
+    };
+    remaining -= stopped;
+    return step;
+  });
+  return { starts, completed, beforeFirst, steps };
 }
 
 /** Conversion insights (P3.8) for a form: where people leave and which
