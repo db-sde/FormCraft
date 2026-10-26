@@ -8,7 +8,14 @@ import { ThemeProvider as NextThemesProvider } from "next-themes";
  * the OS by default. Respondent forms (/f/…) are always drawn in the
  * creator's own theme, so the app's dark mode is switched off there.
  */
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({
+  children,
+  nonce,
+}: {
+  children: React.ReactNode;
+  /** The page's CSP nonce, for next-themes' inline script. */
+  nonce?: string;
+}) {
   const pathname = usePathname();
   return (
     <NextThemesProvider
@@ -16,6 +23,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
+      nonce={nonce}
       forcedTheme={pathname?.startsWith("/f/") ? "light" : undefined}
     >
       {children}

@@ -2,11 +2,32 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { supabaseEnv } from "@/lib/supabase/env";
 import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
+import { API_CSP, buildCsp, newNonce } from "@/lib/http/csp";
 import {
   VISITOR_COOKIE,
   VISITOR_ID_PATTERN,
   VISITOR_MAX_AGE_SECONDS,
 } from "@/domains/experiments/visitor";
+
+/** A page's Content-Security-Policy with a fresh nonce: set on the
+ * request (Next.js reads the nonce from it and adds it to its own
+ * scripts; layouts read `x-nonce`) and on the response. */
+function pageCsp(request: NextRequest, publicForm: boolean) {
+  const nonce = newNonce();
+  const policy = buildCsp({
+    nonce,
+    supabaseUrl: supabaseEnv.url,
+    publicForm,
+    dev: process.env.NODE_ENV === "development",
+    https: request.nextUrl.protocol === "https:",
+  });
+  return { nonce, policy };
+}
+
+function withCsp(response: NextResponse, policy: string): NextResponse {
+  response.headers.set("Content-Security-Policy", policy);
+  return response;
+}
 
 /** Gives a public form page's visitor a random id (A/B tests, P3.9), on
  * this request too so the first render can use it. Returns the new id
@@ -107,14 +128,18 @@ async function customDomain(request: NextRequest, host: string) {
     path.startsWith("/api/responses/") ||
     path === "/favicon.ico"
   ) {
-    return NextResponse.next({ request: { headers } });
+    const response = NextResponse.next({ request: { headers } });
+    return path.startsWith("/api/") ? withCsp(response, API_CSP) : response;
   }
+  const { nonce, policy } = pageCsp(request, true);
+  headers.set("x-nonce", nonce);
+  headers.set("Content-Security-Policy", policy);
   // Stripe brings respondents back to /f/<slug>/payment (P2.17).
   const payment = /^\/f\/([a-z0-9][a-z0-9-]{0,80})\/payment\/?$/.exec(path);
   if (payment) {
     const url = request.nextUrl.clone();
     url.pathname = `/f/${payment[1]}/payment`;
-    return NextResponse.rewrite(url, { request: { headers } });
+    return withCsp(NextResponse.rewrite(url, { request: { headers } }), policy);
   }
   let slug: string | null = null;
   if (path === "/") slug = domain.defaultSlug;
@@ -126,10 +151,9 @@ async function customDomain(request: NextRequest, host: string) {
   const url = request.nextUrl.clone();
   url.pathname = `/f/${slug}`;
   const visitor = ensureVisitor(request, headers);
-  return withVisitor(
-    NextResponse.rewrite(url, { request: { headers } }),
-    request,
-    visitor,
+  return withCsp(
+    withVisitor(NextResponse.rewrite(url, { request: { headers } }), request, visitor),
+    policy,
   );
 }
 
@@ -138,17 +162,31 @@ export async function proxy(request: NextRequest) {
   if (!isAppHost(host)) return customDomain(request, host);
 
   const path = request.nextUrl.pathname;
-  if (path.startsWith("/f/") || path.startsWith("/api/")) {
-    // No session work here (as before); just make sure nobody can send
-    // the custom-domain header themselves.
+  if (path.startsWith("/api/")) {
+    // No session work here; just make sure nobody can send the
+    // custom-domain header themselves.
     const headers = new Headers(request.headers);
     headers.delete(CUSTOM_DOMAIN_HEADER);
-    const visitor = path.startsWith("/f/") ? ensureVisitor(request, headers) : null;
-    if (!visitor && !request.headers.has(CUSTOM_DOMAIN_HEADER))
-      return NextResponse.next();
-    return withVisitor(NextResponse.next({ request: { headers } }), request, visitor);
+    return withCsp(NextResponse.next({ request: { headers } }), API_CSP);
   }
-  return updateSession(request);
+  if (path.startsWith("/f/")) {
+    const headers = new Headers(request.headers);
+    headers.delete(CUSTOM_DOMAIN_HEADER);
+    const { nonce, policy } = pageCsp(request, true);
+    headers.set("x-nonce", nonce);
+    headers.set("Content-Security-Policy", policy);
+    const visitor = ensureVisitor(request, headers);
+    return withCsp(
+      withVisitor(NextResponse.next({ request: { headers } }), request, visitor),
+      policy,
+    );
+  }
+  const { nonce, policy } = pageCsp(request, false);
+  const response = await updateSession(request, {
+    "x-nonce": nonce,
+    "Content-Security-Policy": policy,
+  });
+  return withCsp(response, policy);
 }
 
 export const config = {

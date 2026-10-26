@@ -13,6 +13,7 @@ import {
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { headers } from "next/headers";
 import { ThemeProvider } from "@/components/theme-provider";
 
 // Self-hosted at build time by next/font (no request to Google at runtime).
@@ -64,7 +65,11 @@ export const metadata: Metadata = {
   description: "Build and publish forms, collect responses, and see the results.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // This request's CSP nonce (src/proxy.ts), for the one inline script
+  // rendered here — the theme switcher's. Reading it also renders every
+  // page per request, which a nonce needs.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -72,7 +77,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${spaceGrotesk.variable} ${dmSans.variable} ${jetbrainsMono.variable} ${inter.variable} ${poppins.variable} ${lora.variable} ${playfair.variable} ${nunito.variable} ${dmSerif.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <ThemeProvider>
+        <ThemeProvider nonce={nonce}>
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster />
         </ThemeProvider>

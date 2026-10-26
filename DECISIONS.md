@@ -1375,4 +1375,46 @@ From the QA handover of 23 Oct 2026. The choices that change behaviour:
   generates stricter types that break 56 unrelated call sites.
   Regenerate fully, and fix those, as its own change.
 
+## 2026-10-26 — Security headers after the ZAP scan
+
+The OWASP ZAP baseline scan (no High findings) flagged the missing
+Content-Security-Policy and a few headers. What changed:
+
+- **A real CSP on every page**, built per request in `src/proxy.ts`
+  (`src/lib/http/csp.ts`): scripts only with that response's nonce, or
+  loaded by one ('strict-dynamic' — needed for tag managers); no eval;
+  `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`;
+  images, fonts and connections limited to this site and the Supabase
+  project. Published forms add the analytics-pixel hosts and
+  `frame-ancestors *` (they're made to be embedded); everything else is
+  `frame-ancestors 'none'`. API responses get `default-src 'none'`.
+  `upgrade-insecure-requests` only over HTTPS.
+- **Every page now renders per request** (the root layout reads the
+  nonce), because a nonce can't be baked into a prerendered page. The
+  marketing and sign-in pages were the only static ones.
+- **zod runs jitless in the browser** (`src/instrumentation-client.ts`):
+  its probe for `new Function` is reported as a CSP violation even
+  though the error is caught.
+- **Images only from the Supabase project.** The builder only ever
+  uploads there; a form given an outside image URL through the API
+  would now show no image.
+- `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+  `Permissions-Policy` everywhere; `X-Powered-By` removed.
+
+Accepted, with reasons:
+
+- **`style-src 'unsafe-inline'`**: React's `style` attributes (theme
+  colours, progress bars) can't carry a nonce. Injected CSS can't run
+  script, which is what the policy guards.
+- **`frame-ancestors *` on /f/**: embedding forms on any site is the
+  feature.
+- **"Absence of anti-CSRF tokens" on /signup**: a false positive. Server
+  actions accept only POST, and Next.js rejects one whose Origin doesn't
+  match the host; auth cookies are SameSite=Lax; `form-action 'self'`.
+- **`Access-Control-Allow-Origin: *` on a font in /\_next/static**:
+  public build files, nothing private (Vercel's default).
+- Informational: the login form being found, cache headers on public
+  pages, "suspicious comments" (words in minified code), user-agent
+  fuzzing — nothing to change.
+
 <!-- Add new decisions above this line, newest first. -->

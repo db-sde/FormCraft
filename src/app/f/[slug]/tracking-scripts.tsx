@@ -25,7 +25,7 @@ export function safeTrackingIds(ids: TrackingIds): TrackingIds {
   };
 }
 
-export function TrackingScripts({ ids }: { ids: TrackingIds }) {
+export function TrackingScripts({ ids, nonce }: { ids: TrackingIds; nonce?: string }) {
   const { ga, gtm, meta } = safeTrackingIds(ids);
   if (!ga && !gtm && !meta) return null;
   return (
@@ -33,25 +33,26 @@ export function TrackingScripts({ ids }: { ids: TrackingIds }) {
       {ga && (
         <>
           <Script
+            nonce={nonce}
             src={`https://www.googletagmanager.com/gtag/js?id=${ga}`}
             strategy="afterInteractive"
           />
-          <Script id="fc-ga" strategy="afterInteractive">
+          <Script id="fc-ga" nonce={nonce} strategy="afterInteractive">
             {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=gtag;gtag('js',new Date());gtag('config','${ga}');`}
           </Script>
         </>
       )}
       {gtm && (
-        <Script id="fc-gtm" strategy="afterInteractive">
+        <Script id="fc-gtm" nonce={nonce} strategy="afterInteractive">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${gtm}');`}
         </Script>
       )}
       {meta && (
-        <Script id="fc-meta" strategy="afterInteractive">
+        <Script id="fc-meta" nonce={nonce} strategy="afterInteractive">
           {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${meta}');fbq('track','PageView');`}
         </Script>
       )}
-      <Script id="fc-track" strategy="afterInteractive">
+      <Script id="fc-track" nonce={nonce} strategy="afterInteractive">
         {`window.formcraftTrack=function(e){try{if(window.gtag)window.gtag('event',e==='start'?'form_start':'form_submit');if(window.dataLayer)window.dataLayer.push({event:e==='start'?'formcraft_start':'formcraft_submit'});if(window.fbq&&e==='submit')window.fbq('track','Lead');}catch(_){}};`}
       </Script>
     </>

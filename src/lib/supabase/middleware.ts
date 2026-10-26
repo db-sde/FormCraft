@@ -23,8 +23,17 @@ const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
  * unauthenticated users away from protected routes. This is a UX
  * convenience, not the authorization boundary — every server
  * action/route handler still re-establishes identity itself. */
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+export async function updateSession(
+  request: NextRequest,
+  /** Extra request headers for the page (the CSP nonce). */
+  extraHeaders: Record<string, string> = {},
+) {
+  const forward = () => {
+    const headers = new Headers(request.headers);
+    for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
+    return NextResponse.next({ request: { headers } });
+  };
+  let response = forward();
 
   const supabase = createServerClient<Database>(supabaseEnv.url, supabaseEnv.anonKey, {
     cookies: {
@@ -35,7 +44,7 @@ export async function updateSession(request: NextRequest) {
         for (const { name, value } of cookiesToSet) {
           request.cookies.set(name, value);
         }
-        response = NextResponse.next({ request });
+        response = forward();
         for (const { name, value, options } of cookiesToSet) {
           response.cookies.set(name, value, options);
         }

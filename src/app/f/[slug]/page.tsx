@@ -149,7 +149,12 @@ export default async function PublicFormPage({
 
   return (
     <div className={embedded ? undefined : "min-h-screen"}>
-      {entitlements.tracking_pixels && <TrackingScripts ids={publicForm.tracking} />}
+      {entitlements.tracking_pixels && (
+        <TrackingScripts
+          ids={publicForm.tracking}
+          nonce={requestHeaders.get("x-nonce") ?? undefined}
+        />
+      )}
       <PublicFormRuntime
         formId={publicForm.formId}
         formVersionId={publicForm.formVersionId}
