@@ -190,10 +190,14 @@ export async function getUploadSignedUrl(
   supabase: Client,
   storagePath: string,
   expiresInSeconds = 3600,
+  /** Served as a download under this name (Content-Disposition:
+   * attachment), never rendered in the browser: a respondent's file is
+   * hostile until proven otherwise. */
+  downloadName = true as string | true,
 ): Promise<string | null> {
   const { data, error } = await supabase.storage
     .from("response-uploads")
-    .createSignedUrl(storagePath, expiresInSeconds);
+    .createSignedUrl(storagePath, expiresInSeconds, { download: downloadName });
   if (error) return null;
   return data.signedUrl;
 }

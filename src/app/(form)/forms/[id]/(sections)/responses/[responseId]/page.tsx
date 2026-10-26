@@ -125,7 +125,12 @@ export default async function ResponseDetailPage({
       .in("question_id", fileQuestionIds);
     for (const row of rows ?? []) {
       uploads.set(row.question_id, {
-        url: await getUploadSignedUrl(supabase, row.storage_path),
+        url: await getUploadSignedUrl(
+          supabase,
+          row.storage_path,
+          3600,
+          row.original_filename || true,
+        ),
         name: row.original_filename,
         size: row.size_bytes,
       });

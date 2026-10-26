@@ -8,7 +8,9 @@ import { formatAnswerValue } from "@/domains/responses/format";
 import { decryptJson, encryptJson, type EncryptedPayload } from "@/domains/sheets/crypto";
 import {
   isDisallowedWebhookHost,
+  outboundUrlProblem,
   resolvesToDisallowedAddress,
+  safeFetch,
 } from "@/domains/webhooks/url-safety";
 
 type Client = SupabaseClient<Database>;
@@ -32,6 +34,9 @@ type Client = SupabaseClient<Database>;
  * A failed lookup never blocks the form: it just leaves the fields as
  * they were.
  */
+
+/** What lookups call out with: safeFetch, or a stand-in in tests. */
+type FetchLike = (url: URL, init: RequestInit) => Promise<Response>;
 
 export const MAX_LOOKUPS_PER_FORM = 5;
 export const MAX_CALLS_PER_RESPONSE = 10;
@@ -305,12 +310,9 @@ export async function deleteLookup(
 async function fetchJson(
   url: URL,
   header: { name: string; value: string } | null,
-  fetchImpl: typeof fetch,
+  fetchImpl: FetchLike,
 ): Promise<unknown | null> {
-  if (
-    isDisallowedWebhookHost(url.hostname) ||
-    (await resolvesToDisallowedAddress(url.hostname))
-  ) {
+  if (outboundUrlProblem(url) || (await resolvesToDisallowedAddress(url.hostname))) {
     return null;
   }
   try {
@@ -357,7 +359,7 @@ export async function runLookups(
   responseId: string,
   questionId: string,
   answers: Record<string, unknown>,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: FetchLike = safeFetch,
 ): Promise<Record<string, string>> {
   const { data: response } = await admin
     .from("responses")

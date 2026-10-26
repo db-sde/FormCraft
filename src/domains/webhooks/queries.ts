@@ -7,9 +7,9 @@ import {
   serializeWebhookPayload,
   type WebhookPayload,
 } from "./payload";
-import { signatureHeaderValue } from "./signing";
+import { signatureHeaders } from "./signing";
 import { nextBackoffDelayMs, isExhausted } from "./backoff";
-import { isDisallowedWebhookHost, resolvesToDisallowedAddress } from "./url-safety";
+import { outboundUrlProblem, resolvesToDisallowedAddress, safeFetch } from "./url-safety";
 import { buildSlackMessage } from "./slack";
 import { sendToHubspot } from "@/domains/integrations/hubspot";
 import { parseFormSchema } from "@/domains/forms/schema";
@@ -78,6 +78,24 @@ export async function createWebhookEndpoint(
     .single();
   if (error) throw error;
   return { id: data.id, signingSecret };
+}
+
+/** A new signing secret for an endpoint (the old one stops working at
+ * once). Runs as the caller: row-level security lets only people who
+ * manage integrations change it. Returns the secret to show once. */
+export async function rotateSigningSecret(
+  supabase: Client,
+  endpointId: string,
+): Promise<string | null> {
+  const signingSecret = generateSigningSecret();
+  const { data, error } = await supabase
+    .from("webhook_endpoints")
+    .update({ signing_secret: signingSecret })
+    .eq("id", endpointId)
+    .eq("kind", "webhook")
+    .select("id");
+  if (error) throw error;
+  return data?.length ? signingSecret : null;
 }
 
 export async function setWebhookEndpointEnabled(
@@ -285,26 +303,26 @@ async function attemptDelivery(
   } catch {
     return { status: "failed", error: "invalid URL" };
   }
-  if (
-    isDisallowedWebhookHost(parsedUrl.hostname) ||
-    (await resolvesToDisallowedAddress(parsedUrl.hostname))
-  ) {
+  const problem = outboundUrlProblem(parsedUrl);
+  if (problem) return { status: "failed", error: problem };
+  if (await resolvesToDisallowedAddress(parsedUrl.hostname)) {
     return { status: "failed", error: "endpoint host not allowed" };
   }
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(url, {
+    // safeFetch checks the address it connects to and never follows a
+    // redirect (see url-safety.ts). The reply's body is never read, let
+    // alone shown to anyone: SSRF must not become a way to read pages.
+    const res = await safeFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body,
       signal: controller.signal,
-      // Never follow redirects: a public URL could otherwise bounce the
-      // request to an internal address (see url-safety.ts).
-      redirect: "manual",
     });
     clearTimeout(timeout);
+    void res.body?.cancel();
 
     if (res.ok) return { status: "succeeded" };
     if (res.status >= 300 && res.status < 400) {
@@ -441,7 +459,7 @@ function signedRequest(signingSecret: string, payload: WebhookPayload) {
   return {
     body,
     headers: {
-      "X-FormCraft-Signature": signatureHeaderValue(signingSecret, body),
+      ...signatureHeaders(signingSecret, body),
       "X-FormCraft-Event": payload.eventType,
     },
   };
@@ -500,12 +518,14 @@ async function slackRequest(admin: Client, payload: WebhookPayload, config: Json
 
 /** Sends a synthetic test payload immediately (no enqueue/retry) so a
  * creator can verify their endpoint works. Not recorded in the
- * delivery log — it's a connectivity check, not a real event. */
+ * delivery log — it's a connectivity check, not a real event. Needs the
+ * service-role client (signing secrets aren't readable by members); the
+ * caller checks the person may manage this endpoint first. */
 export async function sendTestDelivery(
-  supabase: Client,
+  admin: Client,
   endpointId: string,
 ): Promise<DeliveryAttemptResult> {
-  const { data: endpoint, error } = await supabase
+  const { data: endpoint, error } = await admin
     .from("webhook_endpoints")
     .select("url, signing_secret, form_id, kind")
     .eq("id", endpointId)
@@ -513,7 +533,7 @@ export async function sendTestDelivery(
   if (error) throw error;
 
   if (endpoint.kind === "slack") {
-    const { data: form } = await supabase
+    const { data: form } = await admin
       .from("forms")
       .select("title")
       .eq("id", endpoint.form_id)

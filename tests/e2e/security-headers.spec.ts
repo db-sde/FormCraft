@@ -93,6 +93,9 @@ test("pages carry a nonce-based CSP and hardening headers", async ({ request }) 
     "default-src 'none'; frame-ancestors 'none'",
   );
   expect(api.headers()["x-content-type-options"]).toBe("nosniff");
+  // API responses (exports, responses) are never cached anywhere.
+  expect(api.headers()["cache-control"]).toBe("private, no-store");
+  expect(api.headers()["access-control-allow-origin"]).toBeUndefined();
 });
 
 test("a published form runs, analytics pixels included, without a CSP violation", async ({

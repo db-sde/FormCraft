@@ -6,6 +6,8 @@ import {
   needsRefresh,
   exchangeCodeForTokens,
   refreshAccessToken,
+  pkceForFlow,
+  revokeToken,
 } from "@/domains/sheets/oauth";
 import { appendRowToSheet, SheetsApiError } from "@/domains/sheets/append";
 
@@ -86,6 +88,55 @@ describe("buildAuthorizeUrl", () => {
   it("throws when Google OAuth isn't configured", () => {
     delete process.env.GOOGLE_OAUTH_CLIENT_ID;
     expect(() => buildAuthorizeUrl("form_123")).toThrow();
+  });
+});
+
+describe("PKCE (security checklist §6)", () => {
+  it("sends an S256 challenge whose verifier only this flow's cookie can produce", async () => {
+    const { verifier, challenge } = pkceForFlow("nonce-of-this-flow");
+    const url = new URL(buildAuthorizeUrl("state", undefined, challenge));
+    expect(url.searchParams.get("code_challenge")).toBe(challenge);
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    // RFC 7636: 43–128 characters, and the challenge is its SHA-256.
+    expect(verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
+    const { createHash } = await import("node:crypto");
+    expect(createHash("sha256").update(verifier).digest("base64url")).toBe(challenge);
+    // Another browser's flow (another cookie) has another verifier.
+    expect(pkceForFlow("someone-elses-nonce").verifier).not.toBe(verifier);
+  });
+
+  it("sends the verifier with the code exchange", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        seen.push(String(init.body));
+        return new Response(
+          JSON.stringify({ access_token: "a", refresh_token: "r", expires_in: 60 }),
+          { status: 200 },
+        );
+      }),
+    );
+    await exchangeCodeForTokens("code", "https://fake.test/token", "the-verifier");
+    expect(new URLSearchParams(seen[0]).get("code_verifier")).toBe("the-verifier");
+  });
+
+  it("revokes a token with Google, and never throws when that fails", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push(String(init.body));
+        return new Response("", { status: 200 });
+      }),
+    );
+    expect(await revokeToken("1//refresh", "https://fake.test/revoke")).toBe(true);
+    expect(new URLSearchParams(calls[0]).get("token")).toBe("1//refresh");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    expect(await revokeToken("1//refresh", "https://fake.test/revoke")).toBe(false);
   });
 });
 

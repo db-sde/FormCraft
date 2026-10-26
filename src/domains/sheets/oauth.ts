@@ -1,3 +1,4 @@
+import { createHash, createHmac } from "node:crypto";
 /**
  * Google OAuth (authorization-code flow) for the Sheets integration.
  * This app has no real Google Cloud OAuth client registered — the
@@ -28,6 +29,8 @@ export function isGoogleOAuthConfigured(): boolean {
 export function buildAuthorizeUrl(
   state: string,
   authEndpoint = DEFAULT_AUTH_ENDPOINT,
+  /** PKCE (S256): see pkceForFlow. */
+  codeChallenge?: string,
 ): string {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
@@ -48,7 +51,49 @@ export function buildAuthorizeUrl(
   // us with an access token and no way to refresh it.
   url.searchParams.set("prompt", "consent");
   url.searchParams.set("state", state);
+  if (codeChallenge) {
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+  }
   return url.toString();
+}
+
+/**
+ * PKCE for one connect flow: a code verifier only the browser that
+ * started the flow can produce (it's derived from that flow's random,
+ * httpOnly state cookie and the server secret), so an authorization
+ * code intercepted on the way back is useless anywhere else. No extra
+ * cookie needed — the callback re-derives it from the same nonce.
+ */
+export function pkceForFlow(
+  cookieNonce: string,
+  secret = process.env.APP_SECRET,
+): { verifier: string; challenge: string } {
+  if (!secret) throw new Error("APP_SECRET is not set");
+  const verifier = createHmac("sha256", secret)
+    .update(`pkce:${cookieNonce}`)
+    .digest("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
+/** Asks Google to revoke a token (disconnecting a sheet). Best effort:
+ * the connection is removed on our side either way. */
+export async function revokeToken(
+  token: string,
+  revokeEndpoint = "https://oauth2.googleapis.com/revoke",
+): Promise<boolean> {
+  try {
+    const res = await fetch(revokeEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 export type OAuthTokens = {
@@ -69,6 +114,8 @@ type GoogleTokenResponse = {
 export async function exchangeCodeForTokens(
   code: string,
   tokenEndpoint = DEFAULT_TOKEN_ENDPOINT,
+  /** The PKCE verifier for this flow (see pkceForFlow). */
+  codeVerifier?: string,
 ): Promise<OAuthTokens> {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -86,6 +133,7 @@ export async function exchangeCodeForTokens(
       client_secret: clientSecret,
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
     }),
   });
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { hitRateLimit } from "@/domains/abuse";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { deleteAccount } from "@/domains/identity";
@@ -45,13 +46,37 @@ export async function updateEmailAction(email: string): Promise<AccountResult> {
 
 export async function updatePasswordAction(
   password: string,
-  currentPassword?: string,
+  currentPassword: string,
 ): Promise<AccountResult> {
-  if (password.length < 8) return { ok: false, message: "Use at least 8 characters." };
+  if (typeof password !== "string" || password.length < 8) {
+    return { ok: false, message: "Use at least 8 characters." };
+  }
   const { supabase, user } = await requireUser();
-  // Someone at an unlocked laptop shouldn't be able to lock the owner out:
-  // the current password has to be right first.
-  if (currentPassword !== undefined) {
+  // Someone at an unlocked laptop (or holding a stolen session) mustn't
+  // be able to lock the owner out: the current password has to be right
+  // first. Decided here, not by the caller — a server action's arguments
+  // are whatever the request sends. Accounts that never had a password
+  // (single sign-on) have nothing to check.
+  const hasPassword = (user.app_metadata?.providers as string[] | undefined)?.includes(
+    "email",
+  );
+  if (hasPassword) {
+    // Checking it is a password guess, so it's limited like logging in.
+    const limit = await hitRateLimit(
+      createAdminClient(),
+      `password-check:${user.id}`,
+      5,
+      15 * 60 * 1000,
+    );
+    if (!limit.allowed) {
+      return {
+        ok: false,
+        message: "Too many attempts. Wait a few minutes, then try again.",
+      };
+    }
+    if (typeof currentPassword !== "string" || !currentPassword) {
+      return { ok: false, message: "Enter your current password." };
+    }
     const { error: checkError } = await supabase.auth.signInWithPassword({
       email: user.email ?? "",
       password: currentPassword,

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import {
   createWebhookEndpoint,
-  isDisallowedWebhookHost,
+  outboundUrlProblem,
   resolvesToDisallowedAddress,
 } from "@/domains/webhooks";
 import { apiError, withApiKey } from "../shared";
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const target = new URL(parsed.data.url);
     if (
       target.protocol !== "https:" ||
-      isDisallowedWebhookHost(target.hostname) ||
+      outboundUrlProblem(target) !== null ||
       (await resolvesToDisallowedAddress(target.hostname))
     ) {
       return apiError("invalid_url", "The URL must be public and use HTTPS.", 400);

@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "@/lib/toast";
-import { Check, Copy, KeyRound, Trash2, Webhook } from "lucide-react";
+import { Check, Copy, KeyRound, RotateCw, Trash2, Webhook } from "lucide-react";
 import type { WebhookEndpoint, DeliveryLogEntry } from "@/domains/webhooks";
 import {
   createWebhookEndpointAction,
   setWebhookEnabledAction,
   deleteWebhookEndpointAction,
   sendTestDeliveryAction,
+  rotateWebhookSecretAction,
 } from "@/app/(form)/forms/[id]/(sections)/integrations/actions";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +133,24 @@ export function WebhooksPanel({
     }
   }
 
+  const [pendingRotate, setPendingRotate] = useState<WebhookEndpoint | null>(null);
+
+  function handleRotate(endpoint: WebhookEndpoint) {
+    setPendingRotate(null);
+    startTransition(async () => {
+      const result = await rotateWebhookSecretAction(formId, endpoint.id);
+      if (!result.ok) {
+        toast.error("Couldn't make a new secret.", { description: result.message });
+        return;
+      }
+      setSecretCopied(false);
+      setRevealedSecret({ endpointId: endpoint.id, secret: result.signingSecret });
+      toast.success("New signing secret made.", {
+        description: "The old one has stopped working. Save the new one below.",
+      });
+    });
+  }
+
   async function copySecret(secret: string) {
     try {
       await navigator.clipboard.writeText(secret);
@@ -203,7 +222,8 @@ export function WebhooksPanel({
           </div>
           <span className="text-[12.5px] text-[#cdbda4]">
             Use it to check the <span className="font-mono">X-FormCraft-Signature</span>{" "}
-            header on each request.
+            header on each request: an HMAC-SHA256 of the timestamp, a dot and the body.
+            Reject requests more than five minutes old.
           </span>
         </div>
       )}
@@ -254,6 +274,17 @@ export function WebhooksPanel({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  className="size-[34px]"
+                  onClick={() => setPendingRotate(endpoint)}
+                  aria-label={`New signing secret for ${host(endpoint.url)}`}
+                  title="New signing secret"
+                >
+                  <RotateCw className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   className="text-destructive hover:text-destructive size-[34px]"
                   onClick={() => setPendingDelete(endpoint)}
                   aria-label={`Delete webhook ${host(endpoint.url)}`}
@@ -293,6 +324,33 @@ export function WebhooksPanel({
           );
         })
       )}
+
+      <AlertDialog
+        open={pendingRotate !== null}
+        onOpenChange={(open) => !open && setPendingRotate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <KeyRound />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Make a new signing secret?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The current secret for {pendingRotate && host(pendingRotate.url)} stops
+              working straight away, so update your receiver with the new one. Do this if
+              the old one may have leaked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingRotate && handleRotate(pendingRotate)}
+            >
+              Make a new secret
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={pendingDelete !== null}

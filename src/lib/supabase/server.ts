@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "./database.types";
-import { supabaseEnv } from "./env";
+import { sessionCookieOptions, supabaseEnv } from "./env";
 
 /** Server-side Supabase client, bound to the current request's cookies.
  * Use in server components, server actions, and route handlers for
@@ -10,6 +10,7 @@ export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(supabaseEnv.url, supabaseEnv.anonKey, {
+    cookieOptions: sessionCookieOptions,
     cookies: {
       getAll() {
         return cookieStore.getAll();

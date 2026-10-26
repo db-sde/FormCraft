@@ -1417,4 +1417,56 @@ Accepted, with reasons:
   pages, "suspicious comments" (words in minified code), user-agent
   fuzzing — nothing to change.
 
+## 2026-10-27 — Security checklist (behind login, server side)
+
+Worked through the 26 Oct checklist against the code and a local stack.
+Fixed:
+
+- **Webhook signing secrets were readable by every member** (row-level
+  security limits rows, not columns): a viewer could fetch one through
+  the API and forge deliveries. Column privileges now keep
+  `webhook_endpoints.signing_secret` and `sheets_connections.
+encrypted_tokens` server-only (migration 44). The test-send action
+  checks access with the session, then reads the secret as the server.
+- **Password change**: the current password was an optional argument,
+  so calling the server action directly skipped it. It's required now
+  (unless the account has no password, e.g. single sign-on) and
+  checking it is rate-limited (5 per 15 minutes).
+- **SSRF, DNS rebinding**: outbound calls to creator URLs (webhooks,
+  data lookups) go through `safeFetch`, which checks the address it is
+  connecting to inside the connection, so a name that changes after the
+  save-time check still can't reach an internal address. Production
+  allows only ports 80/443. Redirects are never followed.
+- **Webhook signatures** now cover a timestamp (`t=…,v1=HMAC(t.body)`,
+  Stripe-style) so a captured delivery can't be replayed; receivers
+  reject anything over five minutes old. Changed format (no consumers
+  yet). Secrets can be rotated (Integrations → ↻).
+- **Public theme storage** takes only PNG/JPEG/WebP/GIF/WOFF2 up to
+  5 MB (bucket rule, not just the file picker); SVG logos are no longer
+  offered, since an SVG opened directly can run script. Respondent
+  uploads: the bucket also refuses anything but the sniffed types.
+- **Respondent files** open as downloads (signed URL with
+  `Content-Disposition: attachment`).
+- **Google Sheets**: PKCE on the connect flow (verifier derived from
+  the flow's httpOnly state cookie); disconnecting revokes the token
+  with Google.
+- Session cookies are `Secure` whenever the app URL is HTTPS; every API
+  response is `Cache-Control: private, no-store`; Next.js 16.4.3 and
+  `npm audit fix` (0 known vulnerabilities).
+
+Accepted / not done, with reasons:
+
+- **Session cookies aren't HttpOnly**: the browser Supabase client
+  (password reset, 2FA setup, image upload) reads the session. The CSP
+  is what keeps foreign script away from it.
+- **Sign-up says when an email already has an account** while email
+  confirmation is off; Supabase hides it once confirmation is on.
+  Sign-up is rate-limited (10/hour per address).
+- **Sheets scope stays `spreadsheets`**: `drive.file` would need the
+  app to create the sheet (or a Google Picker) instead of the creator
+  pasting an id. Worth doing before Sheets is switched on in production.
+- **Bot protection** is the honeypot plus rate limits; no CAPTCHA
+  (Turnstile) yet.
+- Response quotas are soft by design (see Plans).
+
 <!-- Add new decisions above this line, newest first. -->

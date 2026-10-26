@@ -15,6 +15,7 @@ const LABEL: Record<string, string> = {
   "invitation.revoked": "Cancelled an invitation",
   "integration.connected": "Connected an integration",
   "integration.disconnected": "Disconnected an integration",
+  "integration.secret_rotated": "Made a new webhook signing secret",
   "api_key.created": "Created an API key",
   "api_key.revoked": "Revoked an API key",
   "api.hook_created": "API subscribed a hook",

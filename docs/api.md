@@ -158,8 +158,16 @@ form version with the clock pinned to `submittedAt`. `hidden` holds the
 values of the form's declared hidden fields from the respondent's link —
 respondent-controlled, so don't trust them for anything sensitive.
 
-Signed via `X-FormCraft-Signature: sha256=<hmac>` using the endpoint's
-`signing_secret`. Retries with bounded exponential backoff; duplicate
+Signed with the endpoint's own secret (shown once when the endpoint is
+added; Integrations → ↻ makes a new one, and the old one stops working):
+
+    X-FormCraft-Timestamp: 1793031457
+    X-FormCraft-Signature: t=1793031457,v1=<hex HMAC-SHA256 of "1793031457.<raw body>">
+
+Receivers should recompute the HMAC over the timestamp, a dot and the
+exact body bytes, compare in constant time, and reject a timestamp more
+than five minutes away from their clock (replays). Reference:
+`verifySignature` in `src/domains/webhooks/signing.ts`. Retries with bounded exponential backoff; duplicate
 deliveries are possible by design — consumers must dedupe on
 `eventId`. This is documented for creators in-product, not just here.
 

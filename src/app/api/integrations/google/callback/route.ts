@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   exchangeCodeForTokens,
+  pkceForFlow,
   OAUTH_STATE_COOKIE,
   saveConnection,
   verifyOAuthState,
@@ -76,7 +77,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code);
+    // verifyOAuthState accepted the flow, so its cookie nonce is present.
+    const nonce = request.cookies.get(OAUTH_STATE_COOKIE)?.value ?? "";
+    const tokens = await exchangeCodeForTokens(
+      code,
+      undefined,
+      pkceForFlow(nonce).verifier,
+    );
     await saveConnection(supabase, workspace.id, formId, tokens);
     trackEvent({
       formId,

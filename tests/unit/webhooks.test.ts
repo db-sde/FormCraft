@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   signPayload,
   signatureHeaderValue,
+  signatureHeaders,
   verifySignature,
 } from "@/domains/webhooks/signing";
 import {
@@ -16,30 +17,45 @@ import {
 } from "@/domains/webhooks/url-safety";
 
 describe("signPayload / verifySignature", () => {
-  it("produces a deterministic signature for the same secret and payload", () => {
-    const a = signPayload("secret", '{"a":1}');
-    const b = signPayload("secret", '{"a":1}');
-    expect(a).toBe(b);
+  const t = 1_793_031_457;
+  const at = (seconds: number) => new Date(seconds * 1000);
+
+  it("produces a deterministic signature for the same secret, time and payload", () => {
+    expect(signPayload("secret", t, '{"a":1}')).toBe(signPayload("secret", t, '{"a":1}'));
   });
 
-  it("produces a different signature for a different secret", () => {
-    const a = signPayload("secret-1", '{"a":1}');
-    const b = signPayload("secret-2", '{"a":1}');
-    expect(a).not.toBe(b);
-  });
-
-  it("produces a different signature for a different payload", () => {
-    const a = signPayload("secret", '{"a":1}');
-    const b = signPayload("secret", '{"a":2}');
-    expect(a).not.toBe(b);
+  it("changes with the secret, the payload and the timestamp", () => {
+    const base = signPayload("secret", t, '{"a":1}');
+    expect(signPayload("secret-2", t, '{"a":1}')).not.toBe(base);
+    expect(signPayload("secret", t, '{"a":2}')).not.toBe(base);
+    expect(signPayload("secret", t + 1, '{"a":1}')).not.toBe(base);
   });
 
   it("verifySignature accepts a correctly signed header and rejects a forged one", () => {
     const payload = '{"eventId":"abc"}';
-    const header = signatureHeaderValue("secret", payload);
-    expect(verifySignature("secret", payload, header)).toBe(true);
-    expect(verifySignature("secret", payload, "sha256=deadbeef")).toBe(false);
-    expect(verifySignature("wrong-secret", payload, header)).toBe(false);
+    const header = signatureHeaderValue("secret", t, payload);
+    expect(header).toMatch(/^t=1793031457,v1=[0-9a-f]{64}$/);
+    expect(verifySignature("secret", payload, header, at(t))).toBe(true);
+    expect(verifySignature("secret", payload, `t=${t},v1=deadbeef`, at(t))).toBe(false);
+    expect(verifySignature("wrong-secret", payload, header, at(t))).toBe(false);
+  });
+
+  it("rejects a replayed delivery once it's more than five minutes old", () => {
+    const payload = '{"eventId":"abc"}';
+    const header = signatureHeaderValue("secret", t, payload);
+    expect(verifySignature("secret", payload, header, at(t + 299))).toBe(true);
+    expect(verifySignature("secret", payload, header, at(t + 301))).toBe(false);
+    // Moving the timestamp forward breaks the signature.
+    const moved = header.replace(`t=${t}`, `t=${t + 600}`);
+    expect(verifySignature("secret", payload, moved, at(t + 600))).toBe(false);
+  });
+
+  it("signs at the moment of sending", () => {
+    const headers = signatureHeaders("secret", "{}", at(t));
+    expect(headers["X-FormCraft-Timestamp"]).toBe(String(t));
+    expect(verifySignature("secret", "{}", headers["X-FormCraft-Signature"], at(t))).toBe(
+      true,
+    );
   });
 });
 
@@ -88,10 +104,16 @@ describe("buildWebhookPayload / serializeWebhookPayload", () => {
       answers: {},
     });
     const serialized = serializeWebhookPayload(payload);
-    const header = signatureHeaderValue("secret", serialized);
+    const now = new Date();
+    const header = signatureHeaderValue(
+      "secret",
+      Math.floor(now.getTime() / 1000),
+      serialized,
+    );
 
     const tampered = serialized.replace("resp_1", "resp_2");
-    expect(verifySignature("secret", tampered, header)).toBe(false);
+    expect(verifySignature("secret", serialized, header, now)).toBe(true);
+    expect(verifySignature("secret", tampered, header, now)).toBe(false);
   });
 });
 

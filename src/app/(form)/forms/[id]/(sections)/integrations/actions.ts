@@ -6,7 +6,8 @@ import {
   setWebhookEndpointEnabled,
   deleteWebhookEndpoint,
   sendTestDelivery,
-  isDisallowedWebhookHost,
+  rotateSigningSecret,
+  outboundUrlProblem,
   resolvesToDisallowedAddress,
   isSlackWebhookUrl,
 } from "@/domains/webhooks";
@@ -60,10 +61,11 @@ export async function createWebhookEndpointAction(
   if (parsed.protocol !== "https:" && !localDevHttp) {
     return { ok: false, message: "Webhook URLs must use HTTPS." };
   }
-  if (
-    isDisallowedWebhookHost(parsed.hostname) ||
-    (await resolvesToDisallowedAddress(parsed.hostname))
-  ) {
+  const problem = outboundUrlProblem(parsed);
+  if (problem?.includes("ports")) {
+    return { ok: false, message: "Webhook URLs must use the standard HTTPS port (443)." };
+  }
+  if (problem || (await resolvesToDisallowedAddress(parsed.hostname))) {
     return {
       ok: false,
       message: "Webhook URLs must point to a public address, not a private network.",
@@ -124,12 +126,56 @@ export async function deleteWebhookEndpointAction(
   revalidatePath(`/forms/${formId}/integrations`);
 }
 
+/** Only people who manage integrations, for an endpoint in their own
+ * workspace (row-level security decides which ids they can see). */
+async function manageableEndpoint(endpointId: string) {
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (
+    !canEdit(workspace.role) ||
+    !(await hasPermission(supabase, workspace.id, "manage_integrations"))
+  ) {
+    return null;
+  }
+  const { data } = await supabase
+    .from("webhook_endpoints")
+    .select("id, form_id")
+    .eq("id", endpointId)
+    .maybeSingle();
+  return data ? { supabase, user, workspace, endpoint: data } : null;
+}
+
 export async function sendTestDeliveryAction(
   endpointId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const { supabase } = await getCurrentWorkspace();
-  const result = await sendTestDelivery(supabase, endpointId);
+  const access = await manageableEndpoint(endpointId);
+  if (!access) return { ok: false, error: "Webhook not found." };
+  const result = await sendTestDelivery(createAdminClient(), endpointId);
   return { ok: result.status === "succeeded", error: result.error };
+}
+
+/** Replaces an endpoint's signing secret; the new one is shown once. */
+export async function rotateWebhookSecretAction(
+  formId: string,
+  endpointId: string,
+): Promise<{ ok: true; signingSecret: string } | { ok: false; message: string }> {
+  const access = await manageableEndpoint(endpointId);
+  if (!access || access.endpoint.form_id !== formId) {
+    return { ok: false, message: "Webhook not found." };
+  }
+  try {
+    const signingSecret = await rotateSigningSecret(access.supabase, endpointId);
+    if (!signingSecret) return { ok: false, message: "Webhook not found." };
+    await audit(createAdminClient(), {
+      workspaceId: access.workspace.id,
+      actorId: access.user.id,
+      action: "integration.secret_rotated",
+      target: { type: "form", id: formId },
+      metadata: { endpointId },
+    });
+    return { ok: true, signingSecret };
+  } catch {
+    return { ok: false, message: "Couldn't make a new secret. Try again." };
+  }
 }
 
 const SPREADSHEET_ID_PATTERN = /^[a-zA-Z0-9_-]{20,80}$/;
@@ -164,7 +210,7 @@ export async function setSheetsEnabledAction(
 export async function disconnectSheetsAction(formId: string): Promise<{ ok: boolean }> {
   const { supabase } = await getCurrentWorkspace();
   try {
-    await disconnectForm(supabase, formId);
+    await disconnectForm(supabase, formId, createAdminClient());
   } catch {
     return { ok: false };
   }

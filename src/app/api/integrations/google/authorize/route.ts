@@ -6,6 +6,7 @@ import {
   isGoogleOAuthConfigured,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
+  pkceForFlow,
 } from "@/domains/sheets";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 
@@ -48,7 +49,9 @@ export async function GET(request: NextRequest) {
 
   // Bind the flow to this user and this browser (see oauth-state.ts).
   const { state, nonce } = createOAuthState({ formId, userId: user.id });
-  const response = NextResponse.redirect(buildAuthorizeUrl(state));
+  const response = NextResponse.redirect(
+    buildAuthorizeUrl(state, undefined, pkceForFlow(nonce).challenge),
+  );
   response.cookies.set(OAUTH_STATE_COOKIE, nonce, {
     httpOnly: true,
     sameSite: "lax", // sent on the redirect back from Google

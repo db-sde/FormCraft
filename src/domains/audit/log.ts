@@ -25,6 +25,7 @@ export type AuditAction =
   | "invitation.revoked"
   | "integration.connected"
   | "integration.disconnected"
+  | "integration.secret_rotated"
   | "api_key.created"
   | "api_key.revoked"
   | "api.hook_created"

@@ -114,7 +114,10 @@ async function objectExists(path: string) {
 async function putObject(path: string) {
   const { error } = await admin.storage
     .from(BUCKET)
-    .upload(path, new Blob(["file"]), { contentType: "text/plain", upsert: true });
+    .upload(path, new Blob(["file"], { type: "application/pdf" }), {
+      contentType: "application/pdf",
+      upsert: true,
+    });
   if (error) throw error;
 }
 

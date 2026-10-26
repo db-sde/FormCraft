@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { AnswerMap } from "@/domains/logic";
 import { encryptJson, decryptJson, type EncryptedPayload } from "./crypto";
-import { refreshAccessToken, needsRefresh, type OAuthTokens } from "./oauth";
+import { refreshAccessToken, needsRefresh, revokeToken, type OAuthTokens } from "./oauth";
 import { appendRowToSheet } from "./append";
 import { buildResponseRowForSheet } from "./row";
 import { nextBackoffDelayMs, isExhausted } from "@/domains/webhooks/backoff";
@@ -84,12 +84,41 @@ export async function setConnectionEnabled(
   if (error) throw error;
 }
 
-export async function disconnectForm(supabase: Client, formId: string): Promise<void> {
-  const { error } = await supabase
+/**
+ * Disconnects a form's sheet: Google is asked to revoke the token (so a
+ * copy of it, wherever it might be, stops working), then the connection
+ * is deleted. The delete runs as the caller (row-level security decides
+ * whether they may); only when it succeeded is the token, read with the
+ * service role (members can't read it), revoked.
+ */
+export async function disconnectForm(
+  supabase: Client,
+  formId: string,
+  admin?: Client,
+  revoke: (token: string) => Promise<boolean> = revokeToken,
+): Promise<void> {
+  const { data: stored } = admin
+    ? await admin
+        .from("sheets_connections")
+        .select("encrypted_tokens")
+        .eq("form_id", formId)
+        .maybeSingle()
+    : { data: null };
+  const { data: deleted, error } = await supabase
     .from("sheets_connections")
     .delete()
-    .eq("form_id", formId);
+    .eq("form_id", formId)
+    .select("id");
   if (error) throw error;
+  if (!deleted?.length || !stored?.encrypted_tokens) return;
+  try {
+    const tokens = decryptJson<OAuthTokens>(
+      stored.encrypted_tokens as unknown as EncryptedPayload,
+    );
+    await revoke(tokens.refreshToken);
+  } catch {
+    // Unreadable tokens can't be revoked; the connection is gone anyway.
+  }
 }
 
 export type SyncLogEntry = {

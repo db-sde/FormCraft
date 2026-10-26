@@ -29,6 +29,13 @@ function withCsp(response: NextResponse, policy: string): NextResponse {
   return response;
 }
 
+/** API responses: data, never framed or loaded as a page, and never
+ * kept by a browser or shared cache (exports and responses are private). */
+function apiResponse(response: NextResponse): NextResponse {
+  response.headers.set("Cache-Control", "private, no-store");
+  return withCsp(response, API_CSP);
+}
+
 /** Gives a public form page's visitor a random id (A/B tests, P3.9), on
  * this request too so the first render can use it. Returns the new id
  * to set on the response, or null when there already is one. */
@@ -129,7 +136,7 @@ async function customDomain(request: NextRequest, host: string) {
     path === "/favicon.ico"
   ) {
     const response = NextResponse.next({ request: { headers } });
-    return path.startsWith("/api/") ? withCsp(response, API_CSP) : response;
+    return path.startsWith("/api/") ? apiResponse(response) : response;
   }
   const { nonce, policy } = pageCsp(request, true);
   headers.set("x-nonce", nonce);
@@ -167,7 +174,7 @@ export async function proxy(request: NextRequest) {
     // custom-domain header themselves.
     const headers = new Headers(request.headers);
     headers.delete(CUSTOM_DOMAIN_HEADER);
-    return withCsp(NextResponse.next({ request: { headers } }), API_CSP);
+    return apiResponse(NextResponse.next({ request: { headers } }));
   }
   if (path.startsWith("/f/")) {
     const headers = new Headers(request.headers);

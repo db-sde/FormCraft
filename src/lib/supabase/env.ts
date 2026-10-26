@@ -24,3 +24,16 @@ export const supabaseEnv = {
     return requireEnv("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY);
   },
 };
+
+/**
+ * Options for Supabase's session cookies: SameSite=Lax (Supabase's
+ * default), and Secure whenever the app is served over HTTPS, so the
+ * session never travels over plain http. They can't be HttpOnly: the
+ * browser client (password reset, two-factor setup, image uploads) reads
+ * the session itself — the Content-Security-Policy is what keeps foreign
+ * scripts away from it.
+ */
+export const sessionCookieOptions = {
+  sameSite: "lax" as const,
+  secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") ?? false,
+};

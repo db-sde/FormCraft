@@ -136,7 +136,9 @@ beforeAll(async () => {
   uploadPath = `${victim.workspaceId}/${responseId}/secret.txt`;
   await admin.storage
     .from("response-uploads")
-    .upload(uploadPath, new Blob(["secret file"]), { contentType: "text/plain" });
+    .upload(uploadPath, new Blob(["secret file"], { type: "application/pdf" }), {
+      contentType: "application/pdf",
+    });
   await admin.from("uploads").insert({
     response_id: responseId,
     question_id: "q1",
