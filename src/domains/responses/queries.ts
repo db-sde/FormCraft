@@ -16,6 +16,11 @@ import { experimentForResponse } from "@/domains/experiments";
 import { VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
 import { usesProfiles } from "./profile";
 import { lookupPlan } from "@/domains/integrations/lookups";
+import {
+  checkAvailability,
+  getAvailabilitySettings,
+  refusalMessage,
+} from "@/domains/forms/availability";
 
 type Client = SupabaseClient<Database>;
 
@@ -41,6 +46,25 @@ export class FormNotAvailableError extends Error {
   constructor() {
     super("this form is not currently accepting responses");
     this.name = "FormNotAvailableError";
+  }
+}
+
+/** The form is published but past its close date or response cap
+ * (master spec F-46, F-47). `message` is the creator's own text. */
+export class FormClosedError extends Error {
+  constructor(
+    public readonly reason: "closed" | "full",
+    public readonly respondentMessage: string,
+  ) {
+    super(`form is ${reason}`);
+    this.name = "FormClosedError";
+  }
+}
+
+async function assertAcceptingResponses(admin: Client, formId: string): Promise<void> {
+  const availability = await checkAvailability(admin, formId);
+  if (!availability.open) {
+    throw new FormClosedError(availability.reason, availability.message);
   }
 }
 
@@ -121,6 +145,7 @@ export async function startResponse(
     .maybeSingle();
   if (versionError) throw versionError;
   if (!version) throw new FormNotAvailableError();
+  await assertAcceptingResponses(admin, formId);
   const hidden = attribution.hidden
     ? pickHiddenFields(parseFormSchema(version.schema), attribution.hidden)
     : {};
@@ -248,11 +273,16 @@ export async function saveResponseAnswers(
 ): Promise<{ status: ResponseStatus; revision: number }> {
   const { data: response, error: responseError } = await admin
     .from("responses")
-    .select("form_version_id")
+    .select("form_id, form_version_id, status")
     .eq("id", responseId)
     .maybeSingle();
   if (responseError) throw responseError;
   if (!response) throw new ResponseNotFoundError();
+  // A closed form keeps no new answers either; a late autosave of a
+  // completed response stays the harmless no-op below.
+  if (response.status !== "completed") {
+    await assertAcceptingResponses(admin, response.form_id);
+  }
 
   const { data: versionRow, error: versionError } = await admin
     .from("form_versions")
@@ -294,6 +324,13 @@ export type CompleteResult =
       /** Every question that failed, required or otherwise — in form order. */
       missingQuestionIds: string[];
       errors: { questionId: string; message: string }[];
+    }
+  | {
+      ok: false;
+      code: "form_closed";
+      reason: "closed" | "full";
+      /** What to tell the respondent — the creator's own text. */
+      message: string;
     };
 
 /**
@@ -350,6 +387,18 @@ export async function completeResponse(
   if (versionError) throw versionError;
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
   const knownAnswers = filterAnswersToKnownQuestions(compiled.schema, answers);
+
+  // Said before any answer is checked: fixing answers can't help once
+  // the form has closed. complete_response_atomic decides for certain.
+  const availability = await checkAvailability(admin, response.form_id);
+  if (!availability.open) {
+    return {
+      ok: false,
+      code: "form_closed",
+      reason: availability.reason,
+      message: availability.message,
+    };
+  }
 
   const walk = walkForm(compiled, knownAnswers, {
     hidden: storedHidden(response.hidden_fields),
@@ -433,6 +482,21 @@ export async function completeResponse(
 
   const result = data?.[0];
   if (!result || result.outcome === "not_found") throw new ResponseNotFoundError();
+  if (result.outcome === "closed" || result.outcome === "full") {
+    const settings = await getAvailabilitySettings(admin, response.form_id);
+    return {
+      ok: false,
+      code: "form_closed",
+      reason: result.outcome,
+      message: refusalMessage(
+        result.outcome,
+        settings ?? {
+          closedMessage: null,
+          fullMessage: null,
+        },
+      ),
+    };
+  }
   return {
     ok: true,
     endingId: result.ending_id ?? walk.endingId,

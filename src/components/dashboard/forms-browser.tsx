@@ -39,6 +39,17 @@ const STATUS: Record<PublishState, { tone: ChipTone; label: string }> = {
   unpublished: { tone: "pending", label: "Unpublished" },
 };
 
+/** A live form that has closed or filled up says so instead of "Live". */
+function statusOf(form: FormListItem) {
+  if (form.publishState === "live" && form.closed) {
+    return {
+      tone: "pending" as ChipTone,
+      label: form.closed === "full" ? "Full" : "Closed",
+    };
+  }
+  return STATUS[form.publishState];
+}
+
 const VIEW_KEY = "fc-forms-view";
 
 function meta(form: FormListItem) {
@@ -69,7 +80,7 @@ function FormCard({
   form: FormListItem;
   onDuplicating?: (pending: boolean) => void;
 }) {
-  const status = STATUS[form.publishState];
+  const status = statusOf(form);
   return (
     <div className="group border-ink bg-card shadow-card hover:shadow-lift relative rounded-lg border-[1.5px] transition-[transform,box-shadow] duration-[80ms] hover:-translate-x-px hover:-translate-y-px">
       <FormPreviewArt
@@ -119,7 +130,7 @@ function DuplicatingCard({ title }: { title: string }) {
 }
 
 function FormListRow({ form }: { form: FormListItem }) {
-  const status = STATUS[form.publishState];
+  const status = statusOf(form);
   return (
     <div className="border-border hover:bg-accent relative grid grid-cols-[56px_minmax(0,1fr)_110px_130px_130px_44px] items-center gap-[18px] border-b px-4 py-3 text-sm last:border-b-0">
       <FormPreviewArt
@@ -146,7 +157,7 @@ function FormListRow({ form }: { form: FormListItem }) {
 }
 
 function PhoneCard({ form }: { form: FormListItem }) {
-  const status = STATUS[form.publishState];
+  const status = statusOf(form);
   return (
     <div className="border-ink bg-card shadow-raised relative flex items-center gap-3 rounded-lg border-[1.5px] p-2.5">
       <FormPreviewArt

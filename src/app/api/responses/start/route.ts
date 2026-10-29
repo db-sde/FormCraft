@@ -2,7 +2,12 @@ import { z } from "zod";
 import { SEED_PATTERN } from "@/domains/logic/random";
 import type { NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
-import { startResponse, FormNotAvailableError } from "@/domains/responses";
+import {
+  startResponse,
+  FormClosedError,
+  FormNotAvailableError,
+} from "@/domains/responses";
+import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
@@ -58,6 +63,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const admin = createAdminClient();
+    const unlock = request.cookies.get(unlockCookieName(parsed.data.formId))?.value;
+    if (!(await isUnlocked(admin, parsed.data.formId, unlock))) {
+      return apiError("locked", "Enter the form's password to continue.", 403);
+    }
     const result = await startResponse(admin, parsed.data.formId, {
       referrer: parsed.data.referrer,
       utmSource: parsed.data.utmSource,
@@ -100,6 +109,18 @@ export async function POST(request: NextRequest) {
       formVersionId: result.formVersionId,
     });
   } catch (error) {
+    if (error instanceof FormClosedError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "form_closed",
+            reason: error.reason,
+            message: error.respondentMessage,
+          },
+        },
+        { status: 410 },
+      );
+    }
     if (error instanceof FormNotAvailableError) {
       return apiError(
         "form_not_available",

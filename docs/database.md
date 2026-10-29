@@ -253,6 +253,27 @@ existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
   `responses.hidden_fields`; a field a lookup fills is never accepted
   from the respondent's URL.
 
+## Who can respond (migration 45, master spec F-26, F-46–48)
+
+- **`forms`** gains `closes_at`, `closed_message`, `response_cap`
+  (1–1,000,000), `full_message` and `captcha_required`. Form-level,
+  like the other respondent settings: they apply to the live link at
+  once, without republishing.
+- **`form_access_secrets`** — `form_id` (primary key), `password_hash`
+  (`scrypt$N$r$p$salt$hash`), `updated_at`. Row-level security on, no
+  policies, no grants to `anon`/`authenticated`: only the server reads
+  or writes it, because members can read every column of `forms`. A
+  form is password-protected exactly when it has a row here.
+- **`responses.captcha_verified_at`** — when the response passed its
+  form's CAPTCHA; the check runs once per response.
+- **`complete_response_atomic`** refuses (`'closed'` / `'full'`) a
+  completion past `closes_at` or with `response_cap` completed,
+  non-spam responses already. Completions of a capped form take turns
+  on the form row (`for no key update`), so the count is exact under
+  races; new responses can still be started meanwhile. A retried
+  submit of an already completed response is answered before either
+  check.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

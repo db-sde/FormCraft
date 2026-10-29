@@ -19,6 +19,11 @@ import {
 } from "@/domains/experiments";
 import { knownAnswersFor } from "@/domains/responses/profile";
 import { lookupPlan } from "@/domains/integrations/lookups";
+import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
+import { checkAvailability } from "@/domains/forms/availability";
+import { turnstileSiteKey } from "@/domains/abuse/turnstile";
+import { FormClosedScreen } from "@/components/runtime/form-closed";
+import { PasswordGate } from "./password-gate";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -104,16 +109,49 @@ export default async function PublicFormPage({
     }
   }
   const schema = publicForm.compiled.schema;
+  const theme = themeForPlan(
+    schema.theme,
+    entitlements.custom_fonts,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+  );
+
+  // A password-protected form (F-48) sends only its title and theme
+  // until this browser has unlocked it.
+  const cookieStore = await cookies();
+  if (
+    !(await isUnlocked(
+      createAdminClient(),
+      publicForm.formId,
+      cookieStore.get(unlockCookieName(publicForm.formId))?.value,
+    ))
+  ) {
+    return (
+      <PasswordGate
+        formId={publicForm.formId}
+        title={schema.meta.title}
+        theme={theme}
+        embedded={embedded}
+      />
+    );
+  }
+
+  // Past its close date or response cap (F-46, F-47): the creator's
+  // message instead of the form.
+  const availability = await checkAvailability(createAdminClient(), publicForm.formId);
+  if (!availability.open) {
+    return (
+      <FormClosedScreen
+        theme={theme}
+        title={schema.meta.title}
+        message={availability.message}
+        embedded={embedded}
+      />
+    );
+  }
+
   const compiled = {
     ...publicForm.compiled,
-    schema: {
-      ...schema,
-      theme: themeForPlan(
-        schema.theme,
-        entitlements.custom_fonts,
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-      ),
-    },
+    schema: { ...schema, theme },
   };
 
   // Independent of each other, so fetched together:
@@ -170,6 +208,9 @@ export default async function PublicFormPage({
         experimentId={experimentId}
         known={known}
         lookup={lookup?.triggers.length ? lookup : undefined}
+        captchaSiteKey={
+          publicForm.captchaRequired ? (turnstileSiteKey() ?? undefined) : undefined
+        }
       />
     </div>
   );

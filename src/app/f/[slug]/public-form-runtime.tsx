@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
+import { FormClosedScreen } from "@/components/runtime/form-closed";
+import { Turnstile, type TurnstileHandle } from "./turnstile";
 import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
 import type { ResumeResult } from "@/domains/responses/resume";
 import { newSeed } from "@/domains/logic/random";
@@ -111,6 +113,27 @@ function hiddenFromUrl(
   return out;
 }
 
+/** The form closed or filled up (F-46, F-47): the server's message. */
+class FormClosedSignal extends Error {
+  constructor(public readonly respondentMessage: string) {
+    super("form closed");
+  }
+}
+
+/** The form's password changed or the unlock expired (F-48). */
+class FormLockedSignal extends Error {
+  constructor() {
+    super("form locked");
+  }
+}
+
+async function closedMessageOf(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as {
+    error?: { message?: string };
+  } | null;
+  return body?.error?.message ?? "This form is no longer accepting responses.";
+}
+
 async function startSession(
   formId: string,
   hidden: Record<string, string>,
@@ -133,6 +156,8 @@ async function startSession(
       experimentId,
     }),
   });
+  if (res.status === 410) throw new FormClosedSignal(await closedMessageOf(res));
+  if (res.status === 403) throw new FormLockedSignal();
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
   return (await res.json()) as { responseId: string; formVersionId: string };
 }
@@ -181,7 +206,10 @@ export function PublicFormRuntime({
   experimentId,
   known,
   lookup,
+  captchaSiteKey,
 }: {
+  /** Set when the form requires a CAPTCHA to submit (F-26). */
+  captchaSiteKey?: string;
   /** External data (phase 24): the questions that trigger a lookup and
    * the URL fields lookups fill. */
   lookup?: { triggers: string[]; fields: string[] };
@@ -211,6 +239,9 @@ export function PublicFormRuntime({
 }) {
   // undefined = still checking this browser for a session to resume.
   const [resumed, setResumed] = useState<StoredResponse | null | undefined>(undefined);
+  // The form closed or filled up while open: the message to show.
+  const [closedMessage, setClosedMessage] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileHandle>(null);
   const sessionRef = useRef<StoredResponse | null>(null);
   const progressRef = useRef<Progress>({
     answers: {},
@@ -514,6 +545,10 @@ export function PublicFormRuntime({
         (error: unknown) => {
           startPromiseRef.current = null;
           startFailedAtRef.current = Date.now();
+          if (error instanceof FormClosedSignal)
+            setClosedMessage(error.respondentMessage);
+          // The page asks for the password again.
+          if (error instanceof FormLockedSignal) window.location.reload();
           throw error;
         },
       );
@@ -602,6 +637,11 @@ export function PublicFormRuntime({
       if (res.ok) {
         savedRevisionRef.current = Math.max(savedRevisionRef.current, claimed.revision);
       }
+      if (res.status === 410) {
+        // The form closed meanwhile; there's nothing left to save to.
+        setClosedMessage(await closedMessageOf(res));
+        return;
+      }
       if (res.status === 404) {
         // The response itself is gone — nothing to continue.
         clearStored(formId);
@@ -652,6 +692,7 @@ export function PublicFormRuntime({
           idempotencyKey: current.idempotencyKey,
           // Spam trap (see FormRuntime): real respondents never fill it.
           trap: honeypotValue(),
+          captchaToken: turnstileRef.current?.token() ?? undefined,
         }),
       });
 
@@ -679,7 +720,11 @@ export function PublicFormRuntime({
       }
 
       const body = (await res.json().catch(() => null)) as {
-        error?: { message?: string; errors?: { questionId: string; message: string }[] };
+        error?: {
+          code?: string;
+          message?: string;
+          errors?: { questionId: string; message: string }[];
+        };
       } | null;
       if (res.status === 429) {
         return {
@@ -687,6 +732,18 @@ export function PublicFormRuntime({
           message: "Too many attempts. Please wait a moment and try again.",
         };
       }
+      if (res.status === 410) {
+        const message =
+          body?.error?.message ?? "This form is no longer accepting responses.";
+        setClosedMessage(message);
+        return { ok: false, message };
+      }
+      if (res.status === 403) {
+        window.location.reload();
+        return { ok: false, message: "Enter the form's password to continue." };
+      }
+      // A refused token can't be sent again; get a fresh check.
+      if (body?.error?.code?.startsWith("captcha_")) turnstileRef.current?.reset();
       return {
         ok: false,
         message:
@@ -748,6 +805,17 @@ export function PublicFormRuntime({
     }).catch(() => undefined);
   }
 
+  if (closedMessage !== null) {
+    return (
+      <FormClosedScreen
+        theme={theme}
+        title={shown.schema.meta.title}
+        message={closedMessage}
+        embedded={embedded}
+      />
+    );
+  }
+
   if (resumed === undefined) {
     // Loading: the themed background plus a spinner (Part 6 §6.1).
     return (
@@ -790,6 +858,7 @@ export function PublicFormRuntime({
           </select>
         </label>
       )}
+      {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
       <FormRuntime
         compiled={shown}
         language={language}

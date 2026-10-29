@@ -16,7 +16,10 @@ All responses use a consistent error shape:
 
 `GET /f/:slug` — page. Server-resolves the published `form_versions`
 row for the workspace's form with that slug; 404 (rendered, not raw)
-if no published version exists or the form was unpublished.
+if no published version exists or the form was unpublished. A
+password-protected form renders only its title, theme and a password
+field until unlocked; a closed or full form renders the creator's
+message instead of the form.
 `?resume=<token>` (P2.8) opens that unfinished response — same row,
 answers, position and seed — when the link is valid; otherwise the
 page starts fresh with a note (expired, already submitted, form
@@ -34,6 +37,11 @@ utmTerm?, utmContent?, embedded?, hidden?, seed? }` — `hidden`: the
 - creates a `responses` row (`status=in_progress`) for the form's live
   version and returns `{ responseId, formVersionId }`. The browser calls
   it on the respondent's first interaction, not on page load.
+- `403 locked` when the form has a password and the request carries no
+  valid unlock cookie (see `POST /api/responses/unlock`).
+- `410 form_closed` with `{ error: { reason: "closed" | "full", message } }`
+  once the form is past its close date or response cap; `message` is
+  the creator's text (or the default).
 - rate-limited to 120 per 10 minutes per address + form (generous on
   purpose: a school or office shares one address). The address is not
   taken from the visitor-controlled start of `X-Forwarded-For` — see
@@ -52,12 +60,31 @@ answers: Record<questionId, value> }`
   `clientRevision <= responses.client_revision` — a stale tab or a
   delayed retry. The client resyncs to `currentRevision`.
 - `409 already_submitted` once the response is completed.
+- `410 form_closed` (as for start) once the form closed or filled up:
+  nothing more is saved.
 - a form with "save unfinished answers" off stores nothing here.
 
 `POST /api/responses/:id/complete`
 
 - body: `{ clientRevision, lastQuestionId, answers, idempotencyKey (uuid),
-trap? }`
+trap?, captchaToken? }`
+- before anything else, for a response that isn't completed yet:
+  `403 locked` if the form has a password and the unlock cookie is
+  missing, expired or from an earlier password; and, on a form that
+  requires a CAPTCHA, the Turnstile token is verified with Cloudflare —
+  once per response: a pass is stored (`responses.captcha_verified_at`),
+  so resubmitting after fixing an answer needs no new token. It fails
+  closed:
+  `400 captcha_failed` (no token, or Cloudflare refused it) or
+  `503 captcha_unavailable` (no secret key configured, or Cloudflare
+  unreachable). Failures are logged as `captcha_failed` with the reason,
+  never the token or answers.
+- `410 form_closed` with `{ error: { reason, message } }` past the close
+  date or response cap. The database decides this inside
+  `complete_response_atomic`, in the same transaction as the write, so
+  it holds for a page opened before the deadline and for submits racing
+  for the last place. A retry of a submit that already succeeded still
+  returns its original result.
 - validates first, writes second: required-and-reachable questions are
   checked server-side with the same logic engine as preview, and file
   answers must be real, clean uploads of this response and question. A
@@ -74,6 +101,18 @@ trap? }`
 - after the response is sent, independent steps run (analytics,
   notification, webhook enqueue + dispatch, Sheets enqueue + dispatch);
   one failing never affects another or the respondent's 200.
+
+`POST /api/responses/unlock` (master spec F-48)
+
+- body: `{ formId, password }`. Checks the password against the form's
+  scrypt hash and sets `fc_unlock_<formId>`: httpOnly, 12 hours, path
+  `/`, `SameSite=None; Secure; Partitioned` over HTTPS (so it works in
+  embeds), `Lax` over plain HTTP. Its value is an expiry plus an HMAC
+  (`APP_SECRET`) over the form id, the expiry and the current hash, so
+  changing or removing the password invalidates every earlier cookie.
+- `401 wrong_password`; `200` also when the form has no password (the
+  answer doesn't reveal which forms have one).
+- rate-limited to 10 per 10 minutes per address + form.
 
 `POST /api/responses/:id/resume-link` (P2.8)
 

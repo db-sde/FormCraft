@@ -11,6 +11,11 @@ import { listExperiments } from "@/domains/experiments";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { hasPermission } from "@/domains/workspaces/permissions";
 import { loadFormForPage } from "../../load-form";
+import { FormAccessPanel } from "@/components/forms/form-access-panel";
+import { countAcceptedResponses } from "@/domains/forms/availability";
+import { getPasswordHash } from "@/domains/forms/access";
+import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function generateMetadata({
   params,
@@ -33,7 +38,17 @@ export default async function FormSettingsPage({
   const settings = await getFormSettings(supabase, formId, workspace.id);
   if (!settings) notFound();
 
-  const [versions, tests, plan, canPublish, { data: others }] = await Promise.all([
+  const admin = createAdminClient();
+  const [
+    versions,
+    tests,
+    plan,
+    canPublish,
+    { data: others },
+    { data: access },
+    accepted,
+    passwordHash,
+  ] = await Promise.all([
     listVersions(supabase, formId),
     listExperiments(supabase, formId),
     getWorkspacePlan(supabase, workspace.id),
@@ -47,6 +62,15 @@ export default async function FormSettingsPage({
       .is("deleted_at", null)
       .order("title")
       .limit(200),
+    supabase
+      .from("forms")
+      .select("closes_at, closed_message, response_cap, full_message, captcha_required")
+      .eq("id", formId)
+      .single(),
+    // The page already checked this person may edit the form; the hash
+    // is only reduced to "has a password".
+    countAcceptedResponses(admin, formId),
+    getPasswordHash(admin, formId),
   ]);
 
   return (
@@ -64,6 +88,22 @@ export default async function FormSettingsPage({
         appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
         initial={settings}
       />
+      {access && (
+        <FormAccessPanel
+          formId={formId}
+          initial={{
+            closesAt: access.closes_at,
+            closedMessage: access.closed_message,
+            responseCap: access.response_cap,
+            fullMessage: access.full_message,
+            captchaRequired: access.captcha_required,
+            passwordProtected: passwordHash !== null,
+            accepted,
+          }}
+          captchaAvailable={isTurnstileConfigured()}
+          canManage={canPublish}
+        />
+      )}
       <AbTestPanel
         formId={formId}
         formTitle={form.title}

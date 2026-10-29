@@ -9,6 +9,7 @@ import {
 } from "./schema/validate";
 import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
 import type { FormSchemaV1 } from "./schema/v1";
+import { availabilityOf } from "./availability";
 
 type Client = SupabaseClient<Database>;
 
@@ -51,6 +52,8 @@ export type FormListItem = {
   folderId: string | null;
   /** Enough of the draft to draw the dashboard card's preview. */
   preview: FormPreview;
+  /** Live, but past its close date or response cap (F-46, F-47). */
+  closed: "closed" | "full" | null;
 };
 
 /** The first real question of a form, drawn in the form's own theme on
@@ -190,7 +193,7 @@ export async function listFormsForWorkspace(
   const { data, error } = await supabase
     .from("forms")
     .select(
-      "id, title, slug, updated_at, created_at, created_by, folder_id, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count)",
+      "id, title, slug, updated_at, created_at, created_by, folder_id, closes_at, response_cap, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count), accepted:responses(count)",
     )
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
@@ -198,24 +201,43 @@ export async function listFormsForWorkspace(
     .eq("draft.status", "draft")
     .eq("completed.status", "completed")
     .eq("incomplete.status", "partial")
+    // What a response cap counts: completed, not suspected spam.
+    .eq("accepted.status", "completed")
+    .eq("accepted.spam_suspected", false)
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
 
-  return (data ?? []).map((form) => ({
-    id: form.id,
-    title: form.title,
-    slug: form.slug,
-    updatedAt: form.updated_at,
-    hasPublishedVersion: (form.form_versions ?? []).some((v) => v.status === "published"),
-    publishState: publishStateFrom((form.form_versions ?? []).map((v) => v.status)),
-    responseCount: form.completed?.[0]?.count ?? 0,
-    incompleteCount: form.incomplete?.[0]?.count ?? 0,
-    createdAt: form.created_at,
-    createdBy: form.created_by,
-    folderId: form.folder_id,
-    preview: previewFromSchema(form.draft?.[0]?.schema),
-  }));
+  const now = new Date();
+  return (data ?? []).map((form) => {
+    const availability = availabilityOf(
+      {
+        closesAt: form.closes_at,
+        closedMessage: null,
+        responseCap: form.response_cap,
+        fullMessage: null,
+      },
+      form.accepted?.[0]?.count ?? 0,
+      now,
+    );
+    return {
+      id: form.id,
+      title: form.title,
+      slug: form.slug,
+      updatedAt: form.updated_at,
+      hasPublishedVersion: (form.form_versions ?? []).some(
+        (v) => v.status === "published",
+      ),
+      publishState: publishStateFrom((form.form_versions ?? []).map((v) => v.status)),
+      responseCount: form.completed?.[0]?.count ?? 0,
+      incompleteCount: form.incomplete?.[0]?.count ?? 0,
+      createdAt: form.created_at,
+      createdBy: form.created_by,
+      folderId: form.folder_id,
+      preview: previewFromSchema(form.draft?.[0]?.schema),
+      closed: availability.open ? null : availability.reason,
+    };
+  });
 }
 
 /**
@@ -590,6 +612,8 @@ export type PublicForm = {
   workspaceId: string;
   /** Analytics / pixel identifiers (P2.12); shown only on a plan with them. */
   tracking: { ga: string | null; gtm: string | null; meta: string | null };
+  /** Creator setting: submitting needs a CAPTCHA (F-26). */
+  captchaRequired: boolean;
 };
 
 export type FormSettings = {
@@ -673,7 +697,7 @@ export async function getPublicFormBySlug(
   const { data: form, error: formError } = await supabase
     .from("forms")
     .select(
-      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id",
+      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, captcha_required",
     )
     .eq("slug", slug)
     .is("deleted_at", null)
@@ -703,6 +727,7 @@ export async function getPublicFormBySlug(
       gtm: form.gtm_container_id,
       meta: form.meta_pixel_id,
     },
+    captchaRequired: form.captcha_required,
   };
 }
 

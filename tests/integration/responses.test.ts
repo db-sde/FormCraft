@@ -200,7 +200,8 @@ describe("response engine (integration)", () => {
     );
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.missingQuestionIds).toContain("q_name");
+    if (!result.ok && result.code !== "form_closed")
+      expect(result.missingQuestionIds).toContain("q_name");
 
     const { data: row } = await supabase
       .from("responses")

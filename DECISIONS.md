@@ -3,6 +3,76 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-28 — Master spec Phase 0: who can respond, and until when
+
+Phase 0 of the developer master spec (F-26 CAPTCHA, F-46 close date,
+F-47 response cap, F-48 password), migration 45.
+
+- **Form-level, immediate, publisher-only, audited.** All four live on
+  `forms` (the password's hash in its own table), not in the versioned
+  schema: closing a form must not need a republish, and a new version
+  must not quietly reopen one. Changing them needs the same rights as
+  publishing (they change who can submit to the live link), and each
+  change is in the audit log (`form.availability_changed`,
+  `form.password_set` / `_removed`, `form.captcha_changed`).
+- **The database decides at completion.** `complete_response_atomic`
+  refuses a completion past `closes_at` or at the cap, in the same
+  transaction as the write. Completions of a capped form take turns on
+  the form row (`for no key update`, which still lets new responses
+  start). Proven by mutation: without the lock, 12 racing submits put 7
+  through a cap of 3. The app checks the same rule earlier (page, start,
+  autosave, before validating a submit) only so people see the message
+  sooner.
+- **What a place is.** Only completed responses count towards a cap.
+  Unfinished ones never hold a place (no reservations), so an abandoned
+  start can't block anyone. Suspected spam (honeypot) doesn't count
+  either, but is refused once the form is full like anything else. Paid
+  reservations are for the payments phase (spec F-22/47).
+- **Closed beats full**, and both stop autosaves too (a closed form keeps
+  nothing new). A retried submit that already went through still gets
+  its original answer, whatever happened to the form since.
+- **Time zone.** The creator picks a local date and time in their
+  browser, which is stored as an instant (`timestamptz`); the settings
+  name the zone it was read in. DST is the browser's conversion. Moving
+  the date later, or raising the cap, reopens the form; there's no
+  separate "reopen" switch.
+- **Password = a shared secret, not identity.** scrypt (N=16384, r=8,
+  p=1) with a per-password salt, in `form_access_secrets`, which only the
+  server can read (members can read every column of `forms`). Unlocking
+  sets a per-form httpOnly cookie: an expiry (12 h) plus an HMAC over
+  form id, expiry and the current hash, so a new password invalidates
+  every earlier cookie without a session table. The page sends only the
+  title and theme until unlocked; start and submit check the cookie
+  (autosave and uploads need a response id, which only a checked start
+  hands out). Over HTTPS the cookie is `SameSite=None; Partitioned`, so
+  it works inside embeds; a browser that blocks third-party cookies
+  entirely will keep showing the password screen in an embed, and the
+  form works on its own link. Wrong guesses are rate-limited (10 per 10
+  minutes per address and form) rather than written to the audit log,
+  which records creator actions, not respondents.
+- **CAPTCHA = Cloudflare Turnstile, at submit, failing closed.** The
+  widget runs from page load in "interaction-only" mode, so most people
+  never see it; the token goes with the final submit and is verified
+  there (not at start: a start stores nothing worth protecting, and a
+  token would expire while someone fills a long form). No token,
+  Cloudflare refusing it, Cloudflare unreachable, or no secret key all
+  refuse the submit; the answers stay saved and the widget resets for
+  another try. A pass is recorded on the response
+  (`captcha_verified_at`), so a resubmit after fixing an answer doesn't
+  need a new token (tokens are single-use). Failures are logged
+  (`captcha_failed`, reason and Cloudflare's codes; never the token).
+  Creators can only turn it on when the server has both keys. Honeypot,
+  rate limits and bot filtering are unchanged.
+- **No plan gating.** None of the four is an entitlement: the spec
+  leaves pricing undecided (its §9 item 10), so they're on every plan
+  until that's decided.
+- **Dashboard.** A live form past its date or cap shows "Closed" or
+  "Full" instead of "Live" on the forms list.
+- **Not built (optional in the spec):** a countdown to the close date,
+  an email to the creator when a form closes or fills, and showing
+  respondents how many places are left. The settings page shows the
+  creator how many are left.
+
 ## 2026-10-03 — UX pass: the build loop is typing, not clicking
 
 A walkthrough of every creator journey as a new user, counting clicks.

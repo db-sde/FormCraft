@@ -41,6 +41,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/[id]/uploads/[questionId]": "api-contract.spec.ts",
   "/api/responses/events": "api-contract.spec.ts",
   "/api/responses/view": "views-and-exit-save.spec.ts",
+  "/api/responses/unlock": "form-access.spec.ts",
   "/api/forms/[id]/export.csv": "access-control.spec.ts",
   "/api/leads/export.csv": "access-control.spec.ts",
   "/api/cron/health": "api-contract.spec.ts",

@@ -43,6 +43,14 @@ describe("Content-Security-Policy", () => {
     expect(csp["connect-src"]).toContain("https://www.google-analytics.com");
   });
 
+  it("lets only published forms load the CAPTCHA (F-26)", () => {
+    const form = parse(buildCsp({ ...base, publicForm: true }));
+    expect(form["script-src"]).toContain("https://challenges.cloudflare.com");
+    expect(form["frame-src"]).toContain("https://challenges.cloudflare.com");
+    const app = parse(buildCsp({ ...base, publicForm: false }));
+    expect(app["frame-src"]).not.toContain("https://challenges.cloudflare.com");
+  });
+
   it("allows eval and dev sockets only in development", () => {
     const dev = parse(buildCsp({ ...base, publicForm: false, dev: true }));
     expect(dev["script-src"]).toContain("'unsafe-eval'");

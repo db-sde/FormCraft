@@ -26,6 +26,9 @@ const PIXEL_IMG_HOSTS = [
   "https://www.googletagmanager.com",
   "https://www.facebook.com",
 ];
+/** Cloudflare Turnstile, for forms that require a CAPTCHA (F-26): its
+ * script, and the frame the challenge runs in. */
+const CAPTCHA_HOST = "https://challenges.cloudflare.com";
 /** Booking pages shown on endings (scheduler.ts allows only these). */
 const SCHEDULER_FRAMES = [
   "https://calendly.com",
@@ -76,6 +79,7 @@ export function buildCsp({
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
       ...(pixels ? PIXEL_SCRIPT_HOSTS : []),
+      ...(publicForm ? [CAPTCHA_HOST] : []),
       ...(dev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
@@ -94,7 +98,7 @@ export function buildCsp({
       ...(dev ? ["ws:"] : []),
     ],
     "media-src": ["'self'", ...(supabase ? [supabase] : [])],
-    "frame-src": ["'self'", ...SCHEDULER_FRAMES],
+    "frame-src": ["'self'", ...SCHEDULER_FRAMES, ...(publicForm ? [CAPTCHA_HOST] : [])],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
     "object-src": ["'none'"],

@@ -13,6 +13,9 @@ import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../../shared";
 import { rememberProfile } from "@/domains/responses/profile";
+import { markCaptchaVerified, submissionGuards } from "@/domains/responses/guards";
+import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
+import { verifyTurnstile } from "@/domains/abuse/turnstile";
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -24,6 +27,8 @@ const CompleteBody = z.object({
    * managers and browser autofill sometimes fill hidden fields, and a
    * real person must not lose their submission to that). */
   trap: z.string().max(2000).optional(),
+  /** Cloudflare Turnstile token, when the form requires the check. */
+  captchaToken: z.string().max(4096).optional(),
 });
 
 export async function POST(
@@ -55,6 +60,44 @@ export async function POST(
 
   try {
     const admin = createAdminClient();
+    const guards = await submissionGuards(admin, id);
+    if (!guards) return apiError("not_found", "Response not found.", 404);
+
+    // A retry of a submit that already went through skips these: it
+    // must succeed even after the password changed or the token expired.
+    if (!guards.completed) {
+      const unlock = request.cookies.get(unlockCookieName(guards.formId))?.value;
+      if (!(await isUnlocked(admin, guards.formId, unlock))) {
+        return apiError("locked", "Enter the form's password to continue.", 403);
+      }
+      if (guards.needsCaptcha) {
+        const check = await verifyTurnstile(parsed.data.captchaToken, {
+          remoteIp: getClientIp(request),
+        });
+        if (!check.ok) {
+          // Counted in the logs, never with answers or the token.
+          console.warn(
+            JSON.stringify({
+              event: "captcha_failed",
+              formId: guards.formId,
+              reason: check.reason,
+              codes: check.codes ?? [],
+            }),
+          );
+          const ours =
+            check.reason === "unavailable" || check.reason === "not_configured";
+          return apiError(
+            ours ? "captcha_unavailable" : "captcha_failed",
+            ours
+              ? "We couldn't run the security check. Please try again in a moment."
+              : "Please complete the security check, then submit again.",
+            ours ? 503 : 400,
+          );
+        }
+        await markCaptchaVerified(admin, id);
+      }
+    }
+
     const result = await completeResponse(
       admin,
       id,
@@ -65,6 +108,14 @@ export async function POST(
       { spamSuspected: Boolean(parsed.data.trap) },
     );
 
+    if (!result.ok && result.code === "form_closed") {
+      return NextResponse.json(
+        {
+          error: { code: "form_closed", reason: result.reason, message: result.message },
+        },
+        { status: 410 },
+      );
+    }
     if (!result.ok) {
       return NextResponse.json(
         {

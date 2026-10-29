@@ -1,8 +1,36 @@
 # Project Status
 
-Last updated: 2026-10-03
+Last updated: 2026-10-28
 
 ## Current milestone
+
+**MASTER SPEC — Phase 0: who can respond** (2026-10-28, migration 45).
+The developer master spec (48 decisions, phases P0–P7) is the roadmap
+now; Phase 0 is built:
+
+| Item | What                                                                                     |
+| ---- | ---------------------------------------------------------------------------------------- |
+| F-46 | Close date + closed message; enforced in `complete_response_atomic`                      |
+| F-47 | Response cap + full message; exact under racing submits (form-row lock, mutation-proven) |
+| F-48 | Shared form password: scrypt hash in a server-only table, per-form signed unlock cookie  |
+| F-26 | Cloudflare Turnstile per form, verified at submit, fails closed                          |
+
+Settings → Closing / Password / Spam protection; "Closed" / "Full" on
+the forms list. Decisions: `DECISIONS.md` (2026-10-28). Tests:
+`form-availability` + `form-access` + `turnstile` (unit),
+`form-availability` (integration), `form-access.spec.ts` (E2E).
+
+**To deploy:** `npm run db:migrate` (migration 45). For CAPTCHA, create
+a Turnstile widget (add every form host, including custom domains) and
+set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`.
+
+**Next:** Phase 1 of the master spec (classic layout, question blocks,
+matrix, picture choice, address, custom CSS, kiosk, ranking, time
+fields, URL prefill). The spec's §9 lists decisions still needed from
+the product owner before later phases (booking, money, records,
+blocks, PDFs, import, experiments, 360 feedback, pricing).
+
+### Phase 3
 
 **PHASE 3 — Wave A** (2026-10-03, migrations 33–37):
 

@@ -534,6 +534,32 @@ export type Database = {
           },
         ];
       };
+      form_access_secrets: {
+        Row: {
+          form_id: string;
+          password_hash: string;
+          updated_at: string;
+        };
+        Insert: {
+          form_id: string;
+          password_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          form_id?: string;
+          password_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_access_secrets_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: true;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_versions: {
         Row: {
           created_at: string;
@@ -591,17 +617,22 @@ export type Database = {
       forms: {
         Row: {
           ai_lead_criteria: string | null;
+          captcha_required: boolean;
+          closed_message: string | null;
+          closes_at: string | null;
           created_at: string;
           created_by: string;
           deleted_at: string | null;
           description: string | null;
           folder_id: string | null;
+          full_message: string | null;
           ga_measurement_id: string | null;
           gtm_container_id: string | null;
           id: string;
           meta_pixel_id: string | null;
           partial_retention_days: number | null;
           payment_config: Json | null;
+          response_cap: number | null;
           resume_links_enabled: boolean;
           save_partial_responses: boolean;
           slug: string;
@@ -611,17 +642,22 @@ export type Database = {
         };
         Insert: {
           ai_lead_criteria?: string | null;
+          captcha_required?: boolean;
+          closed_message?: string | null;
+          closes_at?: string | null;
           created_at?: string;
           created_by: string;
           deleted_at?: string | null;
           description?: string | null;
           folder_id?: string | null;
+          full_message?: string | null;
           ga_measurement_id?: string | null;
           gtm_container_id?: string | null;
           id?: string;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           payment_config?: Json | null;
+          response_cap?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug: string;
@@ -631,17 +667,22 @@ export type Database = {
         };
         Update: {
           ai_lead_criteria?: string | null;
+          captcha_required?: boolean;
+          closed_message?: string | null;
+          closes_at?: string | null;
           created_at?: string;
           created_by?: string;
           deleted_at?: string | null;
           description?: string | null;
           folder_id?: string | null;
+          full_message?: string | null;
           ga_measurement_id?: string | null;
           gtm_container_id?: string | null;
           id?: string;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           payment_config?: Json | null;
+          response_cap?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug?: string;
@@ -969,6 +1010,7 @@ export type Database = {
       };
       responses: {
         Row: {
+          captcha_verified_at: string | null;
           client_revision: number;
           completed_at: string | null;
           created_at: string;
@@ -998,6 +1040,7 @@ export type Database = {
           visitor_id: string | null;
         };
         Insert: {
+          captcha_verified_at?: string | null;
           client_revision?: number;
           completed_at?: string | null;
           created_at?: string;
@@ -1027,6 +1070,7 @@ export type Database = {
           visitor_id?: string | null;
         };
         Update: {
+          captcha_verified_at?: string | null;
           client_revision?: number;
           completed_at?: string | null;
           created_at?: string;

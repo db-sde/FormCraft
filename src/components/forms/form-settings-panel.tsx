@@ -175,7 +175,6 @@ export function FormSettingsPanel({
       <SettingsSection
         title="Public link"
         description="The address people use to open this form."
-        last
       >
         <form
           className="flex flex-col gap-2"

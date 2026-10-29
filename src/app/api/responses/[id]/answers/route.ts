@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   saveResponseAnswers,
+  FormClosedError,
   ResponseNotFoundError,
   StaleResponseWriteError,
 } from "@/domains/responses";
@@ -56,6 +57,18 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof ResponseNotFoundError) {
       return apiError("not_found", "Response not found.", 404);
+    }
+    if (error instanceof FormClosedError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "form_closed",
+            reason: error.reason,
+            message: error.respondentMessage,
+          },
+        },
+        { status: 410 },
+      );
     }
     if (error instanceof StaleResponseWriteError) {
       return NextResponse.json(
