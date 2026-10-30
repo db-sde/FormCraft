@@ -10,6 +10,8 @@ import {
 import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
 import type { FormSchemaV1 } from "./schema/v1";
 import { availabilityOf } from "./availability";
+import { readKioskConfig, type KioskConfig } from "./kiosk";
+import { assertBlockLocks } from "@/domains/blocks/queries";
 
 type Client = SupabaseClient<Database>;
 
@@ -81,8 +83,10 @@ export function previewFromSchema(raw: unknown): FormPreview {
     (a, b) => (a.order ?? 0) - (b.order ?? 0),
   );
   const first =
-    questions.find((q) => q.type !== "welcome_screen" && q.type !== "statement") ??
-    questions[0];
+    questions.find(
+      (q) =>
+        q.type !== "welcome_screen" && q.type !== "statement" && q.type !== "page_break",
+    ) ?? questions[0];
   if (!first)
     return { theme, question: schema.meta?.title ?? "Untitled form", chips: [] };
 
@@ -117,6 +121,19 @@ export function previewFromSchema(raw: unknown): FormPreview {
       break;
     case "contact_info":
       chips = ["Name", "Email"];
+      break;
+    case "ranking":
+      chips = ((settings.options as { label?: string }[] | undefined) ?? [])
+        .map((o, i) => `${i + 1}. ${o.label ?? ""}`)
+        .slice(0, 3);
+      break;
+    case "matrix":
+      chips = ((settings.columns as { label?: string }[] | undefined) ?? [])
+        .map((c) => c.label ?? "")
+        .filter(Boolean);
+      break;
+    case "address":
+      chips = ["Street", "City"];
       break;
   }
   return {
@@ -349,6 +366,18 @@ export async function saveDraftSchema(
 ): Promise<{ revision: number }> {
   const parsed = parseFormSchema(schema);
   validateSemantics(parsed);
+  // Copies of shared blocks are locked (F-09): checked against the
+  // block's version in the form's own workspace.
+  if (parsed.questions.some((q) => q.block)) {
+    const { data: owner } = await supabase
+      .from("form_versions")
+      .select("forms!inner(workspace_id)")
+      .eq("id", draftVersionId)
+      .maybeSingle();
+    const workspaceId = (owner?.forms as { workspace_id: string } | undefined)
+      ?.workspace_id;
+    if (workspaceId) await assertBlockLocks(supabase, workspaceId, parsed);
+  }
 
   const { data, error } = await supabase
     .from("form_versions")
@@ -442,7 +471,7 @@ export async function publishForm(
 ): Promise<PublishResult> {
   const { data: draft, error: draftError } = await supabase
     .from("form_versions")
-    .select("schema")
+    .select("schema, forms!inner(workspace_id)")
     .eq("form_id", formId)
     .eq("status", "draft")
     .single();
@@ -450,6 +479,11 @@ export async function publishForm(
 
   const parsed = parseFormSchema(draft.schema);
   validateForPublish(parsed);
+  await assertBlockLocks(
+    supabase,
+    (draft.forms as { workspace_id: string }).workspace_id,
+    parsed,
+  );
   const compiled = compileFormSchema(parsed);
 
   const { data, error } = await admin.rpc("publish_form_version", {
@@ -614,6 +648,8 @@ export type PublicForm = {
   tracking: { ga: string | null; gtm: string | null; meta: string | null };
   /** Creator setting: submitting needs a CAPTCHA (F-26). */
   captchaRequired: boolean;
+  /** Kiosk mode's settings (F-15); null when it's off. */
+  kiosk: KioskConfig | null;
 };
 
 export type FormSettings = {
@@ -697,7 +733,7 @@ export async function getPublicFormBySlug(
   const { data: form, error: formError } = await supabase
     .from("forms")
     .select(
-      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, captcha_required",
+      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, captcha_required, kiosk_config",
     )
     .eq("slug", slug)
     .is("deleted_at", null)
@@ -728,6 +764,7 @@ export async function getPublicFormBySlug(
       meta: form.meta_pixel_id,
     },
     captchaRequired: form.captcha_required,
+    kiosk: readKioskConfig(form.kiosk_config),
   };
 }
 

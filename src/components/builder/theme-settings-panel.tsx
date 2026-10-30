@@ -10,7 +10,8 @@ import { uploadThemeFontAction } from "@/app/(form)/forms/[id]/actions";
 import { stageTextColor } from "@/components/runtime/stage-theme";
 import { ColorField } from "./color-field";
 import { ImageUploadField } from "./image-upload-field";
-import { PanelField, SectionHead, Segmented } from "./panel-ui";
+import { PanelField, PanelNote, SectionHead, Segmented } from "./panel-ui";
+import { CustomCssEditor } from "./custom-css-editor";
 import {
   Select,
   SelectContent,
@@ -32,7 +33,12 @@ export function ThemeSettingsPanel({
   formId,
   onChange,
   customFonts = true,
+  layout = "conversational",
+  onLayoutChange,
 }: {
+  /** One question per screen, or classic pages (F-01). */
+  layout?: "conversational" | "classic";
+  onLayoutChange?: (layout: "conversational" | "classic") => void;
   /** The plan includes paid and uploaded fonts (P2.22). */
   customFonts?: boolean;
   theme: ThemeV1;
@@ -212,6 +218,32 @@ export function ThemeSettingsPanel({
         onChange={(backgroundImageUrl) =>
           onChange((current) => ({ ...current, backgroundImageUrl }))
         }
+      />
+      {onLayoutChange && (
+        <>
+          <SectionHead>Layout</SectionHead>
+          <div className="col-span-full">
+            <Segmented
+              label="How questions appear"
+              value={layout}
+              options={[
+                { value: "conversational", label: "One at a time" },
+                { value: "classic", label: "Classic pages" },
+              ]}
+              onChange={onLayoutChange}
+            />
+          </div>
+          <PanelNote>
+            {layout === "classic"
+              ? "Several questions per page. Add page breaks (Add question → Page break) to split it into pages. Logic, scores and validation work the same."
+              : "Each question on its own screen. Page breaks are ignored."}
+          </PanelNote>
+        </>
+      )}
+      <SectionHead>Custom CSS</SectionHead>
+      <CustomCssEditor
+        value={theme.customCss}
+        onChange={(customCss) => onChange((current) => ({ ...current, customCss }))}
       />
     </div>
   );

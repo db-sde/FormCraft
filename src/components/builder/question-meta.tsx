@@ -2,7 +2,14 @@ import {
   AlignLeft,
   AtSign,
   Calendar,
+  CalendarClock,
   CircleDot,
+  Clock,
+  Grid3x3,
+  Images,
+  ListOrdered,
+  MapPin,
+  SeparatorHorizontal,
   Contact,
   DoorOpen,
   Gauge,
@@ -31,17 +38,16 @@ export const GROUP_TINT: Record<QuestionGroup, { bg: string; fg: string }> = {
   Other: { bg: "var(--qt-other-bg)", fg: "var(--qt-other-fg)" },
 };
 
-export const QUESTION_TYPE_META: Record<
-  QuestionType,
-  {
-    label: string;
-    icon: LucideIcon;
-    group: "screen" | "answer";
-    tint: QuestionGroup;
-    /** One line for the Add question menu. */
-    description: string;
-  }
-> = {
+type TypeMeta = {
+  label: string;
+  icon: LucideIcon;
+  group: "screen" | "answer";
+  tint: QuestionGroup;
+  /** One line for the Add question menu. */
+  description: string;
+};
+
+export const QUESTION_TYPE_META: Record<QuestionType, TypeMeta> = {
   welcome_screen: {
     label: "Welcome screen",
     icon: DoorOpen,
@@ -161,6 +167,63 @@ export const QUESTION_TYPE_META: Record<
     tint: "Other",
     description: "Images and PDFs",
   },
+  page_break: {
+    label: "Page break",
+    icon: SeparatorHorizontal,
+    group: "screen",
+    tint: "Screens",
+    description: "Starts a new page (classic layout)",
+  },
+  time: {
+    label: "Time",
+    icon: Clock,
+    group: "answer",
+    tint: "Other",
+    description: "12 or 24 hour, with steps",
+  },
+  datetime: {
+    label: "Date & time",
+    icon: CalendarClock,
+    group: "answer",
+    tint: "Other",
+    description: "A moment, with its time zone",
+  },
+  address: {
+    label: "Address",
+    icon: MapPin,
+    group: "answer",
+    tint: "Text",
+    description: "Street, city, postcode, country",
+  },
+  ranking: {
+    label: "Ranking",
+    icon: ListOrdered,
+    group: "answer",
+    tint: "Choice",
+    description: "Put options in order",
+  },
+  matrix: {
+    label: "Matrix",
+    icon: Grid3x3,
+    group: "answer",
+    tint: "Choice",
+    description: "Rows rated on the same columns",
+  },
+};
+
+/** What the Add question menu can add: every type, plus "Picture
+ * choice" — a multiple-choice question shown as image cards (F-12). */
+export type AddKind = QuestionType | "picture_choice";
+
+export const ADD_KIND_META: Record<AddKind, TypeMeta> = {
+  ...QUESTION_TYPE_META,
+  picture_choice: {
+    label: "Picture choice",
+    icon: Images,
+    group: "answer",
+    tint: "Choice",
+    description: "Options with images",
+  },
 };
 
 export const ADDABLE_QUESTION_TYPES: QuestionType[] = QUESTION_TYPES.filter(
@@ -168,14 +231,37 @@ export const ADDABLE_QUESTION_TYPES: QuestionType[] = QUESTION_TYPES.filter(
 );
 
 /** The Add question menu's columns (Part 4). */
-export const ADD_GROUPS: { name: string; types: QuestionType[] }[] = [
-  { name: "Screens", types: ["welcome_screen", "statement"] },
+export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
+  { name: "Screens", types: ["welcome_screen", "statement", "page_break"] },
   {
     name: "Text",
-    types: ["short_text", "long_text", "email", "phone", "url", "number", "contact_info"],
+    types: [
+      "short_text",
+      "long_text",
+      "email",
+      "phone",
+      "url",
+      "number",
+      "contact_info",
+      "address",
+    ],
   },
-  { name: "Choice", types: ["single_select", "multi_select", "dropdown", "yes_no"] },
-  { name: "Scale & other", types: ["rating", "opinion_scale", "date", "file_upload"] },
+  {
+    name: "Choice",
+    types: [
+      "single_select",
+      "multi_select",
+      "picture_choice",
+      "dropdown",
+      "yes_no",
+      "ranking",
+      "matrix",
+    ],
+  },
+  {
+    name: "Scale & other",
+    types: ["rating", "opinion_scale", "date", "time", "datetime", "file_upload"],
+  },
 ];
 
 /** A question type's icon on its group's tinted tile. */
@@ -185,13 +271,13 @@ export function TypeTile({
   bordered = true,
   className,
 }: {
-  type: QuestionType;
+  type: AddKind;
   size?: 20 | 22 | 24 | 30 | 34;
   /** The canvas chip draws the tile without its ink outline. */
   bordered?: boolean;
   className?: string;
 }) {
-  const meta = QUESTION_TYPE_META[type];
+  const meta = ADD_KIND_META[type];
   const Icon = meta.icon;
   const tint = GROUP_TINT[meta.tint];
   const icon = size >= 34 ? 17 : size >= 30 ? 15 : size >= 24 ? 13 : 12;

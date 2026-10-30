@@ -2,28 +2,43 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Plus, X, GripVertical } from "lucide-react";
-import type { OptionV1 } from "@/domains/forms/schema/v1";
 import { createOption } from "@/domains/forms/builder";
 import { Input } from "@/components/ui/input";
 import { cn } from "cn";
 
 const KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-/** Placeholder wording a new option starts with; typing replaces it. */
-const isPlaceholder = (label: string) => /^Option \d+$/.test(label);
+/** Placeholder wording a new item starts with ("Option 3", "Row 2");
+ * typing replaces it. */
+const placeholderTest = (noun: string) => (label: string) =>
+  new RegExp(`^${noun} \\d+$`).test(label);
 
 /** Options for a choice question (Part 4): drag to reorder, letter keys
  * as respondents see them, and pasting several lines adds one option
  * per line. Built for typing a list without the mouse: Enter adds the
  * next option, Backspace on an empty one removes it, the arrow keys move
  * between them. Option ids are stable — reordering never re-creates them. */
-export function OptionsEditor({
+export function OptionsEditor<T extends { id: string; label: string }>({
   options,
   onChange,
+  noun = "Option",
+  minCount = 1,
+  maxCount = 200,
+  keys = true,
 }: {
-  options: OptionV1[];
-  onChange: (options: OptionV1[]) => void;
+  options: T[];
+  onChange: (options: T[]) => void;
+  /** What each item is called ("Option", "Row", "Column"). */
+  noun?: string;
+  /** Items that can't be removed below this many (a matrix needs two
+   * columns, a ranking two options). */
+  minCount?: number;
+  maxCount?: number;
+  /** Show the respondent's letter keys (choice tiles only). */
+  keys?: boolean;
 }) {
+  const isPlaceholder = placeholderTest(noun);
+  const lower = noun.toLowerCase();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const inputs = useRef(new Map<string, HTMLInputElement>());
@@ -51,13 +66,14 @@ export function OptionsEditor({
   }
 
   function remove(id: string) {
-    if (options.length <= 1) return;
+    if (options.length <= minCount) return;
     onChange(options.filter((o) => o.id !== id));
   }
 
   /** Adds an option after `index` (at the end by default) and focuses it. */
   function add(index = options.length - 1) {
-    const option = createOption(`Option ${options.length + 1}`);
+    if (options.length >= maxCount) return undefined;
+    const option = createOption(`${noun} ${options.length + 1}`) as unknown as T;
     const next = [...options];
     next.splice(index + 1, 0, option);
     onChange(next);
@@ -85,7 +101,7 @@ export function OptionsEditor({
         input?.focus();
         input?.select();
       } else {
-        tentative.current = add(index);
+        tentative.current = add(index) ?? null;
       }
     } else if (
       e.key === "Backspace" &&
@@ -122,7 +138,13 @@ export function OptionsEditor({
     const [first, ...rest] = lines;
     const next = [...options];
     next[index] = { ...next[index], label: first };
-    next.splice(index + 1, 0, ...rest.map((label) => createOption(label)));
+    next.splice(
+      index + 1,
+      0,
+      ...rest
+        .slice(0, Math.max(0, maxCount - options.length))
+        .map((label) => createOption(label) as unknown as T),
+    );
     onChange(next);
   }
 
@@ -166,12 +188,14 @@ export function OptionsEditor({
           >
             <GripVertical className="size-3.5" />
           </span>
-          <span
-            aria-hidden
-            className="border-input text-muted-foreground grid size-[22px] shrink-0 place-items-center rounded-[5px] border-[1.5px] text-[11px] font-bold"
-          >
-            {KEYS[index] ?? "·"}
-          </span>
+          {keys && (
+            <span
+              aria-hidden
+              className="border-input text-muted-foreground grid size-[22px] shrink-0 place-items-center rounded-[5px] border-[1.5px] text-[11px] font-bold"
+            >
+              {KEYS[index] ?? "·"}
+            </span>
+          )}
           <Input
             ref={(el) => {
               if (el) inputs.current.set(option.id, el);
@@ -198,13 +222,13 @@ export function OptionsEditor({
               if (isPlaceholder(e.currentTarget.value)) remove(option.id);
             }}
             onPaste={(e) => handlePaste(index, e)}
-            aria-label={`Option ${index + 1}`}
+            aria-label={`${noun} ${index + 1}`}
             className="h-9 min-w-0 flex-1 px-2.5 text-sm"
           />
           <button
             type="button"
-            disabled={options.length <= 1}
-            aria-label={`Remove option ${index + 1}`}
+            disabled={options.length <= minCount}
+            aria-label={`Remove ${lower} ${index + 1}`}
             onClick={() => remove(option.id)}
             className="fc-focus text-muted-foreground hover:bg-hover-wash grid size-7 shrink-0 place-items-center rounded-sm disabled:opacity-30"
           >
@@ -217,10 +241,10 @@ export function OptionsEditor({
         onClick={() => add()}
         className="fc-focus border-ink hover:bg-hover-wash flex h-8 items-center gap-1.5 self-start rounded-sm border-[1.5px] border-dashed px-2.5 text-[13px] font-semibold"
       >
-        <Plus className="size-[13px]" /> Add option
+        <Plus className="size-[13px]" /> Add {lower}
       </button>
       <p className="text-muted-foreground text-[12px]">
-        Press Enter for the next option, or paste a list.
+        Press Enter for the next {lower}, or paste a list.
       </p>
     </div>
   );

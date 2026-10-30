@@ -45,6 +45,22 @@ export type QuestionSummary =
       max: number | null;
     })
   | (Base & { kind: "text"; quotes: string[] })
+  | (Base & {
+      kind: "matrix";
+      columns: string[];
+      /** Per row: how many chose each column (same order as `columns`). */
+      rows: { label: string; answered: number; counts: number[] }[];
+    })
+  | (Base & {
+      kind: "ranking";
+      /** Best first: the average place each option got (1 = top). */
+      items: {
+        label: string;
+        averageRank: number | null;
+        first: number;
+        ranked: number;
+      }[];
+    })
   | (Base & { kind: "count" });
 
 export type VariableSummary =
@@ -103,7 +119,7 @@ export function summarizeAnswers(
   let number = 0;
 
   for (const question of schema.questions) {
-    if (question.type === "welcome_screen") continue;
+    if (question.type === "welcome_screen" || question.type === "page_break") continue;
     number += 1;
     if (question.type === "statement") continue;
 
@@ -233,6 +249,45 @@ function summarizeQuestion(
           .filter((v): v is string => typeof v === "string")
           .slice(0, QUOTE_COUNT),
       };
+
+    case "matrix": {
+      const { rows, columns } = question.settings;
+      return {
+        ...base,
+        kind: "matrix",
+        columns: columns.map((c) => c.label),
+        rows: rows.map((row) => {
+          const counts = columns.map(() => 0);
+          let answered = 0;
+          for (const value of values) {
+            const cell = (value as Record<string, unknown>)[row.id];
+            const chosen = Array.isArray(cell) ? cell : cell === undefined ? [] : [cell];
+            if (chosen.length > 0) answered += 1;
+            for (const id of chosen) {
+              const at = columns.findIndex((c) => c.id === id);
+              if (at !== -1) counts[at] += 1;
+            }
+          }
+          return { label: row.label, answered, counts };
+        }),
+      };
+    }
+
+    case "ranking": {
+      const items = question.settings.options.map((option) => {
+        const places = values
+          .map((v) => (Array.isArray(v) ? v.indexOf(option.id) : -1))
+          .filter((at) => at !== -1);
+        return {
+          label: option.label,
+          averageRank: places.length ? mean(places.map((at) => at + 1)) : null,
+          first: places.filter((at) => at === 0).length,
+          ranked: places.length,
+        };
+      });
+      items.sort((a, b) => (a.averageRank ?? Infinity) - (b.averageRank ?? Infinity));
+      return { ...base, kind: "ranking", items };
+    }
 
     default:
       return { ...base, kind: "count" };

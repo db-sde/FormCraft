@@ -136,6 +136,36 @@ test.describe("smoke: every page renders cleanly", () => {
         "/forms/[id]/integrations": `/forms/${formId}/integrations`,
         "/forms/[id]/settings": `/forms/${formId}/settings`,
       };
+      // A shared question block, so the library and block pages have one.
+      const { data: workspace } = await adminClient()
+        .from("workspaces")
+        .select("id")
+        .eq("owner_id", user.userId)
+        .limit(1)
+        .single();
+      const { data: block } = await adminClient()
+        .from("question_blocks")
+        .insert({ workspace_id: workspace!.id, name: "Smoke block" })
+        .select("id")
+        .single();
+      await adminClient()
+        .from("question_block_versions")
+        .insert({
+          block_id: block!.id,
+          version: 1,
+          questions: [
+            {
+              id: "b_q",
+              type: "short_text",
+              order: 0,
+              label: "Team",
+              required: false,
+              settings: {},
+            },
+          ],
+        });
+      signedIn["/blocks"] = "/blocks";
+      signedIn["/blocks/[id]"] = `/blocks/${block!.id}`;
       for (const [route, path] of Object.entries(signedIn)) {
         await expectHealthy(page, path, problems);
         visited.add(route);

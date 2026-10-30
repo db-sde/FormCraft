@@ -1,5 +1,9 @@
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
-import { CONTACT_FIELD_LABELS } from "@/domains/forms/schema/question-types";
+import {
+  ADDRESS_FIELD_LABELS,
+  CONTACT_FIELD_LABELS,
+} from "@/domains/forms/schema/question-types";
+import { formatDateTime } from "@/domains/logic/datetime";
 
 function contactRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -30,7 +34,37 @@ export function formatAnswerValue(
   switch (question.type) {
     case "welcome_screen":
     case "statement":
+    case "page_break":
       return "";
+
+    case "address": {
+      const record = contactRecord(value);
+      return question.settings.fields
+        .map((field) => record[field])
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+        .join(", ");
+    }
+
+    case "ranking": {
+      if (!Array.isArray(value)) return String(value);
+      return value
+        .map(
+          (id, i) =>
+            `${i + 1}. ${question.settings.options.find((o) => o.id === id)?.label ?? String(id)}`,
+        )
+        .join("; ");
+    }
+
+    case "matrix": {
+      const record = contactRecord(value);
+      return question.settings.rows
+        .filter((row) => matrixCell(question, record[row.id]) !== "")
+        .map((row) => `${row.label}: ${matrixCell(question, record[row.id])}`)
+        .join("; ");
+    }
+
+    case "datetime":
+      return typeof value === "string" ? formatDateTime(value) : String(value);
 
     case "single_select": {
       if (typeof value === "string" && value.startsWith("other:")) return value.slice(6);
@@ -103,7 +137,28 @@ export function questionColumnLabels(question: QuestionV1): string[] {
       (field) => `${questionColumnLabel(question)} (${CONTACT_FIELD_LABELS[field]})`,
     );
   }
+  if (question.type === "address") {
+    return question.settings.fields.map(
+      (field) => `${questionColumnLabel(question)} (${ADDRESS_FIELD_LABELS[field]})`,
+    );
+  }
+  if (question.type === "matrix") {
+    return question.settings.rows.map(
+      (row) => `${questionColumnLabel(question)} (${row.label.trim() || row.id})`,
+    );
+  }
   return [questionColumnLabel(question)];
+}
+
+/** One matrix row's answer as its column label(s). */
+function matrixCell(
+  question: Extract<QuestionV1, { type: "matrix" }>,
+  cell: unknown,
+): string {
+  const label = (id: unknown) =>
+    question.settings.columns.find((c) => c.id === id)?.label ?? String(id);
+  if (Array.isArray(cell)) return cell.map(label).join(", ");
+  return typeof cell === "string" && cell !== "" ? label(cell) : "";
 }
 
 /** Cells matching questionColumnLabels(`columnsFrom`) — `columnsFrom`
@@ -115,12 +170,18 @@ export function answerCells(
   value: unknown,
   context: { uploadNames?: ReadonlyMap<string, string> } = {},
 ): string[] {
-  if (columnsFrom.type === "contact_info") {
+  if (columnsFrom.type === "contact_info" || columnsFrom.type === "address") {
     const record = contactRecord(value);
-    return columnsFrom.settings.fields.map((field) => {
+    return columnsFrom.settings.fields.map((field: string) => {
       const v = record[field];
       return typeof v === "string" ? v : "";
     });
+  }
+  if (columnsFrom.type === "matrix") {
+    const record = contactRecord(value);
+    // Labels come from the version answered; the columns, from the latest.
+    const answered = question.type === "matrix" ? question : columnsFrom;
+    return columnsFrom.settings.rows.map((row) => matrixCell(answered, record[row.id]));
   }
   return [formatAnswerValue(question, value, context)];
 }

@@ -18,6 +18,7 @@ import { askStructured } from "./structured";
 const SKIPPED: QuestionV1["type"][] = [
   "welcome_screen",
   "statement",
+  "page_break",
   "file_upload",
   "email",
   "phone",

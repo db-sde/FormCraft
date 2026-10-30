@@ -560,6 +560,32 @@ export type Database = {
           },
         ];
       };
+      form_kiosk_secrets: {
+        Row: {
+          form_id: string;
+          pin_hash: string;
+          updated_at: string;
+        };
+        Insert: {
+          form_id: string;
+          pin_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          form_id?: string;
+          pin_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_kiosk_secrets_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: true;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_versions: {
         Row: {
           created_at: string;
@@ -629,6 +655,7 @@ export type Database = {
           ga_measurement_id: string | null;
           gtm_container_id: string | null;
           id: string;
+          kiosk_config: Json | null;
           meta_pixel_id: string | null;
           partial_retention_days: number | null;
           payment_config: Json | null;
@@ -654,6 +681,7 @@ export type Database = {
           ga_measurement_id?: string | null;
           gtm_container_id?: string | null;
           id?: string;
+          kiosk_config?: Json | null;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           payment_config?: Json | null;
@@ -679,6 +707,7 @@ export type Database = {
           ga_measurement_id?: string | null;
           gtm_container_id?: string | null;
           id?: string;
+          kiosk_config?: Json | null;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           payment_config?: Json | null;
@@ -906,6 +935,99 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      question_block_versions: {
+        Row: {
+          block_id: string;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          questions: Json;
+          version: number;
+        };
+        Insert: {
+          block_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          questions: Json;
+          version: number;
+        };
+        Update: {
+          block_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          questions?: Json;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "question_block_versions_block_id_fkey";
+            columns: ["block_id"];
+            isOneToOne: false;
+            referencedRelation: "question_blocks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "question_block_versions_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      question_blocks: {
+        Row: {
+          archived_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          current_version: number;
+          description: string | null;
+          id: string;
+          name: string;
+          updated_at: string;
+          workspace_id: string;
+        };
+        Insert: {
+          archived_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          current_version?: number;
+          description?: string | null;
+          id?: string;
+          name: string;
+          updated_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          archived_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          current_version?: number;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          updated_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "question_blocks_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "question_blocks_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       rate_limits: {
         Row: {
@@ -1969,6 +2091,10 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      publish_question_block_version: {
+        Args: { p_block_id: string; p_questions: Json };
+        Returns: number;
       };
       resolve_custom_domain: {
         Args: { p_hostname: string };

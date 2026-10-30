@@ -169,7 +169,7 @@ export default async function IntegrationsPage({
   const numbered = (schema?.questions ?? [])
     .slice()
     .sort((a, b) => a.order - b.order)
-    .filter((q) => q.type !== "welcome_screen")
+    .filter((q) => q.type !== "welcome_screen" && q.type !== "page_break")
     .map((q) => ({ question: q, number: ++n }));
   const deliveriesByEndpoint = Object.fromEntries(
     await Promise.all(
@@ -320,7 +320,16 @@ export default async function IntegrationsPage({
                 }),
               );
             }
-            if (q.type === "statement" || q.type === "file_upload") return [];
+            if (q.type === "address") {
+              return ((q.settings as { fields?: string[] }).fields ?? []).map(
+                (field) => ({
+                  value: `${q.id}.${field}`,
+                  label: `${label} → ${field}`,
+                }),
+              );
+            }
+            if (q.type === "statement" || q.type === "file_upload" || q.type === "matrix")
+              return [];
             return [{ value: q.id, label }];
           })}
         />

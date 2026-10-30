@@ -113,7 +113,13 @@ export function operatorsFor(kind: OperandKind): CompareOperator[] {
 
 export function questionKind(q: QuestionV1 | undefined, field?: string): OperandKind {
   if (!q) return "unknown";
-  if (field) return "text";
+  if (field) {
+    // A matrix row is a choice among the columns; a ranked option, its
+    // place (1 = first); contact and address parts, text.
+    if (q.type === "matrix") return q.settings.multiple ? "multi" : "choice";
+    if (q.type === "ranking") return "number";
+    return "text";
+  }
   switch (q.type) {
     case "single_select":
     case "dropdown":
@@ -127,9 +133,15 @@ export function questionKind(q: QuestionV1 | undefined, field?: string): Operand
     case "opinion_scale":
       return "number";
     case "date":
+    case "datetime":
       return "date";
+    case "ranking":
+      return "list";
     case "file_upload":
     case "contact_info":
+    case "address":
+    case "matrix":
+    case "page_break":
       return "unknown";
     default:
       return "text";
@@ -170,7 +182,7 @@ export function numberedQuestions(schema: FormSchemaV1) {
   let n = 0;
   return ordered.map((q) => ({
     question: q,
-    number: q.type === "welcome_screen" ? 0 : ++n,
+    number: q.type === "welcome_screen" || q.type === "page_break" ? 0 : ++n,
   }));
 }
 
@@ -216,8 +228,7 @@ export function defaultValue(
   const kind = exprKind(left, schema);
   if (left.type === "answer" && (kind === "choice" || kind === "multi")) {
     const q = schema.questions.find((x) => x.id === left.questionId);
-    const first =
-      (q?.settings as { options?: { id: string }[] }).options?.[0]?.id ?? null;
+    const first = answerChoices(q, left.field)?.[0]?.id ?? null;
     return {
       type: "literal",
       value:
@@ -341,4 +352,16 @@ export function describeRule(rule: RuleV1, schema: FormSchemaV1): string {
   return `${describeTrigger(rule, schema)}: ${when}${rule.then
     .map((a) => describeAction(a, schema))
     .join(", then ")}`;
+}
+
+/** The choices a condition on this answer compares against: a choice
+ * question's options, or a matrix row's columns. */
+export function answerChoices(
+  q: QuestionV1 | undefined,
+  field?: string,
+): { id: string; label: string }[] | undefined {
+  if (!q) return undefined;
+  if (q.type === "matrix") return field ? q.settings.columns : undefined;
+  if (field) return undefined;
+  return (q.settings as { options?: { id: string; label: string }[] }).options;
 }

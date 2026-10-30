@@ -203,6 +203,72 @@ function Body({ q, tableHref }: { q: QuestionSummary; tableHref: string }) {
         </>
       );
 
+    case "matrix":
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr>
+                <th scope="col" className="sr-only">
+                  Row
+                </th>
+                {q.columns.map((c) => (
+                  <th
+                    key={c}
+                    scope="col"
+                    className="text-muted-foreground px-1.5 pb-1.5 text-center font-semibold"
+                  >
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {q.rows.map((row) => (
+                <tr key={row.label} className="border-border border-t">
+                  <th scope="row" className="py-1.5 pr-2 text-left font-medium">
+                    {row.label}
+                  </th>
+                  {row.counts.map((count, i) => {
+                    const share = row.answered
+                      ? Math.round((count / row.answered) * 100)
+                      : 0;
+                    return (
+                      <td key={i} className="px-1.5 py-1.5 text-center tabular-nums">
+                        <span
+                          className="inline-block min-w-9 rounded-[4px] px-1 py-0.5"
+                          style={{
+                            background: `color-mix(in oklab, var(--primary) ${Math.round(share * 0.6)}%, transparent)`,
+                          }}
+                          title={`${count} of ${row.answered}`}
+                        >
+                          {share}%
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+
+    case "ranking":
+      return (
+        <ol className="flex flex-col gap-1.5">
+          {q.items.map((item, i) => (
+            <li key={item.label} className="flex items-baseline gap-2.5 text-[13.5px]">
+              <b className="w-5 shrink-0 text-right tabular-nums">{i + 1}.</b>
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                average place {fmt(item.averageRank)} · first {item.first}×
+              </span>
+            </li>
+          ))}
+        </ol>
+      );
+
     case "count":
       return (
         <Link

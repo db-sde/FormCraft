@@ -92,6 +92,7 @@ export function recallTokens(schema: FormSchemaV1): { token: string; label: stri
         (q) =>
           q.type !== "welcome_screen" &&
           q.type !== "statement" &&
+          q.type !== "page_break" &&
           q.type !== "file_upload",
       )
       .map((q) => ({

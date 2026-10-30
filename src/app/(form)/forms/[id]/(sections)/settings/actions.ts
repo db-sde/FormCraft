@@ -31,6 +31,7 @@ import {
 import { setFormPassword } from "@/domains/forms/access";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/domains/forms/access-rules";
 import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
+import { KioskConfig, KIOSK_PIN_PATTERN, setKioskPin } from "@/domains/forms/kiosk";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
 
@@ -364,5 +365,68 @@ export async function setCaptchaAction(
     return { ok: true };
   } catch {
     return { ok: false, message: "Couldn't save the setting. Please try again." };
+  }
+}
+
+// --- Kiosk mode (master spec F-15) ---------------------------------------
+
+/** Turns kiosk mode on with these timings, or off (null). */
+export async function updateKioskAction(
+  formId: string,
+  config: { resetSeconds: number; idleSeconds: number } | null,
+): Promise<SettingsResult> {
+  const parsed = config === null ? null : KioskConfig.safeParse(config);
+  if (parsed && !parsed.success) {
+    return {
+      ok: false,
+      message: "Start over after 3–60 seconds, and ask “Still there?” after 30–900.",
+    };
+  }
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to change this." };
+  try {
+    const { error } = await ctx.supabase
+      .from("forms")
+      .update({ kiosk_config: parsed ? parsed.data : null })
+      .eq("id", formId)
+      .eq("workspace_id", ctx.workspace.id);
+    if (error) throw error;
+    await audit(createAdminClient(), {
+      workspaceId: ctx.workspace.id,
+      actorId: ctx.userId,
+      action: "form.kiosk_changed",
+      target: { type: "form", id: formId },
+      metadata: { enabled: parsed !== null },
+    });
+    revalidatePath(`/forms/${formId}/settings`);
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Couldn't save the setting. Please try again." };
+  }
+}
+
+/** Sets (4–8 digits) or removes (null) the PIN for leaving kiosk mode. */
+export async function setKioskPinAction(
+  formId: string,
+  pin: string | null,
+): Promise<SettingsResult> {
+  if (pin !== null && !KIOSK_PIN_PATTERN.test(pin)) {
+    return { ok: false, message: "Use 4 to 8 digits." };
+  }
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to change this." };
+  try {
+    await setKioskPin(createAdminClient(), formId, pin);
+    await audit(createAdminClient(), {
+      workspaceId: ctx.workspace.id,
+      actorId: ctx.userId,
+      action: "form.kiosk_changed",
+      target: { type: "form", id: formId },
+      metadata: { pin: pin !== null },
+    });
+    revalidatePath(`/forms/${formId}/settings`);
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Couldn't save the PIN. Please try again." };
   }
 }

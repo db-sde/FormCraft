@@ -3,6 +3,86 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-30 — Master spec Phase 1: authoring and question types
+
+Phase 1 of `docs/master-spec.md` (F-01, F-09, F-11–15, F-18, F-20, F-28),
+migration 46. The product owner settled the spec's §9 item 5 (blocks)
+on 2026-10-29: owners review and apply updates; no local overrides
+(detach to change); editors and up edit blocks.
+
+- **One engine, two layouts.** `meta.layout` is `conversational`
+  (default) or `classic`. Classic pages are split by a new
+  `page_break` item (title and description head the page). A page shows
+  its questions that are on the path for the answers so far
+  (`walkForm`), so show conditions, jumps (forward only, as before),
+  scores, pools, adaptive groups and validation behave the same in both
+  layouts; a jump simply leaves out what's in between. The engine skips
+  page breaks in either layout, so a conversational form ignores them.
+  Not in classic: AI follow-ups (analysis warns) and Enter-to-continue
+  (Enter stays inside the field; Next moves on). Known "ask once"
+  answers are filled in and editable rather than skipped.
+- **New types.** `time` (24-hour `HH:mm`, window, step, 12/24 display —
+  native selects, not the browser's time field, so 12/24 holds on any
+  locale), `datetime` (wall time plus UTC offset; with a question time
+  zone the server checks the offset, a skipped daylight-saving hour is
+  refused and a repeated one accepts either offset, picker uses the
+  first; without one it's the respondent's zone), `address` (parts and
+  required parts, no country format assumed; exports a column per
+  part), `ranking` (top N or all; answer is option ids best first; logic
+  reads `answer:q.<option>` as its place), `matrix` (rows × columns, one
+  or several per row; required means every row; logic reads
+  `answer:q.<row>`; exports a column per row). Picture choice isn't a
+  type: choice options gain an image and alt text and single/multi
+  choice a `pictures` layout, so all choice logic, scoring and exports
+  work unchanged and exports show labels.
+- **Link prefill.** `prefillKey` on supported single-value questions;
+  `?key=value` fills the visible answer (validated with the same
+  `validateAnswer`, options matched by id or label, otherwise ignored),
+  still editable and re-validated by the server. The keys are removed
+  from the address bar after reading; a resumed session's answers win,
+  and prefill beats a remembered answer. Names can't clash with URL
+  fields or FormCraft's own (`lang`, `kiosk`, `utm_*` …). Email/phone
+  show a warning about links in history and logs.
+- **Custom CSS** lives in `theme.customCss`, so it's versioned and goes
+  live on publish. It's nested in the form's scope with native CSS
+  nesting (`.fc-custom-scope { … }`), so it can't reach the dashboard;
+  the builder canvas never loads it (Preview and the live form do).
+  Refused (draft won't save): `<`, `@import`, `@font-face`/namespace,
+  script URLs, `expression()`, bindings, backslashes and a stray `}`
+  that would close the scope. CSP is unchanged (inline styles were
+  already allowed; `url()` stays limited to this site and uploads).
+  Stable hooks: `.fc-question`, `.fc-input`, `.fc-choice`,
+  `.fc-button` and others, listed in the editor. No plan gating (§9.10).
+- **Kiosk mode** (`forms.kiosk_config`, PIN hash in
+  `form_kiosk_secrets`, server-only). `?kiosk=1` works only when on.
+  Each person gets a remounted runtime: no localStorage resume, no
+  finish-later, no remembered answers, and the start isn't tied to the
+  device's visitor id. After submit the ending shows `resetSeconds`,
+  then a fresh form; after `idleSeconds` without input, "Still there?"
+  counts down 15 s and resets. Partial-answer policy: as on any device —
+  kept on the server only if the form saves unfinished responses;
+  nothing stays in the browser. The PIN (checked by
+  `/api/responses/kiosk-exit`, rate-limited) only guards leaving kiosk
+  mode in the page; the UI says to use the tablet's own guided access
+  for real lockdown. Full screen needs a tap (browser rule) and is
+  re-offered if the person leaves it.
+- **Blocks.** `question_blocks` + immutable `question_block_versions`;
+  `publish_question_block_version` numbers versions in one transaction
+  (tested with racing publishes). A form holds copies tagged
+  `block: { id, version, instance, source }`. Content (type, text,
+  required, settings) is locked; the form owns show conditions, checks,
+  option points, weights, "ask once" and prefill. The server enforces
+  the lock at draft save and again at publish (drafts can be written
+  directly): every copy must match its version and an insertion must be
+  complete; deleting a block question removes its whole insertion.
+  Updates are offered, reviewed (added / changed / removed) and applied
+  to the draft only; an update that would break the form's logic can't
+  be applied until the logic changes or the block is detached. Restore
+  publishes a copy of an old version (rollback without rewriting
+  history); archiving keeps versions, and forms keep their copies.
+- **Not built:** address autocomplete and maps (a spec non-goal), and
+  ranking scores by place (rules can read an option's place instead).
+
 ## 2026-10-28 — Master spec Phase 0: who can respond, and until when
 
 Phase 0 of the developer master spec (F-26 CAPTCHA, F-46 close date,

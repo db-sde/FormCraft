@@ -36,7 +36,13 @@ export function QuestionList({
   const firstMovable = hasWelcome ? 1 : 0;
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
-  const hasWelcomeOffset = hasWelcome ? 0 : 1;
+  // Respondent-facing numbers: the welcome screen and page breaks have none.
+  const numbers = new Map<string, number>();
+  let counter = 0;
+  for (const q of questions) {
+    if (q.type !== "welcome_screen" && q.type !== "page_break")
+      numbers.set(q.id, ++counter);
+  }
 
   return (
     <ol className="flex flex-col gap-0.5" aria-label="Questions">
@@ -45,9 +51,13 @@ export function QuestionList({
         const selected = question.id === selectedId;
         // The welcome screen is pinned first — see isWelcomeScreen.
         const pinned = question.type === "welcome_screen";
-        // Respondent-facing numbers skip the pinned welcome screen.
-        const number = index + hasWelcomeOffset;
-        const label = question.label || meta.label;
+        const number = numbers.get(question.id);
+        const pageBreak = question.type === "page_break";
+        const label = pageBreak
+          ? question.label.trim()
+            ? `Page · ${question.label.trim()}`
+            : "Page break"
+          : question.label || meta.label;
 
         return (
           <li
@@ -66,6 +76,7 @@ export function QuestionList({
             }}
             className={cn(
               "group relative flex h-10 items-center gap-2 rounded-sm pr-1.5 pl-1",
+              pageBreak && "border-input mt-1 border-t-[1.5px] border-dashed",
               selected ? "bg-secondary text-secondary-foreground" : "hover:bg-hover-wash",
               dragIndex === index && "opacity-50",
               dragIndex !== null &&
@@ -106,7 +117,7 @@ export function QuestionList({
               className="focus-visible:after:shadow-focus flex min-w-0 flex-1 items-center gap-2 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-sm"
             >
               <span className="w-[18px] shrink-0 text-right text-xs font-bold tabular-nums">
-                {pinned ? "" : number}
+                {number ?? ""}
               </span>
               <TypeTile type={question.type} size={24} />
               <span

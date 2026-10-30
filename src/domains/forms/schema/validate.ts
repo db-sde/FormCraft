@@ -122,6 +122,25 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
       }
       optionIds.add(option.id);
     }
+
+    // A matrix's rows and columns are answers' keys and values (F-11).
+    if (q.type === "matrix") {
+      for (const [kind, items] of [
+        ["rows", q.settings.rows],
+        ["columns", q.settings.columns],
+      ] as const) {
+        if (new Set(items.map((i) => i.id)).size !== items.length) {
+          throw new FormSchemaError(
+            `question ${q.id} has duplicate matrix ${kind} ids`,
+            "duplicate_option_id",
+            {
+              message: `Question ${questionNumber(schema, q.id)}: two ${kind} share the same id. Delete one and add it again.`,
+              questionId: q.id,
+            },
+          );
+        }
+      }
+    }
   }
 
   const endingIds = new Set<string>();

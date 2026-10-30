@@ -8,11 +8,14 @@ import {
   ChevronDown,
   FileCheck,
   FileX,
+  ImageOff,
   Search,
   Star,
   Upload,
   X,
 } from "lucide-react";
+import { AddressInput, MatrixInput, RankingInput } from "./structured-inputs";
+import { DateTimeInput, TimeInput } from "./time-inputs";
 import { Checkbox as CheckboxPrimitive, RadioGroup as RadioPrimitive } from "radix-ui";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OTHER_PREFIX } from "@/domains/logic";
@@ -34,14 +37,40 @@ const KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** Underline field (Part 6): no box, a 2px line that turns primary on focus. */
 const UNDERLINE =
-  "w-full min-w-0 rounded-none border-0 border-b-2 border-(--st-line) bg-transparent py-2 text-(length:--st-input) text-(--st-text) outline-none placeholder:text-(--st-muted) focus:border-(--st-primary) focus-visible:shadow-none aria-invalid:border-[#c8372d]";
+  "fc-input w-full min-w-0 rounded-none border-0 border-b-2 border-(--st-line) bg-transparent py-2 text-(length:--st-input) text-(--st-text) outline-none placeholder:text-(--st-muted) focus:border-(--st-primary) focus-visible:shadow-none aria-invalid:border-[#c8372d]";
 
 /** A choice tile: primary border + 16% fill when chosen, 8% wash on hover. */
 const TILE =
-  "group/tile relative flex w-full cursor-pointer flex-col gap-2 rounded-(--st-tile-br) border-[1.5px] border-(--st-line) bg-(--st-field) p-(--st-tile-pad) text-left text-(length:--st-tile) text-(--st-text) transition-colors hover:bg-(--st-hover) data-[state=checked]:border-(--st-primary) data-[state=checked]:bg-(--st-sel) data-[beat=true]:[animation:fc-beat_350ms_cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:data-[beat=true]:animate-none";
+  "fc-choice group/tile relative flex w-full cursor-pointer flex-col gap-2 rounded-(--st-tile-br) border-[1.5px] border-(--st-line) bg-(--st-field) p-(--st-tile-pad) text-left text-(length:--st-tile) text-(--st-text) transition-colors hover:bg-(--st-hover) data-[state=checked]:border-(--st-primary) data-[state=checked]:bg-(--st-sel) data-[beat=true]:[animation:fc-beat_350ms_cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:data-[beat=true]:animate-none";
 
 const KEY =
   "grid size-6 shrink-0 place-items-center rounded-(--st-key-br) border border-(--st-line) text-xs font-bold group-data-[state=checked]/tile:border-(--st-primary) group-data-[state=checked]/tile:bg-(--st-primary) group-data-[state=checked]/tile:text-(--st-on-primary)";
+
+/** Picture choice (F-12): image cards in a grid, two across on a phone. */
+const PICTURE_GRID =
+  "grid max-w-[640px] grid-cols-2 gap-2.5 sm:grid-cols-3 in-data-[mode=phone]:grid-cols-2";
+const PICTURE_TILE = "justify-start p-2 pb-2.5";
+
+/** An option's picture, or a plain placeholder when it has none (the
+ * label below still names the option). */
+function PictureFace({ imageUrl, imageAlt }: { imageUrl?: string; imageAlt?: string }) {
+  return imageUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+    <img
+      src={imageUrl}
+      alt={imageAlt ?? ""}
+      loading="lazy"
+      className="fc-picture aspect-[4/3] w-full rounded-[calc(var(--st-tile-br)-4px)] object-cover"
+    />
+  ) : (
+    <span
+      aria-hidden
+      className="fc-picture grid aspect-[4/3] w-full place-items-center rounded-[calc(var(--st-tile-br)-4px)] bg-(--st-hover) text-(--st-muted)"
+    >
+      <ImageOff className="size-6" />
+    </span>
+  );
+}
 
 /** Pulse a tile for 350ms after it's chosen (Part 1 Motion: "Choice confirm"). */
 function useBeat(): [string | null, (id: string) => void] {
@@ -69,7 +98,15 @@ export function RuntimeQuestionInput({
   preview = false,
   invalid = false,
   contactField,
+  autoFocus,
+  idPrefix,
 }: {
+  /** Focus the field when it appears (default: on, except in previews).
+   * Off when several questions share a screen (the classic layout). */
+  autoFocus?: boolean;
+  /** Prefix for element ids, so two questions on one page never clash
+   * (default: the question's id). */
+  idPrefix?: string;
   question: QuestionV1;
   value: unknown;
   onChange: (value: unknown) => void;
@@ -86,6 +123,8 @@ export function RuntimeQuestionInput({
   contactField?: ContactField;
 }) {
   const strings = useRuntimeStrings();
+  const focus = autoFocus ?? !preview;
+  const ids = idPrefix ?? `fc-${question.id}`;
   const control = renderControl();
   if (!preview) return control;
   return (
@@ -99,12 +138,68 @@ export function RuntimeQuestionInput({
     switch (question.type) {
       case "welcome_screen":
       case "statement":
+      case "page_break":
         return null;
+
+      case "time":
+        return (
+          <TimeInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+            autoFocus={focus}
+            invalid={invalid}
+          />
+        );
+
+      case "datetime":
+        return (
+          <DateTimeInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+            autoFocus={focus}
+            invalid={invalid}
+          />
+        );
+
+      case "address":
+        return (
+          <AddressInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+            autoFocus={focus}
+          />
+        );
+
+      case "matrix":
+        return (
+          <MatrixInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+          />
+        );
+
+      case "ranking":
+        return (
+          <RankingInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+          />
+        );
 
       case "short_text":
         return (
           <input
-            autoFocus={!preview}
+            autoFocus={focus}
             value={text}
             aria-invalid={invalid || undefined}
             aria-label={question.label}
@@ -118,7 +213,7 @@ export function RuntimeQuestionInput({
       case "long_text":
         return (
           <textarea
-            autoFocus={!preview}
+            autoFocus={focus}
             rows={2}
             value={text}
             aria-invalid={invalid || undefined}
@@ -136,7 +231,7 @@ export function RuntimeQuestionInput({
       case "email":
         return (
           <input
-            autoFocus={!preview}
+            autoFocus={focus}
             type="email"
             autoComplete="email"
             value={text}
@@ -151,7 +246,7 @@ export function RuntimeQuestionInput({
       case "phone":
         return (
           <input
-            autoFocus={!preview}
+            autoFocus={focus}
             type="tel"
             autoComplete="tel"
             value={text}
@@ -166,7 +261,7 @@ export function RuntimeQuestionInput({
       case "url":
         return (
           <input
-            autoFocus={!preview}
+            autoFocus={focus}
             type="url"
             value={text}
             aria-invalid={invalid || undefined}
@@ -180,7 +275,7 @@ export function RuntimeQuestionInput({
       case "number":
         return (
           <input
-            autoFocus={!preview}
+            autoFocus={focus}
             type="number"
             aria-invalid={invalid || undefined}
             aria-label={question.label}
@@ -208,7 +303,7 @@ export function RuntimeQuestionInput({
         return (
           <div className="flex max-w-(--st-tile-max) items-end gap-2.5">
             <input
-              autoFocus={!preview}
+              autoFocus={focus}
               type="date"
               aria-invalid={invalid || undefined}
               aria-label={question.label}
@@ -243,7 +338,7 @@ export function RuntimeQuestionInput({
             value={text}
             onChange={onChange}
             label={question.label}
-            autoFocus={!preview}
+            autoFocus={focus}
           />
         );
 
@@ -275,7 +370,8 @@ export function RuntimeQuestionInput({
             requiredFields={question.settings.requiredFields}
             value={value}
             onChange={onChange}
-            autoFocus={!preview}
+            autoFocus={focus}
+            idPrefix={ids}
           />
         );
     }
@@ -297,9 +393,24 @@ function SingleSelect({
   // (never an internal sentinel), so the stored value always means
   // something and the text box stays open while typing.
   const isOther = selected.startsWith(OTHER_PREFIX);
+  const pictures = question.settings.layout === "pictures";
   const options = [
-    ...question.settings.options.map((o) => ({ id: o.id, label: o.label })),
-    ...(question.settings.allowOther ? [{ id: OTHER_OPTION_ID, label: "Other" }] : []),
+    ...question.settings.options.map((o) => ({
+      id: o.id,
+      label: o.label,
+      imageUrl: o.imageUrl,
+      imageAlt: o.imageAlt,
+    })),
+    ...(question.settings.allowOther
+      ? [
+          {
+            id: OTHER_OPTION_ID,
+            label: "Other",
+            imageUrl: undefined,
+            imageAlt: undefined,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -310,7 +421,7 @@ function SingleSelect({
         pulse(next);
         onChange(next === OTHER_OPTION_ID ? OTHER_PREFIX : next);
       }}
-      className="flex max-w-(--st-tile-max) flex-col gap-2"
+      className={pictures ? PICTURE_GRID : "flex max-w-(--st-tile-max) flex-col gap-2"}
     >
       {options.map((o, i) => {
         const checked = (isOther ? OTHER_OPTION_ID : selected) === o.id;
@@ -320,8 +431,11 @@ function SingleSelect({
             value={o.id}
             data-key={KEYS[i]}
             data-beat={beat === o.id || undefined}
-            className={TILE}
+            className={cn(TILE, pictures && PICTURE_TILE)}
           >
+            {pictures && o.id !== OTHER_OPTION_ID && (
+              <PictureFace imageUrl={o.imageUrl} imageAlt={o.imageAlt} />
+            )}
             <span className="flex items-center gap-3">
               <span aria-hidden className={KEY}>
                 {KEYS[i]}
@@ -393,10 +507,13 @@ function MultiSelect({
         : maxSelections
           ? `Choose up to ${maxSelections}`
           : strings.chooseMany;
+  const pictures = question.settings.layout === "pictures";
   const options = [
     ...question.settings.options.map((o) => ({
       id: o.id,
       label: o.label,
+      imageUrl: o.imageUrl as string | undefined,
+      imageAlt: o.imageAlt as string | undefined,
       checked: selected.includes(o.id),
       onToggle: () => toggle(o.id),
     })),
@@ -405,6 +522,8 @@ function MultiSelect({
           {
             id: OTHER_OPTION_ID,
             label: "Other",
+            imageUrl: undefined,
+            imageAlt: undefined,
             checked: otherEntry !== undefined,
             onToggle: toggleOther,
           },
@@ -417,7 +536,7 @@ function MultiSelect({
       <div
         role="group"
         aria-label={question.label}
-        className="flex max-w-(--st-tile-max) flex-col gap-2"
+        className={pictures ? PICTURE_GRID : "flex max-w-(--st-tile-max) flex-col gap-2"}
       >
         {options.map((o, i) => (
           <CheckboxPrimitive.Root
@@ -426,8 +545,11 @@ function MultiSelect({
             onCheckedChange={o.onToggle}
             data-key={KEYS[i]}
             data-beat={beat === o.id || undefined}
-            className={TILE}
+            className={cn(TILE, pictures && PICTURE_TILE)}
           >
+            {pictures && o.id !== OTHER_OPTION_ID && (
+              <PictureFace imageUrl={o.imageUrl} imageAlt={o.imageAlt} />
+            )}
             <span className="flex items-center gap-3">
               <span aria-hidden className={KEY}>
                 {o.checked ? "✓" : KEYS[i]}
@@ -972,12 +1094,14 @@ function ContactInfoInput({
   value,
   onChange,
   autoFocus,
+  idPrefix,
 }: {
   fields: ContactField[];
   requiredFields: ContactField[];
   value: unknown;
   onChange: (value: unknown) => void;
   autoFocus: boolean;
+  idPrefix: string;
 }) {
   const record =
     value && typeof value === "object" && !Array.isArray(value)
@@ -987,7 +1111,7 @@ function ContactInfoInput({
   return (
     <div className="grid gap-4">
       {fields.map((field, index) => {
-        const id = `contact-${field}`;
+        const id = `${idPrefix}-${field}`;
         const required = requiredFields.includes(field);
         return (
           <div key={field} className="grid gap-1">
@@ -1017,7 +1141,7 @@ function ContactInfoInput({
                 if (e.key !== "Enter" || index === fields.length - 1) return;
                 e.preventDefault();
                 e.stopPropagation();
-                document.getElementById(`contact-${fields[index + 1]}`)?.focus();
+                document.getElementById(`${idPrefix}-${fields[index + 1]}`)?.focus();
               }}
               className={cn(UNDERLINE, "py-1.5 text-[calc(var(--st-input)*0.82)]")}
             />

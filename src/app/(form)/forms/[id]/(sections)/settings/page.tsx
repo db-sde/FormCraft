@@ -12,6 +12,8 @@ import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { hasPermission } from "@/domains/workspaces/permissions";
 import { loadFormForPage } from "../../load-form";
 import { FormAccessPanel } from "@/components/forms/form-access-panel";
+import { FormKioskPanel } from "@/components/forms/form-kiosk-panel";
+import { getKioskPinHash, readKioskConfig } from "@/domains/forms/kiosk";
 import { countAcceptedResponses } from "@/domains/forms/availability";
 import { getPasswordHash } from "@/domains/forms/access";
 import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
@@ -48,6 +50,7 @@ export default async function FormSettingsPage({
     { data: access },
     accepted,
     passwordHash,
+    kioskPinHash,
   ] = await Promise.all([
     listVersions(supabase, formId),
     listExperiments(supabase, formId),
@@ -64,13 +67,16 @@ export default async function FormSettingsPage({
       .limit(200),
     supabase
       .from("forms")
-      .select("closes_at, closed_message, response_cap, full_message, captcha_required")
+      .select(
+        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config",
+      )
       .eq("id", formId)
       .single(),
     // The page already checked this person may edit the form; the hash
     // is only reduced to "has a password".
     countAcceptedResponses(admin, formId),
     getPasswordHash(admin, formId),
+    getKioskPinHash(admin, formId),
   ]);
 
   return (
@@ -101,6 +107,15 @@ export default async function FormSettingsPage({
             accepted,
           }}
           captchaAvailable={isTurnstileConfigured()}
+          canManage={canPublish}
+        />
+      )}
+      {access && (
+        <FormKioskPanel
+          formId={formId}
+          kioskLink={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/f/${settings.slug}?kiosk=1`}
+          initial={readKioskConfig(access.kiosk_config)}
+          hasPin={kioskPinHash !== null}
           canManage={canPublish}
         />
       )}

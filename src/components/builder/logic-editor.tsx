@@ -45,6 +45,7 @@ import {
   describeRule,
   numberedQuestions,
 } from "./logic/logic-ui";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 
 export { describeRule };
 
@@ -98,7 +99,7 @@ export function LogicEditor({
   const commit = (next: RuleV1[]) => onChange({ logic: [], rules: next });
 
   const answerable = numberedQuestions(schema).filter(
-    ({ question: q }) => q.type !== "welcome_screen" && q.type !== "statement",
+    ({ question: q }) => !NON_ANSWERABLE_TYPES.has(q.type),
   );
 
   /** A ready-made rule for a common goal, filled in with this form's own
@@ -557,7 +558,7 @@ function RuleCard({
 /** The first thing a new condition can check. */
 function firstOperand(schema: FormSchemaV1) {
   const q = numberedQuestions(schema).find(
-    ({ question }) => question.type !== "welcome_screen" && question.type !== "statement",
+    ({ question }) => !NON_ANSWERABLE_TYPES.has(question.type),
   );
   if (q) return { type: "answer" as const, questionId: q.question.id };
   const v = (schema.variables ?? [])[0];

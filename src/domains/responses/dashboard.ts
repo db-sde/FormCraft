@@ -21,6 +21,7 @@ import {
   ExportTooLargeError,
   MAX_SYNCHRONOUS_EXPORT_ROWS,
 } from "@/domains/exports";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 
 type Client = SupabaseClient<Database>;
 
@@ -138,7 +139,7 @@ const ATTRIBUTION_COLUMNS = [
 ];
 
 function isAnswerable(q: QuestionV1): boolean {
-  return q.type !== "welcome_screen" && q.type !== "statement";
+  return !NON_ANSWERABLE_TYPES.has(q.type);
 }
 
 export async function getLatestSchema(
@@ -485,7 +486,7 @@ export async function getResponseDetail(
   );
 
   const answers = schema.questions
-    .filter((q) => q.type !== "welcome_screen" && q.type !== "statement")
+    .filter((q) => !NON_ANSWERABLE_TYPES.has(q.type))
     .map((q) => ({
       questionId: q.id,
       label: questionColumnLabel(q),
@@ -657,7 +658,7 @@ export async function buildResponsesTable(
 
   const latestSchema = latestVersion ? parseFormSchema(latestVersion.schema) : null;
   const referenceQuestions = (latestSchema?.questions ?? []).filter(
-    (q) => q.type !== "welcome_screen" && q.type !== "statement",
+    (q) => !NON_ANSWERABLE_TYPES.has(q.type),
   );
   // Scores and other results get a column each (completed responses
   // only: an unfinished one hasn't got a result).

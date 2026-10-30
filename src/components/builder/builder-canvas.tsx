@@ -89,14 +89,18 @@ export function BuilderCanvas({
     if (
       q.type !== "welcome_screen" &&
       q.type !== "statement" &&
+      q.type !== "page_break" &&
+      q.type !== "address" &&
       q.type !== "contact_info"
     ) {
       required = q.required ? "Required" : "Optional";
     }
     foot =
-      q.type === "welcome_screen" || q.type === "statement"
-        ? "Use Preview to try the real form."
-        : "This is a preview of the answer control and can’t be clicked. Use Preview to try the real form.";
+      q.type === "page_break"
+        ? "Starts a new page in the classic layout. Use Preview to see the pages."
+        : q.type === "welcome_screen" || q.type === "statement"
+          ? "Use Preview to try the real form."
+          : "This is a preview of the answer control and can’t be clicked. Use Preview to try the real form.";
   } else if (item.kind === "ending") {
     chip = (
       <span className="grid size-5 place-items-center rounded-[5px] bg-[var(--qt-screens-bg)] text-[var(--qt-screens-fg)]">
@@ -272,6 +276,34 @@ function QuestionStage({
       className={cn(EDITABLE, stageDescClass, "max-w-[520px]")}
     />
   );
+
+  if (question.type === "page_break") {
+    return (
+      <Stage theme={theme} mode="canvas" className="size-full">
+        <div className="flex flex-col gap-4">
+          <div
+            aria-hidden
+            className="flex items-center gap-3 text-[12px] font-bold tracking-[0.1em] text-(--st-muted) uppercase"
+          >
+            <span className="h-px flex-1 border-t-2 border-dashed border-(--st-line)" />
+            New page
+            <span className="h-px flex-1 border-t-2 border-dashed border-(--st-line)" />
+          </div>
+          <textarea
+            key={`l-${question.id}`}
+            ref={labelRef}
+            rows={1}
+            value={question.label}
+            placeholder="Page title (optional)"
+            aria-label="Page title"
+            onChange={(e) => onChange({ ...question, label: e.target.value })}
+            className={cn(EDITABLE, stageTitleClass)}
+          />
+          {description}
+        </div>
+      </Stage>
+    );
+  }
 
   if (entry) {
     const buttonLabel =

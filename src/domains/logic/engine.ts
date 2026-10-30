@@ -468,6 +468,9 @@ function nextVisible(
     if (visited.has(id)) continue;
     const question = run.questions.get(id);
     if (!question) continue;
+    // Page breaks only divide the classic layout into pages: nobody is
+    // ever shown one as a step, in either layout.
+    if (question.type === "page_break") continue;
     if (i <= passedIndex && !run.adaptive.has(id)) continue;
     // Reaching any question of an adaptive group means "ask the group's
     // next question" — wherever that one sits in the form's order.

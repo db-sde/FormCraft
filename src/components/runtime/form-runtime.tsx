@@ -92,7 +92,7 @@ function passKnown(
   return { id, answers, history, filled };
 }
 
-function isEntryScreen(question: QuestionV1) {
+export function isEntryScreen(question: QuestionV1) {
   return question.type === "welcome_screen" || question.type === "statement";
 }
 
@@ -766,7 +766,7 @@ export function FormRuntime({
         <div
           key={contactFields ? `${question.id}:${contactStep}` : question.id}
           className={cn(
-            "flex flex-col gap-(--st-gap)",
+            "fc-question flex flex-col gap-(--st-gap)",
             direction === "back" ? "fc-step-in-back" : "fc-step-in",
           )}
         >
@@ -826,7 +826,7 @@ export function FormRuntime({
                   tabIndex={-1}
                   className={cn(
                     stageLabelClass,
-                    "outline-none focus-visible:shadow-none",
+                    "fc-question-label outline-none focus-visible:shadow-none",
                   )}
                 >
                   {recall(question.label)}
@@ -841,7 +841,9 @@ export function FormRuntime({
                   )}
                 </h2>
                 {question.description && (
-                  <p className={stageDescClass}>{recall(question.description)}</p>
+                  <p className={cn(stageDescClass, "fc-question-description")}>
+                    {recall(question.description)}
+                  </p>
                 )}
               </div>
 
@@ -930,7 +932,7 @@ export function FormRuntime({
 /** A choice question's options as this respondent sees them: only the
  * carried-forward ones they're offered, and shuffled (fixed by the seed,
  * so a refresh doesn't reshuffle) when "Shuffle options" is on. */
-function withDisplayOrder(
+export function withDisplayOrder(
   question: QuestionV1,
   seed: string | undefined,
   answers: AnswerMap,
@@ -952,7 +954,7 @@ function withDisplayOrder(
 }
 
 /** "Finish later" (PRD P2.8): makes a resume link and shows it to copy. */
-function FinishLater({
+export function FinishLater({
   create,
   label,
 }: {
@@ -1027,7 +1029,7 @@ function FinishLater({
  * form: the response is already saved, so count down (the ending's or
  * the form's delay, 3s by default), then go in the same tab; if the
  * browser blocks it, the button stays. */
-function EndingScreen({
+export function EndingScreen({
   ending,
   brandingRemovable,
   scheduler,
@@ -1083,7 +1085,7 @@ function EndingScreen({
       madeWith={showsMadeWith(ending, brandingRemovable)}
       className={cn("min-h-[420px]", className)}
     >
-      <div className="fc-step-in flex flex-col items-start gap-4 pb-10">
+      <div className="fc-ending fc-step-in flex flex-col items-start gap-4 pb-10">
         <h2
           ref={headingRef}
           tabIndex={-1}
@@ -1136,3 +1138,5 @@ function safeHost(url: string): string {
     return url;
   }
 }
+
+export type FormRuntimeProps = Parameters<typeof FormRuntime>[0];

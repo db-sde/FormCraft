@@ -1,8 +1,18 @@
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import {
+  ADDRESS_FIELD_LABELS,
   CONTACT_FIELD_LABELS,
+  type AddressField,
   type ContactField,
 } from "@/domains/forms/schema/question-types";
+import { TIME_OF_DAY } from "@/domains/forms/schema/v1";
+import {
+  displayTime,
+  isValidTimeZone,
+  offsetsForWallTime,
+  parseDateTime,
+  timeFits,
+} from "./datetime";
 
 /** Prefix for a free-text "Other" choice on single/multi-select, e.g.
  * `"other:Purple"`. Shared with formatAnswerValue and the runtime input
@@ -41,10 +51,18 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
     );
   }
   if (typeof value === "number") return Number.isFinite(value);
-  if (question.type === "contact_info") {
+  if (question.type === "contact_info" || question.type === "address") {
     return (
       typeof value === "object" &&
       Object.values(value).some((v) => typeof v === "string" && v.trim() !== "")
+    );
+  }
+  if (question.type === "matrix") {
+    return (
+      typeof value === "object" &&
+      Object.values(value).some((v) =>
+        Array.isArray(v) ? v.length > 0 : typeof v === "string" && v !== "",
+      )
     );
   }
   return question.type === "yes_no" ? typeof value === "boolean" : true;
@@ -116,6 +134,139 @@ export function validateContactField(
   return checkContactField(question.settings, field, record[field]);
 }
 
+const MAX_ADDRESS_PART_LENGTH = 200;
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Structured address (F-13): only the parts the block shows, required
+ * ones filled, nothing longer than a line. No part's format is assumed —
+ * countries differ on states and postcodes. */
+function validateAddress(
+  settings: { fields: AddressField[]; requiredFields: AddressField[] },
+  value: unknown,
+  required: boolean,
+): AnswerValidation {
+  const parts = record(value) ?? {};
+  if (value !== undefined && value !== null && parts !== value) {
+    return fail("Enter the address.");
+  }
+  if (Object.keys(parts).some((key) => !settings.fields.includes(key as AddressField))) {
+    return fail("Enter the address.");
+  }
+  const filled = settings.fields.filter(
+    (f) => typeof parts[f] === "string" && (parts[f] as string).trim() !== "",
+  );
+  // An optional address left empty is fine; once started, required parts count.
+  if (filled.length === 0 && !required) return OK;
+  for (const field of settings.fields) {
+    const raw = parts[field];
+    if (raw !== undefined && typeof raw !== "string") return fail("Enter the address.");
+    const text = ((raw as string | undefined) ?? "").trim();
+    const label = ADDRESS_FIELD_LABELS[field].toLowerCase();
+    if (!text && settings.requiredFields.includes(field))
+      return fail(`Enter the ${label}.`);
+    if (text.length > MAX_ADDRESS_PART_LENGTH) return fail(`That ${label} is too long.`);
+  }
+  if (required && filled.length === 0) return fail("Enter the address.");
+  return OK;
+}
+
+function validateMatrix(
+  question: Extract<QuestionV1, { type: "matrix" }>,
+  value: unknown,
+): AnswerValidation {
+  const answers = record(value);
+  if (!answers) return fail("Answer each row.");
+  const { rows, columns, multiple } = question.settings;
+  const columnIds = new Set(columns.map((c) => c.id));
+  const rowIds = new Set(rows.map((r) => r.id));
+  for (const [rowId, cell] of Object.entries(answers)) {
+    if (!rowIds.has(rowId)) return fail("Answer the rows shown.");
+    if (multiple) {
+      if (!Array.isArray(cell)) return fail("Choose from the columns shown.");
+      if (!cell.every((c) => typeof c === "string" && columnIds.has(c)))
+        return fail("Choose from the columns shown.");
+      if (new Set(cell).size !== cell.length) return fail("Choose each column once.");
+    } else if (typeof cell !== "string" || !columnIds.has(cell)) {
+      return fail("Choose from the columns shown.");
+    }
+  }
+  if (question.required) {
+    const missing = rows.find((row) => {
+      const cell = answers[row.id];
+      return Array.isArray(cell) ? cell.length === 0 : typeof cell !== "string";
+    });
+    if (missing) return fail(`Answer “${missing.label}”.`);
+  }
+  return OK;
+}
+
+function validateRanking(
+  question: Extract<QuestionV1, { type: "ranking" }>,
+  value: unknown,
+): AnswerValidation {
+  const { options, rankCount } = question.settings;
+  const needed = rankCount ?? options.length;
+  if (!Array.isArray(value)) return fail("Rank the options.");
+  const ids = new Set(options.map((o) => o.id));
+  if (!value.every((v) => typeof v === "string" && ids.has(v)))
+    return fail("Rank the options shown.");
+  if (new Set(value).size !== value.length) return fail("Rank each option once.");
+  if (value.length !== needed) {
+    return fail(
+      needed === options.length ? "Rank every option." : `Rank your top ${needed}.`,
+    );
+  }
+  return OK;
+}
+
+function validateTime(
+  settings: {
+    minTime?: string;
+    maxTime?: string;
+    stepMinutes?: number;
+    hourCycle?: "12" | "24";
+  },
+  time: string,
+): AnswerValidation {
+  if (!TIME_OF_DAY.test(time)) return fail("Enter a valid time.");
+  const fits = timeFits(time, settings);
+  if (fits.ok) return OK;
+  const show = (t: string) => displayTime(t, settings.hourCycle);
+  if (fits.reason === "early") return fail(`Choose ${show(settings.minTime!)} or later.`);
+  if (fits.reason === "late")
+    return fail(`Choose ${show(settings.maxTime!)} or earlier.`);
+  return fail(`Choose a time in steps of ${settings.stepMinutes} minutes.`);
+}
+
+function validateDateTime(
+  question: Extract<QuestionV1, { type: "datetime" }>,
+  value: unknown,
+): AnswerValidation {
+  const parts = typeof value === "string" ? parseDateTime(value) : null;
+  if (!parts || !isValidDate(parts.date)) return fail("Enter a valid date and time.");
+  const { minDate, maxDate, timeZone } = question.settings;
+  if (minDate && parts.date < minDate)
+    return fail(`Choose a date on or after ${displayDate(minDate)}.`);
+  if (maxDate && parts.date > maxDate)
+    return fail(`Choose a date on or before ${displayDate(maxDate)}.`);
+  const time = validateTime(question.settings, parts.time);
+  if (!time.ok) return time;
+  if (timeZone && isValidTimeZone(timeZone)) {
+    const offsets = offsetsForWallTime(`${parts.date}T${parts.time}`, timeZone);
+    if (offsets.length === 0) {
+      return fail("That time doesn't exist there (the clocks change). Choose another.");
+    }
+    if (!offsets.includes(parts.offsetMinutes))
+      return fail("Enter a valid date and time.");
+  }
+  return OK;
+}
+
 function isValidUrl(raw: string): boolean {
   const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
@@ -167,10 +318,18 @@ function validateOption(
  * first, never the second). Empty optional answers are always valid.
  */
 export function validateAnswer(question: QuestionV1, value: unknown): AnswerValidation {
-  if (question.type === "welcome_screen" || question.type === "statement") return OK;
+  if (
+    question.type === "welcome_screen" ||
+    question.type === "statement" ||
+    question.type === "page_break"
+  )
+    return OK;
   // Required-ness is per sub-field, so it's checked field by field.
   if (question.type === "contact_info") {
     return validateContactInfo(question.settings, value);
+  }
+  if (question.type === "address") {
+    return validateAddress(question.settings, value, question.required);
   }
 
   if (!hasAnswer(question, value)) {
@@ -302,5 +461,19 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
 
     case "file_upload":
       return typeof value === "string" ? OK : fail("Upload a file.");
+
+    case "time":
+      return typeof value === "string"
+        ? validateTime(question.settings, value)
+        : fail("Enter a valid time.");
+
+    case "datetime":
+      return validateDateTime(question, value);
+
+    case "ranking":
+      return validateRanking(question, value);
+
+    case "matrix":
+      return validateMatrix(question, value);
   }
 }

@@ -9,7 +9,26 @@ import {
   type Expr,
   type RuleV1,
 } from "./logic-model";
-import { CONTACT_FIELDS } from "./question-types";
+import { CONTACT_FIELDS, NON_ANSWERABLE_TYPES } from "./question-types";
+import { PREFILL_KEY_PATTERN, RESERVED_URL_PARAMS, supportsPrefill } from "../prefill";
+
+/** The parts of an answer logic can read with `answer:<id>.<field>`:
+ * contact and address parts, matrix rows, and ranked options (their
+ * place in the ranking). */
+export function answerFields(q: QuestionV1): readonly string[] {
+  switch (q.type) {
+    case "contact_info":
+      return CONTACT_FIELDS;
+    case "address":
+      return q.settings.fields;
+    case "matrix":
+      return q.settings.rows.map((r) => r.id);
+    case "ranking":
+      return q.settings.options.map((o) => o.id);
+    default:
+      return [];
+  }
+}
 
 /**
  * Static analysis of a form's logic (docs/logic-engine.md): broken
@@ -121,10 +140,10 @@ function checkExpr(
       const q = ctx.questions.get(expr.questionId);
       if (!q) {
         error("missing_question", "it uses a question that was deleted.");
-      } else if (q.type === "welcome_screen" || q.type === "statement") {
+      } else if (NON_ANSWERABLE_TYPES.has(q.type)) {
         error("not_answerable", `question ${number(ctx, q.id)} doesn't take an answer.`);
       } else if (expr.field) {
-        if (q.type !== "contact_info" || !CONTACT_FIELDS.includes(expr.field as never)) {
+        if (!answerFields(q).includes(expr.field)) {
           error(
             "missing_field",
             `question ${number(ctx, q.id)} has no “${expr.field}” field.`,
@@ -499,6 +518,60 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
     }
   }
 
+  // Link prefill (F-28): one question per name, never a name FormCraft or
+  // a URL field already uses.
+  const prefillKeys = new Map<string, string>();
+  for (const question of ordered) {
+    const key = question.prefillKey;
+    if (!key) continue;
+    const label = question.label.trim() || "A question";
+    if (!supportsPrefill(question)) {
+      push({
+        severity: "error",
+        code: "prefill_unsupported",
+        message: `${label} can't be filled in from a link.`,
+        questionId: question.id,
+      });
+    } else if (!PREFILL_KEY_PATTERN.test(key) || RESERVED_URL_PARAMS.has(key)) {
+      push({
+        severity: "error",
+        code: "prefill_reserved",
+        message: `“${key}” is a name FormCraft already uses in links. Pick another for ${label}.`,
+        questionId: question.id,
+      });
+    } else if (ctx.hidden.has(key)) {
+      push({
+        severity: "error",
+        code: "prefill_hidden_clash",
+        message: `“${key}” is already one of the form's URL fields. Pick another name for ${label}.`,
+        questionId: question.id,
+      });
+    } else if (prefillKeys.has(key)) {
+      push({
+        severity: "error",
+        code: "prefill_duplicate",
+        message: `${label} and ${prefillKeys.get(key)} both fill from “${key}”.`,
+        questionId: question.id,
+      });
+    }
+    prefillKeys.set(key, label);
+  }
+
+  // The classic layout shows several questions at once: features that
+  // talk to the respondent one question at a time don't run there.
+  if (schema.meta.layout === "classic") {
+    for (const question of ordered) {
+      if (question.type === "long_text" && question.settings.aiFollowUp) {
+        push({
+          severity: "warning",
+          code: "classic_no_follow_up",
+          message: `${question.label.trim() || "A question"} has an AI follow-up, which only runs in the one-question-at-a-time layout.`,
+          questionId: question.id,
+        });
+      }
+    }
+  }
+
   // Question pools.
   const inPool = new Map<string, string>();
   for (const pool of schema.pools ?? []) {
@@ -520,11 +593,11 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
     }
     for (const id of members) {
       const question = ctx.questions.get(id)!;
-      if (question.type === "welcome_screen") {
+      if (question.type === "welcome_screen" || question.type === "page_break") {
         push({
           severity: "error",
           code: "pool_welcome",
-          message: `${name} can't include the welcome screen.`,
+          message: `${name} can't include the welcome screen or a page break.`,
           questionId: id,
         });
       }
@@ -594,6 +667,16 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
         severity: "error",
         code: "missing_question",
         message: `${label}: the question it runs on was deleted.`,
+        ruleId: rule.id,
+      });
+    } else if (
+      rule.on.event === "question_answered" &&
+      ctx.questions.get(rule.on.questionId)?.type === "page_break"
+    ) {
+      push({
+        severity: "error",
+        code: "rule_on_page_break",
+        message: `${label}: it runs on a page break, which is never answered. Put it on a question.`,
         ruleId: rule.id,
       });
     }

@@ -43,6 +43,7 @@ import {
   convertQuestion,
   rulesBrokenByTypeChange,
   questionsWithPlaceholders,
+  pictureChoiceQuestion,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
@@ -55,8 +56,15 @@ import {
   type PublishResult,
 } from "@/app/(form)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
-import { QUESTION_TYPE_META, TypeTile } from "./question-meta";
+import { QUESTION_TYPE_META, TypeTile, type AddKind } from "./question-meta";
 import { AddQuestionMenu } from "./add-question-menu";
+import { BlockNotice, SaveBlockDialog, type BlockStatus } from "./block-controls";
+import {
+  blockStatusAction,
+  getBlockVersionAction,
+  listBlocksAction,
+} from "@/app/(dashboard)/blocks/actions";
+import { instantiate, sameContent } from "@/domains/blocks/content";
 import { SettingsPanel } from "./settings-panel";
 import { EndingSettingsPanel } from "./ending-editor";
 import { CHOICE_TYPES, syncCarriedOptions } from "@/domains/forms/options";
@@ -289,6 +297,52 @@ export function FormBuilder({
     router.replace(`/forms/${formId}`);
   }, [opening.added, router, formId]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  // Shared blocks this form uses (F-09): their latest versions, so the
+  // builder can offer updates.
+  const [blockStatus, setBlockStatus] = useState<Map<string, BlockStatus>>(new Map());
+  const blockKey = [
+    ...new Set(schema.questions.map((q) => q.block?.id).filter(Boolean) as string[]),
+  ]
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (!blockKey) return;
+    let cancelled = false;
+    void blockStatusAction(blockKey.split(",")).then((list) => {
+      if (!cancelled) setBlockStatus(new Map(list.map((b) => [b.id, b])));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [blockKey]);
+  const [savingBlockFrom, setSavingBlockFrom] = useState<string | null>(null);
+  const lockedToastRef = useRef<string | null>(null);
+
+  /** Inserts the latest version of a library block after the selection. */
+  async function handleAddBlock(blockId: string) {
+    const result = await getBlockVersionAction(blockId);
+    if (!result.ok) {
+      toast.error("Couldn't add the block.", { description: result.message });
+      return;
+    }
+    const copies = instantiate(
+      { id: blockId, version: result.version },
+      result.questions,
+    );
+    track("question_added", "block");
+    setSchema((s) => {
+      const selectedIndex =
+        selection.kind === "question"
+          ? s.questions.findIndex((q) => q.id === selection.id)
+          : -1;
+      let questions = s.questions;
+      let at = selectedIndex === -1 ? questions.length : selectedIndex + 1;
+      for (const copy of copies) questions = insertQuestion(questions, copy, at++);
+      return { ...s, questions };
+    });
+    if (copies[0]) setSelection({ kind: "question", id: copies[0].id });
+  }
+
   const [pendingDelete, setPendingDelete] = useState<
     | {
         kind: "question";
@@ -413,6 +467,22 @@ export function FormBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schema]);
 
+  /** Edits from the canvas and settings: a shared block's copy keeps its
+   * content (F-09) — only the form's own parts may change. */
+  function updateQuestionChecked(next: QuestionV1) {
+    const current = schema.questions.find((q) => q.id === next.id);
+    if (current?.block && !sameContent(current, next)) {
+      if (lockedToastRef.current !== next.id) {
+        lockedToastRef.current = next.id;
+        toast("This question comes from a shared block", {
+          description: "Edit the block itself, or detach it to change it here.",
+        });
+      }
+      return;
+    }
+    updateQuestion(next);
+  }
+
   function updateQuestion(next: QuestionV1) {
     // Deleting an option a logic rule checks would leave the rule
     // pointing at nothing, so those rules go with it (and we say so).
@@ -496,9 +566,12 @@ export function FormBuilder({
     void trackBuilderEventAction(formId, eventType, questionType).catch(() => undefined);
   }
 
-  function handleAdd(type: QuestionType) {
-    track("question_added", type);
-    const question = createQuestion(type, schema.questions.length);
+  function handleAdd(kind: AddKind) {
+    track("question_added", kind);
+    const question =
+      kind === "picture_choice"
+        ? pictureChoiceQuestion(schema.questions.length)
+        : createQuestion(kind, schema.questions.length);
     // New questions go after the selected one (or at the end).
     const selectedIndex =
       selection.kind === "question"
@@ -584,10 +657,21 @@ export function FormBuilder({
 
   function commitDeleteQuestion(id: string) {
     const question = schema.questions.find((q) => q.id === id);
-    const after = removeQuestionReferences(
-      { ...schema, questions: removeQuestion(schema.questions, id) },
-      id,
-    );
+    // A block's copy goes with the rest of its insertion: a form holds
+    // all of a block version's questions or none (F-09).
+    const group = question?.block
+      ? schema.questions.filter((q) => q.block?.instance === question.block!.instance)
+      : question
+        ? [question]
+        : [];
+    let after: FormSchemaV1 = schema;
+    for (const q of group) {
+      after = removeQuestionReferences(
+        { ...after, questions: removeQuestion(after.questions, q.id) },
+        q.id,
+      );
+    }
+    if (after.questions.length === 0) return;
     setSchema(after);
     offerUndo(
       question?.type === "welcome_screen"
@@ -856,10 +940,12 @@ export function FormBuilder({
         ? "Publish changes"
         : "Published";
 
-  // Respondent-facing numbers: every step after the welcome screen.
+  // Respondent-facing numbers: every step after the welcome screen
+  // (page breaks aren't steps).
   const numbers = new Map<string, number>();
   for (const q of schema.questions) {
-    if (q.type !== "welcome_screen") numbers.set(q.id, numbers.size + 1);
+    if (q.type !== "welcome_screen" && q.type !== "page_break")
+      numbers.set(q.id, numbers.size + 1);
   }
   const stepCount = numbers.size;
   const ruleCount = schema.logic.length + (schema.rules?.length ?? 0);
@@ -1094,6 +1180,10 @@ export function FormBuilder({
               />
               <AddQuestionMenu
                 onAdd={handleAdd}
+                library={{
+                  load: listBlocksAction,
+                  onPick: (id) => void handleAddBlock(id),
+                }}
                 canAddWelcome={!schema.questions.some((q) => q.type === "welcome_screen")}
               />
             </div>
@@ -1312,7 +1402,7 @@ export function FormBuilder({
                     ? { kind: "ending", ending: selectedEnding }
                     : { kind: "theme" }
               }
-              onChangeQuestion={updateQuestion}
+              onChangeQuestion={updateQuestionChecked}
               onChangeEnding={updateEnding}
               focusLabelId={focusLabelId}
               onLabelFocused={clearFocusLabel}
@@ -1353,25 +1443,62 @@ export function FormBuilder({
                 />
               )}
               {selectedProblem && <NotSavedAlert>{selectedProblem}</NotSavedAlert>}
-              {selectedQuestion && (
-                <SettingsPanel
-                  workspaceId={workspaceId}
-                  formId={formId}
+              {selectedQuestion?.block && (
+                <BlockNotice
                   question={selectedQuestion}
-                  invalid={!!selectedProblem}
-                  aiAvailable={aiEnabled}
-                  onChange={updateQuestion}
-                  onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
-                  earlierChoices={numberedQuestions(schema)
-                    .filter(
-                      ({ question: q }) =>
-                        CHOICE_TYPES.has(q.type) && q.order < selectedQuestion.order,
-                    )
-                    .map(({ question: q, number }) => ({
-                      id: q.id,
-                      number,
-                      label: q.label.trim() || "Untitled",
-                    }))}
+                  status={blockStatus.get(selectedQuestion.block.id)}
+                  schema={schema}
+                  onSchema={setSchema}
+                />
+              )}
+              {selectedQuestion && (
+                <fieldset
+                  disabled={!!selectedQuestion.block}
+                  className="contents"
+                  aria-label={selectedQuestion.block ? "Locked by its block" : undefined}
+                >
+                  <SettingsPanel
+                    workspaceId={workspaceId}
+                    formId={formId}
+                    layout={schema.meta.layout ?? "conversational"}
+                    question={selectedQuestion}
+                    invalid={!!selectedProblem}
+                    aiAvailable={aiEnabled}
+                    onChange={updateQuestion}
+                    onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
+                    earlierChoices={numberedQuestions(schema)
+                      .filter(
+                        ({ question: q }) =>
+                          CHOICE_TYPES.has(q.type) && q.order < selectedQuestion.order,
+                      )
+                      .map(({ question: q, number }) => ({
+                        id: q.id,
+                        number,
+                        label: q.label.trim() || "Untitled",
+                      }))}
+                  />
+                </fieldset>
+              )}
+              {selectedQuestion &&
+                !selectedQuestion.block &&
+                selectedQuestion.type !== "welcome_screen" && (
+                  <button
+                    type="button"
+                    onClick={() => setSavingBlockFrom(selectedQuestion.id)}
+                    className="fc-focus text-muted-foreground hover:text-foreground flex items-center gap-1.5 self-start text-[13px] font-semibold underline underline-offset-2"
+                  >
+                    Save to block library
+                  </button>
+                )}
+              {savingBlockFrom && (
+                <SaveBlockDialog
+                  schema={schema}
+                  initialIds={[savingBlockFrom]}
+                  onClose={() => setSavingBlockFrom(null)}
+                  onSaved={(next) => {
+                    setSchema(next);
+                    setSavingBlockFrom(null);
+                  }}
                 />
               )}
               {selectedQuestion && (
@@ -1399,6 +1526,16 @@ export function FormBuilder({
                   formId={formId}
                   onChange={updateTheme}
                   customFonts={customFonts}
+                  layout={schema.meta.layout ?? "conversational"}
+                  onLayoutChange={(layout) =>
+                    setSchema((s) => ({
+                      ...s,
+                      meta: {
+                        ...s.meta,
+                        layout: layout === "conversational" ? undefined : layout,
+                      },
+                    }))
+                  }
                 />
               )}
             </div>

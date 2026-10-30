@@ -29,6 +29,8 @@ export const RTL_LANGUAGES = new Set<LanguageCode>(["ar"]);
 
 export type UiStrings = {
   ok: string;
+  /** The classic layout's "next page" button. */
+  next: string;
   submit: string;
   start: string;
   continue: string;
@@ -51,6 +53,7 @@ export type UiStrings = {
 
 const EN: UiStrings = {
   ok: "OK",
+  next: "Next",
   submit: "Submit",
   start: "Start",
   continue: "Continue",
@@ -73,6 +76,7 @@ const EN: UiStrings = {
 
 const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
   es: {
+    next: "Siguiente",
     ok: "Aceptar",
     submit: "Enviar",
     start: "Empezar",
@@ -89,6 +93,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Idioma",
   },
   fr: {
+    next: "Suivant",
     ok: "OK",
     submit: "Envoyer",
     start: "Commencer",
@@ -106,6 +111,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Langue",
   },
   de: {
+    next: "Weiter",
     ok: "OK",
     submit: "Absenden",
     start: "Starten",
@@ -123,6 +129,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Sprache",
   },
   pt: {
+    next: "Seguinte",
     ok: "OK",
     submit: "Enviar",
     start: "Começar",
@@ -139,6 +146,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Idioma",
   },
   it: {
+    next: "Avanti",
     ok: "OK",
     submit: "Invia",
     start: "Inizia",
@@ -152,6 +160,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Lingua",
   },
   nl: {
+    next: "Volgende",
     ok: "OK",
     submit: "Versturen",
     start: "Starten",
@@ -165,6 +174,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Taal",
   },
   hi: {
+    next: "आगे",
     ok: "ठीक है",
     submit: "जमा करें",
     start: "शुरू करें",
@@ -178,6 +188,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "भाषा",
   },
   ja: {
+    next: "次へ",
     ok: "OK",
     submit: "送信",
     start: "開始",
@@ -191,6 +202,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "言語",
   },
   zh: {
+    next: "下一页",
     ok: "确定",
     submit: "提交",
     start: "开始",
@@ -204,6 +216,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "语言",
   },
   ar: {
+    next: "التالي",
     ok: "موافق",
     submit: "إرسال",
     start: "ابدأ",
@@ -274,6 +287,16 @@ export function translateSchema(schema: FormSchemaV1, language: string): FormSch
             label: pick(tq.options?.[o.id], o.label),
           }),
         );
+      }
+      for (const key of ["rows", "columns"] as const) {
+        if (Array.isArray(settings[key])) {
+          settings[key] = (settings[key] as { id: string; label: string }[]).map(
+            (item) => ({
+              ...item,
+              label: pick(tq[key]?.[item.id], item.label),
+            }),
+          );
+        }
       }
       for (const key of ["placeholder", "buttonLabel", "yesLabel", "noLabel"] as const) {
         const value = tq[key];

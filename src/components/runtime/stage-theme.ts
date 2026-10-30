@@ -46,6 +46,9 @@ export function stageVars(theme: ThemeV1): React.CSSProperties {
   const light = luminance(theme.backgroundColor) > 0.4;
   const button = theme.buttonStyle;
   return {
+    // Native controls (radios, checkboxes, selects, date pickers) follow
+    // the form's own background, not the app's or the device's mode.
+    colorScheme: light ? "light" : "dark",
     "--st-bg": theme.backgroundColor,
     "--st-text": text,
     "--st-primary": theme.primaryColor,

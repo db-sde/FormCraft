@@ -11,6 +11,7 @@ import {
   EllipsisVertical,
   LayoutGrid,
   LayoutTemplate,
+  Library,
   LogOut,
   Menu,
   Moon,
@@ -434,6 +435,7 @@ export function AppShell({
       icon: LayoutTemplate,
       match: ["/templates"],
     },
+    { href: "/blocks", label: "Blocks", icon: Library, match: ["/blocks"] },
     { href: "/settings", label: "Settings", icon: Settings, match: ["/settings"] },
   ];
   // The checklist lives with the forms, not on templates or settings.

@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { AnswerMap } from "@/domains/logic";
 import { answerCells, questionColumnLabels } from "@/domains/responses/format";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 
 type Client = SupabaseClient<Database>;
 
@@ -36,7 +37,7 @@ export async function buildResponseRowForSheet(
 
   const schema = latestVersion ? parseFormSchema(latestVersion.schema) : null;
   const referenceQuestions = (schema?.questions ?? []).filter(
-    (q) => q.type !== "welcome_screen" && q.type !== "statement",
+    (q) => !NON_ANSWERABLE_TYPES.has(q.type),
   );
 
   const { data: response } = await supabase

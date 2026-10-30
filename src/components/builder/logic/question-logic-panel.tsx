@@ -20,6 +20,7 @@ import { SectionHead } from "../panel-ui";
 import { ConditionEditor } from "./condition-editor";
 import { describeCondition, defaultCompare } from "./logic-ui";
 import { RemoveButton } from "./operand";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 
 /** A condition summarised in words, edited in a roomy dialog. */
 function ConditionField({
@@ -120,7 +121,7 @@ function earlierQuestion(schema: FormSchemaV1, question: QuestionV1) {
       ordered.findIndex((q) => q.id === question.id),
     )
     .reverse()
-    .find((q) => q.type !== "welcome_screen" && q.type !== "statement");
+    .find((q) => !NON_ANSWERABLE_TYPES.has(q.type));
 }
 
 /**

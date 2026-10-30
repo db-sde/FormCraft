@@ -1,8 +1,35 @@
 # Project Status
 
-Last updated: 2026-10-28
+Last updated: 2026-10-30
 
 ## Current milestone
+
+**MASTER SPEC — Phase 1: authoring and question types** (2026-10-30,
+migration 46; spec in `docs/master-spec.md`):
+
+| Item | What                                                                                 |
+| ---- | ------------------------------------------------------------------------------------ |
+| F-01 | Classic layout: pages split by page breaks, same engine (Design → Layout)            |
+| F-11 | Matrix (single or several per row)                                                   |
+| F-12 | Picture choice (images on choice options)                                            |
+| F-13 | Address with configurable and required parts                                         |
+| F-18 | Ranking (all or top N; tap, drag or arrow buttons)                                   |
+| F-20 | Time and date-time (windows, steps, 12/24 h, time zones, daylight saving)            |
+| F-28 | Link prefill of visible answers                                                      |
+| F-14 | Custom CSS, scoped to the form, versioned with the draft                             |
+| F-15 | Kiosk mode (Settings → Kiosk mode, `?kiosk=1`)                                       |
+| F-09 | Shared question blocks: library, versions, locked copies, reviewed updates, rollback |
+
+Decisions: `DECISIONS.md` (2026-10-30). Tests: `phase1-types`, `blocks`
+(unit), `question-blocks` (integration), `phase1.spec.ts` (E2E).
+
+**To deploy:** `npm run db:migrate` (migration 46).
+
+**Next:** Phase 2 (records view, product block, form import, signature,
+response timeline). Its §9 decisions (records governance, import scope)
+need the product owner first.
+
+### Phase 0
 
 **MASTER SPEC — Phase 0: who can respond** (2026-10-28, migration 45).
 The developer master spec (48 decisions, phases P0–P7) is the roadmap
@@ -23,12 +50,6 @@ the forms list. Decisions: `DECISIONS.md` (2026-10-28). Tests:
 **To deploy:** `npm run db:migrate` (migration 45). For CAPTCHA, create
 a Turnstile widget (add every form host, including custom domains) and
 set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`.
-
-**Next:** Phase 1 of the master spec (classic layout, question blocks,
-matrix, picture choice, address, custom CSS, kiosk, ranking, time
-fields, URL prefill). The spec's §9 lists decisions still needed from
-the product owner before later phases (booking, money, records,
-blocks, PDFs, import, experiments, 360 feedback, pricing).
 
 ### Phase 3
 

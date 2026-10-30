@@ -140,6 +140,28 @@ Full model and evaluation order: `docs/logic-engine.md`. In short:
   workspace's forms. Honoured on text, email, phone, URL, number, date,
   yes/no and contact questions; ignored on others.
 
+### Master spec Phase 1 additions (still schemaVersion 1)
+
+- `meta.layout?: "conversational" | "classic"` — classic pages are split
+  by `page_break` items (never answered; skipped by the engine in both
+  layouts).
+- New types: `time` (`HH:mm`; `minTime`, `maxTime`, `stepMinutes`,
+  `hourCycle`), `datetime` (`YYYY-MM-DDTHH:mm±HH:MM`; dates, time window,
+  `timeZone?`), `address` (`fields`, `requiredFields`; answer object of
+  parts), `ranking` (`options`, `rankCount?`; answer = option ids best
+  first), `matrix` (`rows`, `columns`, `multiple`; answer = row id →
+  column id or ids).
+- Options gain `imageUrl?`/`imageAlt?`; single/multi choice gain
+  `layout?: "list" | "pictures"` (picture choice).
+- `questions[].prefillKey?` — fill from `?key=` on the link.
+- `questions[].block?` — `{ id, version, instance, source }` for a copy
+  of a shared question block (content locked; see DECISIONS 2026-10-30).
+- `theme.customCss?` — the creator's CSS, scoped when rendered; unsafe
+  input is a schema error.
+- Logic can read parts: `answer:<id>.<field>` for contact and address
+  parts, matrix rows (the chosen column(s)) and ranking options (the
+  option's place, 1 = first).
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

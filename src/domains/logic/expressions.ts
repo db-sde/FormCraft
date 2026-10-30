@@ -49,8 +49,16 @@ export function dayNumber(isoDate: string): number {
 export function toValue(raw: unknown, field?: string): Value {
   if (raw === undefined || raw === null) return null;
   if (field) {
-    if (typeof raw === "object" && !Array.isArray(raw)) {
+    // A ranking: the option's place in it (1 = first), or null if unranked.
+    if (Array.isArray(raw)) {
+      const at = raw.indexOf(field);
+      return at === -1 ? null : at + 1;
+    }
+    // Contact / address parts and matrix rows (a row of a checkbox matrix
+    // is the list of its columns).
+    if (typeof raw === "object") {
       const v = (raw as Record<string, unknown>)[field];
+      if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
       return typeof v === "string" || typeof v === "number" || typeof v === "boolean"
         ? v
         : null;

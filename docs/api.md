@@ -114,6 +114,15 @@ trap?, captchaToken? }`
   answer doesn't reveal which forms have one).
 - rate-limited to 10 per 10 minutes per address + form.
 
+`POST /api/responses/kiosk-exit` (master spec F-15)
+
+- body: `{ formId, pin }`. `200` when the PIN matches the form's kiosk
+  PIN (or none is set), `401 wrong_pin` otherwise. Rate-limited to 10
+  per 10 minutes per address + form. Leaving kiosk mode happens in the
+  browser; this only checks the PIN.
+- `POST /api/responses/start` also takes `kiosk: true`: the response
+  isn't tied to the device's visitor id.
+
 `POST /api/responses/:id/resume-link` (P2.8)
 
 - no body. Returns `{ path, expiresAt }` — `/f/:slug?resume=<token>`,

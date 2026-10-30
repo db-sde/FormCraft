@@ -63,10 +63,11 @@ export function Stage({
         <div
           role="progressbar"
           aria-label="Form progress"
+          data-fc="progress"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress * 100)}
-          className="relative h-(--st-bar) shrink-0 bg-(--st-line)"
+          className="fc-progress relative h-(--st-bar) shrink-0 bg-(--st-line)"
         >
           <div
             className="h-full rounded-r-full bg-(--st-primary) transition-[width] duration-400 ease-out"
@@ -190,7 +191,7 @@ export function StageError({ children }: { children: React.ReactNode }) {
   return (
     <div
       role="alert"
-      className="flex items-center gap-2 self-start rounded-[6px] bg-[#c8372d] px-3 py-[7px] [font-family:system-ui,sans-serif] text-[13.5px] font-semibold text-white"
+      className="fc-error flex items-center gap-2 self-start rounded-[6px] bg-[#c8372d] px-3 py-[7px] [font-family:system-ui,sans-serif] text-[13.5px] font-semibold text-white"
     >
       <TriangleAlert aria-hidden className="size-[15px] shrink-0" />
       {children}
@@ -209,7 +210,7 @@ export function StageButton({
       type="button"
       {...props}
       className={cn(
-        "inline-flex h-(--st-btn-h) shrink-0 items-center justify-center gap-2 rounded-(--st-br) bg-(--st-primary) px-[22px] text-(length:--st-btn-font) font-semibold text-(--st-on-primary) transition-[filter] hover:brightness-95 disabled:cursor-progress",
+        "fc-button inline-flex h-(--st-btn-h) shrink-0 items-center justify-center gap-2 rounded-(--st-br) bg-(--st-primary) px-[22px] text-(length:--st-btn-font) font-semibold text-(--st-on-primary) transition-[filter] hover:brightness-95 disabled:cursor-progress",
         className,
       )}
     >

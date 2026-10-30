@@ -24,6 +24,8 @@ import { checkAvailability } from "@/domains/forms/availability";
 import { turnstileSiteKey } from "@/domains/abuse/turnstile";
 import { FormClosedScreen } from "@/components/runtime/form-closed";
 import { PasswordGate } from "./password-gate";
+import { KioskShell } from "./kiosk-shell";
+import { getKioskPinHash } from "@/domains/forms/kiosk";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -44,7 +46,12 @@ export default async function PublicFormPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ embed?: string; lang?: string; [RESUME_PARAM]?: string }>;
+  searchParams: Promise<{
+    embed?: string;
+    lang?: string;
+    kiosk?: string;
+    [RESUME_PARAM]?: string;
+  }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
@@ -159,8 +166,11 @@ export default async function PublicFormPage({
   //   once" questions on this workspace's forms;
   // - external data (phase 24): which questions trigger a lookup;
   // - the unfinished response a resume link points at.
-  const [known, lookup, resume] = await Promise.all([
-    VISITOR_ID_PATTERN.test(visitorId)
+  // Kiosk mode (F-15): only on a form that has it on, and then nothing
+  // tied to the device — no remembered answers, no resume link.
+  const kiosk = query.kiosk === "1" ? publicForm.kiosk : null;
+  const [known, lookup, resume, kioskPin] = await Promise.all([
+    !kiosk && VISITOR_ID_PATTERN.test(visitorId)
       ? knownAnswersFor(
           createAdminClient(),
           publicForm.workspaceId,
@@ -169,9 +179,10 @@ export default async function PublicFormPage({
         )
       : {},
     entitlements.data_lookups ? lookupPlan(createAdminClient(), publicForm.formId) : null,
-    typeof query[RESUME_PARAM] === "string"
+    !kiosk && typeof query[RESUME_PARAM] === "string"
       ? resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
       : null,
+    kiosk ? getKioskPinHash(createAdminClient(), publicForm.formId) : null,
   ]);
 
   // Views are counted by the page itself once it loads (see
@@ -185,6 +196,26 @@ export default async function PublicFormPage({
     ? pickLanguage(compiled.schema, query.lang, requestHeaders.get("accept-language"))
     : offered[0];
 
+  const runtimeProps = {
+    formId: publicForm.formId,
+    formVersionId: publicForm.formVersionId,
+    compiled: compiled,
+    savesProgress: publicForm.savePartialResponses,
+    resumeLinks: publicForm.resumeLinksEnabled && publicForm.savePartialResponses,
+    resume: resume,
+    brandingRemovable: entitlements.remove_branding,
+    languages: offered.map((code) => ({ code, name: LANGUAGES[code] })),
+    initialLanguage: language,
+    schedulingAllowed: entitlements.scheduling,
+    embedded: embedded,
+    experimentId: experimentId,
+    known: known,
+    lookup: lookup?.triggers.length ? lookup : undefined,
+    captchaSiteKey: publicForm.captchaRequired
+      ? (turnstileSiteKey() ?? undefined)
+      : undefined,
+  };
+
   return (
     <div className={embedded ? undefined : "min-h-screen"}>
       {entitlements.tracking_pixels && (
@@ -193,25 +224,11 @@ export default async function PublicFormPage({
           nonce={requestHeaders.get("x-nonce") ?? undefined}
         />
       )}
-      <PublicFormRuntime
-        formId={publicForm.formId}
-        formVersionId={publicForm.formVersionId}
-        compiled={compiled}
-        savesProgress={publicForm.savePartialResponses}
-        resumeLinks={publicForm.resumeLinksEnabled && publicForm.savePartialResponses}
-        resume={resume}
-        brandingRemovable={entitlements.remove_branding}
-        languages={offered.map((code) => ({ code, name: LANGUAGES[code] }))}
-        initialLanguage={language}
-        schedulingAllowed={entitlements.scheduling}
-        embedded={embedded}
-        experimentId={experimentId}
-        known={known}
-        lookup={lookup?.triggers.length ? lookup : undefined}
-        captchaSiteKey={
-          publicForm.captchaRequired ? (turnstileSiteKey() ?? undefined) : undefined
-        }
-      />
+      {kiosk ? (
+        <KioskShell config={kiosk} hasPin={kioskPin !== null} runtime={runtimeProps} />
+      ) : (
+        <PublicFormRuntime {...runtimeProps} />
+      )}
     </div>
   );
 }

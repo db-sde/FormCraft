@@ -13,7 +13,7 @@ import {
   FormSchemaError,
   schemaErrorMessage,
 } from "@/domains/forms/schema";
-import { FormRuntime } from "@/components/runtime/form-runtime";
+import { FormCustomCss, FormRenderer } from "@/components/runtime/form-renderer";
 import {
   Dialog,
   DialogContent,
@@ -184,8 +184,9 @@ export function PreviewDialog({
                 )}
               </div>
             ) : device === "desktop" ? (
-              <div className="border-ink size-full max-w-[1100px] overflow-hidden rounded-lg border-[1.5px] bg-white">
-                <FormRuntime
+              <div className="fc-custom-scope border-ink size-full max-w-[1100px] overflow-hidden rounded-lg border-[1.5px] bg-white">
+                <FormCustomCss css={result.compiled.schema.theme.customCss} />
+                <FormRenderer
                   key={`d-${run}-${JSON.stringify(hidden)}`}
                   compiled={result.compiled}
                   hidden={hidden}
@@ -197,8 +198,9 @@ export function PreviewDialog({
                 />
               </div>
             ) : (
-              <div className="border-ink shadow-lift h-full max-h-[700px] w-[375px] max-w-full overflow-hidden rounded-[32px] border-[1.5px] bg-white">
-                <FormRuntime
+              <div className="fc-custom-scope border-ink shadow-lift h-full max-h-[700px] w-[375px] max-w-full overflow-hidden rounded-[32px] border-[1.5px] bg-white">
+                <FormCustomCss css={result.compiled.schema.theme.customCss} />
+                <FormRenderer
                   key={`p-${run}-${JSON.stringify(hidden)}`}
                   compiled={result.compiled}
                   hidden={hidden}

@@ -6,7 +6,9 @@ import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
 import { FormClosedScreen } from "@/components/runtime/form-closed";
 import { Turnstile, type TurnstileHandle } from "./turnstile";
-import { FormRuntime, type CompleteOutcome } from "@/components/runtime/form-runtime";
+import { type CompleteOutcome } from "@/components/runtime/form-runtime";
+import { FormCustomCss, FormRenderer } from "@/components/runtime/form-renderer";
+import { prefillFromParams } from "@/domains/forms/prefill";
 import type { ResumeResult } from "@/domains/responses/resume";
 import { newSeed } from "@/domains/logic/random";
 import {
@@ -140,6 +142,7 @@ async function startSession(
   seed: string,
   language: string,
   experimentId: string | undefined,
+  kiosk: boolean,
 ): Promise<{
   responseId: string;
   formVersionId: string;
@@ -154,6 +157,7 @@ async function startSession(
       seed,
       language,
       experimentId,
+      kiosk: kiosk || undefined,
     }),
   });
   if (res.status === 410) throw new FormClosedSignal(await closedMessageOf(res));
@@ -207,7 +211,15 @@ export function PublicFormRuntime({
   known,
   lookup,
   captchaSiteKey,
+  kiosk = false,
+  onCompleted,
 }: {
+  /** Kiosk mode (F-15): nothing is kept in this browser between people
+   * (no resume, no finish later), and the response isn't tied to the
+   * device's visitor id. */
+  kiosk?: boolean;
+  /** Told when a submit succeeds — the kiosk starts over after it. */
+  onCompleted?: () => void;
   /** Set when the form requires a CAPTCHA to submit (F-26). */
   captchaSiteKey?: string;
   /** External data (phase 24): the questions that trigger a lookup and
@@ -243,6 +255,15 @@ export function PublicFormRuntime({
   const [closedMessage, setClosedMessage] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileHandle>(null);
   const sessionRef = useRef<StoredResponse | null>(null);
+  // This browser's copy of an unfinished response, for picking up after
+  // a refresh — none in a kiosk, where the next person mustn't see it.
+  const store = useMemo(
+    () =>
+      kiosk
+        ? { read: () => null, write: () => {}, clear: () => {} }
+        : { read: readStored, write: writeStored, clear: clearStored },
+    [kiosk],
+  );
   const progressRef = useRef<Progress>({
     answers: {},
     lastQuestionId: compiled.orderedQuestionIds[0] ?? "",
@@ -269,6 +290,37 @@ export function PublicFormRuntime({
   const [urlHidden] = useState<Record<string, string>>(() =>
     typeof window === "undefined" ? {} : hiddenFromUrl(compiled, lookup?.fields),
   );
+
+  // Answers the link fills in (F-28): read once, validated, still
+  // editable. Ignored when resuming (the saved answers win).
+  const [prefilled] = useState<AnswerMap>(() =>
+    typeof window === "undefined"
+      ? {}
+      : prefillFromParams(
+          compiled.schema.questions,
+          new URLSearchParams(window.location.search),
+        ),
+  );
+  // The values have been read: take them out of the address bar so a
+  // shared screen, a bookmark or the history doesn't keep them.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    let changed = false;
+    for (const question of compiled.schema.questions) {
+      if (question.prefillKey && url.searchParams.has(question.prefillKey)) {
+        url.searchParams.delete(question.prefillKey);
+        changed = true;
+      }
+    }
+    if (changed) window.history.replaceState(window.history.state, "", url);
+  }, [compiled]);
+  // A filled-in answer is shown, not skipped as a remembered one would be.
+  const knownForRuntime = useMemo(() => {
+    if (!known) return known;
+    const rest = { ...known };
+    for (const id of Object.keys(prefilled)) delete rest[id];
+    return rest;
+  }, [known, prefilled]);
 
   // A new respondent's seed; a resumed session keeps the one it had.
   const [freshSeed] = useState(newSeed);
@@ -314,11 +366,11 @@ export function PublicFormRuntime({
         const current = sessionRef.current;
         if (current) {
           sessionRef.current = { ...current, hidden: { ...current.hidden, ...values } };
-          if (savesProgress) writeStored(formId, sessionRef.current);
+          if (savesProgress) store.write(formId, sessionRef.current);
         }
       },
     };
-  }, [lookup, savesProgress, formId]);
+  }, [lookup, savesProgress, formId, store]);
 
   // AI follow-ups (P3.7): only where the creator switched them on, and
   // only when answers are saved as they're given — a form that keeps
@@ -459,17 +511,17 @@ export function PublicFormRuntime({
         ...resume.response,
         idempotencyKey: crypto.randomUUID(),
       };
-      if (savesProgress) writeStored(formId, fromLink);
+      if (savesProgress) store.write(formId, fromLink);
       resumeCheckRef.current = Promise.resolve(fromLink);
     }
     if (!resumeCheckRef.current && resume && !resume.ok) {
       // A link that no longer works starts fresh, as its note says —
       // including over this browser's copy of that same response.
-      clearStored(formId);
+      store.clear(formId);
       resumeCheckRef.current = Promise.resolve(null);
     }
     if (!resumeCheckRef.current) {
-      const existing = savesProgress ? readStored(formId) : null;
+      const existing = savesProgress ? store.read(formId) : null;
       // A response started against an older published version can't be
       // continued on the new one — its question ids may not exist.
       const resumable =
@@ -494,14 +546,14 @@ export function PublicFormRuntime({
     return () => {
       cancelled = true;
     };
-  }, [formId, formVersionId, savesProgress, resume]);
+  }, [formId, formVersionId, savesProgress, resume, store]);
 
   function updateSession(patch: Partial<StoredResponse>) {
     const current = sessionRef.current;
     if (!current) return null;
     const updated = { ...current, ...patch };
     sessionRef.current = updated;
-    if (savesProgress) writeStored(formId, updated);
+    if (savesProgress) store.write(formId, updated);
     return updated;
   }
 
@@ -526,6 +578,7 @@ export function PublicFormRuntime({
         freshSeed,
         languageRef.current,
         experimentId,
+        kiosk,
       ).then(
         (data) => {
           const fresh: StoredResponse = {
@@ -538,7 +591,7 @@ export function PublicFormRuntime({
             ...progressRef.current,
           };
           sessionRef.current = fresh;
-          if (savesProgress) writeStored(formId, fresh);
+          if (savesProgress) store.write(formId, fresh);
           pixel("start");
           return fresh;
         },
@@ -644,7 +697,7 @@ export function PublicFormRuntime({
       }
       if (res.status === 404) {
         // The response itself is gone — nothing to continue.
-        clearStored(formId);
+        store.clear(formId);
         return;
       }
       if (!res.ok) dirtyRef.current = true; // retried on the next change / submit
@@ -709,13 +762,14 @@ export function PublicFormRuntime({
         if (data.paymentUrl) {
           // Answers are saved; payment happens on Stripe, and the form
           // only shows it as paid once Stripe confirms (P2.17).
-          clearStored(formId);
+          store.clear(formId);
           window.location.assign(data.paymentUrl);
           return { ok: true, endingId: data.endingId, redirecting: true };
         }
         // Only now is the response durably complete — clearing earlier
         // would lose the respondent's answers if the submit failed.
-        clearStored(formId);
+        store.clear(formId);
+        onCompleted?.();
         return { ok: true, endingId: data.endingId, responseId: current.responseId };
       }
 
@@ -839,8 +893,9 @@ export function PublicFormRuntime({
     <div
       ref={frameRef}
       dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
-      className="relative"
+      className="fc-custom-scope relative"
     >
+      <FormCustomCss css={compiled.schema.theme.customCss} />
       {languages.length > 1 && (
         <label className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-[12.5px] shadow-sm">
           <span className="sr-only">{uiStrings(language).language}</span>
@@ -859,10 +914,12 @@ export function PublicFormRuntime({
         </label>
       )}
       {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
-      <FormRuntime
+      <FormRenderer
         compiled={shown}
         language={language}
-        initialAnswers={resumed?.answers}
+        initialAnswers={
+          resumed?.answers ?? (Object.keys(prefilled).length ? prefilled : undefined)
+        }
         initialQuestionId={resumed?.lastQuestionId}
         initialHistory={resumed?.history}
         welcomeBack={!!resumed && !!resumed.lastQuestionId}
@@ -877,9 +934,9 @@ export function PublicFormRuntime({
         savesProgress={savesProgress}
         onStepEvent={sendStepEvent}
         followUps={followUps}
-        known={known}
+        known={resumed ? known : knownForRuntime}
         lookups={lookups}
-        onFinishLater={resumeLinks && savesProgress ? finishLater : undefined}
+        onFinishLater={resumeLinks && savesProgress && !kiosk ? finishLater : undefined}
         notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
         // Embedded: natural height, reported to the host page so its
         // iframe grows/shrinks to fit (full-viewport height would pin the

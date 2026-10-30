@@ -1,9 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Search } from "lucide-react";
-import type { QuestionType } from "@/domains/forms/schema/question-types";
-import { ADD_GROUPS, QUESTION_TYPE_META, TypeTile } from "./question-meta";
+import { Library, Plus, Search } from "lucide-react";
+import { ADD_GROUPS, ADD_KIND_META, TypeTile, type AddKind } from "./question-meta";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "cn";
 
@@ -15,13 +14,22 @@ import { cn } from "cn";
 export function AddQuestionMenu({
   onAdd,
   canAddWelcome,
+  library,
 }: {
-  onAdd: (type: QuestionType) => void;
+  /** The workspace's shared question blocks (F-09), loaded on open. */
+  library?: {
+    load: () => Promise<{ id: string; name: string; currentVersion: number }[]>;
+    onPick: (blockId: string) => void;
+  };
+  onAdd: (type: AddKind) => void;
   /** Offer "Welcome screen" (added at the top) when the form has none. */
   canAddWelcome: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [blocks, setBlocks] = useState<
+    { id: string; name: string; currentVersion: number }[] | null
+  >(null);
   // Set when a type was picked: focus then belongs to the new question's
   // text, not back on this button.
   const pickedRef = useRef(false);
@@ -29,9 +37,9 @@ export function AddQuestionMenu({
   const needle = query.trim().toLowerCase();
   /** How well a type matches the search: its name first, then what it
    * says about itself. Null = no match. */
-  const rank = (type: QuestionType, groupName: string): number | null => {
+  const rank = (type: AddKind, groupName: string): number | null => {
     if (!needle) return 0;
-    const meta = QUESTION_TYPE_META[type];
+    const meta = ADD_KIND_META[type];
     const label = meta.label.toLowerCase();
     if (label.startsWith(needle)) return 0;
     if (label.split(/[^a-z0-9]+/).some((word) => word.startsWith(needle))) return 1;
@@ -52,7 +60,7 @@ export function AddQuestionMenu({
     )
     .sort((a, b) => a.score - b.score)[0]?.type;
 
-  function pick(type: QuestionType) {
+  function pick(type: AddKind) {
     pickedRef.current = true;
     onAdd(type);
     setOpen(false);
@@ -66,6 +74,7 @@ export function AddQuestionMenu({
         if (next) {
           setQuery("");
           pickedRef.current = false;
+          void library?.load().then(setBlocks, () => setBlocks([]));
         }
       }}
     >
@@ -129,7 +138,7 @@ export function AddQuestionMenu({
           />
           {needle && first && (
             <span className="text-muted-foreground shrink-0 text-xs">
-              ↵ {QUESTION_TYPE_META[first].label}
+              ↵ {ADD_KIND_META[first].label}
             </span>
           )}
         </label>
@@ -145,7 +154,7 @@ export function AddQuestionMenu({
                   {group.name}
                 </span>
                 {group.types.map((type) => {
-                  const meta = QUESTION_TYPE_META[type];
+                  const meta = ADD_KIND_META[type];
                   return (
                     <button
                       key={type}
@@ -166,6 +175,36 @@ export function AddQuestionMenu({
                 })}
               </div>
             ))}
+          </div>
+        )}
+        {library && blocks && blocks.length > 0 && (
+          <div className="border-border flex flex-col gap-0.5 border-t pt-2">
+            <span className="text-muted-foreground px-2 py-1 text-[11px] font-bold tracking-[0.1em] uppercase">
+              From your library
+            </span>
+            {blocks
+              .filter((b) => !needle || b.name.toLowerCase().includes(needle))
+              .map((block) => (
+                <button
+                  key={block.id}
+                  type="button"
+                  data-type="block"
+                  onClick={() => {
+                    pickedRef.current = true;
+                    library.onPick(block.id);
+                    setOpen(false);
+                  }}
+                  className="fc-focus hover:bg-accent flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-left"
+                >
+                  <Library className="size-4 shrink-0" />
+                  <span className="flex flex-col leading-tight">
+                    <b className="text-[13.5px]">{block.name}</b>
+                    <span className="text-muted-foreground text-xs">
+                      Shared block · version {block.currentVersion}
+                    </span>
+                  </span>
+                </button>
+              ))}
           </div>
         )}
       </PopoverContent>

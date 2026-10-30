@@ -1,5 +1,6 @@
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { formatAnswerValue } from "@/domains/responses/format";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 
 /**
  * Slack (PRD P2.14) through an incoming webhook: the creator makes the
@@ -31,7 +32,7 @@ export function buildSlackMessage(input: {
 }) {
   const answerable = [...input.schema.questions]
     .sort((a, b) => a.order - b.order)
-    .filter((q) => q.type !== "welcome_screen" && q.type !== "statement");
+    .filter((q) => !NON_ANSWERABLE_TYPES.has(q.type));
   const chosen = (
     input.questionIds.length
       ? answerable.filter((q) => input.questionIds.includes(q.id))

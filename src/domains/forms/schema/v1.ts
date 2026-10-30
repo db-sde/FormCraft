@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
+  ADDRESS_FIELDS,
   CONTACT_FIELDS,
   LOGIC_OPERATORS,
   OPTION_BEARING_QUESTION_TYPES,
 } from "./question-types";
+import { customCssErrors, MAX_CUSTOM_CSS_LENGTH } from "@/domains/themes/custom-css";
 import { optionalSafeText, safeText, stableId } from "./primitives";
 import {
   Condition,
@@ -41,6 +43,10 @@ export const OptionV1 = z.object({
   scores: z.array(OptionScoreV1).max(10).optional(),
   /** Knowledge quizzes: marks the right answer(s). */
   correct: z.boolean().optional(),
+  /** Picture choice (F-12): the option's image and its alt text. The
+   * answer is still the option's id; the label is what exports show. */
+  imageUrl: webUrl.optional(),
+  imageAlt: optionalSafeText(300),
 });
 export type OptionV1 = z.infer<typeof OptionV1>;
 
@@ -107,9 +113,13 @@ const OptionsFrom = z.object({
   include: z.enum(["selected", "not_selected"]),
 });
 
+/** "pictures" shows options as image cards (picture choice, F-12). */
+const ChoiceLayout = z.enum(["list", "pictures"]);
+
 const SingleSelectSettings = z.object({
   options: z.array(OptionV1).min(1).max(100),
   allowOther: z.boolean().default(false),
+  layout: ChoiceLayout.optional(),
   /** Shown in a random order per respondent (answers are option ids). */
   randomizeOptions: z.boolean().optional(),
   optionsFrom: OptionsFrom.optional(),
@@ -119,6 +129,7 @@ const MultiSelectSettings = z
   .object({
     options: z.array(OptionV1).min(1).max(100),
     allowOther: z.boolean().default(false),
+    layout: ChoiceLayout.optional(),
     randomizeOptions: z.boolean().optional(),
     optionsFrom: OptionsFrom.optional(),
     minSelections: z.number().int().min(0).optional(),
@@ -161,6 +172,84 @@ const OpinionScaleSettings = z
   })
   .refine((v) => v.min < v.max, "min must be less than max");
 
+// --- Phase 1 types (master spec, 2026-10-29) ---------------------------
+
+/** 24-hour "HH:mm", the canonical stored time (F-20). */
+export const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;
+const timeOfDay = z.string().regex(TIME_OF_DAY, "use HH:mm (24-hour)");
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD");
+/** Minutes between the times offered; each divides an hour. */
+export const TIME_STEPS = [1, 5, 10, 15, 20, 30, 60] as const;
+const timeStep = z
+  .number()
+  .int()
+  .refine((v) => (TIME_STEPS as readonly number[]).includes(v), "choose a listed step");
+
+const timeWindow = {
+  minTime: timeOfDay.optional(),
+  maxTime: timeOfDay.optional(),
+  stepMinutes: timeStep.optional(),
+  /** How times are shown; answers are always stored as 24-hour HH:mm. */
+  hourCycle: z.enum(["12", "24"]).optional(),
+};
+const windowInOrder = (v: { minTime?: string; maxTime?: string }) =>
+  !v.minTime || !v.maxTime || v.minTime <= v.maxTime;
+
+const TimeSettings = z
+  .object(timeWindow)
+  .refine(windowInOrder, "the earliest time can't be after the latest");
+
+const DateTimeSettings = z
+  .object({
+    minDate: isoDay.optional(),
+    maxDate: isoDay.optional(),
+    ...timeWindow,
+    /** An IANA zone the times are in (e.g. an event's venue). Unset: the
+     * respondent's own zone. Answers always carry their UTC offset. */
+    timeZone: z.string().min(1).max(64).optional(),
+  })
+  .refine(windowInOrder, "the earliest time can't be after the latest")
+  .refine(
+    (v) => !v.minDate || !v.maxDate || v.minDate <= v.maxDate,
+    "the earliest date can't be after the latest",
+  );
+
+const AddressSettings = z
+  .object({
+    fields: z.array(z.enum(ADDRESS_FIELDS)).min(1).max(ADDRESS_FIELDS.length),
+    requiredFields: z.array(z.enum(ADDRESS_FIELDS)).default([]),
+  })
+  .refine(
+    (v) => v.requiredFields.every((f) => v.fields.includes(f)),
+    "a required address part must also be shown",
+  );
+
+const RankingSettings = z
+  .object({
+    options: z.array(OptionV1).min(2).max(20),
+    /** Rank only the top N (F-18); every option when unset. */
+    rankCount: z.number().int().min(1).optional(),
+    randomizeOptions: z.boolean().optional(),
+  })
+  .refine(
+    (v) => v.rankCount === undefined || v.rankCount <= v.options.length,
+    "can't rank more options than there are",
+  );
+
+export const MatrixItemV1 = z.object({ id: stableId, label: safeText(300) });
+export type MatrixItemV1 = z.infer<typeof MatrixItemV1>;
+
+const MatrixSettings = z.object({
+  rows: z.array(MatrixItemV1).min(1).max(30),
+  columns: z.array(MatrixItemV1).min(2).max(10),
+  /** Several columns per row (checkboxes) instead of one. */
+  multiple: z.boolean().default(false),
+});
+
+/** Splits the classic layout into pages (F-01); its label and
+ * description head the page that follows. Never asked, never answered. */
+const PageBreakSettings = z.object({});
+
 const FileUploadSettings = z.object({
   acceptedMimeTypes: z.array(z.string()).min(1),
   maxSizeMb: z.number().int().min(1).max(100).default(10),
@@ -190,6 +279,23 @@ const baseQuestionFields = {
   profileKey: z
     .string()
     .regex(/^[a-z][a-z0-9_]{0,39}$/)
+    .optional(),
+  /** Visible-answer prefill (F-28): `?<key>=value` on the form's link
+   * fills this question in (still editable, still validated). */
+  prefillKey: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,39}$/)
+    .optional(),
+  /** A copy of a shared question block (F-09): which block, the version
+   * copied, which insertion it belongs to, and the block's own id for
+   * this question. Its content is locked; detaching removes this. */
+  block: z
+    .object({
+      id: z.string().uuid(),
+      version: z.number().int().min(1),
+      instance: stableId,
+      source: stableId,
+    })
     .optional(),
 };
 
@@ -259,6 +365,32 @@ export const QuestionV1 = z.discriminatedUnion("type", [
     type: z.literal("statement"),
     settings: StatementSettings,
   }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("page_break"),
+    settings: PageBreakSettings,
+  }),
+  z.object({ ...baseQuestionFields, type: z.literal("time"), settings: TimeSettings }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("datetime"),
+    settings: DateTimeSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("address"),
+    settings: AddressSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("ranking"),
+    settings: RankingSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("matrix"),
+    settings: MatrixSettings,
+  }),
 ]);
 export type QuestionV1 = z.infer<typeof QuestionV1>;
 
@@ -317,6 +449,16 @@ export const ThemeV1 = z.object({
   logoUrl: webUrl.optional(),
   backgroundImageUrl: webUrl.optional(),
   preset: z.string().max(50).optional(),
+  /** The creator's own CSS (F-14), scoped to the form when rendered. */
+  customCss: z
+    .string()
+    .max(MAX_CUSTOM_CSS_LENGTH)
+    .superRefine((css, ctx) => {
+      for (const message of customCssErrors(css)) {
+        ctx.addIssue({ code: "custom", message: `Custom CSS: ${message}` });
+      }
+    })
+    .optional(),
 });
 export type ThemeV1 = z.infer<typeof ThemeV1>;
 
@@ -371,6 +513,9 @@ export const TranslationV1 = z.object({
         yesLabel: translatedText(50),
         noLabel: translatedText(50),
         options: z.record(stableId, safeText(500)).optional(),
+        /** Matrix rows and columns, by their ids. */
+        rows: z.record(stableId, safeText(300)).optional(),
+        columns: z.record(stableId, safeText(300)).optional(),
       }),
     )
     .optional(),
@@ -394,6 +539,9 @@ export const FormSchemaV1 = z.object({
     description: optionalSafeText(2000),
     /** IANA zone for date logic ("today", "this week"); UTC when unset. */
     timezone: z.string().max(64).optional(),
+    /** One question per screen (the default), or classic pages of several
+     * questions split by page breaks (F-01). The logic is the same. */
+    layout: z.enum(["conversational", "classic"]).optional(),
     /** Where people go after any ending without its own redirect (P2.9). */
     defaultRedirect: z
       .object({

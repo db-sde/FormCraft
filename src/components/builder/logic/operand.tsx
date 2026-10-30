@@ -3,7 +3,11 @@
 import { ArrowLeftRight, X } from "lucide-react";
 import type { CompareOperator, Expr, Value } from "@/domains/forms/schema/logic-model";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
-import { CONTACT_FIELD_LABELS } from "@/domains/forms/schema/question-types";
+import {
+  ADDRESS_FIELD_LABELS,
+  CONTACT_FIELD_LABELS,
+  NON_ANSWERABLE_TYPES,
+} from "@/domains/forms/schema/question-types";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -15,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "cn";
-import { exprKind, numberedQuestions } from "./logic-ui";
+import { answerChoices, exprKind, numberedQuestions } from "./logic-ui";
 
 /** Encodes an operand for a Select value. */
 export function operandKey(expr: Expr | undefined): string {
@@ -54,8 +58,7 @@ export function OperandSelect({
   excludeQuestionId?: string;
 }) {
   const questions = numberedQuestions(schema).filter(
-    ({ question: q }) =>
-      q.id !== excludeQuestionId && q.type !== "welcome_screen" && q.type !== "statement",
+    ({ question: q }) => q.id !== excludeQuestionId && !NON_ANSWERABLE_TYPES.has(q.type),
   );
   const variables = schema.variables ?? [];
   const hidden = schema.hiddenFields ?? [];
@@ -76,6 +79,32 @@ export function OperandSelect({
                     {name} · {CONTACT_FIELD_LABELS[f]}
                   </SelectItem>
                 ));
+              }
+              if (q.type === "address") {
+                return q.settings.fields.map((f) => (
+                  <SelectItem key={`${q.id}:${f}`} value={`a:${q.id}:${f}`}>
+                    {name} · {ADDRESS_FIELD_LABELS[f]}
+                  </SelectItem>
+                ));
+              }
+              if (q.type === "matrix") {
+                return q.settings.rows.map((r) => (
+                  <SelectItem key={`${q.id}:${r.id}`} value={`a:${q.id}:${r.id}`}>
+                    {name} · {r.label}
+                  </SelectItem>
+                ));
+              }
+              if (q.type === "ranking") {
+                return [
+                  <SelectItem key={q.id} value={`a:${q.id}`}>
+                    {name}
+                  </SelectItem>,
+                  ...q.settings.options.map((o) => (
+                    <SelectItem key={`${q.id}:${o.id}`} value={`a:${q.id}:${o.id}`}>
+                      {name} · place of “{o.label}”
+                    </SelectItem>
+                  )),
+                ];
               }
               return [
                 <SelectItem key={q.id} value={`a:${q.id}`}>
@@ -193,8 +222,10 @@ export function ValueInput({
     left.type === "answer"
       ? schema.questions.find((q) => q.id === left.questionId)
       : undefined;
-  const options = (question?.settings as { options?: { id: string; label: string }[] })
-    ?.options;
+  const options = answerChoices(
+    question,
+    left.type === "answer" ? left.field : undefined,
+  );
 
   if ((kind === "choice" || kind === "multi") && options) {
     if (MULTI_OPS.has(op)) {

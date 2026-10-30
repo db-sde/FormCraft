@@ -16,6 +16,13 @@ export const QUESTION_TYPES = [
   "opinion_scale",
   "file_upload",
   "statement",
+  // Master spec Phase 1 (2026-10-29).
+  "page_break",
+  "time",
+  "datetime",
+  "address",
+  "ranking",
+  "matrix",
 ] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];
@@ -32,9 +39,40 @@ export const CONTACT_FIELD_LABELS: Record<ContactField, string> = {
   company: "Company",
 };
 
+/** Structured address (F-13): the parts a block can ask for, in the
+ * order they're shown. Its answer is `{ line1?, line2?, … }`. No part
+ * assumes a country's format — not every country has a state or a
+ * fixed-length postcode. */
+export const ADDRESS_FIELDS = [
+  "line1",
+  "line2",
+  "city",
+  "state",
+  "postalCode",
+  "country",
+] as const;
+export type AddressField = (typeof ADDRESS_FIELDS)[number];
+
+export const ADDRESS_FIELD_LABELS: Record<AddressField, string> = {
+  line1: "Address line 1",
+  line2: "Address line 2",
+  city: "City",
+  state: "State / province / region",
+  postalCode: "Postal code",
+  country: "Country",
+};
+
+/** Items that never take an answer: screens, and page breaks (which
+ * only split the classic layout into pages, F-01). */
+export const NON_ANSWERABLE_TYPES = new Set<string>([
+  "welcome_screen",
+  "statement",
+  "page_break",
+]);
+
 /** Question types that render an answerable input (vs. purely informational). */
 export const ANSWERABLE_QUESTION_TYPES = QUESTION_TYPES.filter(
-  (t) => t !== "welcome_screen" && t !== "statement",
+  (t) => !NON_ANSWERABLE_TYPES.has(t),
 );
 
 /** Question types that carry a configurable list of options. */

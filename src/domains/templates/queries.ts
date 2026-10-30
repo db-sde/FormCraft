@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema/validate";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { previewFromSchema, type FormPreview } from "@/domains/forms/queries";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 
 type Client = SupabaseClient<Database>;
 
@@ -38,9 +39,8 @@ export async function listTemplates(supabase: Client): Promise<TemplateCard[]> {
       category: row.category,
       description: row.description,
       preview: previewFromSchema(row.schema),
-      questionCount: questions.filter(
-        (q) => q.type !== "welcome_screen" && q.type !== "statement",
-      ).length,
+      questionCount: questions.filter((q) => !NON_ANSWERABLE_TYPES.has(q.type ?? ""))
+        .length,
     };
   });
 }

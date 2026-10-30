@@ -274,6 +274,18 @@ existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
   submit of an already completed response is answered before either
   check.
 
+## Kiosk mode and question blocks (migration 46)
+
+- **`forms.kiosk_config`** — `{ resetSeconds, idleSeconds }`; null = off.
+- **`form_kiosk_secrets`** — the exit PIN's scrypt hash; server only.
+- **`question_blocks`** — a workspace's shared blocks (`name`,
+  `description`, `current_version`, `archived_at`). Members read;
+  editors and up insert and update.
+- **`question_block_versions`** — immutable (`block_id`, `version`,
+  `questions` jsonb). Members read; editors insert; never updated.
+- **`publish_question_block_version(block, questions)`** — next version
+  in one transaction (row lock on the block), as the caller.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

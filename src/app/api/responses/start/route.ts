@@ -38,6 +38,9 @@ const StartBody = z.object({
     .optional(),
   /** The A/B test whose link served the form (P3.9). */
   experimentId: z.string().uuid().optional(),
+  /** A kiosk session (F-15): one device, many people, so the response
+   * isn't tied to the device's visitor id. */
+  kiosk: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -81,7 +84,9 @@ export async function POST(request: NextRequest) {
       experimentId: parsed.data.experimentId,
       // From the cookie, never the body: it's httpOnly, so a page script
       // can't choose whose remembered answers a response updates.
-      visitorId: request.cookies.get(VISITOR_COOKIE)?.value,
+      visitorId: parsed.data.kiosk
+        ? undefined
+        : request.cookies.get(VISITOR_COOKIE)?.value,
     });
 
     // A response row only gets created here — never on a resumed

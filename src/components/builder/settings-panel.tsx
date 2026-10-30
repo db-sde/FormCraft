@@ -35,6 +35,14 @@ import {
   PROFILE_QUESTION_TYPES,
   profileKeyFromLabel,
 } from "@/domains/responses/profile";
+import {
+  AddressSettingsPanel,
+  MatrixSettingsPanel,
+  PictureOptionsEditor,
+  PrefillSetting,
+  RankingSettingsPanel,
+  TimeSettingsPanel,
+} from "./structured-settings";
 
 /** Accepted-file chips → the MIME patterns uploads are checked against.
  * Only types the server can verify from the file's bytes are offered. */
@@ -60,7 +68,10 @@ export function SettingsPanel({
   invalid = false,
   earlierChoices = [],
   aiAvailable = false,
+  layout = "conversational",
 }: {
+  /** The form's layout (F-01): page breaks only matter in "classic". */
+  layout?: "conversational" | "classic";
   /** The server has an AI key (AI features are hidden otherwise). */
   aiAvailable?: boolean;
   /** Earlier choice questions this one could take its options from. */
@@ -102,6 +113,8 @@ export function SettingsPanel({
 
       {question.type !== "welcome_screen" &&
         question.type !== "statement" &&
+        question.type !== "page_break" &&
+        question.type !== "address" &&
         question.type !== "contact_info" && (
           <SwitchRow
             label="Required"
@@ -143,6 +156,32 @@ export function SettingsPanel({
             </PanelField>
           )}
         </>
+      )}
+
+      <PrefillSetting question={question} onChange={onChange} />
+
+      {question.type === "page_break" && (
+        <PanelNote>
+          {layout === "classic"
+            ? "Starts a new page. Its title and description head the page; leave the title empty for none."
+            : "This form shows one question at a time, so page breaks are ignored. Switch to the classic layout in Design to use pages."}
+        </PanelNote>
+      )}
+
+      {question.type === "address" && (
+        <AddressSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {(question.type === "time" || question.type === "datetime") && (
+        <TimeSettingsPanel key={question.id} question={question} onChange={onChange} />
+      )}
+
+      {question.type === "ranking" && (
+        <RankingSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "matrix" && (
+        <MatrixSettingsPanel question={question} onChange={onChange} />
       )}
 
       {(question.type === "welcome_screen" || question.type === "statement") && (
@@ -473,6 +512,29 @@ export function SettingsPanel({
               } as QuestionV1)
             }
           />
+          {question.type !== "dropdown" && (
+            <SwitchRow
+              label="Show as pictures"
+              hint="Picture choice: each option is a card with an image"
+              checked={question.settings.layout === "pictures"}
+              onCheckedChange={(on) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, layout: on ? "pictures" : undefined },
+                } as QuestionV1)
+              }
+            />
+          )}
+          {question.type !== "dropdown" &&
+            question.settings.layout === "pictures" &&
+            !question.settings.optionsFrom && (
+              <PictureOptionsEditor
+                question={question}
+                onChange={onChange}
+                workspaceId={workspaceId}
+                formId={formId}
+              />
+            )}
           {question.type !== "dropdown" && (
             <SwitchRow
               label="Allow “Other”"

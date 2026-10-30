@@ -33,6 +33,12 @@ const DEFAULT_LABEL: Record<QuestionType, string> = {
   opinion_scale: "How would you rate this?",
   file_upload: "Upload a file",
   statement: "Statement",
+  page_break: "",
+  time: "Pick a time",
+  datetime: "Pick a date and time",
+  address: "What's your address?",
+  ranking: "Rank these in order",
+  matrix: "How would you rate each?",
 };
 
 /** Type-appropriate default `settings`, matching each type's Zod
@@ -74,11 +80,58 @@ function defaultSettings(type: QuestionType): QuestionV1["settings"] {
       return { acceptedMimeTypes: ["image/*", "application/pdf"], maxSizeMb: 10 };
     case "statement":
       return { buttonLabel: "Continue" };
+    case "page_break":
+      return {};
+    case "time":
+      return { stepMinutes: 15 };
+    case "datetime":
+      return { stepMinutes: 15 };
+    case "address":
+      return {
+        fields: ["line1", "line2", "city", "state", "postalCode", "country"],
+        requiredFields: ["line1", "city", "country"],
+      };
+    case "ranking":
+      return {
+        options: [
+          createOption("Option 1"),
+          createOption("Option 2"),
+          createOption("Option 3"),
+        ],
+      };
+    case "matrix":
+      return {
+        rows: [createMatrixItem("Row 1"), createMatrixItem("Row 2")],
+        columns: [
+          createMatrixItem("Poor"),
+          createMatrixItem("Fair"),
+          createMatrixItem("Good"),
+          createMatrixItem("Excellent"),
+        ],
+        multiple: false,
+      };
   }
+}
+
+export function createMatrixItem(label: string): { id: string; label: string } {
+  return { id: newId("mx"), label };
 }
 
 export function createOption(label = "Option"): OptionV1 {
   return { id: newId("opt"), label };
+}
+
+/** "Picture choice" (F-12): multiple choice shown as image cards. */
+export function pictureChoiceQuestion(order: number): QuestionV1 {
+  const question = createQuestion("single_select", order) as Extract<
+    QuestionV1,
+    { type: "single_select" }
+  >;
+  return {
+    ...question,
+    label: "Pick a picture",
+    settings: { ...question.settings, layout: "pictures" },
+  };
 }
 
 export function createQuestion(type: QuestionType, order: number): QuestionV1 {
@@ -87,7 +140,7 @@ export function createQuestion(type: QuestionType, order: number): QuestionV1 {
     type,
     order,
     label: DEFAULT_LABEL[type],
-    required: type !== "welcome_screen" && type !== "statement",
+    required: type !== "welcome_screen" && type !== "statement" && type !== "page_break",
     settings: defaultSettings(type),
   } as QuestionV1;
 }
@@ -161,11 +214,15 @@ export function removeQuestion(questions: QuestionV1[], id: string): QuestionV1[
 export function duplicateQuestion(questions: QuestionV1[], id: string): QuestionV1[] {
   const index = questions.findIndex((q) => q.id === id);
   if (index === -1 || isWelcomeScreen(questions[index])) return questions;
-  const copy: QuestionV1 = {
-    ...questions[index],
+  // A copy of a shared block's question is the creator's own: it can't
+  // claim to be the block (F-09), so it doesn't carry the reference.
+  const { block: _block, ...original } = questions[index];
+  void _block;
+  const copy = {
+    ...original,
     id: newId("q"),
-    label: `${questions[index].label} (copy)`,
-  };
+    label: original.type === "page_break" ? original.label : `${original.label} (copy)`,
+  } as QuestionV1;
   return insertQuestion(questions, copy, index + 1);
 }
 
@@ -290,7 +347,19 @@ const NUMERIC_TYPES: QuestionType[] = ["number", "rating", "opinion_scale"];
  * contact block or an uploaded file has no single value to compare. */
 export function availableOperators(type: QuestionType): LogicOperator[] {
   const answered: LogicOperator[] = ["is_answered", "is_not_answered"];
-  if (type === "contact_info" || type === "file_upload") return answered;
+  if (type === "page_break") return [];
+  // Several parts (or a moment with its offset): only "answered or not"
+  // here; the rule editor can compare their parts.
+  if (
+    type === "contact_info" ||
+    type === "file_upload" ||
+    type === "address" ||
+    type === "matrix" ||
+    type === "ranking" ||
+    type === "time" ||
+    type === "datetime"
+  )
+    return answered;
   if (type === "multi_select") return [...answered, "contains"];
   const base: LogicOperator[] = [...answered, "equals", "not_equals"];
   if (OPTION_BEARING.includes(type)) return [...base, "contains"];
@@ -397,6 +466,16 @@ export function convertQuestion(
     }
     return { question: { ...base, settings: carried } as QuestionV1, lossy: false };
   }
+  // A choice list becomes a ranking of the same options (up to 20).
+  if (to === "ranking" && Array.isArray(from.options) && from.options.length >= 2) {
+    const options = (from.options as OptionV1[])
+      .slice(0, 20)
+      .map(({ id, label }) => ({ id, label }));
+    return {
+      question: { ...base, settings: { options } } as QuestionV1,
+      lossy: (from.options as OptionV1[]).length > 20,
+    };
+  }
   if (family(question.type) === "choice" && family(to) === "choice") {
     const carried: Record<string, unknown> = { ...base.settings, options: from.options };
     const droppedOther = Boolean(from.allowOther) && to === "dropdown";
@@ -442,13 +521,15 @@ const PLACEHOLDER_LABELS = new Set(
       "multi_select",
       "dropdown",
       "statement",
+      "ranking",
+      "matrix",
     ] as const
   )
     .map((type) => DEFAULT_LABEL[type])
     // A new form's welcome screen carries the form's unnamed title.
     .concat("Untitled form"),
 );
-const PLACEHOLDER_OPTION = /^Option \d+$/;
+const PLACEHOLDER_OPTION = /^(Option|Row) \d+$/;
 
 /** Questions still carrying starter wording ("Pick one", "Option 2"),
  * in form order — so a creator can be told before respondents see it. */
@@ -457,9 +538,16 @@ export function questionsWithPlaceholders(questions: QuestionV1[]): QuestionV1[]
     .sort((a, b) => a.order - b.order)
     .filter((question) => {
       if (PLACEHOLDER_LABELS.has(question.label.trim())) return true;
-      const options = (question.settings as { options?: { label: string }[] }).options;
+      const settings = question.settings as {
+        options?: { label: string }[];
+        rows?: { label: string }[];
+        optionsFrom?: unknown;
+      };
+      const items = [...(settings.options ?? []), ...(settings.rows ?? [])];
       // Carried-forward options are another question's, checked there.
-      const carried = (question.settings as { optionsFrom?: unknown }).optionsFrom;
-      return !carried && !!options?.some((o) => PLACEHOLDER_OPTION.test(o.label.trim()));
+      return (
+        !settings.optionsFrom &&
+        items.some((o) => PLACEHOLDER_OPTION.test(o.label.trim()))
+      );
     });
 }
