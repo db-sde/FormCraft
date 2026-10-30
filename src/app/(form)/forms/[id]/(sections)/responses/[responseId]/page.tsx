@@ -22,6 +22,16 @@ import { aiConfigured } from "@/domains/ai/config";
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { LocalTime } from "@/components/local-time";
 import { cn } from "cn";
+import { getResponseTimeline } from "@/domains/responses/timeline";
+import { getOrder } from "@/domains/responses/orders";
+import { formatMoney } from "@/domains/forms/products";
+import { assignableMembers, listComments } from "@/domains/responses/records";
+import { hasPermission } from "@/domains/workspaces/permissions";
+import {
+  RecordControls,
+  ResponseComments,
+  ResponseTimeline,
+} from "@/components/responses/record-panel";
 import { loadFormForPage } from "../../../load-form";
 
 export async function generateMetadata({
@@ -85,7 +95,7 @@ export default async function ResponseDetailPage({
   params: Promise<{ id: string; responseId: string }>;
 }) {
   const { id: formId, responseId } = await params;
-  const { supabase, form, viewOnly } = await loadFormForPage(formId);
+  const { supabase, form, viewOnly, workspace } = await loadFormForPage(formId);
   const { data: payment } = await supabase
     .from("payments")
     .select("amount, currency, status, livemode")
@@ -107,6 +117,27 @@ export default async function ResponseDetailPage({
   const insight = insights.get(responseId) ?? null;
   const followUps = new Map((followUpRows ?? []).map((f) => [f.question_id, f]));
   const adjacent = await getAdjacentResponseIds(supabase, formId, detail);
+  const [{ data: record }, comments, members, timeline, canReplay, order] =
+    await Promise.all([
+      supabase
+        .from("responses")
+        .select("review_status, assignee_id")
+        .eq("id", responseId)
+        .single(),
+      listComments(supabase, responseId),
+      assignableMembers(supabase, workspace.id),
+      getResponseTimeline(supabase, {
+        id: responseId,
+        startedAt: detail.startedAt,
+        lastActiveAt: detail.lastActiveAt,
+        completedAt: detail.completedAt,
+        status: detail.status,
+      }),
+      viewOnly
+        ? Promise.resolve(false)
+        : hasPermission(supabase, workspace.id, "manage_integrations"),
+      getOrder(supabase, responseId),
+    ]);
 
   // Show the respondent's original file name, not the internal upload
   // reference the answer value stores.
@@ -114,16 +145,38 @@ export default async function ResponseDetailPage({
     string,
     { url: string | null; name: string; size: number | null }
   >();
+  // Signatures (F-10): the drawn image and when it was signed.
+  const signatures = new Map<string, { url: string | null; signedAt: string }>();
   const fileQuestionIds = detail.answers
-    .filter((a) => a.question.type === "file_upload" && a.formatted)
+    .filter(
+      (a) =>
+        (a.question.type === "file_upload" || a.question.type === "signature") &&
+        a.formatted,
+    )
     .map((a) => a.questionId);
   if (fileQuestionIds.length > 0) {
     const { data: rows } = await supabase
       .from("uploads")
-      .select("question_id, storage_path, original_filename, size_bytes")
+      .select("id, question_id, storage_path, original_filename, size_bytes, created_at")
       .eq("response_id", responseId)
       .in("question_id", fileQuestionIds);
     for (const row of rows ?? []) {
+      const answer = detail.answers.find((a) => a.questionId === row.question_id);
+      if (answer?.question.type === "signature") {
+        if (answer.value !== row.id) continue;
+        signatures.set(row.question_id, {
+          // An <img> shows it; the download disposition only matters if
+          // someone opens the link itself.
+          url: await getUploadSignedUrl(
+            supabase,
+            row.storage_path,
+            3600,
+            "signature.png",
+          ),
+          signedAt: row.created_at,
+        });
+        continue;
+      }
       uploads.set(row.question_id, {
         url: await getUploadSignedUrl(
           supabase,
@@ -234,6 +287,15 @@ export default async function ResponseDetailPage({
         </div>
       </div>
 
+      <RecordControls
+        formId={formId}
+        responseId={responseId}
+        status={record?.review_status ?? "new"}
+        assigneeId={record?.assignee_id ?? null}
+        members={members}
+        canChange={!viewOnly}
+      />
+
       {payment && (
         <section className="border-ink bg-card flex flex-wrap items-center gap-3 rounded-lg border-[1.5px] px-[18px] py-3 text-sm">
           <b>Payment</b>
@@ -261,6 +323,41 @@ export default async function ResponseDetailPage({
           {!payment.livemode && (
             <span className="text-muted-foreground text-xs">Stripe test mode</span>
           )}
+        </section>
+      )}
+
+      {order && (
+        <section className="border-ink bg-card rounded-lg border-[1.5px] px-[18px] py-4">
+          <h2 className="text-muted-foreground mb-2.5 text-[11.5px] font-bold tracking-[0.1em] uppercase">
+            Order
+          </h2>
+          <table className="w-full text-sm">
+            <tbody>
+              {order.lines.map((line) => (
+                <tr key={line.itemId} className="border-border border-b">
+                  <td className="py-1.5 pr-3">
+                    {line.quantity} × {line.label}
+                  </td>
+                  <td className="text-muted-foreground py-1.5 pr-3 text-right">
+                    {formatMoney(line.unitAmount, order.currency)} each
+                  </td>
+                  <td className="py-1.5 text-right font-semibold">
+                    {formatMoney(line.amount, order.currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2} className="pt-2 font-bold">
+                  Total
+                </td>
+                <td className="font-heading pt-2 text-right text-lg font-bold">
+                  {formatMoney(order.total, order.currency)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </section>
       )}
 
@@ -302,10 +399,12 @@ export default async function ResponseDetailPage({
       <div className="grid gap-3.5 md:grid-cols-2">
         {detail.answers.map((answer, index) => {
           const upload = uploads.get(answer.questionId);
+          const signature = signatures.get(answer.questionId);
           const wide =
             answer.question.type === "long_text" ||
             answer.question.type === "contact_info" ||
             answer.question.type === "file_upload" ||
+            answer.question.type === "signature" ||
             answer.formatted.length > 60;
           const contact =
             answer.question.type === "contact_info" ? contactRecord(answer.value) : null;
@@ -321,7 +420,26 @@ export default async function ResponseDetailPage({
                 <b className="text-foreground">{index + 1}</b>
                 <span className="min-w-0">{answer.label}</span>
               </h2>
-              {upload ? (
+              {signature ? (
+                <figure className="flex flex-col gap-1.5">
+                  {signature.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed storage URL
+                    <img
+                      src={signature.url}
+                      alt={`Signature for “${answer.label}”`}
+                      className="border-border h-auto max-h-[140px] w-auto max-w-full self-start rounded-[8px] border bg-white"
+                    />
+                  ) : (
+                    <p className="text-subtle-foreground text-sm italic">
+                      Signature image unavailable
+                    </p>
+                  )}
+                  <figcaption className="text-muted-foreground text-xs">
+                    Signed <LocalTime iso={signature.signedAt} /> · electronic signature,
+                    not certified
+                  </figcaption>
+                </figure>
+              ) : upload ? (
                 <a
                   href={upload.url ?? undefined}
                   target="_blank"
@@ -396,6 +514,21 @@ export default async function ResponseDetailPage({
             </section>
           );
         })}
+      </div>
+
+      <div className="grid items-start gap-3.5 md:grid-cols-2">
+        <ResponseComments
+          formId={formId}
+          responseId={responseId}
+          comments={comments}
+          canComment={!viewOnly}
+        />
+        <ResponseTimeline
+          formId={formId}
+          responseId={responseId}
+          entries={timeline}
+          canReplay={canReplay}
+        />
       </div>
 
       {utm.length > 0 && (

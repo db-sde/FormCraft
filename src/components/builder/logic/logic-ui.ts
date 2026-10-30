@@ -117,7 +117,7 @@ export function questionKind(q: QuestionV1 | undefined, field?: string): Operand
     // A matrix row is a choice among the columns; a ranked option, its
     // place (1 = first); contact and address parts, text.
     if (q.type === "matrix") return q.settings.multiple ? "multi" : "choice";
-    if (q.type === "ranking") return "number";
+    if (q.type === "ranking" || q.type === "products") return "number";
     return "text";
   }
   switch (q.type) {
@@ -138,6 +138,8 @@ export function questionKind(q: QuestionV1 | undefined, field?: string): Operand
     case "ranking":
       return "list";
     case "file_upload":
+    case "signature":
+    case "products":
     case "contact_info":
     case "address":
     case "matrix":

@@ -1,3 +1,4 @@
+import { orderProblem } from "@/domains/forms/products";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import {
   ADDRESS_FIELD_LABELS,
@@ -56,6 +57,9 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
       typeof value === "object" &&
       Object.values(value).some((v) => typeof v === "string" && v.trim() !== "")
     );
+  }
+  if (question.type === "products") {
+    return typeof value === "object" && Object.keys(value).length > 0;
   }
   if (question.type === "matrix") {
     return (
@@ -461,6 +465,14 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
 
     case "file_upload":
       return typeof value === "string" ? OK : fail("Upload a file.");
+
+    case "signature":
+      return typeof value === "string" ? OK : fail("Sign before continuing.");
+
+    case "products": {
+      const problem = orderProblem(question, value);
+      return problem ? fail(problem) : OK;
+    }
 
     case "time":
       return typeof value === "string"

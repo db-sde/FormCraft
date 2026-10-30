@@ -23,6 +23,9 @@ export const QUESTION_TYPES = [
   "address",
   "ranking",
   "matrix",
+  // Master spec Phase 2 (2026-10-30).
+  "signature",
+  "products",
 ] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];

@@ -83,6 +83,10 @@ export type ResponseFilters = {
   answer?: AnswerFilter;
   /** Text any answer contains (case-insensitive). */
   search?: string;
+  /** The records view (F-03): review status, and assignee ("none" for
+   * unassigned). */
+  reviewStatus?: string;
+  assigneeId?: string;
 };
 
 /**
@@ -119,6 +123,8 @@ export type ResponseListItem = {
   lastQuestionLabel: string | null;
   /** Campaign source / referring site / "Direct". */
   source: string;
+  reviewStatus: string;
+  assigneeId: string | null;
 };
 
 export type ResponseListPage = {
@@ -209,6 +215,9 @@ function filteredResponses<Row = ResponseRow>(
   if (filters.search) {
     query = query.ilike("search_match.search_text", searchPattern(filters.search));
   }
+  if (filters.reviewStatus) query = query.eq("review_status", filters.reviewStatus);
+  if (filters.assigneeId === "none") query = query.is("assignee_id", null);
+  else if (filters.assigneeId) query = query.eq("assignee_id", filters.assigneeId);
   return query.returns<Row[]>();
 }
 
@@ -225,6 +234,8 @@ type ResponseRow = {
   utm_source: string | null;
   hidden_fields: unknown;
   random_seed: string | null;
+  review_status: string;
+  assignee_id: string | null;
 };
 
 /**
@@ -253,7 +264,7 @@ export async function listResponses(
     formId,
     view,
     options,
-    "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, hidden_fields, random_seed",
+    "id, status, started_at, completed_at, last_active_at, last_question_id, ending_id, form_version_id, referrer, utm_source, hidden_fields, random_seed, review_status, assignee_id",
   );
   query =
     view === "completed"
@@ -340,6 +351,8 @@ export async function listResponses(
       progress: { answered, total: ownAnswerable.length },
       lastQuestionLabel: lastQuestion ? questionColumnLabel(lastQuestion) : null,
       source: describeSource({ utmSource: row.utm_source, referrer: row.referrer }),
+      reviewStatus: row.review_status,
+      assigneeId: row.assignee_id,
     });
   }
 

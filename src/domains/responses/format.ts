@@ -4,6 +4,12 @@ import {
   CONTACT_FIELD_LABELS,
 } from "@/domains/forms/schema/question-types";
 import { formatDateTime } from "@/domains/logic/datetime";
+import {
+  describeOrder,
+  formatMoney,
+  orderFromAnswer,
+  quantities,
+} from "@/domains/forms/products";
 
 function contactRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -105,6 +111,12 @@ export function formatAnswerValue(
       if (typeof value !== "string") return "";
       return context.uploadNames?.get(value) ?? "Uploaded file";
 
+    case "signature":
+      return typeof value === "string" && value ? "Signed" : "";
+
+    case "products":
+      return describeOrder(question, value);
+
     case "number":
     case "rating":
     case "opinion_scale":
@@ -147,6 +159,15 @@ export function questionColumnLabels(question: QuestionV1): string[] {
       (row) => `${questionColumnLabel(question)} (${row.label.trim() || row.id})`,
     );
   }
+  // Products: how many of each item, then the order's total.
+  if (question.type === "products") {
+    return [
+      ...question.settings.items.map(
+        (item) => `${questionColumnLabel(question)} (${item.label.trim() || item.id})`,
+      ),
+      `${questionColumnLabel(question)} (Total ${question.settings.currency})`,
+    ];
+  }
   return [questionColumnLabel(question)];
 }
 
@@ -182,6 +203,19 @@ export function answerCells(
     // Labels come from the version answered; the columns, from the latest.
     const answered = question.type === "matrix" ? question : columnsFrom;
     return columnsFrom.settings.rows.map((row) => matrixCell(answered, record[row.id]));
+  }
+  if (columnsFrom.type === "products") {
+    const qty = quantities(value);
+    // Quantities per the latest items; the total from the prices the
+    // respondent actually saw (the version answered).
+    const answered = question.type === "products" ? question : columnsFrom;
+    const order = orderFromAnswer(answered, value);
+    return [
+      ...columnsFrom.settings.items.map((item) =>
+        typeof qty[item.id] === "number" ? String(qty[item.id]) : "",
+      ),
+      order.lines.length ? formatMoney(order.total, order.currency) : "",
+    ];
   }
   return [formatAnswerValue(question, value, context)];
 }

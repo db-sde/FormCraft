@@ -106,6 +106,18 @@ export function OperandSelect({
                   )),
                 ];
               }
+              if (q.type === "products") {
+                return [
+                  <SelectItem key={q.id} value={`a:${q.id}`}>
+                    {name}
+                  </SelectItem>,
+                  ...q.settings.items.map((item) => (
+                    <SelectItem key={`${q.id}:${item.id}`} value={`a:${q.id}:${item.id}`}>
+                      {name} · how many “{item.label}”
+                    </SelectItem>
+                  )),
+                ];
+              }
               return [
                 <SelectItem key={q.id} value={`a:${q.id}`}>
                   {name}

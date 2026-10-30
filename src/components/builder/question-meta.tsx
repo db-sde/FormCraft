@@ -16,6 +16,8 @@ import {
   Hash,
   Link2,
   Paperclip,
+  PenLine,
+  ShoppingCart,
   Phone,
   Quote,
   SquareCheckBig,
@@ -209,6 +211,20 @@ export const QUESTION_TYPE_META: Record<QuestionType, TypeMeta> = {
     tint: "Choice",
     description: "Rows rated on the same columns",
   },
+  signature: {
+    label: "Signature",
+    icon: PenLine,
+    group: "answer",
+    tint: "Other",
+    description: "Draw or type a signature",
+  },
+  products: {
+    label: "Products",
+    icon: ShoppingCart,
+    group: "answer",
+    tint: "Other",
+    description: "Items, prices and a total",
+  },
 };
 
 /** What the Add question menu can add: every type, plus "Picture
@@ -260,7 +276,16 @@ export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
   },
   {
     name: "Scale & other",
-    types: ["rating", "opinion_scale", "date", "time", "datetime", "file_upload"],
+    types: [
+      "rating",
+      "opinion_scale",
+      "date",
+      "time",
+      "datetime",
+      "file_upload",
+      "signature",
+      "products",
+    ],
   },
 ];
 

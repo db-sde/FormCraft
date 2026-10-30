@@ -427,7 +427,9 @@ export async function completeResponse(
   // A file answer is an upload id; it must be a real upload of *this*
   // response for *this* question, not any string the client sent.
   const fileQuestions = pathQuestions.filter(
-    (q) => q.type === "file_upload" && hasAnswer(q, knownAnswers[q.id]),
+    (q) =>
+      (q.type === "file_upload" || q.type === "signature") &&
+      hasAnswer(q, knownAnswers[q.id]),
   );
   if (fileQuestions.length > 0) {
     const { data: uploads, error: uploadsError } = await admin

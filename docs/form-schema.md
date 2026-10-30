@@ -162,6 +162,18 @@ Full model and evaluation order: `docs/logic-engine.md`. In short:
   parts, matrix rows (the chosen column(s)) and ranking options (the
   option's place, 1 = first).
 
+### Master spec Phase 2 additions (still schemaVersion 1)
+
+- `signature` — `allowTyped?` (default on), `consentText?`. The answer is
+  the id of a PNG upload of this response for this question (checked at
+  completion, like `file_upload`).
+- `products` — `currency` (ISO 4217, one per form), `items[]`
+  (`id`, `label`, `description?`, `imageUrl?`, `imageAlt?`, `price` in
+  minor units, `maxQuantity?` default 10). The answer is
+  `{ itemId: quantity }` (whole numbers ≥ 1; items not ordered are left
+  out). Logic reads `answer:<id>.<itemId>` (how many). The server prices
+  the order; see `response_orders`.
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

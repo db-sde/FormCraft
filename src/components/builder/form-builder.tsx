@@ -59,6 +59,8 @@ import { QuestionList } from "./question-list";
 import { QUESTION_TYPE_META, TypeTile, type AddKind } from "./question-meta";
 import { AddQuestionMenu } from "./add-question-menu";
 import { BlockNotice, SaveBlockDialog, type BlockStatus } from "./block-controls";
+import { ImportReportNotice } from "./import-report";
+import type { ImportReport } from "@/domains/forms/import/report";
 import {
   blockStatusAction,
   getBlockVersionAction,
@@ -182,7 +184,13 @@ export function FormBuilder({
   brandingRemovable = true,
   customFonts = true,
   multilingual = true,
+  importReport = null,
+  onDismissImportReport,
 }: {
+  /** What an import from a public link brought over (F-05), until
+   * dismissed. */
+  importReport?: ImportReport | null;
+  onDismissImportReport?: (formId: string) => Promise<void>;
   /** The plan shows more than one language on the live form. */
   multilingual?: boolean;
   /** The plan allows switching off the "Made with FormCraft" badge. */
@@ -1357,6 +1365,12 @@ export function FormBuilder({
         </aside>
 
         <main className="bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px]">
+          {importReport && onDismissImportReport && (
+            <ImportReportNotice
+              report={importReport}
+              onDismiss={() => onDismissImportReport(formId)}
+            />
+          )}
           {selection.kind === "languages" ? (
             <TranslationsEditor
               schema={schema}

@@ -119,6 +119,15 @@ export function previewFromSchema(raw: unknown): FormPreview {
     case "file_upload":
       chips = ["Upload"];
       break;
+    case "signature":
+      chips = ["Sign here"];
+      break;
+    case "products":
+      chips = ((settings.items as { label?: string }[] | undefined) ?? [])
+        .map((i) => i.label ?? "")
+        .filter(Boolean)
+        .slice(0, 3);
+      break;
     case "contact_info":
       chips = ["Name", "Email"];
       break;

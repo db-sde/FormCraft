@@ -3,6 +3,83 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-30 — Master spec Phase 2: records, orders, import, signature, timeline
+
+Phase 2 of `docs/master-spec.md` (F-03, F-04, F-05, F-10, F-31),
+migration 47. The product owner settled the spec's §9 items on
+2026-10-30: review statuses are **New, In progress, Done**; **editors and
+up** change them (viewers read); import brings over **questions, options
+and logic** (no theme); a form uses **one currency**.
+
+- **Records view (F-03).** `responses.review_status` and
+  `responses.assignee_id` sit beside the response's own lifecycle
+  (`status`), never instead of it. Private comments live in
+  `response_comments`. All three are read through RLS
+  (`view_responses`) and written only by server actions after
+  `canEdit` + `view_responses` + "this response is on this form in your
+  workspace"; the tables grant no insert or update to `authenticated`.
+  The assignee must be a workspace member who can see responses.
+  Defaults chosen without the owner (simplest, per CLAUDE.md rule 9):
+  a list view first (no Kanban yet); submitted answers stay read-only;
+  CSV/Excel exports are unchanged, so comments and assignees never leak
+  into a file.
+- **Timeline (F-31).** One ordered list per response, built at read time
+  from the tables that already log attempts (`webhook_deliveries` —
+  webhook, Slack, HubSpot and Zapier are endpoint kinds —,
+  `sheets_sync_log`, `payments`) plus a new `response_events` for what
+  nothing else records: owner and respondent emails (with outcome and a
+  plain reason), replays, status, assignee and comment changes, each with
+  its actor. Payloads are never shown. Ties sort by a fixed rank so the
+  list never reshuffles. Events are deleted with the response
+  (retention, privacy requests).
+- **Replay** is offered only for a failed or given-up webhook or Sheets
+  attempt of that response, to editors who can manage integrations. It
+  puts the same row back in the queue (same webhook event id, so
+  consumers that dedupe see a repeat) and logs who did it. Payments are
+  never replayed (Stripe owns its retries), and emails aren't either.
+- **Product block (F-04).** `products` question: items with a price in
+  the currency's minor units (integers, so a total is an exact sum — no
+  rounding anywhere), optional picture, description and per-item
+  maximum (10 by default). The answer is only `{ itemId: quantity }`.
+  The server validates quantities on completion and, after it, prices
+  the order from the response's own published version and the answers
+  on the path taken, writing `response_orders` once (a repeat submit
+  doesn't change it). Several product blocks on one form combine into
+  one order. Mixed currencies, or a code the runtime doesn't know, are
+  save errors. Exports: one quantity column per item plus a total. Logic
+  can read `answer:<id>.<itemId>` (how many). Item labels aren't in
+  translations yet. Payment (Phase 3+) will read `response_orders`; the
+  existing Stripe payment is unchanged.
+- **Signature (F-10).** `signature` question: drawn with finger, stylus
+  or mouse on a canvas (white paper, dark ink, up to 2× density), or a
+  typed name rendered in a script font for keyboard and screen-reader
+  users (on unless the creator turns it off). Either way the browser
+  uploads a PNG through the existing uploads route; the server accepts
+  only `image/png` up to 512 KB for signature questions, sniffed from
+  the bytes. The answer is the upload id, checked at completion like a
+  file answer; "signed at" is the upload's time. It's described as a
+  simple electronic signature, never a certified one. Signatures are
+  kept out of HubSpot, Slack text, AI analysis and recall. Rendering in
+  PDFs waits for F-07 (Phase 3).
+- **Import (F-05).** Paste a public Google Forms (docs.google.com/forms,
+  forms.gle) or Typeform (*.typeform.com/to/…) link. Only those hosts
+  are fetched, through the webhook `safeFetch` (address checked at
+  connect time), with a 5 MB cap and 10 s timeout, no cookies, and at
+  most one redirect that must stay on docs.google.com (a redirect to
+  Google sign-in is reported as "not public"). Google's
+  `FB_PUBLIC_LOAD_DATA_` and Typeform's definition JSON are parsed
+  defensively: every field is reported imported, converted (with what
+  changed) or left out; Google forms become the classic layout with page
+  breaks, Typeform conversational. Logic: only "this choice → go to"
+  and "always → go to" jumps, rebuilt through the same rule checker AI
+  drafts use; backward jumps, comparisons, scores and variables are
+  listed as not imported, never guessed. The result is an unpublished
+  draft with `forms.import_report`, shown in the builder until
+  dismissed. No responses are imported. Themes aren't copied. The
+  parsers are tested against saved fixtures; the live page formats
+  are undocumented and may change, in which case the importer says it
+  couldn't read the form rather than importing something wrong.
+
 ## 2026-10-30 — Master spec Phase 1: authoring and question types
 
 Phase 1 of `docs/master-spec.md` (F-01, F-09, F-11–15, F-18, F-20, F-28),

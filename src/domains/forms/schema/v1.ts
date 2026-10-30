@@ -255,6 +255,46 @@ const FileUploadSettings = z.object({
   maxSizeMb: z.number().int().min(1).max(100).default(10),
 });
 
+/** E-signature (F-10): drawn with a finger, stylus or mouse, or typed
+ * when drawing isn't possible. The answer is the id of the PNG the
+ * browser uploaded for this question; when it was signed is the upload's
+ * time. Never described as a certified signature. */
+const SignatureSettings = z.object({
+  /** Let the respondent type their name instead of drawing. On unless
+   * turned off; keyboard and screen-reader users need it. */
+  allowTyped: z.boolean().optional(),
+  /** Shown above the pad ("By signing, I agree to the terms above"). */
+  consentText: optionalSafeText(500),
+});
+
+/** A currency's ISO 4217 code; one per form (product owner, 2026-10-30). */
+export const CurrencyCode = z.string().regex(/^[A-Z]{3}$/);
+
+export const ProductItemV1 = z.object({
+  id: stableId,
+  label: safeText(200),
+  description: optionalSafeText(500),
+  imageUrl: webUrl.optional(),
+  imageAlt: optionalSafeText(300),
+  /** Price in the currency's minor units (cents), so no float rounding. */
+  price: z.number().int().min(0).max(100_000_000),
+  /** Most of this item one respondent can order; 10 when unset. */
+  maxQuantity: z.number().int().min(1).max(999).optional(),
+});
+export type ProductItemV1 = z.infer<typeof ProductItemV1>;
+
+/** Product / order block (F-04). The answer is `{ itemId: quantity }`;
+ * the server works out prices and the total from the published form. */
+const ProductsSettings = z
+  .object({
+    currency: CurrencyCode,
+    items: z.array(ProductItemV1).min(1).max(50),
+  })
+  .refine(
+    (v) => new Set(v.items.map((i) => i.id)).size === v.items.length,
+    "two products share an id",
+  );
+
 const StatementSettings = z.object({
   buttonLabel: optionalSafeText(100),
   ...screenImage,
@@ -390,6 +430,16 @@ export const QuestionV1 = z.discriminatedUnion("type", [
     ...baseQuestionFields,
     type: z.literal("matrix"),
     settings: MatrixSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("signature"),
+    settings: SignatureSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("products"),
+    settings: ProductsSettings,
   }),
 ]);
 export type QuestionV1 = z.infer<typeof QuestionV1>;

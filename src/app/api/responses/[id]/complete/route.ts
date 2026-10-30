@@ -16,6 +16,8 @@ import { rememberProfile } from "@/domains/responses/profile";
 import { markCaptchaVerified, submissionGuards } from "@/domains/responses/guards";
 import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import { verifyTurnstile } from "@/domains/abuse/turnstile";
+import { emailEvent, logResponseEvent } from "@/domains/responses/timeline";
+import { saveOrder } from "@/domains/responses/orders";
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -171,8 +173,29 @@ export async function POST(
           }),
         );
         await step(() => rememberProfile(admin, id));
-        await step(() => notifyFormOwnerOfCompletedResponse(admin, result.formId, id));
-        await step(() => sendConfirmationEmail(admin, id));
+        // Emails go on the response's timeline (F-31) with their outcome.
+        const logEmail = async (
+          kind: "email_owner" | "email_respondent",
+          result: Parameters<typeof emailEvent>[0],
+        ) => {
+          const event = emailEvent(result);
+          if (!event) return;
+          await logResponseEvent(admin, {
+            responseId: id,
+            kind,
+            outcome: event.outcome,
+            detail: event.reason ? { reason: event.reason } : {},
+          });
+        };
+        await step(async () =>
+          logEmail(
+            "email_owner",
+            await notifyFormOwnerOfCompletedResponse(admin, result.formId, id),
+          ),
+        );
+        await step(async () =>
+          logEmail("email_respondent", await sendConfirmationEmail(admin, id)),
+        );
         await step(async () => {
           await enqueueWebhookDeliveries(admin, id);
           // Send right away rather than waiting for the next scheduled
@@ -184,6 +207,14 @@ export async function POST(
           if (enqueued) await dispatchDueSheetsSyncs(admin);
         });
       });
+    }
+
+    // The order from any product blocks (F-04), priced by the server.
+    // Saved before the reply so the response and its order arrive
+    // together. A failure never fails the submission; a repeat submit
+    // (same idempotency key) tries again, and saving is idempotent.
+    if (!parsed.data.trap) {
+      await saveOrder(createAdminClient(), id).catch(() => null);
     }
 
     // Payment (P2.17): the response is already saved; now the server

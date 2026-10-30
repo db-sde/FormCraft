@@ -373,6 +373,22 @@ Both accept `?format=xlsx` for the same table as an Excel workbook
 CSV downloads start with a UTF-8 byte-order mark so Excel reads
 non-ASCII text correctly.
 
+## Records view and import (server actions)
+
+No new HTTP routes. Server actions, each authenticating and checking the
+workspace role and permission first:
+
+- `setReviewStatusAction`, `setAssigneeAction`, `addCommentAction` —
+  editors and up with `view_responses`, for a response of that form in
+  their workspace.
+- `replayAttemptAction` — also needs `manage_integrations`; failed or
+  given-up webhook and Sheets attempts only.
+- `importFormAction` — editors and up; 20 imports an hour per person.
+- `dismissImportReportAction` — editors and up.
+
+The uploads route (`POST /api/responses/:id/uploads/:questionId`) also
+takes signature questions: `image/png` only, 512 KB at most.
+
 ## Conventions
 
 - Every mutating endpoint requires auth _except_ the public runtime

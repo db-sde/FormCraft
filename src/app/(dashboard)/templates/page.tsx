@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FormPreviewArt } from "@/components/forms/form-preview-art";
 import { GenerateFormCard } from "@/components/dashboard/generate-form-card";
+import { ImportFormCard } from "@/components/dashboard/import-form-card";
 import { aiConfigured } from "@/domains/ai/config";
 
 export const metadata: Metadata = { title: "Templates" };
@@ -55,6 +56,7 @@ export default async function TemplatesPage() {
       </form>
 
       <GenerateFormCard enabled={aiConfigured()} />
+      <ImportFormCard />
 
       {templates.length === 0 && (
         <EmptyState

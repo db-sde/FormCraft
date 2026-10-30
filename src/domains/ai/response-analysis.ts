@@ -20,6 +20,7 @@ const SKIPPED: QuestionV1["type"][] = [
   "statement",
   "page_break",
   "file_upload",
+  "signature",
   "email",
   "phone",
 ];

@@ -1,3 +1,4 @@
+import { isKnownCurrency } from "@/domains/forms/products";
 import { optionsFromOf } from "../options";
 import type { FormSchemaV1, QuestionV1 } from "./v1";
 import {
@@ -13,8 +14,8 @@ import { CONTACT_FIELDS, NON_ANSWERABLE_TYPES } from "./question-types";
 import { PREFILL_KEY_PATTERN, RESERVED_URL_PARAMS, supportsPrefill } from "../prefill";
 
 /** The parts of an answer logic can read with `answer:<id>.<field>`:
- * contact and address parts, matrix rows, and ranked options (their
- * place in the ranking). */
+ * contact and address parts, matrix rows, ranked options (their place in
+ * the ranking) and product items (how many were ordered). */
 export function answerFields(q: QuestionV1): readonly string[] {
   switch (q.type) {
     case "contact_info":
@@ -25,6 +26,9 @@ export function answerFields(q: QuestionV1): readonly string[] {
       return q.settings.rows.map((r) => r.id);
     case "ranking":
       return q.settings.options.map((o) => o.id);
+    // Products (F-04): how many of an item were ordered.
+    case "products":
+      return q.settings.items.map((i) => i.id);
     default:
       return [];
   }
@@ -555,6 +559,30 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
       });
     }
     prefillKeys.set(key, label);
+  }
+
+  // Product blocks (F-04): one currency per form (product owner,
+  // 2026-10-30), so an order has one total.
+  const products = ordered.filter(
+    (q): q is Extract<QuestionV1, { type: "products" }> => q.type === "products",
+  );
+  for (const question of products) {
+    const currency = question.settings.currency;
+    if (!isKnownCurrency(currency)) {
+      push({
+        severity: "error",
+        code: "unknown_currency",
+        message: `${question.label.trim() || "A product block"} uses “${currency}”, which isn't a currency code.`,
+        questionId: question.id,
+      });
+    } else if (currency !== products[0].settings.currency) {
+      push({
+        severity: "error",
+        code: "mixed_currency",
+        message: `Every product block in a form uses one currency. ${question.label.trim() || "A product block"} uses ${currency}; the first uses ${products[0].settings.currency}.`,
+        questionId: question.id,
+      });
+    }
   }
 
   // The classic layout shows several questions at once: features that

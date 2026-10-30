@@ -642,6 +642,7 @@ export type Database = {
       };
       forms: {
         Row: {
+          import_report: Json | null;
           ai_lead_criteria: string | null;
           captcha_required: boolean;
           closed_message: string | null;
@@ -668,6 +669,7 @@ export type Database = {
           workspace_id: string;
         };
         Insert: {
+          import_report?: Json | null;
           ai_lead_criteria?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
@@ -694,6 +696,7 @@ export type Database = {
           workspace_id: string;
         };
         Update: {
+          import_report?: Json | null;
           ai_lead_criteria?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
@@ -1047,6 +1050,90 @@ export type Database = {
         };
         Relationships: [];
       };
+      response_comments: {
+        Row: {
+          author_id: string | null;
+          body: string;
+          created_at: string;
+          id: string;
+          response_id: string;
+        };
+        Insert: {
+          author_id?: string | null;
+          body: string;
+          created_at?: string;
+          id?: string;
+          response_id: string;
+        };
+        Update: {
+          author_id?: string | null;
+          body?: string;
+          created_at?: string;
+          id?: string;
+          response_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_comments_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_comments_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      response_events: {
+        Row: {
+          actor_id: string | null;
+          created_at: string;
+          detail: Json;
+          id: number;
+          kind: string;
+          outcome: string;
+          response_id: string;
+        };
+        Insert: {
+          actor_id?: string | null;
+          created_at?: string;
+          detail?: Json;
+          id?: number;
+          kind: string;
+          outcome?: string;
+          response_id: string;
+        };
+        Update: {
+          actor_id?: string | null;
+          created_at?: string;
+          detail?: Json;
+          id?: number;
+          kind?: string;
+          outcome?: string;
+          response_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_events_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_events_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       response_followups: {
         Row: {
           answer: string | null;
@@ -1130,8 +1217,52 @@ export type Database = {
           },
         ];
       };
+      response_orders: {
+        Row: {
+          created_at: string;
+          currency: string;
+          form_id: string;
+          lines: Json;
+          response_id: string;
+          total_amount: number;
+        };
+        Insert: {
+          created_at?: string;
+          currency: string;
+          form_id: string;
+          lines: Json;
+          response_id: string;
+          total_amount: number;
+        };
+        Update: {
+          created_at?: string;
+          currency?: string;
+          form_id?: string;
+          lines?: Json;
+          response_id?: string;
+          total_amount?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_orders_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_orders_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: true;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       responses: {
         Row: {
+          assignee_id: string | null;
+          review_status: string;
           captcha_verified_at: string | null;
           client_revision: number;
           completed_at: string | null;
@@ -1162,6 +1293,8 @@ export type Database = {
           visitor_id: string | null;
         };
         Insert: {
+          assignee_id?: string | null;
+          review_status?: string;
           captcha_verified_at?: string | null;
           client_revision?: number;
           completed_at?: string | null;
@@ -1192,6 +1325,8 @@ export type Database = {
           visitor_id?: string | null;
         };
         Update: {
+          assignee_id?: string | null;
+          review_status?: string;
           captcha_verified_at?: string | null;
           client_revision?: number;
           completed_at?: string | null;

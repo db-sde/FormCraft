@@ -43,6 +43,10 @@ import {
   RankingSettingsPanel,
   TimeSettingsPanel,
 } from "./structured-settings";
+import {
+  ProductsSettingsPanel,
+  SignatureSettingsPanel,
+} from "./signature-products-settings";
 
 /** Accepted-file chips → the MIME patterns uploads are checked against.
  * Only types the server can verify from the file's bytes are offered. */
@@ -182,6 +186,20 @@ export function SettingsPanel({
 
       {question.type === "matrix" && (
         <MatrixSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "signature" && (
+        <SignatureSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "products" && (
+        <ProductsSettingsPanel
+          key={question.id}
+          question={question}
+          onChange={onChange}
+          workspaceId={workspaceId}
+          formId={formId}
+        />
       )}
 
       {(question.type === "welcome_screen" || question.type === "statement") && (

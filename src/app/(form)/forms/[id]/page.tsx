@@ -12,7 +12,9 @@ import {
   renameFormAction,
   proposeRuleAction,
   reviewFormAction,
+  dismissImportReportAction,
 } from "./actions";
+import { ImportReport } from "@/domains/forms/import/report";
 import { aiConfigured } from "@/domains/ai/config";
 import { getWorkspacePlan } from "@/domains/billing";
 
@@ -46,12 +48,19 @@ export default async function FormBuilderPage({
   const { leadCapture, preview } = await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
 
-  const [draft, publishInfo, { entitlements }] = await Promise.all([
+  const [draft, publishInfo, { entitlements }, { data: imported }] = await Promise.all([
     loadDraft(id),
     getPublishInfo(supabase, id),
     getWorkspacePlan(supabase, workspace.id),
+    supabase
+      .from("forms")
+      .select("import_report")
+      .eq("id", id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
   ]);
   if (!draft) notFound();
+  const importReport = ImportReport.safeParse(imported?.import_report);
 
   return (
     <FormBuilder
@@ -81,6 +90,8 @@ export default async function FormBuilderPage({
       multilingual={entitlements.multilingual}
       onProposeRule={proposeRuleAction}
       onReviewForm={reviewFormAction}
+      importReport={importReport.success ? importReport.data : null}
+      onDismissImportReport={dismissImportReportAction}
     />
   );
 }

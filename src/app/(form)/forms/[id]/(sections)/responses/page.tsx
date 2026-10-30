@@ -9,6 +9,8 @@ import {
   Plus,
   Send,
   Table2,
+  CircleDot,
+  UserRound,
 } from "lucide-react";
 import {
   getConversionInsights,
@@ -33,6 +35,13 @@ import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { DeleteResponseButton } from "@/components/responses/delete-response-button";
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { FilterChip, type FilterGroup } from "@/components/responses/filter-chip";
+import { ReviewChip } from "@/components/responses/review-chip";
+import { assignableMembers } from "@/domains/responses/records";
+import {
+  isReviewStatus,
+  REVIEW_STATUS_LABEL,
+  REVIEW_STATUSES,
+} from "@/domains/responses/review";
 import { SummaryView, responseColumnId } from "@/components/responses/summary-view";
 import { AiInsightsPanel } from "@/components/responses/ai-insights-panel";
 import { getFormSummary, insightTotals } from "@/domains/responses/ai-insights";
@@ -65,6 +74,8 @@ type Params = {
   q?: string;
   a?: string;
   search?: string;
+  status?: string;
+  assignee?: string;
 };
 
 export async function generateMetadata({
@@ -324,6 +335,12 @@ export default async function ResponsesPage({
       : undefined;
 
   const fromUrl = filtersFromParams({ period: period.id, search: sp.search });
+  // Records view (F-03): only a known status, and only a teammate who can
+  // be assigned (or "none").
+  const members = await assignableMembers(supabase, workspace.id);
+  const reviewStatus = isReviewStatus(sp.status) ? sp.status : undefined;
+  const assignee =
+    sp.assignee === "none" ? "none" : members.find((m) => m.id === sp.assignee)?.id;
   const filters: ResponseFilters = {
     since: fromUrl.since,
     endingId: ending?.id,
@@ -334,7 +351,13 @@ export default async function ResponsesPage({
   const [responses, counts, funnel, dropoff, summary, insights, ai, reach] =
     await Promise.all([
       tab === "table"
-        ? listResponses(supabase, formId, { page, view, ...filters })
+        ? listResponses(supabase, formId, {
+            page,
+            view,
+            ...filters,
+            reviewStatus,
+            assigneeId: assignee,
+          })
         : null,
       getResponseCounts(supabase, formId),
       getFunnelSummaryForForm(supabase, formId, filters.since),
@@ -360,6 +383,8 @@ export default async function ResponsesPage({
     q: answer?.questionId,
     a: answer ? String(answer.value) : undefined,
     search: filters.search,
+    status: reviewStatus,
+    assignee,
   };
   const href = (
     patch: Partial<Record<keyof typeof current | "page", string | undefined>>,
@@ -370,7 +395,15 @@ export default async function ResponsesPage({
     const s = qs.toString();
     return s ? `${base}?${s}` : base;
   };
-  const filtered = !!(filters.since || ending || answer || filters.search);
+  const filtered = !!(
+    filters.since ||
+    ending ||
+    answer ||
+    filters.search ||
+    reviewStatus ||
+    assignee
+  );
+  const memberName = new Map(members.map((m) => [m.id, m.name]));
 
   const answerGroups: FilterGroup[] = choiceQuestions.map(({ question, choices }) => ({
     label: question.label || "Untitled question",
@@ -597,6 +630,47 @@ export default async function ResponsesPage({
                 groups={answerGroups}
               />
             )}
+            {tab === "table" && (
+              <>
+                <FilterChip
+                  icon={<CircleDot />}
+                  label={reviewStatus ? REVIEW_STATUS_LABEL[reviewStatus] : "Status"}
+                  active={!!reviewStatus}
+                  clearHref={href({ status: undefined, page: undefined })}
+                  clearLabel="Clear the status filter"
+                  options={REVIEW_STATUSES.map((s) => ({
+                    label: REVIEW_STATUS_LABEL[s],
+                    href: href({ status: s, page: undefined }),
+                    selected: s === reviewStatus,
+                  }))}
+                />
+                <FilterChip
+                  icon={<UserRound />}
+                  label={
+                    assignee === "none"
+                      ? "Unassigned"
+                      : assignee
+                        ? (memberName.get(assignee) ?? "Assignee")
+                        : "Assignee"
+                  }
+                  active={!!assignee}
+                  clearHref={href({ assignee: undefined, page: undefined })}
+                  clearLabel="Clear the assignee filter"
+                  options={[
+                    {
+                      label: "Unassigned",
+                      href: href({ assignee: "none", page: undefined }),
+                      selected: assignee === "none",
+                    },
+                    ...members.map((m) => ({
+                      label: m.name,
+                      href: href({ assignee: m.id, page: undefined }),
+                      selected: m.id === assignee,
+                    })),
+                  ]}
+                />
+              </>
+            )}
           </div>
 
           {!completed && dropoff && <DropoffCard {...dropoff} />}
@@ -681,7 +755,7 @@ export default async function ResponsesPage({
                             {(first && item.preview[first.questionId]) || "Anonymous"}
                           </Link>
                           {completed ? (
-                            <ActivityChip activity="completed" />
+                            <ReviewChip status={item.reviewStatus} />
                           ) : (
                             <ActivityChip
                               activity={responseActivity({
@@ -713,7 +787,7 @@ export default async function ResponsesPage({
                   })}
                 </ul>
 
-                <div className="border-ink bg-card hidden overflow-x-auto rounded-lg border-[1.5px] md:block">
+                <div className="border-ink bg-card relative hidden overflow-x-auto rounded-lg border-[1.5px] md:block">
                   {/* One column per question: wide forms scroll sideways. (No
                       pinned column: a sticky cell would trap the link that
                       makes the whole row clickable.) */}
@@ -751,6 +825,12 @@ export default async function ResponsesPage({
                             </th>
                           </>
                         )}
+                        <th scope="col" className="w-[130px] px-4 py-2.5 font-bold">
+                          Review
+                        </th>
+                        <th scope="col" className="w-[150px] px-4 py-2.5 font-bold">
+                          Assignee
+                        </th>
                         <th scope="col" className="w-[60px] px-2">
                           <span className="sr-only">Actions</span>
                         </th>
@@ -814,6 +894,14 @@ export default async function ResponsesPage({
                               </td>
                             </>
                           )}
+                          <td className="px-4 whitespace-nowrap">
+                            <ReviewChip status={item.reviewStatus} />
+                          </td>
+                          <td className="text-muted-foreground truncate px-4">
+                            {item.assigneeId
+                              ? (memberName.get(item.assigneeId) ?? "Former teammate")
+                              : "—"}
+                          </td>
                           <td className="relative z-10 px-2 text-right">
                             <span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                               {!viewOnly && (

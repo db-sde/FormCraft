@@ -289,6 +289,20 @@ function summarizeQuestion(
       return { ...base, kind: "ranking", items };
     }
 
+    // Products (F-04): how many respondents ordered each item.
+    case "products": {
+      const bars = question.settings.items.map((item) => {
+        const count = values.filter((v) => {
+          const q =
+            v && typeof v === "object" ? (v as Record<string, unknown>)[item.id] : 0;
+          return typeof q === "number" && q > 0;
+        }).length;
+        return { label: item.label, count, percent: percent(count, values.length) };
+      });
+      bars.sort((a, b) => b.count - a.count);
+      return { ...base, kind: "choice", bars };
+    }
+
     default:
       return { ...base, kind: "count" };
   }

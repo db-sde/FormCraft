@@ -328,7 +328,12 @@ export default async function IntegrationsPage({
                 }),
               );
             }
-            if (q.type === "statement" || q.type === "file_upload" || q.type === "matrix")
+            if (
+              q.type === "statement" ||
+              q.type === "file_upload" ||
+              q.type === "signature" ||
+              q.type === "matrix"
+            )
               return [];
             return [{ value: q.id, label }];
           })}

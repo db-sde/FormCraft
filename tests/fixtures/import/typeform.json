@@ -1,0 +1,190 @@
+{
+  "id": "abc123",
+  "title": "Feedback",
+  "settings": {
+    "is_public": true
+  },
+  "welcome_screens": [
+    {
+      "ref": "w",
+      "title": "Hi there",
+      "properties": {
+        "description": "2 minutes",
+        "button_text": "Go"
+      }
+    }
+  ],
+  "thankyou_screens": [
+    {
+      "ref": "ty_happy",
+      "title": "Glad!"
+    },
+    {
+      "ref": "default_tys",
+      "title": "Thanks"
+    }
+  ],
+  "fields": [
+    {
+      "ref": "name",
+      "type": "short_text",
+      "title": "Name?",
+      "validations": {
+        "required": true,
+        "max_length": 80
+      }
+    },
+    {
+      "ref": "nps",
+      "type": "nps",
+      "title": "Recommend us?",
+      "properties": {}
+    },
+    {
+      "ref": "happy",
+      "type": "multiple_choice",
+      "title": "Happy?",
+      "properties": {
+        "choices": [
+          {
+            "ref": "c_yes",
+            "label": "Yes"
+          },
+          {
+            "ref": "c_no",
+            "label": "No"
+          }
+        ]
+      },
+      "validations": {
+        "required": true
+      }
+    },
+    {
+      "ref": "grp",
+      "type": "group",
+      "title": "About you",
+      "properties": {
+        "fields": [
+          {
+            "ref": "age",
+            "type": "number",
+            "title": "Age",
+            "validations": {
+              "min_value": 0,
+              "max_value": 120
+            }
+          },
+          {
+            "ref": "pay",
+            "type": "payment",
+            "title": "Pay"
+          }
+        ]
+      }
+    },
+    {
+      "ref": "why",
+      "type": "long_text",
+      "title": "Why not?"
+    },
+    {
+      "ref": "legal",
+      "type": "legal",
+      "title": "Agree?"
+    }
+  ],
+  "logic": [
+    {
+      "type": "field",
+      "ref": "happy",
+      "actions": [
+        {
+          "action": "jump",
+          "details": {
+            "to": {
+              "type": "thankyou",
+              "value": "ty_happy"
+            }
+          },
+          "condition": {
+            "op": "is",
+            "vars": [
+              {
+                "type": "field",
+                "value": "happy"
+              },
+              {
+                "type": "choice",
+                "value": "c_yes"
+              }
+            ]
+          }
+        },
+        {
+          "action": "jump",
+          "details": {
+            "to": {
+              "type": "field",
+              "value": "why"
+            }
+          },
+          "condition": {
+            "op": "is",
+            "vars": [
+              {
+                "type": "field",
+                "value": "happy"
+              },
+              {
+                "type": "choice",
+                "value": "c_no"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "field",
+      "ref": "nps",
+      "actions": [
+        {
+          "action": "add",
+          "details": {
+            "target": {
+              "type": "variable",
+              "value": "score"
+            }
+          },
+          "condition": {
+            "op": "always",
+            "vars": []
+          }
+        }
+      ]
+    },
+    {
+      "type": "field",
+      "ref": "age",
+      "actions": [
+        {
+          "action": "jump",
+          "details": {
+            "to": {
+              "type": "field",
+              "value": "name"
+            }
+          },
+          "condition": {
+            "op": "always",
+            "vars": []
+          }
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "score": 0
+  }
+}

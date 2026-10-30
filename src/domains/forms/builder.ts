@@ -39,6 +39,8 @@ const DEFAULT_LABEL: Record<QuestionType, string> = {
   address: "What's your address?",
   ranking: "Rank these in order",
   matrix: "How would you rate each?",
+  signature: "Sign here",
+  products: "What would you like to order?",
 };
 
 /** Type-appropriate default `settings`, matching each type's Zod
@@ -109,6 +111,16 @@ function defaultSettings(type: QuestionType): QuestionV1["settings"] {
           createMatrixItem("Excellent"),
         ],
         multiple: false,
+      };
+    case "signature":
+      return { consentText: "By signing, I confirm the information above is correct." };
+    case "products":
+      return {
+        currency: "USD",
+        items: [
+          { id: newId("item"), label: "Item 1", price: 1000 },
+          { id: newId("item"), label: "Item 2", price: 2500 },
+        ],
       };
   }
 }
@@ -353,6 +365,8 @@ export function availableOperators(type: QuestionType): LogicOperator[] {
   if (
     type === "contact_info" ||
     type === "file_upload" ||
+    type === "signature" ||
+    type === "products" ||
     type === "address" ||
     type === "matrix" ||
     type === "ranking" ||

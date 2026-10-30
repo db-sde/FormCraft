@@ -57,7 +57,7 @@ export function contactProperties(
     const value =
       field && raw && typeof raw === "object"
         ? (raw as Record<string, unknown>)[field]
-        : question.type === "file_upload"
+        : question.type === "file_upload" || question.type === "signature"
           ? undefined // uploads are private; never sent out
           : raw;
     if (value === undefined || value === null || value === "") continue;

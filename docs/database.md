@@ -286,6 +286,26 @@ existed); `tests/unit/mfa-policy-coverage.test.ts` fails otherwise.
 - **`publish_question_block_version(block, questions)`** — next version
   in one transaction (row lock on the block), as the caller.
 
+## Records, timeline and orders (migration 47)
+
+- **`responses.review_status`** (`new` | `in_progress` | `done`) and
+  **`responses.assignee_id`** — the records view; separate from
+  `status`. Written by server actions only (editors and up).
+- **`response_comments`** — the team's private notes (1–2000 chars).
+- **`response_events`** — timeline entries other tables don't hold:
+  `email_owner`, `email_respondent`, `replay`, `status_changed`,
+  `assigned`, `commented`, each with `outcome` (`ok` | `failed` |
+  `skipped`), non-sensitive `detail` and `actor_id`.
+- **`response_orders`** — one row per response with a product order:
+  `currency`, `lines` (item, unit price, quantity, amount) and
+  `total_amount`, in minor units, priced by the server.
+- **`forms.import_report`** — what an import brought over (F-05), until
+  dismissed.
+
+All four tables: RLS on; members with `view_responses` read; no writes
+from `authenticated` (server only, service role); deleted with the
+response.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

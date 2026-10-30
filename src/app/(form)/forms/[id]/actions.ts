@@ -431,3 +431,15 @@ async function formInWorkspace(
     .maybeSingle();
   return !!data;
 }
+
+/** Hides the import report (F-05) once the creator has read it. */
+export async function dismissImportReportAction(formId: string): Promise<void> {
+  const { supabase, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) return;
+  // RLS: editors update their own workspace's forms.
+  await supabase
+    .from("forms")
+    .update({ import_report: null })
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id);
+}

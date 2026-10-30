@@ -4,6 +4,29 @@ Last updated: 2026-10-30
 
 ## Current milestone
 
+**MASTER SPEC — Phase 2: records, data models and portability**
+(2026-10-30, migration 47):
+
+| Item | What                                                                                 |
+| ---- | ------------------------------------------------------------------------------------ |
+| F-03 | Records view: review status, assignee, private comments; list filters by both        |
+| F-31 | Per-response timeline (emails, webhooks, Sheets, payment, team actions); safe replay |
+| F-04 | Product block: items, prices in minor units, quantities; server-priced saved order   |
+| F-10 | Signature: draw or type, PNG upload, signed time; not a certified signature          |
+| F-05 | Import from a public Google Forms or Typeform link, with a field-level report        |
+
+Decisions: `DECISIONS.md` (2026-10-30, Phase 2). Tests: `phase2`,
+`form-import` (unit, importer fixtures in `tests/fixtures/import`),
+`records-timeline-orders` (integration), `phase2.spec.ts` (E2E).
+
+**To deploy:** `npm run db:migrate` (migration 47).
+
+**Next:** Phase 3 (PDF/document generation, advanced embeds, advanced
+email notifications, LinkedIn/TikTok pixels). Signatures in PDFs and
+payment from `response_orders` build on Phase 2.
+
+### Phase 1
+
 **MASTER SPEC — Phase 1: authoring and question types** (2026-10-30,
 migration 46; spec in `docs/master-spec.md`):
 
@@ -24,10 +47,6 @@ Decisions: `DECISIONS.md` (2026-10-30). Tests: `phase1-types`, `blocks`
 (unit), `question-blocks` (integration), `phase1.spec.ts` (E2E).
 
 **To deploy:** `npm run db:migrate` (migration 46).
-
-**Next:** Phase 2 (records view, product block, form import, signature,
-response timeline). Its §9 decisions (records governance, import scope)
-need the product owner first.
 
 ### Phase 0
 

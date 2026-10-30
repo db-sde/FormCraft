@@ -93,7 +93,8 @@ export function recallTokens(schema: FormSchemaV1): { token: string; label: stri
           q.type !== "welcome_screen" &&
           q.type !== "statement" &&
           q.type !== "page_break" &&
-          q.type !== "file_upload",
+          q.type !== "file_upload" &&
+          q.type !== "signature",
       )
       .map((q) => ({
         token: `{{answer:${q.id}}}`,

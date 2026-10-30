@@ -27,6 +27,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 import { audit } from "@/domains/audit";
 import { countLeadsForForm } from "@/domains/leads";
+import { ImportError, importFromUrl } from "@/domains/forms/import";
+import type { Json } from "@/lib/supabase/database.types";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -149,6 +151,65 @@ export async function generateFormAction(
     eventType: "form_created",
     actorId: user.id,
     metadata: { source: "ai", warnings: result.warnings.length },
+  });
+  redirect(`/forms/${id}`);
+}
+
+export type ImportFormState = { message: string } | null;
+
+/**
+ * "Import from a link" (F-05): a public Google Form or typeform becomes
+ * an unpublished draft with a report of what came over. Nothing is
+ * published and no responses are imported; the creator reviews it in the
+ * builder and publishes it themselves.
+ */
+export async function importFormAction(
+  _previous: ImportFormState,
+  formData: FormData,
+): Promise<ImportFormState> {
+  const link = String(formData.get("url") ?? "").trim();
+  if (!link) return { message: "Paste the form's link." };
+  if (link.length > 2000) return { message: "That link is too long." };
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { message: "You have view-only access to this workspace." };
+  }
+  const admin = createAdminClient();
+  const limit = await hitRateLimit(admin, `import-form:${user.id}`, 20, 3_600_000);
+  if (!limit.allowed) {
+    return { message: "That's a lot of imports for one hour. Try again later." };
+  }
+
+  let result;
+  try {
+    result = await importFromUrl(link);
+  } catch (error) {
+    if (error instanceof ImportError) return { message: error.message };
+    return { message: "That form couldn't be imported. Try again." };
+  }
+
+  const { id } = await createFormWithDraft(
+    supabase,
+    workspace.id,
+    user.id,
+    result.schema.meta.title,
+    result.schema,
+  );
+  // The report rides on the form until the creator dismisses it.
+  await admin
+    .from("forms")
+    .update({ import_report: result.report as unknown as Json })
+    .eq("id", id)
+    .eq("workspace_id", workspace.id);
+  trackEvent({
+    formId: id,
+    eventType: "form_created",
+    actorId: user.id,
+    metadata: {
+      source: "import",
+      importSource: result.report.source,
+      unknown: result.report.fields.filter((f) => f.status === "unknown").length,
+    },
   });
   redirect(`/forms/${id}`);
 }

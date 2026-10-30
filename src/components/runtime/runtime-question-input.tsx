@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AddressInput, MatrixInput, RankingInput } from "./structured-inputs";
 import { DateTimeInput, TimeInput } from "./time-inputs";
+import { ProductsInput, SignatureInput } from "./signature-products-inputs";
 import { Checkbox as CheckboxPrimitive, RadioGroup as RadioPrimitive } from "radix-ui";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OTHER_PREFIX } from "@/domains/logic";
@@ -360,6 +361,27 @@ export function RuntimeQuestionInput({
             value={value}
             onChange={onChange}
             getResponseId={getResponseId}
+          />
+        );
+
+      case "signature":
+        return (
+          <SignatureInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            getResponseId={getResponseId}
+            idPrefix={ids}
+          />
+        );
+
+      case "products":
+        return (
+          <ProductsInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
           />
         );
 

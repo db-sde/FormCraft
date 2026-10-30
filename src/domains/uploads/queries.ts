@@ -42,6 +42,8 @@ export class ResponseCompletedError extends Error {
 }
 
 const HARD_MAX_BYTES = 100 * 1024 * 1024; // absolute ceiling regardless of question config
+/** A drawn or typed signature, as a PNG: a few tens of KB in practice. */
+export const SIGNATURE_MAX_BYTES = 512 * 1024;
 
 export type PreparedUpload = {
   responseId: string;
@@ -81,7 +83,18 @@ export async function prepareUpload(
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
 
   const question = compiled.schema.questions.find((q) => q.id === questionId);
-  if (!question || question.type !== "file_upload") throw new QuestionNotFoundError();
+  if (!question || (question.type !== "file_upload" && question.type !== "signature"))
+    throw new QuestionNotFoundError();
+
+  // A signature (F-10) is a small PNG the browser drew; nothing else.
+  if (question.type === "signature") {
+    return {
+      responseId,
+      questionId,
+      maxBytes: SIGNATURE_MAX_BYTES,
+      acceptedMimeTypes: ["image/png"],
+    };
+  }
 
   // The plan's per-file ceiling applies on top of the question's own.
   const workspaceId = (response.forms as { workspace_id: string } | null)?.workspace_id;
