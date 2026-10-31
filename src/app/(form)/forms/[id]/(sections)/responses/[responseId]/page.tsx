@@ -25,6 +25,14 @@ import { cn } from "cn";
 import { getResponseTimeline } from "@/domains/responses/timeline";
 import { getOrder } from "@/domains/responses/orders";
 import { formatMoney } from "@/domains/forms/products";
+import { documentApplies, listFormDocuments } from "@/domains/documents/issue";
+import {
+  DOCUMENT_KIND_LABEL,
+  documentNumber,
+  type DocumentKind,
+} from "@/domains/documents/settings";
+import { loadResponseContext } from "@/domains/responses/context";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { assignableMembers, listComments } from "@/domains/responses/records";
 import { hasPermission } from "@/domains/workspaces/permissions";
 import {
@@ -190,6 +198,52 @@ export default async function ResponseDetailPage({
     }
   }
 
+  // PDF documents (F-07): the summary always; set-up ones this response
+  // qualifies for, with their number once issued.
+  const documents: { kind: DocumentKind; label: string; number: string | null }[] = [];
+  if (completed) {
+    const [configured, { data: issued }] = await Promise.all([
+      listFormDocuments(supabase, formId),
+      supabase
+        .from("response_documents")
+        .select("number, form_documents!inner(kind)")
+        .eq("response_id", responseId),
+    ]);
+    const enabled = configured.filter((d) => d.enabled);
+    const ctx = enabled.some((d) => d.kind !== "summary" && d.kind !== "registration")
+      ? await loadResponseContext(createAdminClient(), responseId)
+      : null;
+    const numberOf = (kind: DocumentKind) => {
+      const row = (issued ?? []).find(
+        (r) => (r.form_documents as { kind: string }).kind === kind,
+      );
+      const doc = configured.find((d) => d.kind === kind);
+      return row && doc ? documentNumber(doc.settings, row.number) : null;
+    };
+    if (!enabled.some((d) => d.kind === "summary")) {
+      documents.push({
+        kind: "summary",
+        label: DOCUMENT_KIND_LABEL.summary,
+        number: null,
+      });
+    }
+    for (const doc of enabled) {
+      const applies =
+        doc.kind === "summary" || doc.kind === "registration"
+          ? true
+          : ctx
+            ? documentApplies(doc.kind, doc.settings, ctx)
+            : false;
+      if (applies) {
+        documents.push({
+          kind: doc.kind,
+          label: DOCUMENT_KIND_LABEL[doc.kind],
+          number: numberOf(doc.kind),
+        });
+      }
+    }
+  }
+
   const listHref = `/forms/${formId}/responses${completed ? "" : "?view=incomplete"}`;
   const detailHref = (id: string | null) =>
     id ? `/forms/${formId}/responses/${id}` : null;
@@ -286,6 +340,29 @@ export default async function ResponseDetailPage({
           <span>Source: {source}</span>
         </div>
       </div>
+
+      {documents.length > 0 && (
+        <nav
+          aria-label="Documents"
+          className="text-muted-foreground -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm"
+        >
+          <span className="font-semibold">PDF:</span>
+          {documents.map((d) => (
+            <a
+              key={d.kind}
+              href={`/api/forms/${formId}/responses/${responseId}/documents/${d.kind}`}
+              download
+              className="text-foreground inline-flex items-center gap-1.5 font-semibold underline-offset-2 hover:underline"
+            >
+              <Download className="size-3.5" />
+              {d.label}
+              {d.number && (
+                <span className="text-muted-foreground font-normal">{d.number}</span>
+              )}
+            </a>
+          ))}
+        </nav>
+      )}
 
       <RecordControls
         formId={formId}

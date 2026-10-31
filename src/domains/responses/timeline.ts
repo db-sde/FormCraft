@@ -80,6 +80,13 @@ const INTEGRATION_LABEL: Record<string, string> = {
   make: "Make",
 };
 
+const DOCUMENT_LABEL: Record<string, string> = {
+  summary: "Response summary",
+  order: "Order confirmation",
+  registration: "Registration confirmation",
+  certificate: "Certificate",
+};
+
 const REVIEW_LABEL: Record<string, string> = {
   new: "New",
   in_progress: "In progress",
@@ -159,6 +166,22 @@ function eventEntry(event: TimelineSources["events"][number]): TimelineEntry {
       return {
         ...base,
         title: d.to ? `Assigned to ${str(d.toName) ?? "a teammate"}` : "Unassigned",
+      };
+    case "document_emailed":
+      return {
+        ...base,
+        title: `${DOCUMENT_LABEL[String(d.document)] ?? "Document"} PDF emailed`,
+        detail: str(d.reason),
+      };
+    case "email_rule":
+      return {
+        ...base,
+        title: `Notification “${str(d.rule) ?? "rule"}” emailed`,
+        detail:
+          str(d.reason) ??
+          (typeof d.recipients === "number"
+            ? `${d.recipients} recipient${d.recipients === 1 ? "" : "s"}`
+            : undefined),
       };
     case "commented":
       return { ...base, title: "Comment added" };
@@ -268,7 +291,12 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
   for (const e of sources.events) {
     entries.push({
       ...eventEntry(e),
-      rank: e.kind.startsWith("email_") ? 2 : e.kind === "replay" ? 3 : 4,
+      rank:
+        e.kind.startsWith("email_") || e.kind === "document_emailed"
+          ? 2
+          : e.kind === "replay"
+            ? 3
+            : 4,
     });
   }
   return entries

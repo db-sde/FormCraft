@@ -477,6 +477,53 @@ export type Database = {
           },
         ];
       };
+      form_documents: {
+        Row: {
+          created_at: string;
+          enabled: boolean;
+          form_id: string;
+          id: string;
+          kind: "summary" | "order" | "registration" | "certificate";
+          member_ids: string[];
+          next_number: number;
+          recipients: "owner" | "respondent" | "both" | "none";
+          settings: Json;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          enabled?: boolean;
+          form_id: string;
+          id?: string;
+          kind: "summary" | "order" | "registration" | "certificate";
+          member_ids?: string[];
+          next_number?: number;
+          recipients?: "owner" | "respondent" | "both" | "none";
+          settings?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          enabled?: boolean;
+          form_id?: string;
+          id?: string;
+          kind?: "summary" | "order" | "registration" | "certificate";
+          member_ids?: string[];
+          next_number?: number;
+          recipients?: "owner" | "respondent" | "both" | "none";
+          settings?: Json;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_documents_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_lookups: {
         Row: {
           created_at: string;
@@ -667,6 +714,10 @@ export type Database = {
           title: string;
           updated_at: string;
           workspace_id: string;
+          linkedin_conversion_id: string | null;
+          linkedin_partner_id: string | null;
+          pixel_consent: string;
+          tiktok_pixel_id: string | null;
         };
         Insert: {
           import_report?: Json | null;
@@ -694,6 +745,10 @@ export type Database = {
           title: string;
           updated_at?: string;
           workspace_id: string;
+          linkedin_conversion_id?: string | null;
+          linkedin_partner_id?: string | null;
+          pixel_consent?: string;
+          tiktok_pixel_id?: string | null;
         };
         Update: {
           import_report?: Json | null;
@@ -721,6 +776,10 @@ export type Database = {
           title?: string;
           updated_at?: string;
           workspace_id?: string;
+          linkedin_conversion_id?: string | null;
+          linkedin_partner_id?: string | null;
+          pixel_consent?: string;
+          tiktok_pixel_id?: string | null;
         };
         Relationships: [
           {
@@ -807,6 +866,91 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [];
+      };
+      notification_digests: {
+        Row: {
+          enabled: boolean;
+          form_id: string;
+          last_sent_on: string | null;
+          member_ids: string[];
+          time_zone: string;
+          updated_at: string;
+        };
+        Insert: {
+          enabled?: boolean;
+          form_id: string;
+          last_sent_on?: string | null;
+          member_ids: string[];
+          time_zone?: string;
+          updated_at?: string;
+        };
+        Update: {
+          enabled?: boolean;
+          form_id?: string;
+          last_sent_on?: string | null;
+          member_ids?: string[];
+          time_zone?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_digests_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notification_rules: {
+        Row: {
+          attach_document: string | null;
+          condition: Json | null;
+          created_at: string;
+          enabled: boolean;
+          form_id: string;
+          id: string;
+          include_answers: boolean;
+          member_ids: string[];
+          name: string;
+          subject: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          attach_document?: string | null;
+          condition?: Json | null;
+          created_at?: string;
+          enabled?: boolean;
+          form_id: string;
+          id?: string;
+          include_answers?: boolean;
+          member_ids: string[];
+          name: string;
+          subject?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          attach_document?: string | null;
+          condition?: Json | null;
+          created_at?: string;
+          enabled?: boolean;
+          form_id?: string;
+          id?: string;
+          include_answers?: boolean;
+          member_ids?: string[];
+          name?: string;
+          subject?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_rules_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       notification_settings: {
         Row: {
@@ -1082,6 +1226,48 @@ export type Database = {
           },
           {
             foreignKeyName: "response_comments_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      response_documents: {
+        Row: {
+          document_id: string;
+          emailed_at: string | null;
+          id: string;
+          issued_at: string;
+          number: number;
+          response_id: string;
+        };
+        Insert: {
+          document_id: string;
+          emailed_at?: string | null;
+          id?: string;
+          issued_at?: string;
+          number: number;
+          response_id: string;
+        };
+        Update: {
+          document_id?: string;
+          emailed_at?: string | null;
+          id?: string;
+          issued_at?: string;
+          number?: number;
+          response_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "response_documents_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "form_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "response_documents_response_id_fkey";
             columns: ["response_id"];
             isOneToOne: false;
             referencedRelation: "responses";
@@ -2184,6 +2370,15 @@ export type Database = {
         Returns: boolean;
       };
       jwt_has_sso: { Args: { claims: Json }; Returns: boolean };
+      issue_response_document: {
+        Args: { p_document_id: string; p_response_id: string };
+        Returns: {
+          emailed_at: string | null;
+          id: string;
+          issued_at: string;
+          number: number;
+        }[];
+      };
       list_leads: {
         Args: {
           p_form_id?: string;

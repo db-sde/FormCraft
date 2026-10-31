@@ -13,6 +13,8 @@
 const PIXEL_SCRIPT_HOSTS = [
   "https://www.googletagmanager.com",
   "https://connect.facebook.net",
+  "https://snap.licdn.com",
+  "https://analytics.tiktok.com",
 ];
 const PIXEL_CONNECT_HOSTS = [
   "https://www.google-analytics.com",
@@ -20,11 +22,15 @@ const PIXEL_CONNECT_HOSTS = [
   "https://*.analytics.google.com",
   "https://www.googletagmanager.com",
   "https://www.facebook.com",
+  "https://px.ads.linkedin.com",
+  "https://analytics.tiktok.com",
 ];
 const PIXEL_IMG_HOSTS = [
   "https://www.google-analytics.com",
   "https://www.googletagmanager.com",
   "https://www.facebook.com",
+  "https://px.ads.linkedin.com",
+  "https://analytics.tiktok.com",
 ];
 /** Cloudflare Turnstile, for forms that require a CAPTCHA (F-26): its
  * script, and the frame the challenge runs in. */

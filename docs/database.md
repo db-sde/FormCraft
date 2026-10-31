@@ -306,6 +306,22 @@ All four tables: RLS on; members with `view_responses` read; no writes
 from `authenticated` (server only, service role); deleted with the
 response.
 
+## Documents, notifications and pixels (migration 48)
+
+- **`form_documents`** — one per form and kind (`summary`, `order`,
+  `registration`, `certificate`): `settings`, `recipients`, `member_ids`,
+  `next_number`. Members read; editors write.
+- **`response_documents`** — a response's number per document and when
+  it was emailed. Read with `view_responses`; written by the server.
+- **`issue_response_document(document, response)`** — the number, issued
+  once under a row lock (service role only).
+- **`notification_rules`** — teammates, optional condition, subject,
+  answers on/off, attached document. Members read; editors write.
+- **`notification_digests`** — teammates, time zone, `last_sent_on`.
+- **`forms`** gain `linkedin_partner_id`, `linkedin_conversion_id`,
+  `tiktok_pixel_id`, `pixel_consent` (`none` | `ask`).
+- **`response_events.kind`** adds `document_emailed`, `email_rule`.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

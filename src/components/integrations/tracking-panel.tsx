@@ -15,12 +15,20 @@ export function TrackingPanel({
   allowed,
 }: {
   formId: string;
-  initial: { gaMeasurementId: string; gtmContainerId: string; metaPixelId: string };
+  initial: {
+    gaMeasurementId: string;
+    gtmContainerId: string;
+    metaPixelId: string;
+    linkedinPartnerId: string;
+    linkedinConversionId: string;
+    tiktokPixelId: string;
+    consent: "none" | "ask";
+  };
   allowed: boolean;
 }) {
   const [values, setValues] = useState(initial);
   const [pending, start] = useTransition();
-  const hasAny = Object.values(initial).some(Boolean);
+  const hasAny = Object.entries(initial).some(([k, v]) => k !== "consent" && Boolean(v));
 
   if (!allowed && !hasAny) {
     return (
@@ -30,7 +38,11 @@ export function TrackingPanel({
     );
   }
 
-  const field = (key: keyof typeof values, label: string, placeholder: string) => (
+  const field = (
+    key: Exclude<keyof typeof values, "consent">,
+    label: string,
+    placeholder: string,
+  ) => (
     <div className="grid gap-1.5">
       <Label htmlFor={`tracking-${key}`}>{label}</Label>
       <Input
@@ -58,7 +70,33 @@ export function TrackingPanel({
         {field("gaMeasurementId", "Google Analytics 4", "G-XXXXXXX")}
         {field("gtmContainerId", "Google Tag Manager", "GTM-XXXXXX")}
         {field("metaPixelId", "Meta Pixel", "123456789012345")}
+        {field("linkedinPartnerId", "LinkedIn Partner ID", "1234567")}
+        {field("linkedinConversionId", "LinkedIn conversion ID (submit)", "12345678")}
+        {field("tiktokPixelId", "TikTok Pixel", "C4ABCDEFGHIJKLMNOPQR")}
       </div>
+      <label className="flex items-start gap-2.5 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={values.consent === "ask"}
+          onChange={(e) =>
+            setValues((v) => ({ ...v, consent: e.target.checked ? "ask" : "none" }))
+          }
+        />
+        <span className="flex flex-col">
+          <b>Ask respondents first</b>
+          <span className="text-muted-foreground text-xs">
+            Nothing loads until they allow it on the form (remembered in their browser).
+            Browsers that send Global Privacy Control never load pixels.
+          </span>
+        </span>
+      </label>
+      <p className="text-muted-foreground text-xs leading-normal">
+        Events: a page view, one start (Google, Tag Manager, TikTok) and one submit
+        (Google, Tag Manager, Meta “Lead”, TikTok “SubmitForm”, LinkedIn with a conversion
+        ID), only after the response is saved. To check them, open the live form with{" "}
+        <code>?fc_pixel_debug=1</code> and watch the browser console.
+      </p>
       <p className="text-muted-foreground text-xs leading-normal">
         These load only on the live form (never in Preview) and send page views, starts
         and submissions — no answers. They set cookies and share visits with Google or

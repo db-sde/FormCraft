@@ -4,6 +4,24 @@ Last updated: 2026-10-30
 
 ## Current milestone
 
+**MASTER SPEC — Phase 3: distribution, communication and documents**
+(2026-10-31, migration 48):
+
+| Item | What                                                                                              |
+| ---- | ------------------------------------------------------------------------------------------------- |
+| F-07 | PDF documents: summary, order, registration, certificate; per-form numbers; emailed once          |
+| F-25 | Notification rules (conditions, merge subjects, answers, PDF) and a daily digest                  |
+| F-24 | Embed SDK: inline, popup, slide-in, side tab, full page, button; delay/scroll triggers; analytics |
+| F-44 | LinkedIn Insight Tag and TikTok Pixel; consent prompt; Global Privacy Control; dedupe             |
+
+Decisions: `DECISIONS.md` (2026-10-31). Tests: `phase3` (unit),
+`documents-notifications` (integration), `phase3.spec.ts` (E2E).
+
+**To deploy:** `npm run db:migrate` (migration 48); the digest cron is
+in `vercel.json`.
+
+### Phase 2
+
 **MASTER SPEC — Phase 2: records, data models and portability**
 (2026-10-30, migration 47):
 
@@ -20,10 +38,6 @@ Decisions: `DECISIONS.md` (2026-10-30, Phase 2). Tests: `phase2`,
 `records-timeline-orders` (integration), `phase2.spec.ts` (E2E).
 
 **To deploy:** `npm run db:migrate` (migration 47).
-
-**Next:** Phase 3 (PDF/document generation, advanced embeds, advanced
-email notifications, LinkedIn/TikTok pixels). Signatures in PDFs and
-payment from `response_orders` build on Phase 2.
 
 ### Phase 1
 

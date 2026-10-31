@@ -12,6 +12,9 @@ export const ANALYTICS_EVENT_TYPES = [
   // Respondent step events (PRD §3.6) — question ids only, never values.
   "question_viewed",
   "question_answered",
+  // Embed SDK (F-24): a launcher or inline form shown, an overlay opened.
+  "embed_impression",
+  "embed_opened",
   // Creator product events.
   "form_created",
   "question_added",

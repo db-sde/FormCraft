@@ -654,7 +654,16 @@ export type PublicForm = {
   resumeLinksEnabled: boolean;
   workspaceId: string;
   /** Analytics / pixel identifiers (P2.12); shown only on a plan with them. */
-  tracking: { ga: string | null; gtm: string | null; meta: string | null };
+  tracking: {
+    ga: string | null;
+    gtm: string | null;
+    meta: string | null;
+    linkedin: string | null;
+    linkedinConversion: string | null;
+    tiktok: string | null;
+  };
+  /** Pixels wait for the respondent's consent (F-44). */
+  pixelConsent: "none" | "ask";
   /** Creator setting: submitting needs a CAPTCHA (F-26). */
   captchaRequired: boolean;
   /** Kiosk mode's settings (F-15); null when it's off. */
@@ -742,7 +751,7 @@ export async function getPublicFormBySlug(
   const { data: form, error: formError } = await supabase
     .from("forms")
     .select(
-      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, captcha_required, kiosk_config",
+      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, captcha_required, kiosk_config",
     )
     .eq("slug", slug)
     .is("deleted_at", null)
@@ -771,7 +780,11 @@ export async function getPublicFormBySlug(
       ga: form.ga_measurement_id,
       gtm: form.gtm_container_id,
       meta: form.meta_pixel_id,
+      linkedin: form.linkedin_partner_id,
+      linkedinConversion: form.linkedin_conversion_id,
+      tiktok: form.tiktok_pixel_id,
     },
+    pixelConsent: form.pixel_consent === "ask" ? "ask" : "none",
     captchaRequired: form.captcha_required,
     kiosk: readKioskConfig(form.kiosk_config),
   };

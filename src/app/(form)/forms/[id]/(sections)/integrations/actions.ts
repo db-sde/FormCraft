@@ -362,6 +362,26 @@ const TrackingInput = z.object({
     .trim()
     .regex(/^[0-9]{6,20}$/, "A Meta Pixel ID is a number.")
     .or(z.literal("")),
+  linkedinPartnerId: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{4,10}$/, "A LinkedIn Partner ID is a number.")
+    .or(z.literal(""))
+    .default(""),
+  linkedinConversionId: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{4,12}$/, "A LinkedIn conversion ID is a number.")
+    .or(z.literal(""))
+    .default(""),
+  tiktokPixelId: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{15,25}$/, "A TikTok Pixel ID is 15–25 letters and numbers.")
+    .or(z.literal(""))
+    .default(""),
+  consent: z.enum(["none", "ask"]).default("none"),
 });
 
 /** Analytics and ad pixels (P2.12): identifiers only, never code. */
@@ -373,10 +393,15 @@ export async function saveTrackingAction(
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the IDs." };
   }
+  if (parsed.data.linkedinConversionId && !parsed.data.linkedinPartnerId) {
+    return { ok: false, message: "Add the LinkedIn Partner ID for the conversion." };
+  }
   const clearing =
     !parsed.data.gaMeasurementId &&
     !parsed.data.gtmContainerId &&
-    !parsed.data.metaPixelId;
+    !parsed.data.metaPixelId &&
+    !parsed.data.linkedinPartnerId &&
+    !parsed.data.tiktokPixelId;
   const ctx = clearing
     ? await (async () => {
         const c = await getCurrentWorkspace();
@@ -390,6 +415,10 @@ export async function saveTrackingAction(
       ga_measurement_id: parsed.data.gaMeasurementId || null,
       gtm_container_id: parsed.data.gtmContainerId || null,
       meta_pixel_id: parsed.data.metaPixelId || null,
+      linkedin_partner_id: parsed.data.linkedinPartnerId || null,
+      linkedin_conversion_id: parsed.data.linkedinConversionId || null,
+      tiktok_pixel_id: parsed.data.tiktokPixelId || null,
+      pixel_consent: parsed.data.consent,
     })
     .eq("id", formId)
     .eq("workspace_id", ctx.workspace.id)

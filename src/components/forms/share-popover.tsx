@@ -5,11 +5,7 @@ import Link from "next/link";
 import QRCode from "qrcode";
 import { Check, Copy, ExternalLink, Share2, X } from "lucide-react";
 import { toast } from "@/lib/toast";
-import {
-  buildEmbedSnippet,
-  buildPopupSnippet,
-  type PopupMode,
-} from "@/domains/forms/embed";
+import { buildEmbedSnippet } from "@/domains/forms/embed";
 import {
   Popover,
   PopoverClose,
@@ -18,6 +14,14 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { publicFormUrl } from "./live-link-actions";
+import {
+  AUTO_OPEN_MODES,
+  buildSdkSnippet,
+  EMBED_MODE_LABEL,
+  parseTrigger,
+  type EmbedSdkMode,
+  type EmbedTrigger,
+} from "@/domains/forms/embed-sdk";
 import { CopyLinkField } from "./copy-link-field";
 import { cn } from "cn";
 
@@ -257,39 +261,45 @@ export function ShareEmbed({
   slug: string;
   formId: string;
   title: string;
-  /** The plan includes popup / side-tab / button embeds (P2.23). */
+  /** The plan includes popup / slide-in / side-tab / button embeds. */
   popupEmbeds?: boolean;
   /** The form's button colour, for the launcher. */
   color?: string;
 }) {
-  const [mode, setMode] = useState<EmbedMode | PopupMode>("standard");
+  const [mode, setMode] = useState<EmbedMode | EmbedSdkMode>("standard");
   const [label, setLabel] = useState("Open form");
+  const [trigger, setTrigger] = useState<EmbedTrigger>({ kind: "click" });
   const [copied, copy] = useCopy();
   const url = publicFormUrl(slug);
+  const origin = (() => {
+    try {
+      return new URL(url).origin;
+    } catch {
+      return "";
+    }
+  })();
   const code =
     mode === "standard"
       ? buildEmbedSnippet({ formUrl: url, formId, title })
       : mode === "full"
         ? `<iframe src="${url}?embed=1" title="${title.replace(/"/g, "&quot;")}" style="position:fixed;inset:0;width:100%;height:100%;border:0"></iframe>`
-        : buildPopupSnippet({ formUrl: url, formId, title, mode, label, color });
-  const launcher = mode === "popup" || mode === "side-tab" || mode === "button";
+        : buildSdkSnippet({ origin, slug, mode, trigger, label, color });
+  const sdkModes: EmbedSdkMode[] = popupEmbeds
+    ? ["popup", "slide-in", "side-tab", "full-page", "button"]
+    : [];
+  const launcher = mode !== "standard" && mode !== "full" && mode !== "inline";
+  const canAutoOpen = AUTO_OPEN_MODES.includes(mode as EmbedSdkMode);
 
   return (
     <>
-      <div className="border-border bg-background flex gap-0.5 self-start rounded-[8px] border-[1.5px] p-[3px]">
+      <div className="border-border bg-background flex flex-wrap gap-0.5 self-start rounded-[8px] border-[1.5px] p-[3px]">
         {(
           [
             ["standard", "Standard"],
             ["full", "Full page"],
-            ...(popupEmbeds
-              ? ([
-                  ["popup", "Popup"],
-                  ["side-tab", "Side tab"],
-                  ["button", "Button"],
-                ] as const)
-              : []),
+            ...sdkModes.map((m) => [m, EMBED_MODE_LABEL[m]] as const),
           ] as const
-        ).map(([id, label]) => (
+        ).map(([id, text]) => (
           <button
             key={id}
             type="button"
@@ -302,13 +312,13 @@ export function ShareEmbed({
                 : "hover:bg-hover-wash",
             )}
           >
-            {label}
+            {text}
           </button>
         ))}
       </div>
       {!popupEmbeds && (
         <p className="text-muted-foreground text-xs">
-          Popup, side tab and button embeds are part of paid plans.
+          Popup, slide-in, side tab and button embeds are part of paid plans.
         </p>
       )}
       {launcher && (
@@ -321,6 +331,54 @@ export function ShareEmbed({
             className="border-input bg-field h-8 rounded-sm border-[1.5px] px-2 font-normal"
           />
         </label>
+      )}
+      {canAutoOpen && (
+        <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
+          Opens
+          <select
+            aria-label="When it opens"
+            value={trigger.kind}
+            onChange={(e) =>
+              setTrigger(
+                e.target.value === "delay"
+                  ? { kind: "delay", seconds: 5 }
+                  : e.target.value === "scroll"
+                    ? { kind: "scroll", percent: 50 }
+                    : { kind: "click" },
+              )
+            }
+            className="border-input bg-field h-8 rounded-sm border-[1.5px] px-2 font-normal"
+          >
+            <option value="click">when the button is clicked</option>
+            <option value="delay">after a delay</option>
+            <option value="scroll">when the visitor scrolls</option>
+          </select>
+          {trigger.kind !== "click" && (
+            <>
+              <input
+                type="number"
+                aria-label={trigger.kind === "delay" ? "Seconds" : "Percent scrolled"}
+                min={trigger.kind === "delay" ? 0 : 1}
+                max={trigger.kind === "delay" ? 120 : 100}
+                value={trigger.kind === "delay" ? trigger.seconds : trigger.percent}
+                onChange={(e) =>
+                  setTrigger(
+                    parseTrigger(
+                      `${trigger.kind}:${Math.max(0, Number(e.target.value) || 0)}`,
+                    ),
+                  )
+                }
+                className="border-input bg-field h-8 w-20 rounded-sm border-[1.5px] px-2 font-normal"
+              />
+              {trigger.kind === "delay" ? "seconds" : "% down the page"}
+            </>
+          )}
+        </div>
+      )}
+      {canAutoOpen && trigger.kind !== "click" && (
+        <p className="text-muted-foreground text-xs">
+          It opens on its own at most once per visit.
+        </p>
       )}
       <pre className="max-h-48 overflow-auto rounded-sm bg-[#2b2118] p-3 font-mono text-xs leading-[1.55] break-all whitespace-pre-wrap text-[#f3ebdf]">
         {code}

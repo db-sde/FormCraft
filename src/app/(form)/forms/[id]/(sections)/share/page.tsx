@@ -45,6 +45,7 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
     savesUnfinished: settings?.savePartialResponses ?? true,
   });
 
+  const embedStats = await embedStatsFor(supabase, formId);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const url = `${appUrl}/f/${form.slug}`;
   const shareText = encodeURIComponent(`${form.title} — ${url}`);
@@ -152,6 +153,25 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
             wide
           >
             <div className="flex flex-col gap-3.5">
+              <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
+                <dl className="contents">
+                  {(
+                    [
+                      ["Embed impressions", embedStats.impressions],
+                      ["Opened", embedStats.opens],
+                      ["Completed in an embed", embedStats.completed],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex gap-1.5">
+                      <dt>{label}</dt>
+                      <dd className="text-foreground font-semibold">
+                        {value.toLocaleString()}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <span>Last 30 days</span>
+              </div>
               <ShareEmbed
                 slug={form.slug}
                 formId={form.id}
@@ -189,4 +209,36 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
       </SettingsSection>
     </div>
   );
+}
+
+/** Embed numbers (F-24), last 30 days: one impression and one open per
+ * page load, deduped by the server. */
+async function embedStatsFor(
+  supabase: Awaited<ReturnType<typeof loadFormForPage>>["supabase"],
+  formId: string,
+) {
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const countEvents = async (eventType: string) =>
+    (
+      await supabase
+        .from("analytics_events")
+        .select("id", { count: "exact", head: true })
+        .eq("form_id", formId)
+        .eq("event_type", eventType)
+        .eq("is_preview", false)
+        .gte("created_at", since)
+    ).count ?? 0;
+  const [impressions, opens, { count: completed }] = await Promise.all([
+    countEvents("embed_impression"),
+    countEvents("embed_opened"),
+    supabase
+      .from("responses")
+      .select("id", { count: "exact", head: true })
+      .eq("form_id", formId)
+      .eq("embedded", true)
+      .eq("status", "completed")
+      .eq("is_preview", false)
+      .gte("completed_at", since),
+  ]);
+  return { impressions, opens, completed: completed ?? 0 };
 }

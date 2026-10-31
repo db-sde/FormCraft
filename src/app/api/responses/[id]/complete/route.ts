@@ -18,6 +18,8 @@ import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import { verifyTurnstile } from "@/domains/abuse/turnstile";
 import { emailEvent, logResponseEvent } from "@/domains/responses/timeline";
 import { saveOrder } from "@/domains/responses/orders";
+import { issueDocumentsForResponse } from "@/domains/documents/issue";
+import { sendRuleEmails } from "@/domains/notifications/rules";
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -206,6 +208,11 @@ export async function POST(
           const enqueued = await enqueueSheetsSync(admin, result.formId, id);
           if (enqueued) await dispatchDueSheetsSyncs(admin);
         });
+        // PDF documents (F-07): numbered and emailed once; failures are
+        // on the response's timeline.
+        await step(() => issueDocumentsForResponse(admin, id));
+        // Notification rules (F-25): teammates, by condition.
+        await step(() => sendRuleEmails(admin, id));
       });
     }
 

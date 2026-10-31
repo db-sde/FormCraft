@@ -497,6 +497,20 @@ export function PublicFormRuntime({
     return () => observer.disconnect();
   }, [embedded, formId, ready]);
 
+  // Embedded in an overlay (F-24): Escape inside the form closes it. The
+  // host page can't hear keys pressed in the frame, so the form says so;
+  // the SDK only acts on it from the frame it opened.
+  useEffect(() => {
+    if (!embedded || window.parent === window) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        window.parent.postMessage({ type: "formcraft:escape", formId }, "*");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [embedded, formId]);
+
   useEffect(() => {
     let cancelled = false;
     if (!resumeCheckRef.current && resume) {

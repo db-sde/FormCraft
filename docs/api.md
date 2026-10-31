@@ -389,6 +389,17 @@ workspace role and permission first:
 The uploads route (`POST /api/responses/:id/uploads/:questionId`) also
 takes signature questions: `image/png` only, 512 KB at most.
 
+## Documents and embeds (Phase 3)
+
+- `GET /api/forms/:id/responses/:responseId/documents/:kind` — the PDF
+  (`summary`, `order`, `registration`, `certificate`), for members with
+  `view_responses`; 404 when the response doesn't qualify.
+- `GET /api/embed/sdk.js` — the embed SDK (public, cacheable).
+- `POST /api/embed/events` — `{ slug, event: "impression" | "open",
+mode, trigger, pageview }` as a text body; always 204; deduped per
+  page view.
+- `GET|POST /api/cron/digests` — daily digests (CRON_SECRET).
+
 ## Conventions
 
 - Every mutating endpoint requires auth _except_ the public runtime

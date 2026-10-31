@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/domains",
       "schedule": "20 2 * * *"
+    },
+    {
+      "path": "/api/cron/digests",
+      "schedule": "40 3 * * *"
     }
   ]
 }

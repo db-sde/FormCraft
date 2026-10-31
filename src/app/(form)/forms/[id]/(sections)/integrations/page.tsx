@@ -16,6 +16,7 @@ import { cn } from "cn";
 import {
   ChartLine,
   Contact,
+  FileText,
   CreditCard,
   DatabaseZap,
   MailCheck,
@@ -37,6 +38,11 @@ import {
   getConfirmationSettings,
 } from "@/domains/notifications/confirmation";
 import { loadFormForPage } from "../../load-form";
+import { DocumentsPanel } from "@/components/integrations/documents-panel";
+import { NotificationRulesPanel } from "@/components/integrations/notification-rules-panel";
+import { listNotificationRules } from "@/domains/notifications/rules";
+import { listFormDocuments } from "@/domains/documents/issue";
+import { assignableMembers } from "@/domains/responses/records";
 
 export async function generateMetadata({
   params,
@@ -144,7 +150,9 @@ export default async function IntegrationsPage({
       .maybeSingle(),
     supabase
       .from("forms")
-      .select("ga_measurement_id, gtm_container_id, meta_pixel_id, payment_config")
+      .select(
+        "ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, payment_config",
+      )
       .eq("id", formId)
       .single(),
   ]);
@@ -162,6 +170,16 @@ export default async function IntegrationsPage({
   // Lookups are server-only rows; this page is for editors of the form
   // (loadFormForPage checked), and the list carries no secret.
   const lookups = await listLookups(createAdminClient(), formId);
+  const [documents, members, rules, { data: digest }] = await Promise.all([
+    listFormDocuments(supabase, formId),
+    assignableMembers(supabase, workspace.id),
+    listNotificationRules(supabase, formId),
+    supabase
+      .from("notification_digests")
+      .select("enabled, member_ids, time_zone")
+      .eq("form_id", formId)
+      .maybeSingle(),
+  ]);
   const endpoints = allEndpoints.filter((e) => e.kind === "webhook");
   const slackEndpoints = allEndpoints.filter((e) => e.kind === "slack");
   const schema = draft ? parseFormSchema(draft.schema) : null;
@@ -382,10 +400,52 @@ export default async function IntegrationsPage({
       )}
 
       <Section
+        icon={<FileText />}
+        tint="choice"
+        title="PDF documents"
+        description="A response summary, order confirmation, registration confirmation or certificate, numbered per form. Download any of them from a response, or email them on submit."
+      >
+        <DocumentsPanel
+          formId={formId}
+          workspaceId={workspace.id}
+          emailConfigured={emailAvailable}
+          initial={documents.map((d) => ({
+            kind: d.kind,
+            enabled: d.enabled,
+            settings: d.settings,
+            recipients: d.recipients,
+            memberIds: d.memberIds,
+          }))}
+          emailQuestions={(schema ? emailQuestions(schema) : []).map((q) => ({
+            id: q.id,
+            label: `${numbered.find((x) => x.question.id === q.id)?.number ?? ""} · ${q.label.trim() || "Untitled"}`,
+          }))}
+          nameQuestions={numbered
+            .filter(
+              ({ question: q }) =>
+                q.type === "short_text" ||
+                (q.type === "contact_info" && q.settings.fields.includes("name")),
+            )
+            .map(({ question: q, number }) => ({
+              id: q.id,
+              label: `${number} · ${q.label.trim() || "Untitled"}`,
+            }))}
+          endings={(schema?.endings ?? []).map((e) => ({
+            id: e.id,
+            label: e.title.trim() || "Untitled ending",
+          }))}
+          variables={(schema?.variables ?? [])
+            .filter((v) => v.type === "number")
+            .map((v) => ({ id: v.id, label: v.name }))}
+          members={members.map((m) => ({ id: m.id, label: m.name }))}
+        />
+      </Section>
+
+      <Section
         icon={<ChartLine />}
         tint="live"
         title="Analytics and ad pixels"
-        description="Measure visits to the live form in Google Analytics, Tag Manager or Meta."
+        description="Measure visits, starts and submissions in Google Analytics, Tag Manager, Meta, LinkedIn or TikTok."
       >
         <TrackingPanel
           formId={formId}
@@ -394,6 +454,10 @@ export default async function IntegrationsPage({
             gaMeasurementId: tracking?.ga_measurement_id ?? "",
             gtmContainerId: tracking?.gtm_container_id ?? "",
             metaPixelId: tracking?.meta_pixel_id ?? "",
+            linkedinPartnerId: tracking?.linkedin_partner_id ?? "",
+            linkedinConversionId: tracking?.linkedin_conversion_id ?? "",
+            tiktokPixelId: tracking?.tiktok_pixel_id ?? "",
+            consent: tracking?.pixel_consent === "ask" ? "ask" : "none",
           }}
         />
       </Section>
@@ -403,14 +467,32 @@ export default async function IntegrationsPage({
           icon={<Bell />}
           tint="text"
           title="Email notifications"
-          description="Get an email for each completed response."
+          description="An email to you for each response, rules that email teammates when answers match, and a daily digest."
         >
-          <NotificationsPanel
-            formId={formId}
-            initialEnabled={notificationsEnabled}
-            ownerEmail={user.email ?? ""}
-            emailConfigured={emailAvailable}
-          />
+          <div className="flex flex-col gap-4">
+            <NotificationsPanel
+              formId={formId}
+              initialEnabled={notificationsEnabled}
+              ownerEmail={user.email ?? ""}
+              emailConfigured={emailAvailable}
+            />
+            <NotificationRulesPanel
+              formId={formId}
+              schema={schema}
+              members={members.map((m) => ({ id: m.id, label: m.name }))}
+              documents={documents.filter((d) => d.enabled).map((d) => d.kind)}
+              initialRules={rules}
+              initialDigest={
+                digest
+                  ? {
+                      enabled: digest.enabled,
+                      memberIds: digest.member_ids,
+                      timeZone: digest.time_zone,
+                    }
+                  : null
+              }
+            />
+          </div>
         </Section>
       )}
     </div>

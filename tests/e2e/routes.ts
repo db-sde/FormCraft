@@ -33,6 +33,10 @@ export const PAGE_ROUTES = [
 
 /** API / handler routes → the spec that covers them. */
 export const HANDLER_ROUTES: Record<string, string> = {
+  "/api/embed/sdk.js": "phase3.spec.ts",
+  "/api/embed/events": "phase3.spec.ts",
+  "/api/cron/digests": "api-contract.spec.ts",
+  "/api/forms/[id]/responses/[responseId]/documents/[kind]": "phase3.spec.ts",
   "/api/responses/start": "api-contract.spec.ts, form-starts.spec.ts",
   "/api/responses/[id]/answers": "api-contract.spec.ts, autosave-race.spec.ts",
   "/api/responses/[id]/resume-link": "resume-link.spec.ts",

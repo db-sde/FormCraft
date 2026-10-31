@@ -3,6 +3,75 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-10-31 — Master spec Phase 3: documents, notifications, embeds, pixels
+
+Phase 3 of `docs/master-spec.md` (F-07, F-24, F-25, F-44), migration 48.
+The product owner settled §9 item 6 (PDF scope) on 2026-10-30: numbers
+are **per form** (and per document kind) with a creator prefix;
+certificates only when **a condition the creator sets** holds; PDFs are
+**rebuilt on demand, never stored**; extra recipients are **workspace
+members only**.
+
+- **PDF documents (F-07).** Four ready-made templates — response summary,
+  order confirmation, registration confirmation, certificate — with an
+  editable heading, text, footer, logo (from this workspace's uploads
+  only), colour and number prefix; no free-form designer. Rendered with
+  `pdf-lib` in Noto Sans (`@fontsource/noto-sans`, OFL), picking the
+  script file per character (Latin, Latin Extended, Cyrillic, Greek,
+  Vietnamese, Devanagari — shaped through fontkit, which needs
+  `regenerator-runtime`); anything else (emoji, CJK, Arabic) prints as
+  "?". Long responses flow onto more pages; signatures are embedded.
+  `issue_response_document` gives a response its number under a row lock
+  (no gaps or reuse under races) and returns the same number every time
+  after. Triggers on submit: summary and registration always; order when
+  there's an order; certificate only when its rule holds (an ending
+  and/or a condition such as score ≥ 80) — no rule, no certificate. An
+  order says "Paid" only when the payment row is paid. Emails go to the
+  owner / respondent / both / neither plus chosen teammates who can see
+  responses, at most once (claimed with `emailed_at`; released on a
+  failed send so a retry can go), recorded on the timeline. Members with
+  `view_responses` download any of them from a response
+  (`/api/forms/:id/responses/:responseId/documents/:kind`); the summary
+  is always available.
+- **Notification rules and digest (F-25).** Rules email teammates (members
+  who can see responses — never an address from an answer) about every
+  response or those matching a condition (the builder's condition
+  editor), with a subject using `{{form}}` and recall tokens (one line,
+  control characters stripped) and optionally the answers (off by
+  default, matching the existing "no answers in email" alert) and a PDF.
+  Sent once per completion (the completion step runs only for the
+  request that completed it); each send is on the timeline. The daily
+  digest counts the previous day in the form's chosen time zone,
+  computed with the zone's real offsets (a 25-hour day stays 25 hours),
+  claims the day before sending (never twice), sends nothing on a quiet
+  day, and carries counts only. Runs from a daily cron
+  (`/api/cron/digests`, 03:40 UTC — every zone's previous day has ended
+  by then).
+- **Embed SDK (F-24).** `/api/embed/sdk.js`: `<div data-formcraft="slug"
+data-mode=…>` becomes inline, popup, slide-in, side tab, full page or a
+  button; popup/slide-in/full page can also open after a delay or on
+  scroll, at most once per browser session per form. It only frames this
+  app's `/f/<slug>` pages (slug pattern checked, origin = the script's),
+  draws its launcher in a shadow root, and its overlays are dialogs
+  (focus moves in and back, Tab stays inside, Escape closes — the form
+  posts Escape to its host, since keys inside the frame don't reach it).
+  Impressions and opens are beacons with a random page-view id; the
+  server dedupes per page view and counts only live forms
+  (`embed_impression`, `embed_opened`); Share shows 30-day totals.
+  Non-inline modes stay on the existing `popup_embeds` entitlement.
+- **Pixels (F-44).** LinkedIn Insight Tag (with an optional submit
+  conversion id) and TikTok Pixel join GA4, Tag Manager and Meta, ids
+  only, checked again before use. All pixels now load from one client
+  loader: never when the browser sends Global Privacy Control; straight
+  away by default; or, with "Ask respondents first", only after the
+  respondent allows it on the form (remembered per form in that browser;
+  declining loads nothing). Each start and submit fires once per page
+  load, submit only after the response is saved. `?fc_pixel_debug=1`
+  logs what fires. TikTok gets `FormStart` and `SubmitForm`; Meta `Lead`
+  on submit; GA `form_start`/`form_submit`; Tag Manager
+  `formcraft_start`/`formcraft_submit` — different names, so a site
+  using both Google tags doesn't double count.
+
 ## 2026-10-30 — Master spec Phase 2: records, orders, import, signature, timeline
 
 Phase 2 of `docs/master-spec.md` (F-03, F-04, F-05, F-10, F-31),

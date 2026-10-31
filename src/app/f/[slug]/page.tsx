@@ -221,6 +221,8 @@ export default async function PublicFormPage({
       {entitlements.tracking_pixels && (
         <TrackingScripts
           ids={publicForm.tracking}
+          formId={publicForm.formId}
+          consent={publicForm.pixelConsent}
           nonce={requestHeaders.get("x-nonce") ?? undefined}
         />
       )}
