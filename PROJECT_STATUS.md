@@ -4,6 +4,25 @@ Last updated: 2026-10-30
 
 ## Current milestone
 
+**MASTER SPEC — Phase 5: native bookings and calendars** (2026-11-02,
+migration 50):
+
+| Item | What                                                                                                   |
+| ---- | ------------------------------------------------------------------------------------------------------ |
+| F-27 | Booking types (hours, buffers, notice, teams), Booking question, atomic holds, manage links, reminders |
+| F-43 | Google Calendar per host: busy times, idempotent events with invitations, sync of deletes and moves    |
+| §5.3 | Shared connector framework: OAuth for any provider, encrypted connections, idempotent retried jobs     |
+
+Decisions: `DECISIONS.md` (2026-11-02, Phase 5 — includes the booking
+defaults to confirm with the product owner). Tests: `phase5` (unit),
+`bookings` (integration), `phase5.spec.ts` (E2E).
+
+**To deploy:** `npm run db:migrate` (migration 50); add the connectors
+callback as a redirect URI on the Google OAuth client and enable the
+Calendar API (see `.env.example`).
+
+### Phase 4
+
 **MASTER SPEC — Phase 4: intelligence and analytics** (2026-11-02,
 migration 49):
 

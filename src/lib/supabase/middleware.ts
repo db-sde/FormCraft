@@ -3,7 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "./database.types";
 import { sessionCookieOptions, supabaseEnv } from "./env";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/forms", "/leads", "/templates", "/settings"];
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/forms",
+  "/leads",
+  "/templates",
+  "/settings",
+  "/bookings",
+];
 // Exact paths, not prefixes: `/signup` and `/forgot-password` each have
 // a "check your email" sub-page (`/signup/check-email`,
 // `/forgot-password/check-email`) that must stay reachable even for an

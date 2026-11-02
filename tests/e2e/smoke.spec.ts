@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
@@ -8,6 +9,7 @@ import {
   loginViaUI,
 } from "./helpers";
 import { PAGE_ROUTES } from "./routes";
+import type { Json } from "@/lib/supabase/database.types";
 
 /**
  * Renders every page in the app (see routes.ts) and fails on anything a
@@ -164,6 +166,7 @@ test.describe("smoke: every page renders cleanly", () => {
             },
           ],
         });
+      signedIn["/bookings"] = "/bookings";
       signedIn["/blocks"] = "/blocks";
       signedIn["/blocks/[id]"] = `/blocks/${block!.id}`;
       for (const [route, path] of Object.entries(signedIn)) {
@@ -197,6 +200,36 @@ test.describe("smoke: every page renders cleanly", () => {
       await expectHealthy(page, `/invite/${"x".repeat(43)}`, problems);
       await expect(page.getByText("This invitation doesn't work")).toBeVisible();
       visited.add("/invite/[token]");
+
+      // An attendee's booking page, from their manage link.
+      const { data: bookingType } = await adminClient()
+        .from("booking_types")
+        .insert({
+          workspace_id: workspace!.id,
+          name: "Smoke call",
+          duration_minutes: 30,
+          time_zone: "UTC",
+          weekly: [] as unknown as Json,
+        })
+        .select("id")
+        .single();
+      const manageToken = "s".repeat(43);
+      const startsAt = new Date(Date.now() + 7 * 86_400_000);
+      const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
+      await adminClient()
+        .from("bookings")
+        .insert({
+          booking_type_id: bookingType!.id,
+          host_id: user.userId,
+          starts_at: startsAt.toISOString(),
+          ends_at: endsAt.toISOString(),
+          blocked: `[${startsAt.toISOString()},${endsAt.toISOString()})`,
+          status: "confirmed",
+          manage_token_hash: createHash("sha256").update(manageToken).digest("hex"),
+        });
+      await expectHealthy(page, `/booking/${manageToken}`, problems);
+      await expect(page.getByRole("heading", { name: "Smoke call" })).toBeVisible();
+      visited.add("/booking/[token]");
 
       // Every registered page was actually visited above.
       expect([...visited].sort()).toEqual([...PAGE_ROUTES].sort());

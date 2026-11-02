@@ -562,6 +562,27 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
     prefillKeys.set(key, label);
   }
 
+  // Bookings (F-27): one per form, and it needs a booking type.
+  const bookings = ordered.filter((q) => q.type === "booking");
+  for (const question of bookings) {
+    if (question.type === "booking" && !question.settings.bookingTypeId) {
+      push({
+        severity: "error",
+        code: "booking_without_type",
+        message: `${question.label.trim() || "A booking question"} needs a booking type. Choose one in its settings.`,
+        questionId: question.id,
+      });
+    }
+  }
+  if (bookings.length > 1) {
+    push({
+      severity: "error",
+      code: "booking_twice",
+      message: "A form can have one booking question.",
+      questionId: bookings[1].id,
+    });
+  }
+
   // In-form A/B variants (F-29): wording, order and layout only.
   for (const message of variantProblems(schema)) {
     push({ severity: "error", code: "variant_invalid", message });

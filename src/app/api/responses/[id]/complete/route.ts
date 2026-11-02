@@ -20,6 +20,7 @@ import { emailEvent, logResponseEvent } from "@/domains/responses/timeline";
 import { saveOrder } from "@/domains/responses/orders";
 import { issueDocumentsForResponse } from "@/domains/documents/issue";
 import { sendRuleEmails } from "@/domains/notifications/rules";
+import { emailConfirmed, holdBookings, settleBookings } from "@/domains/bookings/submit";
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -102,6 +103,23 @@ export async function POST(
       }
     }
 
+    // Bookings (F-27): hold the chosen slot before the response
+    // completes; a slot that's gone is an answer error.
+    const holds = await holdBookings(admin, id, parsed.data.answers);
+    if (!holds.ok) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "invalid_answer",
+            message: "Some answers need fixing before you can submit.",
+            missingQuestionIds: holds.errors.map((e) => e.questionId),
+            errors: holds.errors,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
     const result = await completeResponse(
       admin,
       id,
@@ -111,6 +129,9 @@ export async function POST(
       parsed.data.idempotencyKey,
       { spamSuspected: Boolean(parsed.data.trap) },
     );
+    // Confirmed or released before the reply, so the booking and the
+    // response never disagree.
+    const confirmedBookings = await settleBookings(admin, holds.held, id, result.ok);
 
     if (!result.ok && result.code === "form_closed") {
       return NextResponse.json(
@@ -148,6 +169,7 @@ export async function POST(
       // (missing API key, an unreachable webhook endpoint, ...) can
       // never affect the response itself (see ARCHITECTURE.md).
       after(async () => {
+        await emailConfirmed(admin, confirmedBookings).catch(() => null);
         // Each step is independent: one failing (analytics down, no
         // email key, a webhook consumer erroring) must not skip the
         // rest. Anything that still doesn't happen is picked up by the

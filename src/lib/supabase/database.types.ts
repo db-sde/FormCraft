@@ -204,6 +204,205 @@ export type Database = {
           },
         ];
       };
+      booking_hosts: {
+        Row: {
+          added_at: string;
+          booking_type_id: string;
+          user_id: string;
+        };
+        Insert: {
+          added_at?: string;
+          booking_type_id: string;
+          user_id: string;
+        };
+        Update: {
+          added_at?: string;
+          booking_type_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "booking_hosts_booking_type_id_fkey";
+            columns: ["booking_type_id"];
+            isOneToOne: false;
+            referencedRelation: "booking_types";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "booking_hosts_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      booking_types: {
+        Row: {
+          archived_at: string | null;
+          blocked_dates: string[];
+          buffer_after_minutes: number;
+          buffer_before_minutes: number;
+          created_at: string;
+          created_by: string | null;
+          duration_minutes: number;
+          id: string;
+          interval_minutes: number | null;
+          location: string | null;
+          max_days_ahead: number;
+          min_notice_minutes: number;
+          name: string;
+          reminders: boolean;
+          time_zone: string;
+          updated_at: string;
+          weekly: Json;
+          workspace_id: string;
+        };
+        Insert: {
+          archived_at?: string | null;
+          blocked_dates?: string[];
+          buffer_after_minutes?: number;
+          buffer_before_minutes?: number;
+          created_at?: string;
+          created_by?: string | null;
+          duration_minutes: number;
+          id?: string;
+          interval_minutes?: number | null;
+          location?: string | null;
+          max_days_ahead?: number;
+          min_notice_minutes?: number;
+          name: string;
+          reminders?: boolean;
+          time_zone: string;
+          updated_at?: string;
+          weekly?: Json;
+          workspace_id: string;
+        };
+        Update: {
+          archived_at?: string | null;
+          blocked_dates?: string[];
+          buffer_after_minutes?: number;
+          buffer_before_minutes?: number;
+          created_at?: string;
+          created_by?: string | null;
+          duration_minutes?: number;
+          id?: string;
+          interval_minutes?: number | null;
+          location?: string | null;
+          max_days_ahead?: number;
+          min_notice_minutes?: number;
+          name?: string;
+          reminders?: boolean;
+          time_zone?: string;
+          updated_at?: string;
+          weekly?: Json;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "booking_types_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      bookings: {
+        Row: {
+          attendee_email: string | null;
+          attendee_name: string | null;
+          attendee_time_zone: string | null;
+          blocked: string;
+          booking_type_id: string;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          confirmed_at: string | null;
+          created_at: string;
+          ends_at: string;
+          form_id: string | null;
+          host_id: string;
+          id: string;
+          manage_token_hash: string;
+          reminder_sent_at: string | null;
+          rescheduled_from: string | null;
+          response_id: string | null;
+          starts_at: string;
+          status: "pending" | "confirmed" | "cancelled";
+        };
+        Insert: {
+          attendee_email?: string | null;
+          attendee_name?: string | null;
+          attendee_time_zone?: string | null;
+          blocked: string;
+          booking_type_id: string;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          confirmed_at?: string | null;
+          created_at?: string;
+          ends_at: string;
+          form_id?: string | null;
+          host_id: string;
+          id?: string;
+          manage_token_hash: string;
+          reminder_sent_at?: string | null;
+          rescheduled_from?: string | null;
+          response_id?: string | null;
+          starts_at: string;
+          status?: "pending" | "confirmed" | "cancelled";
+        };
+        Update: {
+          attendee_email?: string | null;
+          attendee_name?: string | null;
+          attendee_time_zone?: string | null;
+          blocked?: string;
+          booking_type_id?: string;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          confirmed_at?: string | null;
+          created_at?: string;
+          ends_at?: string;
+          form_id?: string | null;
+          host_id?: string;
+          id?: string;
+          manage_token_hash?: string;
+          reminder_sent_at?: string | null;
+          rescheduled_from?: string | null;
+          response_id?: string | null;
+          starts_at?: string;
+          status?: "pending" | "confirmed" | "cancelled";
+        };
+        Relationships: [
+          {
+            foreignKeyName: "bookings_booking_type_id_fkey";
+            columns: ["booking_type_id"];
+            isOneToOne: false;
+            referencedRelation: "booking_types";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bookings_host_id_fkey";
+            columns: ["host_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bookings_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bookings_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       confirmation_email_log: {
         Row: {
           created_at: string;
@@ -280,6 +479,152 @@ export type Database = {
             columns: ["form_id"];
             isOneToOne: true;
             referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      connector_connections: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          encrypted: Json;
+          id: string;
+          label: string | null;
+          provider: string;
+          settings: Json;
+          status: "ok" | "invalid" | "revoked";
+          updated_at: string;
+          user_id: string | null;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          encrypted: Json;
+          id?: string;
+          label?: string | null;
+          provider: string;
+          settings?: Json;
+          status?: "ok" | "invalid" | "revoked";
+          updated_at?: string;
+          user_id?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          encrypted?: Json;
+          id?: string;
+          label?: string | null;
+          provider?: string;
+          settings?: Json;
+          status?: "ok" | "invalid" | "revoked";
+          updated_at?: string;
+          user_id?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "connector_connections_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "connector_connections_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      connector_jobs: {
+        Row: {
+          action: string;
+          attempt_count: number;
+          booking_id: string | null;
+          connection_id: string | null;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          response_id: string | null;
+          result: Json | null;
+          status:
+            "pending" | "running" | "succeeded" | "failed" | "exhausted" | "skipped";
+          updated_at: string;
+          workspace_id: string;
+        };
+        Insert: {
+          action: string;
+          attempt_count?: number;
+          booking_id?: string | null;
+          connection_id?: string | null;
+          created_at?: string;
+          id?: string;
+          idempotency_key: string;
+          last_error?: string | null;
+          next_attempt_at?: string;
+          payload?: Json;
+          provider: string;
+          response_id?: string | null;
+          result?: Json | null;
+          status?:
+            "pending" | "running" | "succeeded" | "failed" | "exhausted" | "skipped";
+          updated_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          action?: string;
+          attempt_count?: number;
+          booking_id?: string | null;
+          connection_id?: string | null;
+          created_at?: string;
+          id?: string;
+          idempotency_key?: string;
+          last_error?: string | null;
+          next_attempt_at?: string;
+          payload?: Json;
+          provider?: string;
+          response_id?: string | null;
+          result?: Json | null;
+          status?:
+            "pending" | "running" | "succeeded" | "failed" | "exhausted" | "skipped";
+          updated_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "connector_jobs_connection_id_fkey";
+            columns: ["connection_id"];
+            isOneToOne: false;
+            referencedRelation: "connector_connections";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "connector_jobs_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "connector_jobs_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "connector_jobs_booking_id_fkey";
+            columns: ["booking_id"];
+            isOneToOne: false;
+            referencedRelation: "bookings";
             referencedColumns: ["id"];
           },
         ];
@@ -2305,6 +2650,21 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      book_slot: {
+        Args: {
+          p_attendee_email: string;
+          p_attendee_name: string;
+          p_attendee_time_zone: string;
+          p_booking_type_id: string;
+          p_form_id: string;
+          p_host_ids: string[];
+          p_manage_token_hash: string;
+          p_rescheduled_from?: string;
+          p_response_id: string;
+          p_starts_at: string;
+        };
+        Returns: { ends_at: string; host_id: string; id: string; starts_at: string }[];
+      };
       can_admin_workspace: {
         Args: { target_workspace_id: string };
         Returns: boolean;
@@ -2312,6 +2672,10 @@ export type Database = {
       can_edit_workspace: {
         Args: { target_workspace_id: string };
         Returns: boolean;
+      };
+      claim_connector_jobs: {
+        Args: { p_lease_seconds: number; p_limit: number };
+        Returns: Database["public"]["Tables"]["connector_jobs"]["Row"][];
       };
       claim_due_sheets_syncs: {
         Args: { p_lease_seconds: number; p_limit: number };
@@ -2370,6 +2734,18 @@ export type Database = {
           ending_id: string;
           form_id: string;
           outcome: string;
+        }[];
+      };
+      connector_status: {
+        Args: { p_workspace_id: string };
+        Returns: {
+          created_at: string;
+          id: string;
+          label: string | null;
+          provider: string;
+          settings: Json;
+          status: string;
+          user_id: string | null;
         }[];
       };
       create_form_with_draft: {

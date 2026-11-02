@@ -41,6 +41,7 @@ const DEFAULT_LABEL: Record<QuestionType, string> = {
   matrix: "How would you rate each?",
   signature: "Sign here",
   products: "What would you like to order?",
+  booking: "Pick a time",
 };
 
 /** Type-appropriate default `settings`, matching each type's Zod
@@ -114,6 +115,8 @@ function defaultSettings(type: QuestionType): QuestionV1["settings"] {
       };
     case "signature":
       return { consentText: "By signing, I confirm the information above is correct." };
+    case "booking":
+      return {};
     case "products":
       return {
         currency: "USD",
@@ -367,6 +370,7 @@ export function availableOperators(type: QuestionType): LogicOperator[] {
     type === "file_upload" ||
     type === "signature" ||
     type === "products" ||
+    type === "booking" ||
     type === "address" ||
     type === "matrix" ||
     type === "ranking" ||

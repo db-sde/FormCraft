@@ -187,7 +187,7 @@ export async function listComments(
 export async function replayAttempt(
   admin: Client,
   input: {
-    target: "webhook" | "sheets";
+    target: "webhook" | "sheets" | "connector";
     id: string;
     responseId: string;
     actorId: string;

@@ -17,6 +17,7 @@ import {
 import { AddressInput, MatrixInput, RankingInput } from "./structured-inputs";
 import { DateTimeInput, TimeInput } from "./time-inputs";
 import { ProductsInput, SignatureInput } from "./signature-products-inputs";
+import { BookingInput } from "./booking-input";
 import { Checkbox as CheckboxPrimitive, RadioGroup as RadioPrimitive } from "radix-ui";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OTHER_PREFIX } from "@/domains/logic";
@@ -382,6 +383,16 @@ export function RuntimeQuestionInput({
             value={value}
             onChange={onChange}
             idPrefix={ids}
+          />
+        );
+
+      case "booking":
+        return (
+          <BookingInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            getResponseId={getResponseId}
           />
         );
 

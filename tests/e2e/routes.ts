@@ -19,6 +19,8 @@ export const PAGE_ROUTES = [
   "/templates",
   "/blocks",
   "/blocks/[id]",
+  "/bookings",
+  "/booking/[token]",
   "/settings",
   "/forms/[id]",
   "/forms/[id]/share",
@@ -33,6 +35,11 @@ export const PAGE_ROUTES = [
 
 /** API / handler routes → the spec that covers them. */
 export const HANDLER_ROUTES: Record<string, string> = {
+  "/api/connectors/[provider]/authorize": "phase5.spec.ts",
+  "/api/connectors/oauth/callback": "phase5.spec.ts",
+  "/api/cron/connectors": "api-contract.spec.ts",
+  "/api/bookings/slots": "phase5.spec.ts",
+  "/api/bookings/manage": "phase5.spec.ts",
   "/api/forms/[id]/crosstab.csv": "phase4.spec.ts",
   "/api/embed/sdk.js": "phase3.spec.ts",
   "/api/embed/events": "phase3.spec.ts",

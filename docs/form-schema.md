@@ -182,6 +182,12 @@ layout? }[]` (at most 3) — in-form A/B variants. `order` lists every
   question once, welcome screen first, and is only allowed on forms
   without logic. Answers, ids and logic are always the original's.
 
+### Master spec Phase 5 additions (still schemaVersion 1)
+
+- `booking` — `bookingTypeId` (required to save), `nameQuestionId?`,
+  `emailQuestionId?`. The answer is `{ start, timeZone? }`; the server
+  holds the slot before completing and confirms it after. One per form.
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

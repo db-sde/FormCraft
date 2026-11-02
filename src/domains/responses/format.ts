@@ -114,6 +114,9 @@ export function formatAnswerValue(
     case "signature":
       return typeof value === "string" && value ? "Signed" : "";
 
+    case "booking":
+      return formatBookingAnswer(value);
+
     case "products":
       return describeOrder(question, value);
 
@@ -218,4 +221,21 @@ export function answerCells(
     ];
   }
   return [formatAnswerValue(question, value, context)];
+}
+
+/** "Tue, 3 Nov 2026, 14:00 (Europe/London)" — in the zone the
+ * respondent picked it in, else UTC. */
+export function formatBookingAnswer(value: unknown): string {
+  const v = (value ?? {}) as { start?: unknown; timeZone?: unknown };
+  if (typeof v.start !== "string") return "";
+  const zone = typeof v.timeZone === "string" ? v.timeZone : "UTC";
+  try {
+    return `${new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: zone,
+    }).format(new Date(v.start))} (${zone})`;
+  } catch {
+    return v.start;
+  }
 }

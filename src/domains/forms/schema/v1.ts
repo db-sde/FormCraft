@@ -295,6 +295,17 @@ const ProductsSettings = z
     "two products share an id",
   );
 
+/** Booking (F-27): the respondent picks a time from a booking type's
+ * free slots. The answer is `{ start, timeZone? }` (the slot's start in
+ * UTC, and the zone they saw it in); the server holds the slot before
+ * the response completes and confirms it after. Contact details for the
+ * booking come from the questions named here. */
+const BookingSettings = z.object({
+  bookingTypeId: z.string().uuid().optional(),
+  nameQuestionId: stableId.optional(),
+  emailQuestionId: stableId.optional(),
+});
+
 const StatementSettings = z.object({
   buttonLabel: optionalSafeText(100),
   ...screenImage,
@@ -440,6 +451,11 @@ export const QuestionV1 = z.discriminatedUnion("type", [
     ...baseQuestionFields,
     type: z.literal("products"),
     settings: ProductsSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("booking"),
+    settings: BookingSettings,
   }),
 ]);
 export type QuestionV1 = z.infer<typeof QuestionV1>;

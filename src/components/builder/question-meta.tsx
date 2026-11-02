@@ -17,6 +17,7 @@ import {
   Link2,
   Paperclip,
   PenLine,
+  CalendarCheck,
   ShoppingCart,
   Phone,
   Quote,
@@ -225,6 +226,13 @@ export const QUESTION_TYPE_META: Record<QuestionType, TypeMeta> = {
     tint: "Other",
     description: "Items, prices and a total",
   },
+  booking: {
+    label: "Booking",
+    icon: CalendarCheck,
+    group: "answer",
+    tint: "Other",
+    description: "Pick a free time from your calendar",
+  },
 };
 
 /** What the Add question menu can add: every type, plus "Picture
@@ -285,6 +293,7 @@ export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
       "file_upload",
       "signature",
       "products",
+      "booking",
     ],
   },
 ];

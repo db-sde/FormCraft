@@ -3,6 +3,73 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-02 — Master spec Phase 5: native bookings and Google Calendar
+
+Phase 5 of `docs/master-spec.md` (F-27, F-43), migration 50. The spec's
+§9 items 1 (Outlook) and 2 (booking specifics) were left to the product
+owner, who asked for the work to go ahead without waiting; these are the
+defaults chosen, simplest and safest, to revisit with them:
+
+- **Outlook waits** for the Microsoft 365 work (F-39, later). Google
+  Calendar is the only calendar now.
+- **Booking types** (workspace-level): length, start interval, buffers
+  before/after, minimum notice, how far ahead, weekly hours per weekday
+  in the type's own time zone, days off, a location (address or meeting
+  link — no generated Meet links), reminders on/off, and hosts.
+- **Teams:** any free host can take a booking; the host with the fewest
+  upcoming bookings goes first.
+- **Provider ownership:** each host connects their own Google Calendar
+  (a personal connection), chooses which calendar, and can disconnect.
+- **Reminders:** one email to the attendee within the day before.
+- **Changes:** attendees cancel or move from the link in their email
+  until the minimum notice before the start; hosts and editors cancel any
+  time (from Bookings). Moving takes the new slot before releasing the
+  old, so nobody ends up with neither.
+- **Provider outages:** a host whose calendar can't be read isn't offered
+  (fail closed, no double booking); a booking never depends on Google —
+  events are created afterwards, with retries, and failures show on the
+  response's timeline.
+
+How it holds together:
+
+- **No double booking, by construction.** `bookings.blocked` is the
+  host's busy range including buffers; an exclusion constraint refuses
+  overlapping live bookings for the same host (pending or confirmed),
+  whatever races in the app. `book_slot` tries hosts in order inside one
+  function call.
+- **Submit = hold, complete, settle.** The submit route holds the chosen
+  slot (pending) before the response completes — a slot that's gone is an
+  answer error on the booking question — and confirms or releases it
+  before replying, so a response and its booking never disagree. Holds
+  that were never settled lapse after 15 minutes. Repeats find the same
+  booking (idempotent per response).
+- **Slots** come from the weekly hours with the zone's real offsets
+  (a skipped hour isn't offered; a repeated one is offered once), minus
+  notice, horizon, days off, each host's bookings and their calendar's
+  busy times. The slot feed is keyed by the in-progress response, so it
+  uses the exact version being answered, and returns start times only.
+- **Shared connector framework (spec §5.3)**, built here for the
+  calendar and reused by Phase 6: `connector_connections` (encrypted
+  tokens; workspace or personal), one OAuth flow for every provider
+  (signed state bound to user and browser, PKCE where supported, token
+  refresh, revoke), and `connector_jobs` with a durable idempotency key,
+  claim/lease, backoff retries, an exhausted state, auth failures
+  marking the connection for reconnecting, per-attempt errors on the
+  timeline and manual replay of the same row.
+- **Google Calendar (F-43).** Free/busy blocks offers; events use an id
+  derived from the booking, so a retried create can't duplicate (409 =
+  done) and invitations go to the attendee; cancelling deletes the
+  event. The connectors cron polls upcoming bookings: an event deleted
+  in Google cancels the booking (attendee told); a moved one moves the
+  booking if the host is free then (the overlap rule decides), otherwise
+  it stays and the timeline says why. Polling, not push webhooks: push
+  channels need a public HTTPS endpoint and renewal, and a 15-minute poll
+  is enough at this scale.
+- **Scheduling:** Vercel's free plan only runs daily crons, so
+  `/api/cron/connectors` is daily in `vercel.json`; calendar jobs also
+  run immediately when queued, and `.env.example` documents calling the
+  cron more often from any scheduler.
+
 ## 2026-11-02 — Master spec Phase 4: AI editing, in-form variants, survey analytics
 
 Phase 4 of `docs/master-spec.md` (F-23, F-29, F-30), migration 49. The

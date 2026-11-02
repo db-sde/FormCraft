@@ -43,6 +43,7 @@ import {
   RankingSettingsPanel,
   TimeSettingsPanel,
 } from "./structured-settings";
+import { BookingSettingsPanel } from "./booking-settings";
 import {
   ProductsSettingsPanel,
   SignatureSettingsPanel,
@@ -73,7 +74,10 @@ export function SettingsPanel({
   earlierChoices = [],
   aiAvailable = false,
   layout = "conversational",
+  allQuestions = [],
 }: {
+  /** Every question, for settings that point at others (booking). */
+  allQuestions?: { id: string; label: string; type: string }[];
   /** The form's layout (F-01): page breaks only matter in "classic". */
   layout?: "conversational" | "classic";
   /** The server has an AI key (AI features are hidden otherwise). */
@@ -186,6 +190,14 @@ export function SettingsPanel({
 
       {question.type === "matrix" && (
         <MatrixSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "booking" && (
+        <BookingSettingsPanel
+          question={question}
+          onChange={onChange}
+          questions={allQuestions}
+        />
       )}
 
       {question.type === "signature" && (

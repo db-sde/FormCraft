@@ -58,6 +58,12 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
       Object.values(value).some((v) => typeof v === "string" && v.trim() !== "")
     );
   }
+  if (question.type === "booking") {
+    return (
+      typeof value === "object" &&
+      typeof (value as { start?: unknown }).start === "string"
+    );
+  }
   if (question.type === "products") {
     return typeof value === "object" && Object.keys(value).length > 0;
   }
@@ -468,6 +474,15 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
 
     case "signature":
       return typeof value === "string" ? OK : fail("Sign before continuing.");
+
+    case "booking": {
+      const start = (value as { start?: unknown } | null)?.start;
+      return typeof value === "object" &&
+        typeof start === "string" &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/.test(start)
+        ? OK
+        : fail("Pick a time.");
+    }
 
     case "products": {
       const problem = orderProblem(question, value);

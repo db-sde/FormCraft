@@ -1529,6 +1529,13 @@ export function FormBuilder({
                     workspaceId={workspaceId}
                     formId={formId}
                     layout={schema.meta.layout ?? "conversational"}
+                    allQuestions={numberedQuestions(schema).map(
+                      ({ question: q, number }) => ({
+                        id: q.id,
+                        type: q.type,
+                        label: `${number} · ${q.label.trim() || "Untitled"}`,
+                      }),
+                    )}
                     question={selectedQuestion}
                     invalid={!!selectedProblem}
                     aiAvailable={aiEnabled}

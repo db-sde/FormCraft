@@ -18,6 +18,9 @@ import {
 import { dispatchDueDeliveries } from "@/domains/webhooks";
 import { dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
+import { logResponseEvent } from "@/domains/responses/timeline";
+import "@/domains/connectors/registry";
+import { dispatchConnectorJobs } from "@/domains/connectors/framework";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -110,7 +113,7 @@ export async function replayAttemptAction(
   target: string,
   attemptId: string,
 ): Promise<Result> {
-  if (target !== "webhook" && target !== "sheets") {
+  if (target !== "webhook" && target !== "sheets" && target !== "connector") {
     return { ok: false, message: "Only webhook and Sheets attempts can be sent again." };
   }
   const auth = await authorize(formId, responseId);
@@ -121,6 +124,42 @@ export async function replayAttemptAction(
     return { ok: false, message: "You don't have permission to resend integrations." };
   }
   const admin = createAdminClient();
+  if (target === "connector") {
+    // A connector job of this response (or of its booking): the same
+    // row and idempotency key go back in the queue.
+    const { data: job } = await admin
+      .from("connector_jobs")
+      .select("id, response_id, bookings(response_id)")
+      .eq("id", attemptId)
+      .maybeSingle();
+    const owner =
+      job?.response_id ??
+      (job?.bookings as { response_id: string | null } | null)?.response_id;
+    if (!job || owner !== responseId)
+      return { ok: false, message: "That attempt isn't this response's." };
+    const { data: reset } = await admin
+      .from("connector_jobs")
+      .update({
+        status: "pending",
+        attempt_count: 0,
+        last_error: null,
+        next_attempt_at: new Date().toISOString(),
+      })
+      .eq("id", attemptId)
+      .in("status", ["failed", "exhausted"])
+      .select("id");
+    if (!reset?.length)
+      return { ok: false, message: "That attempt isn't waiting to be sent again." };
+    await logResponseEvent(admin, {
+      responseId,
+      kind: "replay",
+      actorId: auth.user.id,
+      detail: { target: "connector", attempt: attemptId },
+    });
+    await dispatchConnectorJobs(admin).catch(() => null);
+    refresh(formId, responseId);
+    return { ok: true };
+  }
   const queued = await replayAttempt(admin, {
     target,
     id: attemptId,

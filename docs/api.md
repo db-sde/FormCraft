@@ -411,6 +411,19 @@ mode, trigger, pageview }` as a text body; always 204; deduped per
 - Server action `proposeFormEditAction` (Edit with AI) and the variant /
   confidential settings actions in Settings.
 
+## Phase 5
+
+- `GET /api/bookings/slots?response=&question=&from=&days=` — free start
+  times for a booking question of an unfinished response (public, rate
+  limited).
+- `POST /api/bookings/manage` — `{ token, action: "slots" | "cancel" |
+"reschedule", from?, start? }` from the attendee's link.
+- `GET /api/connectors/:provider/authorize?returnTo=` → provider;
+  `GET /api/connectors/oauth/callback` ← provider.
+- `GET|POST /api/cron/connectors` — connector jobs, reminders, calendar
+  sync (CRON_SECRET).
+- Page `/booking/:token` — the attendee's booking.
+
 ## Conventions
 
 - Every mutating endpoint requires auth _except_ the public runtime

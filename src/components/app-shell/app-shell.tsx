@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   LayoutTemplate,
   Library,
+  CalendarCheck,
   LogOut,
   Menu,
   Moon,
@@ -436,6 +437,7 @@ export function AppShell({
       match: ["/templates"],
     },
     { href: "/blocks", label: "Blocks", icon: Library, match: ["/blocks"] },
+    { href: "/bookings", label: "Bookings", icon: CalendarCheck, match: ["/bookings"] },
     { href: "/settings", label: "Settings", icon: Settings, match: ["/settings"] },
   ];
   // The checklist lives with the forms, not on templates or settings.

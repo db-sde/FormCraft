@@ -140,6 +140,7 @@ export function questionKind(q: QuestionV1 | undefined, field?: string): Operand
     case "file_upload":
     case "signature":
     case "products":
+    case "booking":
     case "contact_info":
     case "address":
     case "matrix":

@@ -335,6 +335,24 @@ response.
   has responses.
 - **`notification_digests.frequency`** — `daily` | `weekly`.
 
+## Bookings and connectors (migration 50)
+
+- **`booking_types`**, **`booking_hosts`** — what can be booked, when,
+  by which hosts. Members read; editors write.
+- **`bookings`** — `starts_at`, `ends_at`, `blocked` (busy range with
+  buffers), `status` pending/confirmed/cancelled, attendee details, the
+  manage token's hash. Exclusion constraint: no overlapping live
+  bookings per host. Read with `view_responses`; written by the server.
+- **`book_slot(...)`** — takes a slot for the first free host, lapsing
+  unconfirmed holds older than 15 minutes (service role).
+- **`connector_connections`** — encrypted provider tokens, per workspace
+  or per member; no client access (`connector_status` gives members a
+  safe summary).
+- **`connector_jobs`** — outbound actions with a unique idempotency key,
+  status, attempts, backoff, last error, result;
+  **`claim_connector_jobs`** leases due jobs (service role).
+- **`response_events.kind`** adds `booking`.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

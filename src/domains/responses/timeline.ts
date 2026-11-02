@@ -28,7 +28,7 @@ export type TimelineEntry = {
   /** Who did it, for the team's own actions. */
   actor?: string | null;
   /** A failed integration attempt that may be sent again. */
-  replay?: { target: "webhook" | "sheets"; id: string };
+  replay?: { target: "webhook" | "sheets" | "connector"; id: string };
 };
 
 export type TimelineSources = {
@@ -46,6 +46,16 @@ export type TimelineSources = {
     lastError: string | null;
     createdAt: string;
     updatedAt: string;
+  }[];
+  /** Connector jobs (spec §5.3): calendar events, CRM records… */
+  connectorJobs?: {
+    id: string;
+    provider: string;
+    action: string;
+    status: string;
+    attemptCount: number;
+    lastError: string | null;
+    createdAt: string;
   }[];
   sheets: {
     id: string;
@@ -85,6 +95,16 @@ const DOCUMENT_LABEL: Record<string, string> = {
   order: "Order confirmation",
   registration: "Registration confirmation",
   certificate: "Certificate",
+};
+
+const CONNECTOR_LABEL: Record<string, string> = {
+  google_calendar: "Google Calendar",
+  airtable: "Airtable",
+  salesforce: "Salesforce",
+  notion: "Notion",
+  mailchimp: "Mailchimp",
+  zoho_crm: "Zoho CRM",
+  pipedrive: "Pipedrive",
 };
 
 const REVIEW_LABEL: Record<string, string> = {
@@ -152,7 +172,7 @@ function eventEntry(event: TimelineSources["events"][number]): TimelineEntry {
     case "replay":
       return {
         ...base,
-        title: `Sent again: ${d.target === "sheets" ? "Google Sheets" : (INTEGRATION_LABEL[String(d.integration)] ?? "Webhook")}`,
+        title: `Sent again: ${d.target === "sheets" ? "Google Sheets" : d.target === "connector" ? "connector action" : (INTEGRATION_LABEL[String(d.integration)] ?? "Webhook")}`,
       };
     case "status_changed":
       return {
@@ -182,6 +202,19 @@ function eventEntry(event: TimelineSources["events"][number]): TimelineEntry {
           (typeof d.recipients === "number"
             ? `${d.recipients} recipient${d.recipients === 1 ? "" : "s"}`
             : undefined),
+      };
+    case "booking":
+      return {
+        ...base,
+        title:
+          d.action === "confirmed"
+            ? "Booking confirmed"
+            : d.action === "cancelled"
+              ? `Booking cancelled${d.by === "calendar" ? " in Google Calendar" : d.by === "attendee" ? " by the attendee" : d.by === "host" ? " by the host" : ""}`
+              : d.action === "moved"
+                ? "Booking moved in Google Calendar"
+                : "Booking not moved",
+        detail: str(d.reason),
       };
     case "commented":
       return { ...base, title: "Comment added" };
@@ -266,6 +299,27 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
       rank: 3,
     });
   }
+  for (const j of sources.connectorJobs ?? []) {
+    entries.push({
+      key: `connector-${j.id}`,
+      at: j.createdAt,
+      title: `${CONNECTOR_LABEL[j.provider] ?? j.provider}: ${j.action.replace(/_/g, " ")}`,
+      outcome: j.status === "skipped" ? "skipped" : jobOutcome(j.status),
+      detail:
+        j.status === "skipped"
+          ? (j.lastError ?? undefined)
+          : jobDetail(
+              j.status === "running" ? "pending" : j.status,
+              j.attemptCount,
+              j.lastError,
+            ),
+      replay:
+        j.status === "failed" || j.status === "exhausted"
+          ? { target: "connector", id: j.id }
+          : undefined,
+      rank: 3,
+    });
+  }
   if (sources.payment) {
     const p = sources.payment;
     const amount = formatMoney(p.amount, p.currency);
@@ -320,30 +374,43 @@ export async function getResponseTimeline(
   supabase: Client,
   response: TimelineSources["response"] & { id: string },
 ): Promise<TimelineEntry[]> {
-  const [deliveries, sheets, payment, events] = await Promise.all([
-    supabase
-      .from("webhook_deliveries")
-      .select(
-        "id, status, attempt_count, last_error, created_at, updated_at, webhook_endpoints(kind)",
-      )
-      .eq("response_id", response.id)
-      .order("created_at"),
-    supabase
-      .from("sheets_sync_log")
-      .select("id, status, attempt_count, last_error, created_at, updated_at")
-      .eq("response_id", response.id)
-      .order("created_at"),
-    supabase
-      .from("payments")
-      .select("status, amount, currency, created_at, paid_at")
-      .eq("response_id", response.id)
-      .maybeSingle(),
-    supabase
-      .from("response_events")
-      .select("id, kind, outcome, detail, created_at, profiles(full_name, email)")
-      .eq("response_id", response.id)
-      .order("created_at"),
-  ]);
+  const [deliveries, sheets, payment, events, connectorJobs, bookingJobs] =
+    await Promise.all([
+      supabase
+        .from("webhook_deliveries")
+        .select(
+          "id, status, attempt_count, last_error, created_at, updated_at, webhook_endpoints(kind)",
+        )
+        .eq("response_id", response.id)
+        .order("created_at"),
+      supabase
+        .from("sheets_sync_log")
+        .select("id, status, attempt_count, last_error, created_at, updated_at")
+        .eq("response_id", response.id)
+        .order("created_at"),
+      supabase
+        .from("payments")
+        .select("status, amount, currency, created_at, paid_at")
+        .eq("response_id", response.id)
+        .maybeSingle(),
+      supabase
+        .from("response_events")
+        .select("id, kind, outcome, detail, created_at, profiles(full_name, email)")
+        .eq("response_id", response.id)
+        .order("created_at"),
+      supabase
+        .from("connector_jobs")
+        .select("id, provider, action, status, attempt_count, last_error, created_at")
+        .eq("response_id", response.id)
+        .order("created_at"),
+      supabase
+        .from("connector_jobs")
+        .select(
+          "id, provider, action, status, attempt_count, last_error, created_at, bookings!inner(response_id)",
+        )
+        .eq("bookings.response_id", response.id)
+        .order("created_at"),
+    ]);
   return buildTimeline({
     response,
     deliveries: (deliveries.data ?? []).map((d) => ({
@@ -355,6 +422,17 @@ export async function getResponseTimeline(
       createdAt: d.created_at,
       updatedAt: d.updated_at,
     })),
+    connectorJobs: [...(connectorJobs.data ?? []), ...(bookingJobs.data ?? [])].map(
+      (j) => ({
+        id: j.id,
+        provider: j.provider,
+        action: j.action,
+        status: j.status,
+        attemptCount: j.attempt_count,
+        lastError: j.last_error,
+        createdAt: j.created_at,
+      }),
+    ),
     sheets: (sheets.data ?? []).map((s) => ({
       id: s.id,
       status: s.status,
