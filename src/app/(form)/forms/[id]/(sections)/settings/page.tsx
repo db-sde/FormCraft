@@ -18,6 +18,12 @@ import { countAcceptedResponses } from "@/domains/forms/availability";
 import { getPasswordHash } from "@/domains/forms/access";
 import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { VariantTestPanel } from "@/components/forms/variant-test-panel";
+import { ConfidentialPanel } from "@/components/forms/confidential-panel";
+import { readConfidential } from "@/domains/responses/feedback-report";
+import { listVariantTests, variantResults } from "@/domains/forms/variant-tests";
+import { hasLogic } from "@/domains/forms/variants";
+import { parseFormSchema } from "@/domains/forms/schema";
 
 export async function generateMetadata({
   params,
@@ -68,7 +74,7 @@ export default async function FormSettingsPage({
     supabase
       .from("forms")
       .select(
-        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config",
+        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config, confidential",
       )
       .eq("id", formId)
       .single(),
@@ -78,6 +84,22 @@ export default async function FormSettingsPage({
     getPasswordHash(admin, formId),
     getKioskPinHash(admin, formId),
   ]);
+  // In-form variants (F-29): the draft's variant, what's live, and the
+  // form's tests with results for the open one.
+  const [{ data: versionRows }, variantTests] = await Promise.all([
+    supabase
+      .from("form_versions")
+      .select("status, schema")
+      .eq("form_id", formId)
+      .in("status", ["draft", "published"]),
+    listVariantTests(supabase, formId),
+  ]);
+  const draftSchema = versionRows?.find((v) => v.status === "draft");
+  const publishedSchema = versionRows?.find((v) => v.status === "published");
+  const draftForm = draftSchema ? parseFormSchema(draftSchema.schema) : null;
+  const liveForm = publishedSchema ? parseFormSchema(publishedSchema.schema) : null;
+  const openTest = variantTests.find((t) => t.status !== "ended") ?? null;
+  const openResults = openTest ? await variantResults(supabase, openTest) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,6 +149,29 @@ export default async function FormSettingsPage({
         allowed={plan.entitlements.ab_testing}
         canManage={canPublish}
       />
+      {draftForm && (
+        <VariantTestPanel
+          formId={formId}
+          draft={draftForm}
+          publishedVariantIds={(liveForm?.variants ?? []).map((v) => v.id)}
+          hasLogic={hasLogic(draftForm)}
+          test={openTest && openResults ? { ...openTest, results: openResults } : null}
+          history={variantTests}
+          allowed={plan.entitlements.ab_testing}
+          canManage={canPublish}
+        />
+      )}
+      {access && draftForm && (
+        <ConfidentialPanel
+          formId={formId}
+          initial={readConfidential(access.confidential)}
+          hasResponses={accepted > 0}
+          groupQuestions={draftForm.questions
+            .filter((q) => q.type === "single_select" || q.type === "dropdown")
+            .map((q) => ({ id: q.id, label: q.label.trim() || "Untitled" }))}
+          canManage={canPublish}
+        />
+      )}
       <VersionHistory formId={formId} versions={versions} />
     </div>
   );

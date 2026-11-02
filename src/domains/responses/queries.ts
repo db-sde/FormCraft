@@ -1,3 +1,4 @@
+import { validVariantTag } from "@/domains/forms/variant-tests";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
@@ -85,6 +86,9 @@ export type StartAttribution = {
   language?: string;
   /** The A/B test that served this form (P3.9); checked here. */
   experimentId?: string;
+  /** The in-form variant test and arm (F-29); checked here. */
+  variantTestId?: string;
+  variant?: string;
   /** The browser's visitor id; kept only for forms with "ask once"
    * questions (progressive profiling). */
   visitorId?: string;
@@ -161,10 +165,19 @@ export async function startResponse(
     formId,
   );
 
+  const variantTag = await validVariantTag(
+    admin,
+    formId,
+    attribution.variantTestId,
+    attribution.variant,
+  );
+
   const { data: response, error } = await admin
     .from("responses")
     .insert({
       experiment_id: experimentId,
+      variant_test_id: variantTag?.testId ?? null,
+      variant: variantTag?.variant ?? null,
       visitor_id:
         attribution.visitorId &&
         VISITOR_ID_PATTERN.test(attribution.visitorId) &&

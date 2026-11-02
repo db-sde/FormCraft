@@ -103,7 +103,13 @@ describe("summarizeAnswers", () => {
     const nps = byId.nps;
     if (nps.kind !== "scale") throw new Error("expected a scale summary");
     // 2 promoters (9, 10) and 1 detractor (3) out of 4.
-    expect(nps.nps).toEqual({ score: 25, promoters: 50, detractors: 25 });
+    expect(nps.nps).toMatchObject({
+      score: 25,
+      promoters: 50,
+      passives: 25,
+      detractors: 25,
+      responses: 4,
+    });
     expect(nps.counts).toHaveLength(11);
   });
 

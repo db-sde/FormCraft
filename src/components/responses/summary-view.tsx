@@ -120,8 +120,39 @@ function Body({ q, tableHref }: { q: QuestionSummary; tableHref: string }) {
                   {q.nps.score > 0 ? `+${q.nps.score}` : q.nps.score}
                 </span>
                 <span className="text-muted-foreground text-[13px]">
-                  NPS · {q.nps.promoters}% promoters, {q.nps.detractors}% detractors
+                  NPS · {q.nps.promoters}% promoters, {q.nps.passives}% passives,{" "}
+                  {q.nps.detractors}% detractors
                 </span>
+                {q.nps.trend && q.nps.trend.length > 1 && (
+                  <table className="basis-full text-[12px]" aria-label="NPS by week">
+                    <tbody>
+                      <tr className="text-muted-foreground">
+                        <th scope="row" className="pr-2 text-left font-semibold">
+                          Week of
+                        </th>
+                        {q.nps.trend.map((w) => (
+                          <td key={w.week} className="px-1.5 text-center">
+                            {w.week.slice(5)}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <th scope="row" className="pr-2 text-left font-semibold">
+                          NPS
+                        </th>
+                        {q.nps.trend.map((w) => (
+                          <td
+                            key={w.week}
+                            className="px-1.5 text-center font-semibold"
+                            title={`${w.responses} responses`}
+                          >
+                            {w.score > 0 ? `+${w.score}` : w.score}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
               </>
             ) : (
               <>

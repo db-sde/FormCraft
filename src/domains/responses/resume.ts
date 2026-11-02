@@ -1,3 +1,5 @@
+import { compileFormSchema } from "@/domains/forms/schema";
+import { applyVariant } from "@/domains/forms/variants";
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -73,6 +75,9 @@ export type ResumedResponse = {
   history: string[];
   hidden: Record<string, string>;
   seed?: string;
+  /** The in-form variant it was served (F-29); kept on resume. */
+  variantTestId?: string;
+  variant?: string;
 };
 
 export type ResumeResult =
@@ -98,7 +103,7 @@ export async function resolveResumeToken(
   const { data: response } = await admin
     .from("responses")
     .select(
-      "id, form_id, form_version_id, status, client_revision, last_question_id, hidden_fields, random_seed, forms!inner(resume_links_enabled)",
+      "id, form_id, form_version_id, status, client_revision, last_question_id, hidden_fields, random_seed, variant_test_id, variant, forms!inner(resume_links_enabled)",
     )
     .eq("id", row.response_id)
     .maybeSingle();
@@ -129,7 +134,11 @@ export async function resolveResumeToken(
 
   // Back navigation: the path the engine takes to where they stopped.
   const seed = response.random_seed ?? undefined;
-  const visited = walkForm(form.compiled, answers, {
+  // In the order of the variant it was served, if any (F-29).
+  const compiled = response.variant
+    ? compileFormSchema(applyVariant(form.compiled.schema, response.variant))
+    : form.compiled;
+  const visited = walkForm(compiled, answers, {
     hidden,
     now,
     seed,
@@ -137,7 +146,7 @@ export async function resolveResumeToken(
   const last =
     response.last_question_id && visited.includes(response.last_question_id)
       ? response.last_question_id
-      : (visited.at(-1) ?? form.compiled.orderedQuestionIds[0]);
+      : (visited.at(-1) ?? compiled.orderedQuestionIds[0]);
   return {
     ok: true,
     response: {
@@ -149,6 +158,12 @@ export async function resolveResumeToken(
       history: visited.slice(0, visited.indexOf(last)),
       hidden,
       seed,
+      ...(response.variant
+        ? {
+            variant: response.variant,
+            variantTestId: response.variant_test_id ?? undefined,
+          }
+        : {}),
     },
   };
 }

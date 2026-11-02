@@ -11,6 +11,8 @@ import {
   Table2,
   CircleDot,
   UserRound,
+  Globe,
+  Grid3x3,
 } from "lucide-react";
 import {
   getConversionInsights,
@@ -36,6 +38,12 @@ import { DeleteResponseButton } from "@/components/responses/delete-response-but
 import { ActivityChip } from "@/components/responses/activity-chip";
 import { FilterChip, type FilterGroup } from "@/components/responses/filter-chip";
 import { ReviewChip } from "@/components/responses/review-chip";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { CrossTabView } from "@/components/responses/crosstab-view";
+import { FeedbackReportView } from "@/components/responses/feedback-report-view";
+import { getFeedbackReport, readConfidential } from "@/domains/responses/feedback-report";
+import { crossTabQuestions, getCrossTab } from "@/domains/responses/crosstab";
+import { listSources } from "@/domains/responses/dashboard";
 import { assignableMembers } from "@/domains/responses/records";
 import {
   isReviewStatus,
@@ -76,6 +84,9 @@ type Params = {
   search?: string;
   status?: string;
   assignee?: string;
+  source?: string;
+  x?: string;
+  y?: string;
 };
 
 export async function generateMetadata({
@@ -312,9 +323,35 @@ export default async function ResponsesPage({
     );
   }
 
+  // Confidential feedback (F-30): a report instead of responses. The
+  // database hides the individual rows; the report is computed here,
+  // after the permission check above.
+  const { data: conf } = await supabase
+    .from("forms")
+    .select("confidential")
+    .eq("id", formId)
+    .single();
+  const confidential = readConfidential(conf?.confidential);
+  if (confidential) {
+    const report = await getFeedbackReport(createAdminClient(), formId, confidential);
+    return (
+      <div className="flex flex-col gap-6">
+        <FormSectionHeader
+          formId={formId}
+          title={form.title}
+          active="responses"
+          state={publishState}
+          hasChanges={hasUnpublishedChanges}
+        />
+        {report && <FeedbackReportView report={report} />}
+      </div>
+    );
+  }
+
   const view: ResponseView = sp.view === "incomplete" ? "incomplete" : "completed";
   const completed = view === "completed";
-  const tab = completed && sp.tab === "summary" ? "summary" : "table";
+  const tab =
+    completed && (sp.tab === "summary" || sp.tab === "crosstab") ? sp.tab : "table";
   const period: (typeof PERIODS)[number] =
     PERIODS.find((p) => p.id === sp.period) ?? PERIODS[PERIODS.length - 1];
   const page = Math.max(1, Number(sp.page) || 1);
@@ -334,7 +371,11 @@ export default async function ResponsesPage({
       ? { questionId: answerQuestion.question.id, value: answerChoice.value }
       : undefined;
 
-  const fromUrl = filtersFromParams({ period: period.id, search: sp.search });
+  const fromUrl = filtersFromParams({
+    period: period.id,
+    search: sp.search,
+    source: sp.source,
+  });
   // Records view (F-03): only a known status, and only a teammate who can
   // be assigned (or "none").
   const members = await assignableMembers(supabase, workspace.id);
@@ -346,6 +387,7 @@ export default async function ResponsesPage({
     endingId: ending?.id,
     answer,
     search: fromUrl.search,
+    source: fromUrl.source,
   };
 
   const [responses, counts, funnel, dropoff, summary, insights, ai, reach] =
@@ -374,10 +416,23 @@ export default async function ResponsesPage({
       tab === "summary" ? getReach(supabase, formId, filters.since) : null,
     ]);
 
+  // Cross-tab (F-30): two choice or scale questions.
+  const crossable = latest ? crossTabQuestions(latest) : [];
+  const crossRow = crossable.find((q) => q.id === sp.x)?.id ?? crossable[0]?.id;
+  const crossColumn =
+    crossable.find((q) => q.id === sp.y)?.id ??
+    crossable.find((q) => q.id !== crossRow)?.id;
+  const [crossTab, sources] = await Promise.all([
+    tab === "crosstab" && latest && crossRow && crossColumn
+      ? getCrossTab(supabase, formId, latest, crossRow, crossColumn, filters)
+      : null,
+    listSources(supabase, formId),
+  ]);
+
   const base = `/forms/${formId}/responses`;
   const current = {
     view: completed ? undefined : "incomplete",
-    tab: tab === "summary" ? "summary" : undefined,
+    tab: tab === "table" ? undefined : tab,
     period: period.id === "all" ? undefined : period.id,
     ending: ending?.id,
     q: answer?.questionId,
@@ -385,6 +440,9 @@ export default async function ResponsesPage({
     search: filters.search,
     status: reviewStatus,
     assignee,
+    source: filters.source,
+    x: tab === "crosstab" ? crossRow : undefined,
+    y: tab === "crosstab" ? crossColumn : undefined,
   };
   const href = (
     patch: Partial<Record<keyof typeof current | "page", string | undefined>>,
@@ -401,7 +459,8 @@ export default async function ResponsesPage({
     answer ||
     filters.search ||
     reviewStatus ||
-    assignee
+    assignee ||
+    filters.source
   );
   const memberName = new Map(members.map((m) => [m.id, m.name]));
 
@@ -555,6 +614,7 @@ export default async function ResponsesPage({
                   [
                     ["table", "Table", Table2],
                     ["summary", "Summary", BarChart3],
+                    ["crosstab", "Cross-tab", Grid3x3],
                   ] as const
                 ).map(([id, label, Icon]) => (
                   <Link
@@ -562,8 +622,10 @@ export default async function ResponsesPage({
                     role="tab"
                     aria-selected={tab === id}
                     href={href({
-                      tab: id === "summary" ? "summary" : undefined,
+                      tab: id === "table" ? undefined : id,
                       page: undefined,
+                      x: undefined,
+                      y: undefined,
                     })}
                     scroll={false}
                     className={cn(
@@ -586,6 +648,36 @@ export default async function ResponsesPage({
               placeholder="Search answers…"
               label="Search responses"
               className="w-full sm:w-56"
+            />
+            <FilterChip
+              icon={<Globe />}
+              label={
+                filters.source === "direct"
+                  ? "Direct"
+                  : filters.source === "referral"
+                    ? "Other sites"
+                    : (filters.source ?? "Source")
+              }
+              active={!!filters.source}
+              clearHref={href({ source: undefined, page: undefined })}
+              clearLabel="Clear the source filter"
+              options={[
+                ...sources.map((s) => ({
+                  label: s,
+                  href: href({ source: s, page: undefined }),
+                  selected: filters.source === s,
+                })),
+                {
+                  label: "Direct",
+                  href: href({ source: "direct", page: undefined }),
+                  selected: filters.source === "direct",
+                },
+                {
+                  label: "Other sites",
+                  href: href({ source: "referral", page: undefined }),
+                  selected: filters.source === "referral",
+                },
+              ]}
             />
             <FilterChip
               icon={<Calendar />}
@@ -687,6 +779,28 @@ export default async function ResponsesPage({
               summary={ai[0]}
               totals={ai[1]}
               leadCriteria={ai[2].data?.ai_lead_criteria ?? ""}
+            />
+          )}
+
+          {tab === "crosstab" && (
+            <CrossTabView
+              action={base}
+              hidden={Object.fromEntries(
+                Object.entries({
+                  ...current,
+                  x: undefined,
+                  y: undefined,
+                  page: undefined,
+                }).filter((e): e is [string, string] => typeof e[1] === "string"),
+              )}
+              questions={crossable.map((q) => ({
+                id: q.id,
+                label: q.label.trim() || "Untitled",
+              }))}
+              rowId={crossRow}
+              columnId={crossColumn}
+              table={crossTab}
+              csvHref={`/api/forms/${formId}/crosstab.csv${href({ tab: undefined, page: undefined }).slice(base.length)}`}
             />
           )}
 

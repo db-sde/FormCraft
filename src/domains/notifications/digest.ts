@@ -4,6 +4,8 @@ import { isValidTimeZone, zoneOffsetMinutes } from "@/domains/logic/datetime";
 import { renderEmailHtml } from "./email-layout";
 import { defaultSender, type Send } from "./mailer";
 import { ruleRecipients } from "./rules";
+import { parseFormSchema } from "@/domains/forms/schema";
+import { npsOf } from "@/domains/responses/summary";
 
 type Client = SupabaseClient<Database>;
 
@@ -53,20 +55,55 @@ export function dayWindow(date: string, timeZone: string): { from: string; to: s
   };
 }
 
+export function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** 0 = Sunday … 6 = Saturday, for a YYYY-MM-DD date. */
+export function weekdayOf(date: string): number {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/**
+ * The period a digest covers on a run, or null when it isn't due: daily,
+ * the previous local day; weekly, Monday to Sunday, sent on the run after
+ * the Sunday (claimed by that Sunday's date).
+ */
+export function digestPeriod(
+  frequency: "daily" | "weekly",
+  previous: string,
+): { first: string; last: string } | null {
+  if (frequency === "daily") return { first: previous, last: previous };
+  if (weekdayOf(previous) !== 0) return null;
+  return { first: addDays(previous, -6), last: previous };
+}
+
 export function digestEmail(input: {
   formTitle: string;
   day: string;
+  /** The first day, for a weekly digest. */
+  firstDay?: string;
   timeZone: string;
   completed: number;
   started: number;
+  nps?: { label: string; score: number; responses: number } | null;
   responsesUrl: string;
   settingsUrl: string;
 }) {
   const title = input.formTitle || "Untitled form";
-  const subject = `Daily digest: ${input.completed} new response${input.completed === 1 ? "" : "s"} · ${title}`;
-  const body = `Here's how “${title}” did on ${input.day} (${input.timeZone}).`;
+  const weekly = Boolean(input.firstDay && input.firstDay !== input.day);
+  const kind = weekly ? "Weekly digest" : "Daily digest";
+  const subject = `${kind}: ${input.completed} new response${input.completed === 1 ? "" : "s"} · ${title}`;
+  const body = weekly
+    ? `Here's how “${title}” did from ${input.firstDay} to ${input.day} (${input.timeZone}).`
+    : `Here's how “${title}” did on ${input.day} (${input.timeZone}).`;
+  const npsLine = input.nps
+    ? `${input.nps.score > 0 ? "+" : ""}${input.nps.score} from ${input.nps.responses} answers`
+    : null;
   const html = renderEmailHtml({
-    tag: "Daily digest",
+    tag: kind,
     tagColor: "#e4ecfb",
     title: subject,
     body,
@@ -76,9 +113,12 @@ export function digestEmail(input: {
         label: "Started but not finished",
         value: String(Math.max(0, input.started - input.completed)),
       },
+      ...(input.nps && npsLine
+        ? [{ label: `NPS · ${input.nps.label}`, value: npsLine }]
+        : []),
     ],
     button: { label: "See responses", href: input.responsesUrl },
-    fine: "You're getting this because a teammate added you to this form's daily digest.",
+    fine: `You're getting this because a teammate added you to this form's ${weekly ? "weekly" : "daily"} digest.`,
     footerLink: { label: "Notification settings", href: input.settingsUrl },
   });
   const text = [
@@ -87,6 +127,7 @@ export function digestEmail(input: {
     body,
     `Completed: ${input.completed}`,
     `Started but not finished: ${Math.max(0, input.started - input.completed)}`,
+    ...(input.nps && npsLine ? [`NPS (${input.nps.label}): ${npsLine}`] : []),
     "",
     `See responses: ${input.responsesUrl}`,
     `Notification settings: ${input.settingsUrl}`,
@@ -107,13 +148,18 @@ export async function sendDueDigests(
   const { data: digests } = await admin
     .from("notification_digests")
     .select(
-      "form_id, member_ids, time_zone, last_sent_on, forms!inner(title, workspace_id, deleted_at)",
+      "form_id, member_ids, time_zone, frequency, last_sent_on, forms!inner(title, workspace_id, deleted_at)",
     )
     .eq("enabled", true)
     .is("forms.deleted_at", null);
   for (const digest of digests ?? []) {
     const form = digest.forms as { title: string; workspace_id: string };
-    const day = previousDay(localDate(now, digest.time_zone));
+    const period = digestPeriod(
+      digest.frequency === "weekly" ? "weekly" : "daily",
+      previousDay(localDate(now, digest.time_zone)),
+    );
+    if (!period) continue;
+    const day = period.last;
     if (digest.last_sent_on && digest.last_sent_on >= day) continue;
     // Claim the day first: a second run can't send it again.
     const claim = admin
@@ -125,7 +171,10 @@ export async function sendDueDigests(
     ).select("form_id");
     if (!claimed?.length) continue;
 
-    const window = dayWindow(day, digest.time_zone);
+    const window = {
+      from: dayWindow(period.first, digest.time_zone).from,
+      to: dayWindow(day, digest.time_zone).to,
+    };
     const count = async (
       column: "completed_at" | "started_at",
       completedOnly: boolean,
@@ -154,9 +203,12 @@ export async function sendDueDigests(
       skipped += 1;
       continue;
     }
+    const nps = await periodNps(admin, digest.form_id, window);
     const email = digestEmail({
       formTitle: form.title,
       day,
+      firstDay: period.first,
+      nps,
       timeZone: digest.time_zone,
       completed,
       started,
@@ -176,4 +228,46 @@ export async function sendDueDigests(
     }
   }
   return { sent, skipped };
+}
+
+/** NPS over a period for the form's first 0–10 scale, if it has one. */
+async function periodNps(
+  admin: Client,
+  formId: string,
+  window: { from: string; to: string },
+): Promise<{ label: string; score: number; responses: number } | null> {
+  const { data: live } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .eq("status", "published")
+    .maybeSingle();
+  if (!live) return null;
+  const question = parseFormSchema(live.schema).questions.find(
+    (q) => q.type === "opinion_scale" && q.settings.min === 0 && q.settings.max === 10,
+  );
+  if (!question) return null;
+  const { data } = await admin
+    .from("answers")
+    .select(
+      "value, responses!inner(form_id, status, is_preview, spam_suspected, completed_at)",
+    )
+    .eq("question_id", question.id)
+    .eq("responses.form_id", formId)
+    .eq("responses.status", "completed")
+    .eq("responses.is_preview", false)
+    .eq("responses.spam_suspected", false)
+    .gte("responses.completed_at", window.from)
+    .lt("responses.completed_at", window.to)
+    .limit(5000);
+  const result = npsOf(
+    (data ?? []).map((a) => a.value).filter((v): v is number => typeof v === "number"),
+  );
+  return result
+    ? {
+        label: question.label.trim() || "Score",
+        score: result.score,
+        responses: result.responses,
+      }
+    : null;
 }

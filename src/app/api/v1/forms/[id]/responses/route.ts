@@ -43,12 +43,16 @@ export async function GET(
   return withApiKey(request, "responses:read", async (caller, admin) => {
     const { data: form } = await admin
       .from("forms")
-      .select("id")
+      .select("id, confidential")
       .eq("id", id)
       .eq("workspace_id", caller.workspaceId)
       .is("deleted_at", null)
       .maybeSingle();
     if (!form) return apiError("not_found", "Form not found.", 404);
+    // Confidential feedback (F-30): individual responses never leave.
+    if (form.confidential) {
+      return apiError("confidential", "This form's responses are confidential.", 403);
+    }
     let q = admin
       .from("responses")
       .select("id, completed_at, ending_id, answers(question_id, value)")

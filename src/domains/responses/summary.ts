@@ -13,6 +13,7 @@ import {
   searchPattern,
   type AnswerFilter,
   type ResponseFilters,
+  withSource,
 } from "./dashboard";
 
 type Client = SupabaseClient<Database>;
@@ -36,7 +37,7 @@ export type QuestionSummary =
       counts: { value: number; count: number }[];
       average: number | null;
       /** Only for 0–10 scales: promoters (9–10) minus detractors (0–6). */
-      nps: { score: number; promoters: number; detractors: number } | null;
+      nps: NpsResult | null;
     })
   | (Base & {
       kind: "number";
@@ -98,6 +99,65 @@ export type ResponseSummary = {
   outcomes: OutcomeSummary;
 };
 
+/** Net Promoter Score (F-30): promoters answer 9–10, passives 7–8,
+ * detractors 0–6; the score is the promoters' share minus the
+ * detractors', from the raw counts (−100…100). Percentages are rounded
+ * for display only. */
+export type NpsResult = {
+  score: number;
+  promoters: number;
+  passives: number;
+  detractors: number;
+  responses: number;
+  /** Week by week (weeks starting Monday, UTC), oldest first. */
+  trend?: { week: string; score: number; responses: number }[];
+};
+
+export function npsOf(numbers: number[]): NpsResult | null {
+  const n = numbers.length;
+  if (n === 0) return null;
+  const promoters = numbers.filter((x) => x >= 9).length;
+  const detractors = numbers.filter((x) => x <= 6).length;
+  const passives = n - promoters - detractors;
+  return {
+    score: Math.round(((promoters - detractors) / n) * 100),
+    promoters: Math.round((promoters / n) * 100),
+    passives: Math.round((passives / n) * 100),
+    detractors: Math.round((detractors / n) * 100),
+    responses: n,
+  };
+}
+
+/** Monday (UTC) of an instant's week, as YYYY-MM-DD. */
+export function weekOf(iso: string): string {
+  const d = new Date(iso);
+  const day = (d.getUTCDay() + 6) % 7;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** NPS per week for the last `weeks` weeks that have answers. */
+export function npsTrend(
+  entries: { value: number; completedAt: string | null }[],
+  weeks = 8,
+): NonNullable<NpsResult["trend"]> {
+  const byWeek = new Map<string, number[]>();
+  for (const e of entries) {
+    if (!e.completedAt) continue;
+    const week = weekOf(e.completedAt);
+    byWeek.set(week, [...(byWeek.get(week) ?? []), e.value]);
+  }
+  return [...byWeek.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-weeks)
+    .map(([week, values]) => ({
+      week,
+      score: npsOf(values)!.score,
+      responses: values.length,
+    }));
+}
+
 const percent = (part: number, whole: number) =>
   whole === 0 ? 0 : Math.round((part / whole) * 100);
 
@@ -114,6 +174,8 @@ const mean = (values: number[]) =>
 export function summarizeAnswers(
   schema: FormSchemaV1,
   answers: Map<string, unknown>[],
+  /** When each response was submitted (same order), for trends. */
+  completedAt: (string | null)[] = [],
 ): QuestionSummary[] {
   const summaries: QuestionSummary[] = [];
   let number = 0;
@@ -132,7 +194,18 @@ export function summarizeAnswers(
       label: questionColumnLabel(question),
       answered: values.length,
     };
-    summaries.push(summarizeQuestion(question, values, base));
+    const summary = summarizeQuestion(question, values, base);
+    if (summary.kind === "scale" && summary.nps) {
+      summary.nps.trend = npsTrend(
+        answers.flatMap((a, i) => {
+          const v = a.get(question.id);
+          return typeof v === "number"
+            ? [{ value: v, completedAt: completedAt[i] ?? null }]
+            : [];
+        }),
+      );
+    }
+    summaries.push(summary);
   }
   return summaries;
 }
@@ -207,8 +280,6 @@ function summarizeQuestion(
         counts.push({ value, count: numbers.filter((n) => n === value).length });
       }
       const isNps = min === 0 && max === 10;
-      const promoters = numbers.filter((n) => n >= 9).length;
-      const detractors = numbers.filter((n) => n <= 6).length;
       return {
         ...base,
         kind: "scale",
@@ -216,16 +287,7 @@ function summarizeQuestion(
         max,
         counts,
         average: mean(numbers),
-        nps:
-          isNps && numbers.length > 0
-            ? {
-                score:
-                  percent(promoters, numbers.length) -
-                  percent(detractors, numbers.length),
-                promoters: percent(promoters, numbers.length),
-                detractors: percent(detractors, numbers.length),
-              }
-            : null,
+        nps: isNps ? npsOf(numbers) : null,
       };
     }
 
@@ -438,7 +500,42 @@ export async function getResponseSummary(
     };
   }
   const schema = parseFormSchema(latest.schema);
+  const { total, rows, ids, byResponse } = await loadCompletedAnswers(
+    supabase,
+    formId,
+    filters,
+  );
 
+  return {
+    total,
+    capped: total > ids.length,
+    questions: summarizeAnswers(
+      schema,
+      ids.map((id) => byResponse.get(id) ?? new Map()),
+      rows.map((r) => r.completed_at),
+    ),
+    outcomes: summarizeOutcomes(
+      schema,
+      await walkResponses(supabase, schema, rows, byResponse),
+    ),
+  };
+}
+
+/**
+ * The newest matching completed responses (up to SUMMARY_RESPONSE_LIMIT)
+ * and their answers, read as the caller — shared by the summary and the
+ * cross-tab so both count the same responses.
+ */
+export async function loadCompletedAnswers(
+  supabase: Client,
+  formId: string,
+  filters: ResponseFilters,
+): Promise<{
+  total: number;
+  rows: CompletedRow[];
+  ids: string[];
+  byResponse: Map<string, Map<string, unknown>>;
+}> {
   // Newest matching completed responses, up to the limit.
   const rows: CompletedRow[] = [];
   let total = 0;
@@ -474,18 +571,7 @@ export async function getResponseSummary(
     }
   }
 
-  return {
-    total,
-    capped: total > ids.length,
-    questions: summarizeAnswers(
-      schema,
-      ids.map((id) => byResponse.get(id) ?? new Map()),
-    ),
-    outcomes: summarizeOutcomes(
-      schema,
-      await walkResponses(supabase, schema, rows, byResponse),
-    ),
-  };
+  return { total, rows, ids, byResponse };
 }
 
 /** Each response's variables, replayed with the version it was served
@@ -553,5 +639,6 @@ function completedQuery(supabase: Client, formId: string, filters: ResponseFilte
   if (filters.search) {
     query = query.ilike("search_match.search_text", searchPattern(filters.search));
   }
+  query = withSource(query, filters.source);
   return query.returns<CompletedRow[]>();
 }

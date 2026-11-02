@@ -1,5 +1,11 @@
 "use server";
 
+import { getDraftForEdit, saveDraftSchema, StaleDraftError } from "@/domains/forms";
+import { VariantV1 } from "@/domains/forms/schema/v1";
+import { parseFormSchema } from "@/domains/forms/schema";
+import { applyVariant, ORIGINAL, variantProblems } from "@/domains/forms/variants";
+import { ConfidentialSettings } from "@/domains/responses/feedback-report";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -429,4 +435,237 @@ export async function setKioskPinAction(
   } catch {
     return { ok: false, message: "Couldn't save the PIN. Please try again." };
   }
+}
+
+// --- In-form variants (master spec F-29) ---------------------------------
+// The variant lives in the draft (published with the form); a test sends a
+// share of new visitors to it. Same rights as publishing.
+
+/** Saves the form's variant into the draft (null removes it). */
+export async function saveVariantAction(
+  formId: string,
+  variant: VariantV1 | null,
+): Promise<SettingsResult> {
+  if (variant !== null && !VariantV1.safeParse(variant).success) {
+    return { ok: false, message: "Check the variant." };
+  }
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to run tests." };
+  const draft = await getDraftForEdit(ctx.supabase, formId, ctx.workspace.id);
+  if (!draft) return { ok: false, message: "Form not found." };
+  const schema = { ...draft.schema, variants: variant ? [variant] : undefined };
+  const problems = variantProblems(schema);
+  if (problems.length) return { ok: false, message: problems[0] };
+  try {
+    await saveDraftSchema(ctx.supabase, draft.draftVersionId, draft.revision, schema);
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof StaleDraftError
+          ? "The form changed in another tab. Reload and try again."
+          : "Couldn't save the variant.",
+    };
+  }
+  revalidatePath(`/forms/${formId}/settings`);
+  return { ok: true };
+}
+
+const VariantTestInput = z.object({
+  variantId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  name: z.string().trim().min(1).max(120),
+  split: z.number().int().min(1).max(99),
+});
+
+/** Starts a test of the published variant against the original. */
+export async function startVariantTestAction(
+  formId: string,
+  input: z.infer<typeof VariantTestInput>,
+): Promise<SettingsResult> {
+  const parsed = VariantTestInput.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Check the test's settings." };
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to run tests." };
+  try {
+    await requireFeature(ctx.supabase, ctx.workspace.id, "ab_testing");
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof EntitlementError ? error.message : "Not allowed.",
+    };
+  }
+  const { data: live } = await ctx.supabase
+    .from("form_versions")
+    .select("schema")
+    .eq("form_id", formId)
+    .eq("status", "published")
+    .maybeSingle();
+  const published = live ? parseFormSchema(live.schema) : null;
+  if (!published?.variants?.some((v) => v.id === parsed.data.variantId)) {
+    return { ok: false, message: "Publish the form with this variant first." };
+  }
+  const { data, error } = await ctx.supabase
+    .from("variant_tests")
+    .insert({
+      form_id: formId,
+      variant_id: parsed.data.variantId,
+      name: parsed.data.name,
+      split: parsed.data.split,
+      created_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      message:
+        error?.code === "23505"
+          ? "This form already has a test."
+          : "Couldn't start the test.",
+    };
+  }
+  await audit(createAdminClient(), {
+    workspaceId: ctx.workspace.id,
+    actorId: ctx.userId,
+    action: "experiment.started",
+    target: { type: "variant_test", id: data.id },
+    metadata: { form: formId, variant: parsed.data.variantId, split: parsed.data.split },
+  });
+  revalidatePath(`/forms/${formId}/settings`);
+  return { ok: true };
+}
+
+/** Pauses or resumes a test; the split changes only while paused. */
+export async function updateVariantTestAction(
+  formId: string,
+  testId: string,
+  change: { status?: "running" | "paused"; split?: number },
+): Promise<SettingsResult> {
+  if (
+    !z.string().uuid().safeParse(testId).success ||
+    (change.status && !["running", "paused"].includes(change.status)) ||
+    (change.split !== undefined &&
+      !z.number().int().min(1).max(99).safeParse(change.split).success)
+  ) {
+    return { ok: false, message: "Check the test's settings." };
+  }
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to run tests." };
+  const { data, error } = await ctx.supabase
+    .from("variant_tests")
+    .update({
+      ...(change.status ? { status: change.status } : {}),
+      ...(change.split !== undefined ? { split: change.split } : {}),
+    })
+    .eq("id", testId)
+    .eq("form_id", formId)
+    .select("id");
+  if (error) {
+    return {
+      ok: false,
+      message: error.message.includes("Pause the test")
+        ? "Pause the test to change its split."
+        : "Couldn't change the test.",
+    };
+  }
+  if (!data?.length) return { ok: false, message: "Test not found." };
+  revalidatePath(`/forms/${formId}/settings`);
+  return { ok: true };
+}
+
+/**
+ * Ends a test, optionally adopting a winner. Adopting the variant writes
+ * its wording, order and layout into the draft (and drops the variant);
+ * nothing is published — the creator reviews and publishes. Responses
+ * already collected keep the version they answered.
+ */
+export async function endVariantTestAction(
+  formId: string,
+  testId: string,
+  winner: string | null,
+): Promise<SettingsResult & { copiedIntoDraft?: boolean }> {
+  if (!z.string().uuid().safeParse(testId).success)
+    return { ok: false, message: "Test not found." };
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to run tests." };
+  const { data: test } = await ctx.supabase
+    .from("variant_tests")
+    .select("variant_id, status")
+    .eq("id", testId)
+    .eq("form_id", formId)
+    .maybeSingle();
+  if (!test || test.status === "ended") return { ok: false, message: "Test not found." };
+  if (winner !== null && winner !== ORIGINAL && winner !== test.variant_id) {
+    return { ok: false, message: "Pick the original or the variant." };
+  }
+  let copiedIntoDraft = false;
+  if (winner === test.variant_id) {
+    const draft = await getDraftForEdit(ctx.supabase, formId, ctx.workspace.id);
+    if (!draft) return { ok: false, message: "Form not found." };
+    if (draft.schema.variants?.some((v) => v.id === winner)) {
+      const adopted = { ...applyVariant(draft.schema, winner), variants: undefined };
+      try {
+        await saveDraftSchema(
+          ctx.supabase,
+          draft.draftVersionId,
+          draft.revision,
+          adopted,
+        );
+        copiedIntoDraft = true;
+      } catch {
+        return {
+          ok: false,
+          message: "Couldn't copy the variant into the draft. Reload and try again.",
+        };
+      }
+    }
+  }
+  const { error } = await ctx.supabase
+    .from("variant_tests")
+    .update({ status: "ended", winner })
+    .eq("id", testId);
+  if (error) return { ok: false, message: "Couldn't end the test." };
+  await audit(createAdminClient(), {
+    workspaceId: ctx.workspace.id,
+    actorId: ctx.userId,
+    action: "experiment.stopped",
+    target: { type: "variant_test", id: testId },
+    metadata: { winner },
+  });
+  revalidatePath(`/forms/${formId}`);
+  revalidatePath(`/forms/${formId}/settings`);
+  return { ok: true, copiedIntoDraft };
+}
+
+// --- Confidential feedback (master spec F-30) -----------------------------
+
+/**
+ * Makes the form's responses confidential (360 feedback) or changes its
+ * settings. Once a confidential form has responses it stays confidential
+ * and its threshold can't go down — the database refuses it.
+ */
+export async function setConfidentialAction(
+  formId: string,
+  settings: { threshold: number; groupQuestionId?: string } | null,
+): Promise<SettingsResult> {
+  if (settings !== null && !ConfidentialSettings.safeParse(settings).success) {
+    return { ok: false, message: "The threshold must be between 2 and 50." };
+  }
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to change this." };
+  const { error } = await ctx.supabase
+    .from("forms")
+    .update({ confidential: settings })
+    .eq("id", formId)
+    .eq("workspace_id", ctx.workspace.id);
+  if (error) {
+    return {
+      ok: false,
+      message: error.message.includes("stays confidential")
+        ? "This form has responses, so it stays confidential and its threshold can't go down."
+        : "Couldn't save that.",
+    };
+  }
+  revalidatePath(`/forms/${formId}`, "layout");
+  return { ok: true };
 }

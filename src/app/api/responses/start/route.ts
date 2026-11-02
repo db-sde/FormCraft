@@ -38,6 +38,12 @@ const StartBody = z.object({
     .optional(),
   /** The A/B test whose link served the form (P3.9). */
   experimentId: z.string().uuid().optional(),
+  /** The in-form variant test and arm the page served (F-29). */
+  variantTestId: z.string().uuid().optional(),
+  variant: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,64}$/)
+    .optional(),
   /** A kiosk session (F-15): one device, many people, so the response
    * isn't tied to the device's visitor id. */
   kiosk: z.boolean().optional(),
@@ -82,6 +88,8 @@ export async function POST(request: NextRequest) {
       seed: parsed.data.seed,
       language: parsed.data.language,
       experimentId: parsed.data.experimentId,
+      variantTestId: parsed.data.variantTestId,
+      variant: parsed.data.variant,
       // From the cookie, never the body: it's httpOnly, so a page script
       // can't choose whose remembered answers a response updates.
       visitorId: parsed.data.kiosk

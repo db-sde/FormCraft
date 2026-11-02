@@ -582,6 +582,29 @@ export const TranslationV1 = z.object({
 });
 export type TranslationV1 = z.infer<typeof TranslationV1>;
 
+/** An in-form A/B variant (master spec F-29): other wording (by question
+ * and option id), another question order, or another layout. Applied on
+ * top of the published version for the visitors a test sends to it;
+ * answers, ids and logic are the original's. */
+export const VariantV1 = z.object({
+  id: stableId,
+  name: safeText(80),
+  questions: z
+    .record(
+      stableId,
+      z.object({
+        label: optionalSafeText(1000),
+        description: optionalSafeText(2000),
+        options: z.record(stableId, safeText(500)).optional(),
+      }),
+    )
+    .optional(),
+  /** Every question id once, welcome screen first. */
+  order: z.array(stableId).max(200).optional(),
+  layout: z.enum(["conversational", "classic"]).optional(),
+});
+export type VariantV1 = z.infer<typeof VariantV1>;
+
 export const FormSchemaV1 = z.object({
   schemaVersion: z.literal(1),
   meta: z.object({
@@ -616,6 +639,8 @@ export const FormSchemaV1 = z.object({
     .optional(),
   /** Text in the other languages, by stable id (P2.21). */
   translations: z.partialRecord(languageCode, TranslationV1).optional(),
+  /** In-form A/B variants (F-29). */
+  variants: z.array(VariantV1).max(3).optional(),
 });
 export type FormSchemaV1 = z.infer<typeof FormSchemaV1>;
 

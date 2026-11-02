@@ -97,6 +97,7 @@ const DigestInput = z.object({
   enabled: z.boolean(),
   memberIds: z.array(z.string().uuid()).max(20),
   timeZone: z.string().min(1).max(64),
+  frequency: z.enum(["daily", "weekly"]).default("daily"),
 });
 
 /** The daily digest (F-25). Turning it off keeps the settings. */
@@ -127,6 +128,7 @@ export async function saveDigestAction(
         enabled: parsed.data.enabled,
         member_ids: parsed.data.memberIds,
         time_zone: parsed.data.timeZone,
+        frequency: parsed.data.frequency,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "form_id" },

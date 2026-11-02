@@ -400,6 +400,17 @@ mode, trigger, pageview }` as a text body; always 204; deduped per
   page view.
 - `GET|POST /api/cron/digests` — daily digests (CRON_SECRET).
 
+## Phase 4
+
+- `GET /api/forms/:id/crosstab.csv?x=&y=` — the cross-tab of two
+  questions, with the responses page's filters (`period`, `ending`,
+  `q` + `a`, `search`, `source`); needs `export_responses`.
+- `source` is accepted by `export.csv` too.
+- Confidential forms: `export.csv`, `crosstab.csv` and the public API's
+  response endpoints answer 403 (`confidential`).
+- Server action `proposeFormEditAction` (Edit with AI) and the variant /
+  confidential settings actions in Settings.
+
 ## Conventions
 
 - Every mutating endpoint requires auth _except_ the public runtime

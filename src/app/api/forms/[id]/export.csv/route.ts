@@ -38,6 +38,7 @@ export async function GET(
     q: search.get("q"),
     a: search.get("a"),
     search: search.get("search"),
+    source: search.get("source"),
   });
   const { supabase, workspace } = await getCurrentWorkspace();
   if (!(await hasPermission(supabase, workspace.id, "export_responses"))) {
@@ -48,7 +49,7 @@ export async function GET(
 
   const { data: form } = await supabase
     .from("forms")
-    .select("id, title")
+    .select("id, title, confidential")
     .eq("id", formId)
     .eq("workspace_id", workspace.id)
     .is("deleted_at", null)
@@ -57,6 +58,19 @@ export async function GET(
     return NextResponse.json(
       { error: { code: "not_found", message: "Form not found." } },
       { status: 404 },
+    );
+  }
+
+  // Confidential feedback (F-30): no individual responses in a file.
+  if (form.confidential) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "confidential",
+          message: "This form's responses are confidential; use its feedback report.",
+        },
+      },
+      { status: 403 },
     );
   }
 

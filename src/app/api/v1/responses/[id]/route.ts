@@ -15,7 +15,7 @@ export async function GET(
     const { data: r } = await admin
       .from("responses")
       .select(
-        "id, form_id, completed_at, ending_id, status, answers(question_id, value), forms!inner(workspace_id)",
+        "id, form_id, completed_at, ending_id, status, answers(question_id, value), forms!inner(workspace_id, confidential)",
       )
       .eq("id", id)
       .maybeSingle();
@@ -25,6 +25,10 @@ export async function GET(
       (r.forms as { workspace_id: string }).workspace_id !== caller.workspaceId
     ) {
       return apiError("not_found", "Response not found.", 404);
+    }
+    // Confidential feedback (F-30): individual responses never leave.
+    if ((r.forms as { confidential: unknown }).confidential) {
+      return apiError("confidential", "This form's responses are confidential.", 403);
     }
     return NextResponse.json(
       buildWebhookPayload({

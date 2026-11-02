@@ -198,6 +198,15 @@ export async function POST(
         await step(async () =>
           logEmail("email_respondent", await sendConfirmationEmail(admin, id)),
         );
+        // Confidential feedback (F-30): nothing that carries individual
+        // answers leaves (webhooks and their Slack/HubSpot/Zapier kinds,
+        // Sheets, PDFs, rule emails). The owner's alert has no answers.
+        const { data: formRow } = await admin
+          .from("forms")
+          .select("confidential")
+          .eq("id", result.formId)
+          .maybeSingle();
+        if (formRow?.confidential) return;
         await step(async () => {
           await enqueueWebhookDeliveries(admin, id);
           // Send right away rather than waiting for the next scheduled

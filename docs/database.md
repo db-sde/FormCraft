@@ -322,6 +322,19 @@ response.
   `tiktok_pixel_id`, `pixel_consent` (`none` | `ask`).
 - **`response_events.kind`** adds `document_emailed`, `email_rule`.
 
+## Variants and confidential feedback (migration 49)
+
+- **`variant_tests`** — one open test per form (`variant_id`, `split`,
+  `status` running/paused/ended, `winner`). The split changes only while
+  paused; an ended test can't change. Members read; publishers write.
+- **`responses.variant_test_id`, `responses.variant`** — the arm a
+  response was served (`original` or the variant id).
+- **`forms.confidential`** — `{ threshold, groupQuestionId }`; restrictive
+  policies hide the form's `responses` and `answers` from `authenticated`;
+  a trigger keeps it on (and its threshold from going down) once the form
+  has responses.
+- **`notification_digests.frequency`** — `daily` | `weekly`.
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

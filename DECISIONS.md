@@ -3,6 +3,72 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-02 — Master spec Phase 4: AI editing, in-form variants, survey analytics
+
+Phase 4 of `docs/master-spec.md` (F-23, F-29, F-30), migration 49. The
+product owner settled §9 items 8 and 9 on 2026-10-31: a variant winner
+needs **95% confidence and at least 100 starts per arm**; the split is
+**locked while a test runs** (pause to change it); 360 groups under
+**3 raters** are never shown on their own; nobody sees **individual 360
+ratings**, only averages.
+
+- **AI form editing (F-23).** "Edit with AI" in the builder asks the
+  model for an `EditDraft` (update / add / delete / move questions, theme,
+  title, endings, rules) numbered against the form as it is now, so a
+  multi-step request doesn't shift under itself. `applyEdit` applies it to
+  a copy, keeps option ids whose labels stay (answers and logic stay
+  attached), runs the same validation and logic analysis as a manual
+  edit, and lists the changes. The creator sees the list and applies or
+  discards it; applying is an ordinary draft change (autosaved, Undo for
+  ten seconds, version history after) and never publishes. The model gets
+  one retry with the exact problem; failures come back as plain
+  messages. Same gates as AI rules: AI configured, editors and up, rate
+  limit, plan credits.
+- **In-form variants (F-29).** A form's schema can carry up to three
+  variants (other question/option wording, another question order,
+  another layout), versioned and published with it; only one is tested
+  at a time. Reordering needs a form without logic — with jumps, show
+  conditions or pools, order changes which questions people reach, and
+  the arms would stop being the same form. Everything else (ids, answers,
+  validation, logic, exports) is the original's. A test sends `split`% of
+  new visitors to the variant by a stable hash of test id and visitor id;
+  the browser applies the variant, and the response records its test and
+  arm (validated by the server against a running test), so resumed
+  responses — saved progress or resume links — keep their arm, even if
+  the test is later paused. Paused or ended tests tag nobody new.
+  Results compare completion rates per arm from the responses each arm
+  served, with the existing two-proportion test; below 100 starts per arm
+  the panel says it's too early. Adopting the variant writes it into the
+  draft (and drops it) for the creator to publish; collected responses
+  keep their version. Plan: `ab_testing`; rights: publishers.
+- **Analytics (F-30).** A source filter (UTM source, Direct, Other sites)
+  joins the shared filters used by the table, summary, exports and
+  cross-tab. Cross-tabs compare two choice, yes/no, rating or scale
+  questions over the same responses the summary reads, with a "No answer"
+  row and column so the table adds up to the response count (checkbox
+  questions count a response once per option chosen, and say so); CSV
+  export is the same table. NPS on 0–10 scales now reports passives and a
+  weekly trend, and the score is computed from raw counts (subtracting two
+  rounded percentages could be off by one). Digests can be weekly (sent
+  the Monday after a Monday–Sunday week in the form's time zone, claimed
+  by that Sunday's date) and include NPS when the form has a 0–10 scale.
+  A "360° Feedback Review" template joins the library.
+- **Confidential feedback (F-30).** `forms.confidential = { threshold,
+groupQuestionId }`. A restrictive RLS policy hides the form's responses
+  and answers from every signed-in user, owners included; the public API
+  and CSV/cross-tab exports refuse; webhooks (and Slack, HubSpot, Zapier),
+  Sheets, PDFs and rule emails don't run for it (the owner's
+  no-answers alert and the respondent's own confirmation still do). The
+  Responses page shows a report computed with the service role after the
+  permission check: nothing until the threshold, then average ratings
+  overall and per rater group, choice percentages, and comments together
+  in an order unrelated to submission. Groups under the threshold pool
+  into "Others"; a pool still under it joins the smallest shown group
+  ("Peer and others") — never hidden while counted in the overall, which
+  would let it be worked out by subtraction. Once a confidential form has
+  responses it can't be made ordinary and its threshold can't go down
+  (a security-definer trigger, so it sees the rows the policy hides).
+
 ## 2026-10-31 — Master spec Phase 3: documents, notifications, embeds, pixels
 
 Phase 3 of `docs/master-spec.md` (F-07, F-24, F-25, F-44), migration 48.

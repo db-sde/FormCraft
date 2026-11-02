@@ -13,6 +13,7 @@ import {
   proposeRuleAction,
   reviewFormAction,
   dismissImportReportAction,
+  proposeFormEditAction,
 } from "./actions";
 import { ImportReport } from "@/domains/forms/import/report";
 import { aiConfigured } from "@/domains/ai/config";
@@ -92,6 +93,7 @@ export default async function FormBuilderPage({
       onReviewForm={reviewFormAction}
       importReport={importReport.success ? importReport.data : null}
       onDismissImportReport={dismissImportReportAction}
+      onProposeEdit={proposeFormEditAction}
     />
   );
 }

@@ -20,6 +20,7 @@ import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import type { RuleProposal } from "@/domains/ai/rule-draft";
 import { aiConfigured, MAX_INSTRUCTION_LENGTH } from "@/domains/ai/config";
 import { proposeRule } from "@/domains/ai/propose-rule";
+import { proposeFormEdit } from "@/domains/ai/edit-form";
 import { describeFormForAi } from "@/domains/ai/rule-draft";
 import { reviewForm, type CopilotSuggestion } from "@/domains/ai/response-analysis";
 import {
@@ -442,4 +443,107 @@ export async function dismissImportReportAction(formId: string): Promise<void> {
     .update({ import_report: null })
     .eq("id", formId)
     .eq("workspace_id", workspace.id);
+}
+
+export type ProposeEditResult =
+  | { ok: true; schema: FormSchemaV1; changes: string[]; summary: string }
+  | { ok: false; code: "not_configured" | "limited" | "failed"; message: string };
+
+/**
+ * "Edit with AI" (master spec F-23): a reviewable change set for the
+ * builder's current draft. Nothing is saved here — the creator sees the
+ * changes and applies or discards them; applying goes through the normal
+ * autosave (and its checks), and can be undone.
+ */
+export async function proposeFormEditAction(
+  formId: string,
+  instruction: string,
+  schema: FormSchemaV1,
+): Promise<ProposeEditResult> {
+  if (!aiConfigured()) {
+    return {
+      ok: false,
+      code: "not_configured",
+      message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing).",
+    };
+  }
+  const text = instruction.trim();
+  if (!text)
+    return { ok: false, code: "failed", message: "Describe the change you want." };
+  if (text.length > MAX_INSTRUCTION_LENGTH) {
+    return {
+      ok: false,
+      code: "failed",
+      message: `Keep it under ${MAX_INSTRUCTION_LENGTH} characters.`,
+    };
+  }
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return {
+      ok: false,
+      code: "failed",
+      message: "You have view-only access to this workspace.",
+    };
+  }
+  const { data } = await supabase
+    .from("forms")
+    .select("id")
+    .eq("id", formId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+  if (!data) return { ok: false, code: "failed", message: "Form not found." };
+  const admin = createAdminClient();
+  const limit = await hitRateLimit(admin, `ai-edit:${user.id}`, 30, 3_600_000);
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      code: "limited",
+      message: "That's a lot of AI edits for one hour. Try again later.",
+    };
+  }
+  const { entitlements } = await getWorkspacePlan(admin, workspace.id);
+  if (!(await spendAiCredit(admin, workspace.id, entitlements))) {
+    return {
+      ok: false,
+      code: "limited",
+      message: "You've used this month's AI credits on your plan.",
+    };
+  }
+  let parsed: FormSchemaV1;
+  try {
+    parsed = parseFormSchema(schema);
+  } catch {
+    return { ok: false, code: "failed", message: "Save your form's changes first." };
+  }
+  try {
+    const result = await proposeFormEdit(text, parsed);
+    return result.ok
+      ? {
+          ok: true,
+          schema: result.schema,
+          changes: result.changes,
+          summary: result.summary,
+        }
+      : { ok: false, code: "failed", message: result.message };
+  } catch (error) {
+    if (error instanceof Anthropic.RateLimitError) {
+      return {
+        ok: false,
+        code: "limited",
+        message: "The AI is busy. Try again in a minute.",
+      };
+    }
+    if (error instanceof Anthropic.AuthenticationError) {
+      return {
+        ok: false,
+        code: "not_configured",
+        message: "The server's ANTHROPIC_API_KEY was rejected.",
+      };
+    }
+    return {
+      ok: false,
+      code: "failed",
+      message: "The AI couldn't be reached. Try again.",
+    };
+  }
 }

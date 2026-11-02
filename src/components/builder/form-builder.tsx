@@ -19,6 +19,7 @@ import {
   Split,
   Trash2,
   X,
+  Sparkles,
 } from "lucide-react";
 import type {
   FormSchemaV1,
@@ -60,6 +61,7 @@ import { QUESTION_TYPE_META, TypeTile, type AddKind } from "./question-meta";
 import { AddQuestionMenu } from "./add-question-menu";
 import { BlockNotice, SaveBlockDialog, type BlockStatus } from "./block-controls";
 import { ImportReportNotice } from "./import-report";
+import { AiEditDialog } from "./ai-edit-dialog";
 import type { ImportReport } from "@/domains/forms/import/report";
 import {
   blockStatusAction,
@@ -186,7 +188,17 @@ export function FormBuilder({
   multilingual = true,
   importReport = null,
   onDismissImportReport,
+  onProposeEdit,
 }: {
+  /** "Edit with AI" (F-23): a reviewable change set for this draft. */
+  onProposeEdit?: (
+    formId: string,
+    instruction: string,
+    schema: FormSchemaV1,
+  ) => Promise<
+    | { ok: true; schema: FormSchemaV1; changes: string[]; summary: string }
+    | { ok: false; message: string }
+  >;
   /** What an import from a public link brought over (F-05), until
    * dismissed. */
   importReport?: ImportReport | null;
@@ -640,6 +652,31 @@ export function FormBuilder({
     commitDeleteQuestion(id);
   }
 
+  const [aiEditOpen, setAiEditOpen] = useState(false);
+  /** An AI edit (F-23) replaces the draft like any edit (autosaved and
+   * checked on save), with Undo for a while after. */
+  function applyAiEdit(next: FormSchemaV1, summary: string) {
+    const before = latestSchemaRef.current;
+    const selectionBefore = selection;
+    setSchema(next);
+    toast(summary || "Changes applied", {
+      duration: 10000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (latestSchemaRef.current !== next) {
+            toast.error("Couldn't undo", {
+              description: "The form has changed since. Use version history instead.",
+            });
+            return;
+          }
+          setSchema(before);
+          setSelection(selectionBefore);
+        },
+      },
+    });
+  }
+
   /** A delete can be taken back for a few seconds: Undo puts the form
    * back exactly as it was — the item, its place and any logic that went
    * with it — unless it has been edited again since. */
@@ -1086,6 +1123,15 @@ export function FormBuilder({
               />
             </>
           )}
+          {aiEnabled && onProposeEdit && (
+            <Button
+              variant="outline"
+              className="h-9 px-3"
+              onClick={() => setAiEditOpen(true)}
+            >
+              <Sparkles /> <span className="max-xl:sr-only">Edit with AI</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             className="h-9 px-3"
@@ -1138,6 +1184,14 @@ export function FormBuilder({
         </div>
       </header>
 
+      {aiEnabled && onProposeEdit && (
+        <AiEditDialog
+          open={aiEditOpen}
+          onOpenChange={setAiEditOpen}
+          propose={(instruction) => onProposeEdit(formId, instruction, schema)}
+          onApply={applyAiEdit}
+        />
+      )}
       <PreviewDialog
         brandingRemovable={brandingRemovable}
         schema={{

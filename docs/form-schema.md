@@ -174,6 +174,14 @@ Full model and evaluation order: `docs/logic-engine.md`. In short:
   out). Logic reads `answer:<id>.<itemId>` (how many). The server prices
   the order; see `response_orders`.
 
+### Master spec Phase 4 additions (still schemaVersion 1)
+
+- `variants?: { id, name, questions?: { [questionId]: { label?,
+description?, options?: { [optionId]: label } } }, order?: string[],
+layout? }[]` (at most 3) — in-form A/B variants. `order` lists every
+  question once, welcome screen first, and is only allowed on forms
+  without logic. Answers, ids and logic are always the original's.
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

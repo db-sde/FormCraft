@@ -151,7 +151,7 @@ export default async function IntegrationsPage({
     supabase
       .from("forms")
       .select(
-        "ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, payment_config",
+        "ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, payment_config, confidential",
       )
       .eq("id", formId)
       .single(),
@@ -176,7 +176,7 @@ export default async function IntegrationsPage({
     listNotificationRules(supabase, formId),
     supabase
       .from("notification_digests")
-      .select("enabled, member_ids, time_zone")
+      .select("enabled, member_ids, time_zone, frequency")
       .eq("form_id", formId)
       .maybeSingle(),
   ]);
@@ -214,6 +214,13 @@ export default async function IntegrationsPage({
         hasChanges={hasUnpublishedChanges}
         actions={<FormPageActions formId={formId} isLive={isLive} />}
       />
+      {tracking?.confidential ? (
+        <p className="rounded-sm bg-[var(--alert-warning-bg)] px-3 py-2.5 text-sm text-[var(--alert-warning-fg)]">
+          This form&apos;s responses are confidential, so webhooks (and Slack, HubSpot and
+          Zapier), Google Sheets, PDF documents and notification rules don&apos;t run for
+          it. Your new-response alert and respondents&apos; own confirmations still do.
+        </p>
+      ) : null}
 
       <Section
         first
@@ -488,6 +495,7 @@ export default async function IntegrationsPage({
                       enabled: digest.enabled,
                       memberIds: digest.member_ids,
                       timeZone: digest.time_zone,
+                      frequency: digest.frequency === "weekly" ? "weekly" : "daily",
                     }
                   : null
               }

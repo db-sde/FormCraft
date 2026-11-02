@@ -57,11 +57,14 @@ export function filtersFromParams(params: {
   q?: string | null;
   a?: string | null;
   search?: string | null;
+  source?: string | null;
 }): ResponseFilters {
   const period = RESPONSE_PERIODS.find((p) => p.id === params.period);
   const search = params.search?.trim().slice(0, MAX_RESPONSE_SEARCH);
+  const source = params.source?.trim().slice(0, 100);
   return {
     search: search || undefined,
+    source: source && /^[\w .:/-]+$/.test(source) ? source : undefined,
     since: period?.days ? new Date(Date.now() - period.days * 86_400_000) : undefined,
     endingId: params.ending || undefined,
     answer:
@@ -87,7 +90,45 @@ export type ResponseFilters = {
    * unassigned). */
   reviewStatus?: string;
   assigneeId?: string;
+  /** Where respondents came from (F-30): a UTM source, "direct" (no
+   * source, no referrer) or "referral" (another site, no UTM source). */
+  source?: string;
 };
+
+/** Narrows a responses query to one source (see ResponseFilters.source). */
+export function withSource<
+  Q extends {
+    is: (c: string, v: null) => Q;
+    not: (c: string, op: string, v: null) => Q;
+    eq: (c: string, v: string) => Q;
+  },
+>(query: Q, source: string | undefined): Q {
+  if (!source) return query;
+  if (source === "direct") return query.is("utm_source", null).is("referrer", null);
+  if (source === "referral")
+    return query.is("utm_source", null).not("referrer", "is", null);
+  return query.eq("utm_source", source);
+}
+
+/** The sources a form's responses came from, most common first. */
+export async function listSources(supabase: Client, formId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from("responses")
+    .select("utm_source")
+    .eq("form_id", formId)
+    .eq("status", "completed")
+    .not("utm_source", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(1000);
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    if (r.utm_source) counts.set(r.utm_source, (counts.get(r.utm_source) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([s]) => s);
+}
 
 /**
  * Free-text search (QA EN-01): responses with any answer containing the
@@ -215,6 +256,7 @@ function filteredResponses<Row = ResponseRow>(
   if (filters.search) {
     query = query.ilike("search_match.search_text", searchPattern(filters.search));
   }
+  query = withSource(query, filters.source);
   if (filters.reviewStatus) query = query.eq("review_status", filters.reviewStatus);
   if (filters.assigneeId === "none") query = query.is("assignee_id", null);
   else if (filters.assigneeId) query = query.eq("assignee_id", filters.assigneeId);

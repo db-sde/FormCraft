@@ -260,6 +260,35 @@ const templates: TemplateDef[] = [
       { type: "long_text", label: "What draws you to this role?" },
     ],
   ),
+  // 360° feedback: pair it with Settings → Confidential feedback, so
+  // raters stay anonymous and only averages are reported (F-30).
+  t(
+    "HR & Recruiting",
+    "360° Feedback Review",
+    "Anonymous feedback on a colleague from their manager, peers and reports.",
+    [
+      {
+        type: "single_select",
+        label: "How do you work with this person?",
+        required: true,
+        options: ["I'm their manager", "Peer", "They manage me", "Other colleague"],
+      },
+      {
+        type: "opinion_scale",
+        label: "They communicate clearly and openly.",
+        required: true,
+      },
+      {
+        type: "opinion_scale",
+        label: "They deliver on what they commit to.",
+        required: true,
+      },
+      { type: "opinion_scale", label: "They help others succeed.", required: true },
+      { type: "opinion_scale", label: "They handle feedback well.", required: true },
+      { type: "long_text", label: "What should they keep doing?" },
+      { type: "long_text", label: "What could they do differently?" },
+    ],
+  ),
   t(
     "HR & Recruiting",
     "Employee Exit Interview",

@@ -718,6 +718,7 @@ export type Database = {
           linkedin_partner_id: string | null;
           pixel_consent: string;
           tiktok_pixel_id: string | null;
+          confidential: Json | null;
         };
         Insert: {
           import_report?: Json | null;
@@ -749,6 +750,7 @@ export type Database = {
           linkedin_partner_id?: string | null;
           pixel_consent?: string;
           tiktok_pixel_id?: string | null;
+          confidential?: Json | null;
         };
         Update: {
           import_report?: Json | null;
@@ -780,6 +782,7 @@ export type Database = {
           linkedin_partner_id?: string | null;
           pixel_consent?: string;
           tiktok_pixel_id?: string | null;
+          confidential?: Json | null;
         };
         Relationships: [
           {
@@ -875,6 +878,7 @@ export type Database = {
           member_ids: string[];
           time_zone: string;
           updated_at: string;
+          frequency: string;
         };
         Insert: {
           enabled?: boolean;
@@ -883,6 +887,7 @@ export type Database = {
           member_ids: string[];
           time_zone?: string;
           updated_at?: string;
+          frequency?: string;
         };
         Update: {
           enabled?: boolean;
@@ -891,6 +896,7 @@ export type Database = {
           member_ids?: string[];
           time_zone?: string;
           updated_at?: string;
+          frequency?: string;
         };
         Relationships: [
           {
@@ -1477,6 +1483,8 @@ export type Database = {
           utm_source: string | null;
           utm_term: string | null;
           visitor_id: string | null;
+          variant_test_id: string | null;
+          variant: string | null;
         };
         Insert: {
           assignee_id?: string | null;
@@ -1509,6 +1517,8 @@ export type Database = {
           utm_source?: string | null;
           utm_term?: string | null;
           visitor_id?: string | null;
+          variant_test_id?: string | null;
+          variant?: string | null;
         };
         Update: {
           assignee_id?: string | null;
@@ -1541,6 +1551,8 @@ export type Database = {
           utm_source?: string | null;
           utm_term?: string | null;
           visitor_id?: string | null;
+          variant_test_id?: string | null;
+          variant?: string | null;
         };
         Relationships: [
           {
@@ -1899,6 +1911,60 @@ export type Database = {
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      variant_tests: {
+        Row: {
+          created_by: string | null;
+          ended_at: string | null;
+          form_id: string;
+          id: string;
+          name: string;
+          split: number;
+          started_at: string;
+          status: "running" | "paused" | "ended";
+          variant_id: string;
+          winner: string | null;
+        };
+        Insert: {
+          created_by?: string | null;
+          ended_at?: string | null;
+          form_id: string;
+          id?: string;
+          name: string;
+          split: number;
+          started_at?: string;
+          status?: "running" | "paused" | "ended";
+          variant_id: string;
+          winner?: string | null;
+        };
+        Update: {
+          created_by?: string | null;
+          ended_at?: string | null;
+          form_id?: string;
+          id?: string;
+          name?: string;
+          split?: number;
+          started_at?: string;
+          status?: "running" | "paused" | "ended";
+          variant_id?: string;
+          winner?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "variant_tests_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "variant_tests_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -2439,6 +2505,10 @@ export type Database = {
           question_id: string;
           stopped: number;
         }[];
+      };
+      response_is_confidential: {
+        Args: { p_form_id: string };
+        Returns: boolean;
       };
       response_reach: {
         Args: { since?: string; target_form_id: string };

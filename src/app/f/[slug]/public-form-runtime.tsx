@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
+import { compileFormSchema } from "@/domains/forms/schema/compile";
+import { applyVariant, ORIGINAL } from "@/domains/forms/variants";
 import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
 import { FormClosedScreen } from "@/components/runtime/form-closed";
@@ -43,6 +45,10 @@ type StoredResponse = {
   hidden?: Record<string, string>;
   /** Random seed for question pools and option order (kept on resume). */
   seed?: string;
+  /** The in-form variant this response was served (F-29): kept on resume,
+   * even if the test has since been paused. */
+  variant?: string;
+  variantTestId?: string;
 };
 
 /** What the respondent has done so far, before or after a response
@@ -143,6 +149,7 @@ async function startSession(
   language: string,
   experimentId: string | undefined,
   kiosk: boolean,
+  variant: { testId?: string; id: string } | undefined,
 ): Promise<{
   responseId: string;
   formVersionId: string;
@@ -158,6 +165,7 @@ async function startSession(
       language,
       experimentId,
       kiosk: kiosk || undefined,
+      ...(variant?.testId ? { variantTestId: variant.testId, variant: variant.id } : {}),
     }),
   });
   if (res.status === 410) throw new FormClosedSignal(await closedMessageOf(res));
@@ -198,7 +206,8 @@ const START_RETRY_COOLDOWN_MS = 5000;
 export function PublicFormRuntime({
   formId,
   formVersionId,
-  compiled,
+  compiled: baseCompiled,
+  variant,
   savesProgress = true,
   embedded = false,
   resumeLinks = false,
@@ -230,6 +239,9 @@ export function PublicFormRuntime({
   known?: Record<string, unknown>;
   /** The A/B test whose link served this form (P3.9). */
   experimentId?: string;
+  /** The in-form variant this visitor is assigned (F-29); a resumed
+   * response's own variant wins. */
+  variant?: { testId?: string; id: string };
   /** Languages the respondent can choose (P2.21), default first. */
   languages?: { code: string; name: string }[];
   initialLanguage?: string;
@@ -249,6 +261,16 @@ export function PublicFormRuntime({
   /** Creator setting: keep answers from respondents who don't finish. */
   savesProgress?: boolean;
 }) {
+  // In-form variant (F-29): the assigned arm, until a resumed response
+  // says which arm it was served.
+  const [activeVariant, setActiveVariant] = useState(variant);
+  const compiled = useMemo(
+    () =>
+      activeVariant && activeVariant.id !== ORIGINAL
+        ? compileFormSchema(applyVariant(baseCompiled.schema, activeVariant.id))
+        : baseCompiled,
+    [baseCompiled, activeVariant],
+  );
   // undefined = still checking this browser for a session to resume.
   const [resumed, setResumed] = useState<StoredResponse | null | undefined>(undefined);
   // The form closed or filled up while open: the message to show.
@@ -548,6 +570,9 @@ export function PublicFormRuntime({
     void resumeCheckRef.current.then((existing) => {
       if (cancelled) return;
       sessionRef.current = existing;
+      if (existing?.variant) {
+        setActiveVariant({ testId: existing.variantTestId, id: existing.variant });
+      }
       if (existing) {
         progressRef.current = {
           answers: existing.answers,
@@ -593,6 +618,7 @@ export function PublicFormRuntime({
         languageRef.current,
         experimentId,
         kiosk,
+        activeVariant,
       ).then(
         (data) => {
           const fresh: StoredResponse = {
@@ -602,6 +628,9 @@ export function PublicFormRuntime({
             revision: 0,
             hidden: urlHidden,
             seed: freshSeed,
+            ...(activeVariant?.testId
+              ? { variant: activeVariant.id, variantTestId: activeVariant.testId }
+              : {}),
             ...progressRef.current,
           };
           sessionRef.current = fresh;

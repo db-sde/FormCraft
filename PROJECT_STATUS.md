@@ -4,6 +4,24 @@ Last updated: 2026-10-30
 
 ## Current milestone
 
+**MASTER SPEC — Phase 4: intelligence and analytics** (2026-11-02,
+migration 49):
+
+| Item | What                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------ |
+| F-23 | Edit with AI: reviewable change list, same checks as manual edits, Undo                    |
+| F-29 | In-form variants (wording, order, layout); locked split; per-arm results; adopt into draft |
+| F-30 | Cross-tabs + CSV, source filter, NPS passives and weekly trend, weekly digests             |
+| F-30 | Confidential 360 feedback: report only, threshold groups, no individual access             |
+
+Decisions: `DECISIONS.md` (2026-11-02). Tests: `phase4` (unit),
+`variants-analytics` (integration), `phase4.spec.ts` (E2E).
+
+**To deploy:** `npm run db:migrate` (migration 49), then
+`npm run db:seed-templates` for the 360 template.
+
+### Phase 3
+
 **MASTER SPEC — Phase 3: distribution, communication and documents**
 (2026-10-31, migration 48):
 

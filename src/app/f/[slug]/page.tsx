@@ -1,3 +1,5 @@
+import { openVariantTest } from "@/domains/forms/variant-tests";
+import { assignVariant } from "@/domains/forms/variants";
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
@@ -115,6 +117,23 @@ export default async function PublicFormPage({
       experimentId = test.id;
     }
   }
+  // An in-form variant test (F-29) on the form itself: a running test
+  // sends its share of visitors to the variant (the same one each time,
+  // by visitor id). Paused or ended: everyone new sees the original.
+  let variant: { testId?: string; id: string } | undefined;
+  if (
+    entitlements.ab_testing &&
+    publicForm === linked &&
+    VISITOR_ID_PATTERN.test(visitorId)
+  ) {
+    const test = await openVariantTest(createAdminClient(), publicForm.formId);
+    if (test?.status === "running") {
+      variant = {
+        testId: test.id,
+        id: assignVariant(test.id, visitorId, test.split, test.variantId),
+      };
+    }
+  }
   const schema = publicForm.compiled.schema;
   const theme = themeForPlan(
     schema.theme,
@@ -209,6 +228,11 @@ export default async function PublicFormPage({
     schedulingAllowed: entitlements.scheduling,
     embedded: embedded,
     experimentId: experimentId,
+    // A resume link keeps the variant its response was served.
+    variant:
+      resume?.ok && resume.response.variant
+        ? { testId: resume.response.variantTestId, id: resume.response.variant }
+        : variant,
     known: known,
     lookup: lookup?.triggers.length ? lookup : undefined,
     captchaSiteKey: publicForm.captchaRequired

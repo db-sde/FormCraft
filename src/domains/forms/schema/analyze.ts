@@ -1,4 +1,5 @@
 import { isKnownCurrency } from "@/domains/forms/products";
+import { variantProblems } from "@/domains/forms/variants";
 import { optionsFromOf } from "../options";
 import type { FormSchemaV1, QuestionV1 } from "./v1";
 import {
@@ -559,6 +560,11 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
       });
     }
     prefillKeys.set(key, label);
+  }
+
+  // In-form A/B variants (F-29): wording, order and layout only.
+  for (const message of variantProblems(schema)) {
+    push({ severity: "error", code: "variant_invalid", message });
   }
 
   // Product blocks (F-04): one currency per form (product owner,

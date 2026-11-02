@@ -220,7 +220,12 @@ export function NotificationRulesPanel({
   members: Option[];
   documents: DocumentKind[];
   initialRules: NotificationRule[];
-  initialDigest: { enabled: boolean; memberIds: string[]; timeZone: string } | null;
+  initialDigest: {
+    enabled: boolean;
+    memberIds: string[];
+    timeZone: string;
+    frequency: "daily" | "weekly";
+  } | null;
 }) {
   const [rules, setRules] = useState(initialRules);
   const [editing, setEditing] = useState<string | "new" | null>(null);
@@ -228,6 +233,7 @@ export function NotificationRulesPanel({
     initialDigest ?? {
       enabled: false,
       memberIds: [],
+      frequency: "daily" as "daily" | "weekly",
       timeZone:
         typeof Intl !== "undefined"
           ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
@@ -341,10 +347,10 @@ export function NotificationRulesPanel({
       >
         <label className="flex items-center justify-between gap-3">
           <span className="flex flex-col">
-            <b className="text-sm">Daily digest</b>
+            <b className="text-sm">Digest email</b>
             <span className="text-muted-foreground text-xs">
-              Yesterday&apos;s counts, once a day. Nothing is sent on a day without
-              responses.
+              Counts (and NPS, for a 0–10 question) daily or weekly. Nothing is sent for a
+              period without responses.
             </span>
           </span>
           <Switch
@@ -360,6 +366,23 @@ export function NotificationRulesPanel({
               onChange={(memberIds) => setDigest((d) => ({ ...d, memberIds }))}
               idPrefix="digest"
             />
+            <div className="flex max-w-xs flex-col gap-1.5">
+              <Label htmlFor="digest-frequency">How often</Label>
+              <select
+                id="digest-frequency"
+                className="border-input bg-field h-9 rounded-sm border-[1.5px] px-2 text-sm"
+                value={digest.frequency}
+                onChange={(e) =>
+                  setDigest((d) => ({
+                    ...d,
+                    frequency: e.target.value === "weekly" ? "weekly" : "daily",
+                  }))
+                }
+              >
+                <option value="daily">Daily (yesterday)</option>
+                <option value="weekly">Weekly (Monday, for the week before)</option>
+              </select>
+            </div>
             <div className="flex max-w-xs flex-col gap-1.5">
               <Label htmlFor="digest-zone">Time zone</Label>
               <Input
