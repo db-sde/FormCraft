@@ -21,6 +21,8 @@ import { saveOrder } from "@/domains/responses/orders";
 import { issueDocumentsForResponse } from "@/domains/documents/issue";
 import { sendRuleEmails } from "@/domains/notifications/rules";
 import { emailConfirmed, holdBookings, settleBookings } from "@/domains/bookings/submit";
+import { enqueueConnectorSyncs } from "@/domains/connectors/links";
+import "@/domains/connectors/registry";
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -244,6 +246,9 @@ export async function POST(
         await step(() => issueDocumentsForResponse(admin, id));
         // Notification rules (F-25): teammates, by condition.
         await step(() => sendRuleEmails(admin, id));
+        // Business apps (Phase 6): one job per linked app, run now; the
+        // connectors cron retries and recovers.
+        await step(() => enqueueConnectorSyncs(admin, id));
       });
     }
 

@@ -1,3 +1,4 @@
+import { isReplayable } from "@/domains/connectors/catalog";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
@@ -313,10 +314,13 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
               j.attemptCount,
               j.lastError,
             ),
-      replay:
-        j.status === "failed" || j.status === "exhausted"
-          ? { target: "connector", id: j.id }
-          : undefined,
+      replay: isReplayable({
+        status: j.status,
+        action: j.action,
+        last_error: j.lastError,
+      })
+        ? { target: "connector", id: j.id }
+        : undefined,
       rank: 3,
     });
   }

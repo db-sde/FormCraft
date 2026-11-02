@@ -20,7 +20,7 @@ import { dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { logResponseEvent } from "@/domains/responses/timeline";
 import "@/domains/connectors/registry";
-import { dispatchConnectorJobs } from "@/domains/connectors/framework";
+import { dispatchConnectorJobs, replayJob } from "@/domains/connectors/framework";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -137,19 +137,12 @@ export async function replayAttemptAction(
       (job?.bookings as { response_id: string | null } | null)?.response_id;
     if (!job || owner !== responseId)
       return { ok: false, message: "That attempt isn't this response's." };
-    const { data: reset } = await admin
-      .from("connector_jobs")
-      .update({
-        status: "pending",
-        attempt_count: 0,
-        last_error: null,
-        next_attempt_at: new Date().toISOString(),
-      })
-      .eq("id", attemptId)
-      .in("status", ["failed", "exhausted"])
-      .select("id");
-    if (!reset?.length)
-      return { ok: false, message: "That attempt isn't waiting to be sent again." };
+    if (!(await replayJob(admin, attemptId)))
+      return {
+        ok: false,
+        message:
+          "That attempt can't be sent again. If the app was disconnected, reconnect it first.",
+      };
     await logResponseEvent(admin, {
       responseId,
       kind: "replay",

@@ -3,6 +3,67 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-02 — Master spec Phase 6: business integrations
+
+Phase 6 of `docs/master-spec.md` (F-33 Airtable, F-34 Salesforce, F-36
+Notion, F-38 Mailchimp, F-40 Zoho CRM and Pipedrive), migration 51, all
+on the Phase 5 connector framework — no connector has its own retry or
+logging. The product owner asked for the work to go ahead without
+waiting; where the spec left a choice open, these are the defaults, to
+revisit with them:
+
+- **One connection per workspace per app**, made by an admin or a member
+  with "Manage integrations"; **one link per form per app** (where its
+  responses go, a field mapping, an optional condition, on/off).
+  Disconnecting stops every form and discards the tokens.
+- **What a response sends:** answers as text (choices as their labels,
+  multi-choice joined with "; " like exports), numbers and yes/no as
+  such, contact and address parts separately, results, URL fields,
+  response ID, submission time, form title, or fixed text. Uploads and
+  signatures are never sent. Answers left on a skipped branch aren't
+  sent. Empty values are left out rather than blanking the destination.
+- **Duplicates (spec §5.3 "record deduplication keys"):**
+  - Airtable: upsert on a text field the creator picks to hold the
+    response ID (required).
+  - Notion: query the database for the response ID property (required)
+    before creating a page; update it if found.
+  - Salesforce: Leads or Contacts, matched by Email (unconverted leads
+    only) or by an External ID field holding the response ID (upsert).
+  - Mailchimp: the member id (md5 of the lowercased email) — a PUT.
+  - Zoho CRM: upsert with `duplicate_check_fields: ["Email"]`.
+  - Pipedrive: exact email search, then update or create the person; a
+    "person and lead" link adds one lead titled with the response's
+    short id, checked before creating.
+    Each sync is one job keyed `provider:link:response`, so repeat submits,
+    the recovery sweep and manual replays can't queue a second; the
+    provider-side key makes a retry after a timeout update, not duplicate.
+- **Consent (F-38):** with a consent question (yes/no), only "yes" is
+  sent; others are recorded as skipped. **Double opt-in is on by
+  default** (new contacts are `pending` until they confirm). Existing
+  contacts keep their status — an unsubscribe is never undone. Tags are
+  added, never removed.
+- **Routing (F-34):** Salesforce leads can run the org's assignment rules
+  (`Sforce-Auto-Assign`), off by default; owner fields can be mapped.
+- **Unsupported field types** (formulas, lookups, attachments, links to
+  other records, people, addresses as objects…) are listed in the editor
+  and refused at sync with the field's name; required destination fields
+  left unmapped are warned about in the editor and named in the error.
+- **Failures:** a provider outage or 429 retries with the framework's
+  backoff; a mapping or validation error stops at once with the
+  provider's message; a refused token is refreshed once (Salesforce
+  doesn't say when tokens expire), then the connection is marked for
+  reconnecting. All of it is on the response's timeline, with "Send
+  again"; syncs skipped while disconnected can be sent after reconnecting.
+- **Conditional sync** uses the logic condition editor; a response that
+  doesn't match is recorded as skipped with the reason.
+- **Confidential forms** (F-30) send nothing to apps, like webhooks.
+- **Missed syncs:** the connectors cron queues syncs for completed
+  responses (last 24 hours) a killed request missed.
+- **Versions and regions:** Salesforce API v62.0; Notion API 2022-06-28
+  (databases; multi-source data sources come later); Zoho's US accounts
+  server (`accounts.zoho.com`) for sign-in, the account's own data centre
+  for API calls; Mailchimp's data centre read from its metadata once.
+
 ## 2026-11-02 — Master spec Phase 5: native bookings and Google Calendar
 
 Phase 5 of `docs/master-spec.md` (F-27, F-43), migration 50. The spec's

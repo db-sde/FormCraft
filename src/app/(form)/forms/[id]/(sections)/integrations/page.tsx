@@ -43,6 +43,14 @@ import { NotificationRulesPanel } from "@/components/integrations/notification-r
 import { listNotificationRules } from "@/domains/notifications/rules";
 import { listFormDocuments } from "@/domains/documents/issue";
 import { assignableMembers } from "@/domains/responses/records";
+import { AppsPanel, type AppState } from "@/components/integrations/apps-panel";
+import { APPS } from "@/domains/connectors/catalog";
+import { listLinks } from "@/domains/connectors/links";
+import { sourceOptions } from "@/domains/connectors/mapping";
+import { isConfigured } from "@/domains/connectors/oauth";
+import { canAdmin } from "@/domains/workspaces";
+import { hasPermission } from "@/domains/workspaces/permissions";
+import { Blocks } from "lucide-react";
 
 export async function generateMetadata({
   params,
@@ -53,6 +61,15 @@ export async function generateMetadata({
   const { form } = await loadFormForPage(id);
   return { title: `${form.title} · Integrations` };
 }
+
+// Outcomes the app-connection routes redirect back here with.
+const CONNECT_ERRORS: Record<string, string> = {
+  not_configured: "That app isn't set up on this server yet.",
+  forbidden: "You need permission to manage integrations to connect apps.",
+  declined: "The app wasn't connected because access was declined.",
+  workspace: "That connection was started in another workspace. Try again here.",
+  exchange_failed: "The app couldn't be connected. Please try again.",
+};
 
 // Outcomes the Google OAuth routes redirect back here with.
 const SHEETS_ERRORS: Record<string, { text: string; tone: "warning" | "error" }> = {
@@ -120,11 +137,20 @@ export default async function IntegrationsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sheets_error?: string; sheets_connected?: string }>;
+  searchParams: Promise<{
+    sheets_error?: string;
+    sheets_connected?: string;
+    connected?: string;
+    connect_error?: string;
+  }>;
 }) {
   const { id: formId } = await params;
-  const { sheets_error: sheetsError, sheets_connected: sheetsConnected } =
-    await searchParams;
+  const {
+    sheets_error: sheetsError,
+    sheets_connected: sheetsConnected,
+    connected: appConnected,
+    connect_error: connectError,
+  } = await searchParams;
   const { supabase, user, workspace, form, isLive, publishState, hasUnpublishedChanges } =
     await loadFormForPage(formId, { editorsOnly: true });
 
@@ -180,6 +206,40 @@ export default async function IntegrationsPage({
       .eq("form_id", formId)
       .maybeSingle(),
   ]);
+  // Business apps (Phase 6): only those set up on this server.
+  const offeredApps = APPS.filter((a) => isConfigured(a.provider));
+  const [links, mayManageApps, { data: appConnections }] = offeredApps.length
+    ? await Promise.all([
+        listLinks(supabase, formId),
+        canAdmin(workspace.role)
+          ? Promise.resolve(true)
+          : hasPermission(supabase, workspace.id, "manage_integrations"),
+        supabase.rpc("connector_status", { p_workspace_id: workspace.id }),
+      ])
+    : [[], false, { data: [] }];
+  const appStates: AppState[] = offeredApps.map((app) => {
+    const connection = appConnections?.find(
+      (c) => c.provider === app.provider && c.user_id === null && c.status !== "revoked",
+    );
+    const link = links.find((l) => l.provider === app.provider);
+    return {
+      provider: app.provider,
+      connection: connection
+        ? {
+            label: connection.label,
+            status: connection.status === "ok" ? "ok" : "invalid",
+          }
+        : null,
+      link: link
+        ? {
+            enabled: link.enabled,
+            settings: link.settings,
+            mapping: link.mapping,
+            condition: link.condition,
+          }
+        : null,
+    };
+  });
   const endpoints = allEndpoints.filter((e) => e.kind === "webhook");
   const slackEndpoints = allEndpoints.filter((e) => e.kind === "slack");
   const schema = draft ? parseFormSchema(draft.schema) : null;
@@ -217,8 +277,9 @@ export default async function IntegrationsPage({
       {tracking?.confidential ? (
         <p className="rounded-sm bg-[var(--alert-warning-bg)] px-3 py-2.5 text-sm text-[var(--alert-warning-fg)]">
           This form&apos;s responses are confidential, so webhooks (and Slack, HubSpot and
-          Zapier), Google Sheets, PDF documents and notification rules don&apos;t run for
-          it. Your new-response alert and respondents&apos; own confirmations still do.
+          Zapier), Google Sheets, apps, PDF documents and notification rules don&apos;t
+          run for it. Your new-response alert and respondents&apos; own confirmations
+          still do.
         </p>
       ) : null}
 
@@ -364,6 +425,52 @@ export default async function IntegrationsPage({
           })}
         />
       </Section>
+
+      {appStates.length > 0 && (
+        <Section
+          icon={<Blocks />}
+          tint="live"
+          title="Apps"
+          description="Send each completed response to Airtable, Notion, Mailchimp or your CRM. Connect an app once for the workspace, then choose here where this form's responses go. A failed sync never loses a response; it's on the response's timeline, where you can send it again."
+        >
+          <div className="flex flex-col gap-3.5">
+            {appConnected && appStates.some((a) => a.provider === appConnected) && (
+              <div
+                role="status"
+                className="flex gap-2.5 rounded-sm border-[1.5px] border-[var(--alert-success-border)] bg-[var(--alert-success-bg)] px-3 py-[11px] text-[13.5px] text-[var(--alert-success-fg)]"
+              >
+                <CircleCheck className="mt-px size-[17px] shrink-0" />
+                <span>
+                  <b>Connected.</b> Choose where this form&apos;s responses go below.
+                </span>
+              </div>
+            )}
+            {connectError && (
+              <div
+                role="alert"
+                className="flex gap-2.5 rounded-sm border-[1.5px] border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] px-3 py-[11px] text-[13.5px] text-[var(--alert-error-fg)]"
+              >
+                <CircleAlert className="mt-px size-[17px] shrink-0" />
+                <span>
+                  {CONNECT_ERRORS[connectError] ?? CONNECT_ERRORS.exchange_failed}
+                </span>
+              </div>
+            )}
+            <AppsPanel
+              formId={formId}
+              apps={appStates}
+              canManage={mayManageApps}
+              schema={schema}
+              sources={schema ? sourceOptions(schema) : []}
+              questions={numbered.map(({ question: q, number }) => ({
+                id: q.id,
+                type: q.type,
+                label: `${number} · ${q.label.trim() || "Untitled"}`,
+              }))}
+            />
+          </div>
+        </Section>
+      )}
 
       <Section
         icon={<DatabaseZap />}

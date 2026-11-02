@@ -3,6 +3,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { decryptJson, encryptJson, type EncryptedPayload } from "@/domains/sheets/crypto";
 import { isExhausted, nextBackoffDelayMs } from "@/domains/webhooks/backoff";
 import { refreshIfNeeded, TokenError, type Tokens } from "./oauth";
+import { isReplayable } from "./catalog";
 
 type Client = SupabaseClient<Database>;
 type JobRow = Database["public"]["Tables"]["connector_jobs"]["Row"];
@@ -37,7 +38,13 @@ export type Connection = {
 };
 
 export type ActionResult =
-  | { ok: true; result?: Record<string, unknown> }
+  | {
+      ok: true;
+      result?: Record<string, unknown>;
+      /** Nothing to do, on purpose (no consent, nothing mapped): shown
+       * as skipped with this reason. */
+      skipped?: string;
+    }
   | { ok: false; retry: boolean; error: string; auth?: boolean };
 
 export type ActionContext = {
@@ -162,11 +169,14 @@ export async function usableTokens(
   admin: Client,
   connection: Connection,
   fetcher: typeof fetch = fetch,
+  options: { force?: boolean } = {},
 ): Promise<Tokens> {
   try {
     const { tokens, refreshed } = await refreshIfNeeded(
       connection.provider,
-      connection.tokens,
+      // Forced: some providers (Salesforce) don't say when tokens expire,
+      // so a refusal is the first sign.
+      options.force ? { ...connection.tokens, expiresAt: 0 } : connection.tokens,
       fetcher,
     );
     if (refreshed) {
@@ -201,7 +211,15 @@ export async function markConnection(
 
 /** Disconnects: no further jobs run for it (theirs are skipped). */
 export async function revokeConnection(admin: Client, id: string) {
-  await markConnection(admin, id, "revoked");
+  // The tokens are discarded, not just unused.
+  await admin
+    .from("connector_connections")
+    .update({
+      status: "revoked",
+      encrypted: encryptJson({ accessToken: "" }) as unknown as Json,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
   await admin
     .from("connector_jobs")
     .update({
@@ -226,6 +244,9 @@ export async function enqueueJob(
     responseId?: string | null;
     bookingId?: string | null;
     payload?: Record<string, unknown>;
+    /** Recorded as skipped with this reason instead of queued (a
+     * condition that didn't match), so the timeline says why. */
+    skipped?: string;
   },
 ): Promise<void> {
   await admin.from("connector_jobs").upsert(
@@ -238,6 +259,7 @@ export async function enqueueJob(
       response_id: job.responseId ?? null,
       booking_id: job.bookingId ?? null,
       payload: (job.payload ?? {}) as Json,
+      ...(job.skipped ? { status: "skipped" as const, last_error: job.skipped } : {}),
     },
     { onConflict: "idempotency_key", ignoreDuplicates: true },
   );
@@ -264,6 +286,18 @@ export async function dispatchConnectorJobs(
 
 async function finish(admin: Client, job: JobRow, outcome: ActionResult) {
   const now = new Date().toISOString();
+  if (outcome.ok && outcome.skipped) {
+    await admin
+      .from("connector_jobs")
+      .update({
+        status: "skipped",
+        last_error: outcome.skipped.slice(0, 500),
+        result: (outcome.result ?? null) as Json,
+        updated_at: now,
+      })
+      .eq("id", job.id);
+    return;
+  }
   if (outcome.ok) {
     await admin
       .from("connector_jobs")
@@ -314,7 +348,13 @@ export async function runJob(admin: Client, job: JobRow, fetcher: typeof fetch =
   }
   try {
     await usableTokens(admin, connection, fetcher);
-    const outcome = await run(job, { admin, connection, fetch: fetcher });
+    let outcome = await run(job, { admin, connection, fetch: fetcher });
+    // Refused: refresh once and try again before giving up on the
+    // connection (a refresh the provider refuses throws TokenError).
+    if (!outcome.ok && outcome.auth && connection.tokens.refreshToken) {
+      await usableTokens(admin, connection, fetcher, { force: true });
+      outcome = await run(job, { admin, connection, fetch: fetcher });
+    }
     if (!outcome.ok && outcome.auth)
       await markConnection(admin, connection.id, "invalid");
     await finish(admin, job, outcome);
@@ -332,25 +372,37 @@ export async function runJob(admin: Client, job: JobRow, fetcher: typeof fetch =
   }
 }
 
-/** Puts a failed or given-up job back in the queue (manual replay). The
- * same row, the same idempotency key: safe by construction. */
-export async function replayJob(
-  admin: Client,
-  jobId: string,
-  responseId: string,
-): Promise<boolean> {
+/** Puts a job back in the queue (manual replay): a failed or given-up
+ * one, or an app sync skipped because the app wasn't connected — it goes
+ * out on the workspace's current connection. The same row and
+ * idempotency key: safe by construction. */
+export async function replayJob(admin: Client, jobId: string): Promise<boolean> {
+  const { data: job } = await admin
+    .from("connector_jobs")
+    .select("id, status, action, provider, workspace_id, last_error, connection_id")
+    .eq("id", jobId)
+    .maybeSingle();
+  if (!job || !isReplayable(job)) return false;
+  let connectionId = job.connection_id;
+  if (job.action === "sync_response") {
+    const current = await findConnection(admin, job.workspace_id, job.provider);
+    connectionId = current?.status === "ok" ? current.id : null;
+    if (!connectionId) return false;
+  }
   const { data } = await admin
     .from("connector_jobs")
     .update({
       status: "pending",
+      connection_id: connectionId,
       attempt_count: 0,
       last_error: null,
-      next_attempt_at: new Date().toISOString(),
+      // A minute back: due at once even if this server's clock is ahead
+      // of the database's.
+      next_attempt_at: new Date(Date.now() - 60_000).toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", jobId)
-    .eq("response_id", responseId)
-    .in("status", ["failed", "exhausted"])
+    .eq("status", job.status)
     .select("id");
   return Boolean(data?.length);
 }
@@ -404,15 +456,25 @@ export async function providerCall(
   };
 }
 
-function describeError(data: unknown): string {
+/** The provider's own words: Salesforce answers with an array of
+ * errors, Zoho with `data[0]`, Notion and Mailchimp with message/detail,
+ * Airtable and Pipedrive with `error`. Field names are kept. */
+export function describeError(data: unknown): string {
   if (typeof data === "string") return data.slice(0, 200);
+  if (Array.isArray(data)) return describeError(data[0]);
   const o = (data ?? {}) as Record<string, unknown>;
+  if (Array.isArray(o.data) && o.data.length) return describeError(o.data[0]);
   const nested = o.error as Record<string, unknown> | string | undefined;
-  return String(
+  const message = String(
     (typeof nested === "object" ? nested?.message : nested) ??
       o.message ??
       o.detail ??
       o.title ??
       "error",
+  );
+  const details = o.details as { api_name?: unknown } | undefined;
+  const fields = Array.isArray(o.fields) ? o.fields.join(", ") : details?.api_name;
+  return (
+    typeof fields === "string" && fields ? `${message} (${fields})` : message
   ).slice(0, 200);
 }

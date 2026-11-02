@@ -1,8 +1,31 @@
 # Project Status
 
-Last updated: 2026-10-30
+Last updated: 2026-11-02
 
 ## Current milestone
+
+**MASTER SPEC — Phase 6: business integrations** (2026-11-02, migration
+51), on the Phase 5 connector framework:
+
+| Item | What                                                                                            |
+| ---- | ----------------------------------------------------------------------------------------------- |
+| F-33 | Airtable: base/table picker, field mapping, upsert on the response ID field                     |
+| F-34 | Salesforce: leads or contacts, email or External ID matching, assignment rules, refresh         |
+| F-36 | Notion: database picker, property mapping, page found by response ID before creating            |
+| F-38 | Mailchimp: audience, merge fields, tags, consent question, double opt-in by default             |
+| F-40 | Zoho CRM (upsert on Email) and Pipedrive (person by email, optional lead)                       |
+| §5.3 | Per-form links with conditions; skipped/failed syncs on the timeline; replay; missed-sync sweep |
+
+Decisions: `DECISIONS.md` (2026-11-02, Phase 6 — includes the defaults
+to confirm with the product owner). Tests: `phase6` (unit), `connectors`
+(integration), `phase6.spec.ts` (E2E, against a fake Airtable).
+
+**To deploy:** `npm run db:migrate` (migration 51); register an OAuth
+app with each provider you want to offer, with the connectors callback
+as its redirect URI, and set its client id and secret (see
+`.env.example`). Apps without credentials aren't shown.
+
+### Phase 5
 
 **MASTER SPEC — Phase 5: native bookings and calendars** (2026-11-02,
 migration 50):

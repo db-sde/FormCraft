@@ -353,6 +353,19 @@ response.
   **`claim_connector_jobs`** leases due jobs (service role).
 - **`response_events.kind`** adds `booking`.
 
+## Business app links (migration 51)
+
+- **`connector_links`** — a form's link to a business app (Airtable,
+  Salesforce, Notion, Mailchimp, Zoho CRM, Pipedrive): `settings` (the
+  destination and options), `mapping` (`[{ field, source }]`),
+  `condition` (a logic condition or null), `enabled`; one per form and
+  app. Members read; editors with `manage_integrations` write. Each
+  completed response makes one `connector_jobs` row per link, keyed
+  `provider:link:response` (`sync_response`).
+- **`responses_missing_connector_sync(limit)`** — completed responses of
+  the last day that an enabled link has no job for (spam and
+  confidential forms excluded); the cron queues them (service role).
+
 ## Identity & versioning rules encoded in schema
 
 - Question ids are `text` (short nanoid), generated client-side at

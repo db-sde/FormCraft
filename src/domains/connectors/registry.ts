@@ -3,3 +3,4 @@
  * its own). Import this wherever jobs are dispatched.
  */
 import "@/domains/bookings/google-calendar";
+import "@/domains/connectors/providers";

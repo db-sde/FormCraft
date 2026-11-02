@@ -14,6 +14,13 @@ export const FAKE_AI_PORT = 4601;
 process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${FAKE_AI_PORT}`;
 process.env.ANTHROPIC_API_KEY ??= "e2e-test-key";
 
+// And Airtable (master spec Phase 6) is a fake that phase6.spec.ts runs;
+// the base URL is always overridden so a test never reaches the real API.
+export const FAKE_AIRTABLE_PORT = 4602;
+process.env.AIRTABLE_API_BASE = `http://127.0.0.1:${FAKE_AIRTABLE_PORT}`;
+process.env.AIRTABLE_CLIENT_ID ??= "e2e-airtable-client";
+process.env.AIRTABLE_CLIENT_SECRET ??= "e2e-airtable-secret";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",

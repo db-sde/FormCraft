@@ -356,7 +356,7 @@ export async function refreshIfNeeded(
   fetcher: Fetcher = fetch,
   now = Date.now(),
 ): Promise<{ tokens: Tokens; refreshed: boolean }> {
-  if (!tokens.expiresAt || tokens.expiresAt - now > 60_000)
+  if (tokens.expiresAt === undefined || tokens.expiresAt - now > 60_000)
     return { tokens, refreshed: false };
   const config = oauthProvider(provider);
   if (!config || !tokens.refreshToken)

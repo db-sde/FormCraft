@@ -424,6 +424,20 @@ mode, trigger, pageview }` as a text body; always 204; deduped per
   sync (CRON_SECRET).
 - Page `/booking/:token` — the attendee's booking.
 
+## Phase 6
+
+- No new route handlers. `GET /api/connectors/:provider/authorize` also
+  takes `airtable`, `salesforce`, `notion`, `mailchimp`, `zoho_crm` and
+  `pipedrive` (workspace connections: admins, or members with "Manage
+  integrations").
+- Server actions on Integrations (`connector-actions.ts`):
+  `connectorChoicesAction` (bases, tables, databases, audiences),
+  `connectorFieldsAction` (destination fields, with unsupported ones),
+  `saveConnectorLinkAction`, `deleteConnectorLinkAction`,
+  `disconnectAppAction`.
+- `GET|POST /api/cron/connectors` also queues syncs a killed request
+  missed (`recovered` in its reply).
+
 ## Conventions
 
 - Every mutating endpoint requires auth _except_ the public runtime

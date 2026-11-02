@@ -629,6 +629,53 @@ export type Database = {
           },
         ];
       };
+      connector_links: {
+        Row: {
+          condition: Json | null;
+          created_at: string;
+          created_by: string | null;
+          enabled: boolean;
+          form_id: string;
+          id: string;
+          mapping: Json;
+          provider: string;
+          settings: Json;
+          updated_at: string;
+        };
+        Insert: {
+          condition?: Json | null;
+          created_at?: string;
+          created_by?: string | null;
+          enabled?: boolean;
+          form_id: string;
+          id?: string;
+          mapping?: Json;
+          provider: string;
+          settings?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          condition?: Json | null;
+          created_at?: string;
+          created_by?: string | null;
+          enabled?: boolean;
+          form_id?: string;
+          id?: string;
+          mapping?: Json;
+          provider?: string;
+          settings?: Json;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "connector_links_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       custom_domains: {
         Row: {
           created_at: string;
@@ -2650,6 +2697,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      responses_missing_connector_sync: {
+        Args: { p_limit: number };
+        Returns: { response_id: string }[];
+      };
       book_slot: {
         Args: {
           p_attendee_email: string;
