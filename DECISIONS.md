@@ -6,7 +6,7 @@ implementation detail open. Newest first.
 ## 2026-11-03 — Hardening: system design and network security review
 
 A review of the whole app (architecture, network security, reliability)
-found these; each is fixed here except where noted. Migrations 54–57.
+found these; each is fixed here except where noted. Migrations 54–59.
 
 - **Background work every minute, not daily.** Vercel's free plan runs
   crons once a day, so retries and booking reminders could wait a day.
@@ -35,11 +35,20 @@ found these; each is fixed here except where noted. Migrations 54–57.
     and form unlock cookies from before the deploy need redoing once;
   - `npm run secrets:reencrypt` rewrites existing values; old ones keep
     working until then.
-- **Service-role client:** 64 files use the client that skips row-level
-  security. Not rewritten (a larger refactor, file by file, onto the
-  user's client or narrow database functions); instead a test freezes the
-  list — it may only shrink, new use must be added in review — and keeps
-  the client out of browser code.
+- **Service-role client:** used in 64 files. Most uses are for things
+  deliberately closed to signed-in users (audit log, rate limits, AI
+  credits, secrets, Auth admin), so the fix isn't to open those tables:
+  - audit entries and rate limits go through narrow helpers
+    (`recordAudit`, `rateLimit`) that hold the key themselves — 5 files
+    no longer touch it;
+  - the Integrations page lists data lookups with the editor's own access
+    (migration 58 grants every column but the encrypted header), and the
+    response page loads its context with the viewer's client (RLS already
+    allows it);
+  - the remaining 57 app files are listed with the reason each needs it
+    (anonymous respondents, webhooks, cron, sign-in, secrets, cross-
+    workspace invitations…); a test keeps the list shrink-only, requires a
+    reason for every entry, and keeps the client out of browser code.
 - **Rate limiting:** the review said `rate_limits` was never pruned; it
   is (daily, by the retention cron) — that finding was wrong. The real
   cost was a database write per public request even during a flood: an
@@ -49,9 +58,10 @@ found these; each is fixed here except where noted. Migrations 54–57.
 - **Operational tables:** finished webhook deliveries, Sheets rows and
   connector jobs are pruned after 90 days, failed or expired payment
   attempts after 180 (paid ones and payments are kept), in batches, by
-  the retention cron. `analytics_events` isn't pruned: the analytics
-  pages offer "all time", so pruning needs daily rollups first (left as
-  a follow-up).
+  the retention cron. Analytics events older than 90 days are folded into
+  daily counts (`analytics_daily`, migration 59) and deleted in the same
+  statement; the funnel adds the daily counts back, so totals don't
+  change (a period starting more than 90 days ago counts whole days).
 - **Observability:** Sentry was installed and documented but never
   started; it now starts on the server and in the browser when its DSN
   is set. Failures in the background steps after a submit were silently

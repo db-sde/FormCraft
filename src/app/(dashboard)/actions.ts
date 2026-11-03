@@ -1,5 +1,9 @@
 "use server";
 
+import { rateLimit } from "@/domains/abuse/limit";
+
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -25,7 +29,6 @@ import { generateForm } from "@/domains/ai/generate-form";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
-import { audit } from "@/domains/audit";
 import { countLeadsForForm } from "@/domains/leads";
 import { ImportError, importFromUrl } from "@/domains/forms/import";
 import type { Json } from "@/lib/supabase/database.types";
@@ -110,12 +113,7 @@ export async function generateFormAction(
   if (!canEdit(workspace.role)) {
     return { message: "You have view-only access to this workspace." };
   }
-  const limit = await hitRateLimit(
-    createAdminClient(),
-    `ai-form:${user.id}`,
-    10,
-    3_600_000,
-  );
+  const limit = await rateLimit(`ai-form:${user.id}`, 10, 3_600_000);
   if (!limit.allowed) {
     return { message: "That's a lot of generated forms for one hour. Try again later." };
   }
@@ -250,7 +248,7 @@ export async function deleteFormAction(
   }
   try {
     await softDeleteForm(supabase, formId, workspace.id);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
       action: "form.deleted",

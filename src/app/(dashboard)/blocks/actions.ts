@@ -1,10 +1,10 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 import { canEdit } from "@/domains/workspaces";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import {
@@ -103,7 +103,7 @@ export async function createBlockAction(input: {
       questions,
       userId: ctx.user.id,
     });
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,
       action: "block.created",
@@ -141,7 +141,7 @@ export async function publishBlockVersionAction(
         description: Description.parse(input.description) || null,
       })
       .eq("id", blockId);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,
       action: "block.version_published",
@@ -170,7 +170,7 @@ export async function restoreBlockVersionAction(
   if (!old.ok) return old;
   try {
     const next = await publishBlockVersion(ctx.supabase, blockId, old.questions);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,
       action: "block.restored",
@@ -197,7 +197,7 @@ export async function archiveBlockAction(blockId: string): Promise<Result> {
     .select("id");
   if (error || !data?.length)
     return { ok: false, message: "Couldn't archive the block." };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.user.id,
     action: "block.archived",

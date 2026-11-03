@@ -32,7 +32,6 @@ import { ConfirmationPanel } from "@/components/integrations/confirmation-panel"
 import { TrackingPanel } from "@/components/integrations/tracking-panel";
 import { LookupsPanel } from "@/components/integrations/lookups-panel";
 import { listLookups } from "@/domains/integrations/lookups";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspacePlan } from "@/domains/billing";
 import { parseFormSchema } from "@/domains/forms/schema";
 import {
@@ -195,9 +194,9 @@ export default async function IntegrationsPage({
         .eq("id", hubspotEndpoint.id)
         .single()
     : { data: null };
-  // Lookups are server-only rows; this page is for editors of the form
-  // (loadFormForPage checked), and the list carries no secret.
-  const lookups = await listLookups(createAdminClient(), formId);
+  // The editor's own access: the header value is never readable
+  // (migration 58 grants every other column).
+  const lookups = await listLookups(supabase, formId);
   const [documents, members, rules, { data: digest }, { data: coupons }] =
     await Promise.all([
       listFormDocuments(supabase, formId),

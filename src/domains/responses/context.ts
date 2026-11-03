@@ -14,7 +14,9 @@ type Client = SupabaseClient<Database>;
 
 /**
  * Everything the Phase 3 senders (documents, rule emails, digests) need
- * about one response, read once with the service role: its own form
+ * about one response, read once — with the service role for senders,
+ * or the viewer's own client on the response page (RLS allows members
+ * who can see responses to read all of it): its own form
  * version, answers, the path it took and its variables (replayed at its
  * submission time), uploads, order and payment.
  */

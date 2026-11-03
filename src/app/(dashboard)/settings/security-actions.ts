@@ -1,5 +1,7 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -55,7 +57,7 @@ export async function updateSsoSettingsAction(input: {
       ok: false,
       message: "Single sign-on isn't connected for this workspace yet.",
     };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.user.id,
     action: "security.sso_changed",
@@ -149,7 +151,7 @@ export async function exportPersonAction(
   if (!value) return { ok: false, message: "Enter an email address." };
   try {
     const data = await exportPersonData(ctx.supabase, ctx.workspace.id, value);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,
       action: "privacy.data_exported",

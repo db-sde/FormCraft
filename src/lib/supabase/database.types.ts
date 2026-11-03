@@ -29,6 +29,38 @@ export type Database = {
   };
   public: {
     Tables: {
+      analytics_daily: {
+        Row: {
+          count: number;
+          day: string;
+          event_type: string;
+          form_id: string;
+          is_preview: boolean;
+        };
+        Insert: {
+          count: number;
+          day: string;
+          event_type: string;
+          form_id: string;
+          is_preview: boolean;
+        };
+        Update: {
+          count?: number;
+          day?: string;
+          event_type?: string;
+          form_id?: string;
+          is_preview?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "analytics_daily_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       analytics_events: {
         Row: {
           created_at: string;
@@ -2859,6 +2891,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      rollup_analytics_events: {
+        Args: { p_keep_days?: number; p_batch?: number };
+        Returns: number;
+      };
+      analytics_rolled_count: {
+        Args: { p_form_id: string; p_event_type: string; p_since: string | null };
+        Returns: number;
+      };
       form_embed_origins: { Args: { p_slug: string }; Returns: string[] | null };
       valid_embed_origins: { Args: { p_origins: string[] }; Returns: boolean };
       prune_operational_data: { Args: { p_batch?: number }; Returns: Json };

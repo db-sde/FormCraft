@@ -22,7 +22,7 @@ const users = files("src").filter((f) =>
 
 describe("service-role client use", () => {
   it("is limited to the reviewed allowlist", () => {
-    const unexpected = users.filter((f) => !ADMIN_CLIENT_ALLOWED.includes(f));
+    const unexpected = users.filter((f) => !Object.hasOwn(ADMIN_CLIENT_ALLOWED, f));
     expect(
       unexpected,
       "New use of createAdminClient: prefer the user's client or a narrow database function; if it's needed, add the file to tests/unit/admin-client-allowlist.ts in review.",
@@ -30,7 +30,15 @@ describe("service-role client use", () => {
   });
 
   it("lists no file that no longer uses it (the list only shrinks)", () => {
-    expect(ADMIN_CLIENT_ALLOWED.filter((f) => !users.includes(f))).toEqual([]);
+    expect(Object.keys(ADMIN_CLIENT_ALLOWED).filter((f) => !users.includes(f))).toEqual(
+      [],
+    );
+  });
+
+  it("says why each file needs it", () => {
+    for (const [file, why] of Object.entries(ADMIN_CLIENT_ALLOWED)) {
+      expect(why.trim().length, file).toBeGreaterThan(10);
+    }
   });
 
   it("never reaches browser code", () => {

@@ -1,5 +1,9 @@
 "use server";
 
+import { rateLimit } from "@/domains/abuse/limit";
+
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import {
   saveDraftSchema,
@@ -163,7 +167,7 @@ export async function unpublishAction(
 
   try {
     await unpublishForm(supabase, formId);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: user.id,
       action: "form.unpublished",
@@ -248,12 +252,7 @@ export async function proposeRuleAction(
     .maybeSingle();
   if (!data) return { ok: false, code: "failed", message: "Form not found." };
 
-  const limit = await hitRateLimit(
-    createAdminClient(),
-    `ai-rule:${user.id}`,
-    30,
-    3_600_000,
-  );
+  const limit = await rateLimit(`ai-rule:${user.id}`, 30, 3_600_000);
   if (!limit.allowed) {
     return {
       ok: false,

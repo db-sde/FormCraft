@@ -1,5 +1,7 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import { getWorkspacePlan, type Feature } from "@/domains/billing";
 import {
@@ -19,7 +21,6 @@ import {
 import { canAdmin } from "@/domains/workspaces";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 
 export type ConnectionResult =
   { ok: true; message?: string } | { ok: false; message: string };
@@ -69,7 +70,7 @@ export async function connectStripeAction(
     { secretKey: key, webhookSecret: whsec },
     `${maskSecret(key)}${key.includes("_test_") ? " (test mode)" : ""}`,
   );
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: allowed.ctx.workspace.id,
     actorId: allowed.ctx.user.id,
     action: "integration.connected",
@@ -118,7 +119,7 @@ export async function connectRazorpayAction(
     { keyId: id, keySecret: secret, webhookSecret: hook },
     `${id}${isTestKey(id) ? " (test mode)" : ""}`,
   );
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: allowed.ctx.workspace.id,
     actorId: allowed.ctx.user.id,
     action: "integration.connected",
@@ -152,7 +153,7 @@ export async function connectHubspotAction(token: string): Promise<ConnectionRes
     { token: value },
     maskSecret(value),
   );
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: allowed.ctx.workspace.id,
     actorId: allowed.ctx.user.id,
     action: "integration.connected",
@@ -169,7 +170,7 @@ export async function disconnectAction(provider: Provider): Promise<ConnectionRe
   if (!canAdmin(ctx.workspace.role))
     return { ok: false, message: "Only the owner and admins can do this." };
   await deleteCredential(createAdminClient(), ctx.workspace.id, provider);
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.user.id,
     action: "integration.disconnected",

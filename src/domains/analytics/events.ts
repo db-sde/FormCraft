@@ -70,7 +70,9 @@ export async function recordAnalyticsEvent(
  * (never above 100%). Everything is counted in the database: PostgREST
  * caps a select at 1000 rows, so counting fetched rows silently
  * undercounted any popular form. Preview traffic is excluded at the
- * source.
+ * source. Views older than 90 days live as daily counts
+ * (analytics_daily) and are added back — by whole days, so a period
+ * starting more than 90 days ago counts from the start of its first day.
  */
 export async function getFunnelSummaryForForm(
   supabase: Client,
@@ -99,7 +101,7 @@ export async function getFunnelSummaryForForm(
     .eq("is_preview", false)
     .eq("status", "completed");
 
-  const [views, starts, completions] = await Promise.all(
+  const [rawViews, starts, completions] = await Promise.all(
     [
       sinceIso ? viewsQuery.gte("created_at", sinceIso) : viewsQuery,
       sinceIso ? startsQuery.gte("started_at", sinceIso) : startsQuery,
@@ -110,6 +112,15 @@ export async function getFunnelSummaryForForm(
       return count ?? 0;
     }),
   );
+
+  // Views older than 90 days are kept as daily counts (migration 59).
+  const rolled = await supabase.rpc("analytics_rolled_count", {
+    p_form_id: formId,
+    p_event_type: "form_viewed",
+    p_since: sinceIso ? sinceIso.slice(0, 10) : null,
+  });
+  if (rolled.error) throw rolled.error;
+  const views = rawViews + Number(rolled.data ?? 0);
 
   return {
     views,

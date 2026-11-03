@@ -356,7 +356,7 @@ response.
   `form_documents.kind` adds `receipt`; `response_events.kind` adds
   `payment`.
 
-## Hardening (migrations 54–57)
+## Hardening (migrations 54–59)
 
 - **54** — `pg_cron` + `pg_net`; `schedule_background_jobs(url, secret)`
   (secrets in Vault) schedules the cron endpoints;
@@ -371,6 +371,13 @@ response.
   after 180.
 - **57** — `forms.embed_origins text[]` (validated origins, ≤ 20; null =
   any site) and `form_embed_origins(slug)` for the request proxy.
+- **58** — editors may read `form_lookups` (every column except
+  `encrypted_header`).
+- **59** — **`analytics_daily`** (form, UTC day, event type, preview flag,
+  count; members read); `rollup_analytics_events(keep_days, batch)` folds
+  and deletes raw events older than 90 days in one statement;
+  `analytics_rolled_count(form, type, since)` for readers that go
+  further back.
 
 Encrypted columns (`integration_credentials.encrypted`,
 `connector_connections.encrypted`, `sheets_connections.encrypted_tokens`,

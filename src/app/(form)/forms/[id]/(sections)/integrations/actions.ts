@@ -1,5 +1,7 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import {
   createWebhookEndpoint,
@@ -75,7 +77,7 @@ export async function createWebhookEndpointAction(
   const { supabase, user, workspace } = await getCurrentWorkspace();
   try {
     const result = await createWebhookEndpoint(supabase, formId, url);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: user.id,
       action: "integration.connected",
@@ -116,7 +118,7 @@ export async function deleteWebhookEndpointAction(
 ): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
   await deleteWebhookEndpoint(supabase, endpointId);
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: workspace.id,
     actorId: user.id,
     action: "integration.disconnected",
@@ -165,7 +167,7 @@ export async function rotateWebhookSecretAction(
   try {
     const signingSecret = await rotateSigningSecret(access.supabase, endpointId);
     if (!signingSecret) return { ok: false, message: "Webhook not found." };
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: access.workspace.id,
       actorId: access.user.id,
       action: "integration.secret_rotated",
@@ -275,7 +277,7 @@ export async function createSlackAction(
       eventType: "integration_connected",
       metadata: { provider: "slack" },
     });
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,
       action: "integration.connected",
@@ -496,7 +498,7 @@ export async function saveHubspotSyncAction(
     .eq("form_id", formId)
     .eq("kind", "hubspot")
     .maybeSingle();
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.user.id,
     action: mapping === null ? "integration.disconnected" : "integration.connected",

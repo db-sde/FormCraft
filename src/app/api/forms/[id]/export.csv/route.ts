@@ -1,3 +1,4 @@
+import { recordAudit } from "@/domains/audit/record";
 import { NextResponse } from "next/server";
 import { buildResponsesTable, filtersFromParams } from "@/domains/responses";
 import {
@@ -10,8 +11,6 @@ import {
 } from "@/domains/exports";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 import { hasPermission } from "@/domains/workspaces/permissions";
 
 /**
@@ -84,7 +83,7 @@ export async function GET(
       eventType: "export_completed",
       metadata: { kind: view, format: excel ? "xlsx" : "csv" },
     });
-    void audit(createAdminClient(), {
+    void recordAudit({
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
       action: "export.responses",

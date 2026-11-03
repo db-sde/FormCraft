@@ -1,5 +1,7 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { addDomain, DomainError, verifyDomain } from "@/domains/domains";
@@ -25,7 +27,7 @@ export async function addDomainAction(hostname: string): Promise<DomainResult> {
     return { ok: false, message: "Only the owner and admins can connect domains." };
   try {
     const domain = await addDomain(createAdminClient(), ctx.workspace.id, hostname);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,
       action: "domain.added",
@@ -109,7 +111,7 @@ export async function removeDomainAction(domainId: string): Promise<DomainResult
     .eq("workspace_id", ctx.workspace.id)
     .select("id");
   if (error || !data?.length) return { ok: false, message: "Couldn't remove it." };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.user.id,
     action: "domain.removed",

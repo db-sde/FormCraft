@@ -6,6 +6,8 @@ import { startResponse } from "@/domains/responses";
 import { loadCredential, saveCredential } from "@/domains/integrations/credentials";
 import { reencryptSecrets } from "@/lib/crypto/reencrypt";
 import type { EncryptedPayload } from "@/lib/crypto/encryption";
+import { getFunnelSummaryForForm } from "@/domains/analytics";
+import { listLookups } from "@/domains/integrations/lookups";
 
 /**
  * Hardening (2026-11-03) against the real database: old secrets
@@ -24,6 +26,7 @@ const anon = createClient<Database>(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_K
 });
 const runId = crypto.randomUUID().slice(0, 8);
 let ownerId: string;
+let ownerClient: SupabaseClient<Database>;
 let ws1: string;
 let ws2: string;
 let formId: string;
@@ -41,12 +44,20 @@ const schema = {
 } as unknown as Json;
 
 beforeAll(async () => {
+  const password = crypto.randomUUID();
   const { data: user } = await admin.auth.admin.createUser({
     email: `hard-${runId}@example.com`,
-    password: crypto.randomUUID(),
+    password,
     email_confirm: true,
   });
   ownerId = user!.user!.id;
+  ownerClient = createClient<Database>(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false },
+  });
+  await ownerClient.auth.signInWithPassword({
+    email: `hard-${runId}@example.com`,
+    password,
+  });
   const { data: a } = await admin
     .from("workspaces")
     .insert({ name: "A", slug: `hard-a-${runId}`, owner_id: ownerId })
@@ -59,6 +70,9 @@ beforeAll(async () => {
     .single();
   ws1 = a!.id;
   ws2 = b!.id;
+  await admin
+    .from("workspace_members")
+    .insert({ workspace_id: ws1, user_id: ownerId, role: "owner", permissions: {} });
   const { data: form } = await admin
     .from("forms")
     .insert({ workspace_id: ws1, title: "Hardening", slug, created_by: ownerId })
@@ -242,5 +256,88 @@ describe("embed allowlist", () => {
       "https://acme.com",
       "http://localhost:8080",
     ]);
+  });
+});
+
+describe("narrower access for editors", () => {
+  it("lists data lookups with the editor's own access, never the header value", async () => {
+    await admin.from("form_lookups").insert({
+      form_id: formId,
+      name: "CRM",
+      trigger_question_id: "q",
+      url: "https://api.example.com/{{q}}",
+      header_name: "Authorization",
+      encrypted_header: {
+        v: 2,
+        kid: "x",
+        iv: "",
+        authTag: "",
+        ciphertext: "",
+      } as unknown as Json,
+      outputs: [] as unknown as Json,
+    });
+    const lookups = await listLookups(ownerClient, formId);
+    expect(lookups.map((l) => l.name)).toEqual(["CRM"]);
+    const { error } = await ownerClient
+      .from("form_lookups")
+      .select("encrypted_header")
+      .eq("form_id", formId);
+    expect(error).not.toBeNull();
+  });
+});
+
+describe("analytics rollups", () => {
+  it("folds old events into daily counts without changing any total", async () => {
+    const old = new Date(Date.now() - 100 * 86_400_000).toISOString();
+    const recent = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const event = (created_at: string, is_preview = false) => ({
+      form_id: formId,
+      event_type: "form_viewed",
+      is_preview,
+      created_at,
+    });
+    const { error } = await admin
+      .from("analytics_events")
+      .insert([
+        event(old),
+        event(old),
+        event(old),
+        event(old, true),
+        event(recent),
+        event(recent),
+      ]);
+    expect(error).toBeNull();
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const before = await getFunnelSummaryForForm(ownerClient, formId);
+    const beforeRecent = await getFunnelSummaryForForm(ownerClient, formId, since);
+    expect(before.views).toBe(5);
+    expect(beforeRecent.views).toBe(2);
+
+    // Other tests' old events may be folded too; run until done.
+    for (let i = 0; i < 10; i += 1) {
+      const { data } = await admin.rpc("rollup_analytics_events", {});
+      if (!data) break;
+    }
+    const { count: rawOld } = await admin
+      .from("analytics_events")
+      .select("id", { count: "exact", head: true })
+      .eq("form_id", formId)
+      .lt("created_at", new Date(Date.now() - 90 * 86_400_000).toISOString());
+    expect(rawOld).toBe(0);
+    const { data: daily } = await admin
+      .from("analytics_daily")
+      .select("is_preview, count")
+      .eq("form_id", formId)
+      .order("is_preview");
+    expect(daily).toEqual([
+      { is_preview: false, count: 3 },
+      { is_preview: true, count: 1 },
+    ]);
+    // Same totals, read with the creator's own access; a second run
+    // folds nothing more.
+    expect((await getFunnelSummaryForForm(ownerClient, formId)).views).toBe(5);
+    expect((await getFunnelSummaryForForm(ownerClient, formId, since)).views).toBe(2);
+    expect((await admin.rpc("rollup_analytics_events", {})).data).toBe(0);
+    expect((await getFunnelSummaryForForm(ownerClient, formId)).views).toBe(5);
   });
 });

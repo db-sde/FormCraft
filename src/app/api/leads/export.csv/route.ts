@@ -1,10 +1,9 @@
+import { recordAudit } from "@/domains/audit/record";
 import { NextResponse } from "next/server";
 import { CSV_BOM, toCsv, toXlsx, XLSX_CONTENT_TYPE } from "@/domains/exports";
 import { buildLeadsTable } from "@/domains/leads";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 import { hasPermission } from "@/domains/workspaces/permissions";
 
 /** Creator-only, session-scoped (RLS) export of the workspace's leads;
@@ -22,7 +21,7 @@ export async function GET(request: Request) {
 
   try {
     const { columns, rows } = await buildLeadsTable(supabase, workspace.id, formId);
-    void audit(createAdminClient(), {
+    void recordAudit({
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
       action: "export.leads",

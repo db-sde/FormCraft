@@ -28,6 +28,13 @@ async function run(request: NextRequest) {
   await pruneRateLimits(admin);
   // Finished background work past its keep period (migration 56).
   const { data: operational } = await admin.rpc("prune_operational_data", {});
+  // Analytics events past 90 days become daily counts (migration 59).
+  let analyticsFolded = 0;
+  for (let i = 0; i < 20; i += 1) {
+    const { data: folded } = await admin.rpc("rollup_analytics_events", {});
+    analyticsFolded += folded ?? 0;
+    if (!folded) break;
+  }
   const profilesDeleted = await purgeStaleProfiles(admin);
   return NextResponse.json({
     ...expired,
@@ -35,6 +42,7 @@ async function run(request: NextRequest) {
     ...forms,
     profilesDeleted,
     operational,
+    analyticsFolded,
   });
 }
 

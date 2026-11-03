@@ -33,7 +33,6 @@ import {
   type DocumentKind,
 } from "@/domains/documents/settings";
 import { loadResponseContext } from "@/domains/responses/context";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { assignableMembers, listComments } from "@/domains/responses/records";
 import { hasPermission } from "@/domains/workspaces/permissions";
 import {
@@ -214,7 +213,7 @@ export default async function ResponseDetailPage({
     ]);
     const enabled = configured.filter((d) => d.enabled);
     const ctx = enabled.some((d) => d.kind !== "summary" && d.kind !== "registration")
-      ? await loadResponseContext(createAdminClient(), responseId)
+      ? await loadResponseContext(supabase, responseId)
       : null;
     const numberOf = (kind: DocumentKind) => {
       const row = (issued ?? []).find(

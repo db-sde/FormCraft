@@ -1,12 +1,13 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { API_SCOPES, ApiKeyError, createApiKey, type ApiScope } from "@/domains/api";
 import { canAdmin } from "@/domains/workspaces";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 
 export type ApiKeyResult = { ok: true; key?: string } | { ok: false; message: string };
 
@@ -25,7 +26,7 @@ export async function createApiKeyAction(
       createdBy: user.id,
       scopes: scopes.filter((s) => (API_SCOPES as readonly string[]).includes(s)),
     });
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: user.id,
       action: "api_key.created",
@@ -54,7 +55,7 @@ export async function revokeApiKeyAction(keyId: string): Promise<ApiKeyResult> {
     .select("id");
   if (error || !data?.length)
     return { ok: false, message: "Only the owner and admins can revoke keys." };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: workspace.id,
     actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
     action: "api_key.revoked",

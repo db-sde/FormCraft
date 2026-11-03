@@ -1,5 +1,7 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -91,7 +93,7 @@ export async function changeRoleAction(
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
     await changeMemberRole(supabase, workspace.id, userId, role);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
       action: "member.role_changed",
@@ -114,7 +116,7 @@ export async function removeMemberAction(userId: string): Promise<TeamResult> {
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
     await removeMember(supabase, workspace.id, userId);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
       action: "member.removed",
@@ -142,7 +144,7 @@ export async function leaveWorkspaceAction(): Promise<TeamResult> {
     .eq("workspace_id", workspace.id)
     .eq("user_id", user.id);
   if (error) return { ok: false, message: "Couldn't leave the workspace." };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: workspace.id,
     actorId: user.id,
     action: "member.left",
@@ -158,7 +160,7 @@ export async function revokeInvitationAction(invitationId: string): Promise<Team
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
     await revokeInvitation(supabase, workspace.id, invitationId);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: workspace.id,
       actorId: (await supabase.auth.getUser()).data.user?.id ?? null,
       action: "invitation.revoked",
@@ -190,7 +192,7 @@ export async function acceptInvitationAction(token: string): Promise<TeamResult>
         error instanceof TeamError ? error.message : "Couldn't accept the invitation.",
     };
   }
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId,
     actorId: user.id,
     action: "member.joined",
@@ -225,7 +227,7 @@ export async function setMemberPermissionsAction(
     .in("role", ["editor", "viewer"])
     .select("id");
   if (error || !data?.length) return { ok: false, message: "Couldn't change that." };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: workspace.id,
     actorId: user.id,
     action: "permissions.changed",

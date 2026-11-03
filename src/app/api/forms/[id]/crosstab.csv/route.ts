@@ -1,3 +1,4 @@
+import { recordAudit } from "@/domains/audit/record";
 import { NextResponse } from "next/server";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { hasPermission } from "@/domains/workspaces/permissions";
@@ -5,8 +6,6 @@ import { filtersFromParams } from "@/domains/responses";
 import { getLatestSchema } from "@/domains/responses/dashboard";
 import { crossTabRows, getCrossTab } from "@/domains/responses/crosstab";
 import { CSV_BOM, neutralizeFormulaInjection } from "@/domains/exports";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 
 const cell = (value: string) => {
   const safe = neutralizeFormulaInjection(value);
@@ -76,7 +75,7 @@ export async function GET(
   const csv = crossTabRows(table, label(rowId), label(columnId))
     .map((row) => row.map(cell).join(","))
     .join("\r\n");
-  void audit(createAdminClient(), {
+  void recordAudit({
     workspaceId: workspace.id,
     actorId: user.id,
     action: "export.responses",

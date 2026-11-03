@@ -1,5 +1,7 @@
 "use server";
 
+import { recordAudit } from "@/domains/audit/record";
+
 import { getDraftForEdit, saveDraftSchema, StaleDraftError } from "@/domains/forms";
 import { VariantV1 } from "@/domains/forms/schema/v1";
 import { parseFormSchema } from "@/domains/forms/schema";
@@ -17,7 +19,6 @@ import {
 import { setNotificationsEnabled } from "@/domains/notifications";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { audit } from "@/domains/audit";
 import { canEdit } from "@/domains/workspaces";
 import { restoreVersionIntoDraft, RestoreError } from "@/domains/forms/versions/history";
 import { hasPermission } from "@/domains/workspaces/permissions";
@@ -152,7 +153,7 @@ export async function restoreVersionAction(
       versionId,
     );
     const { data: auth } = await ctx.supabase.auth.getUser();
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: auth.user?.id ?? null,
       action: "form.version_restored",
@@ -202,7 +203,7 @@ export async function startExperimentAction(
       createdBy: ctx.userId,
       ...parsed.data,
     });
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: "experiment.started",
@@ -247,7 +248,7 @@ export async function stopExperimentAction(
       .maybeSingle();
     if (!test) return { ok: false, message: "Test not found." };
     const { copiedIntoDraft } = await stopExperiment(ctx.supabase, experimentId, winner);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: "experiment.stopped",
@@ -299,7 +300,7 @@ export async function updateAvailabilityAction(
       ...parsed.data,
       closesAt,
     });
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: "form.availability_changed",
@@ -333,7 +334,7 @@ export async function setFormPasswordAction(
     // The hash table is server-only; the permission check above is what
     // stands in for row-level security here.
     await setFormPassword(createAdminClient(), formId, parsed.data);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: parsed.data === null ? "form.password_removed" : "form.password_set",
@@ -360,7 +361,7 @@ export async function setCaptchaAction(
   if (!ctx) return { ok: false, message: "You don't have permission to change this." };
   try {
     await setCaptchaRequired(ctx.supabase, formId, ctx.workspace.id, Boolean(required));
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: "form.captcha_changed",
@@ -397,7 +398,7 @@ export async function updateKioskAction(
       .eq("id", formId)
       .eq("workspace_id", ctx.workspace.id);
     if (error) throw error;
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: "form.kiosk_changed",
@@ -423,7 +424,7 @@ export async function setKioskPinAction(
   if (!ctx) return { ok: false, message: "You don't have permission to change this." };
   try {
     await setKioskPin(createAdminClient(), formId, pin);
-    await audit(createAdminClient(), {
+    await recordAudit({
       workspaceId: ctx.workspace.id,
       actorId: ctx.userId,
       action: "form.kiosk_changed",
@@ -524,7 +525,7 @@ export async function startVariantTestAction(
           : "Couldn't start the test.",
     };
   }
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.userId,
     action: "experiment.started",
@@ -625,7 +626,7 @@ export async function endVariantTestAction(
     .update({ status: "ended", winner })
     .eq("id", testId);
   if (error) return { ok: false, message: "Couldn't end the test." };
-  await audit(createAdminClient(), {
+  await recordAudit({
     workspaceId: ctx.workspace.id,
     actorId: ctx.userId,
     action: "experiment.stopped",
