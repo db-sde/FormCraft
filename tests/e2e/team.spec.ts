@@ -61,9 +61,22 @@ test("an owner invites a viewer, who sees responses but can't edit", async ({
       .textContent();
     expect(link).toMatch(/\/invite\/[A-Za-z0-9_-]{43}$/);
     // The invitations list is re-rendered by the server after the action.
-    await expect(page.getByText(invitee.email.toLowerCase())).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(
+      page.getByText(invitee.email.toLowerCase(), { exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
+    // With email set up (the suite's stand-in API), the invitation is
+    // emailed too, and the app says so.
+    if (process.env.RESEND_BASE_URL) {
+      await expect(page.getByText(/^Invitation sent to /)).toBeVisible();
+      await expect
+        .poll(async () => {
+          const sent = (await (
+            await fetch(`${process.env.RESEND_BASE_URL}/sent`)
+          ).json()) as { to: string[] | string }[];
+          return sent.some((m) => [m.to].flat().includes(invitee.email.toLowerCase()));
+        })
+        .toBe(true);
+    }
 
     const other = await browser.newContext();
     try {

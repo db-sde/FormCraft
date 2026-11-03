@@ -22,11 +22,18 @@ export function BookingSettingsPanel({
   const [types, setTypes] = useState<{ id: string; name: string }[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    listBookingTypesAction()
-      .then((t) => !cancelled && setTypes(t))
-      .catch(() => !cancelled && setTypes([]));
+    const load = () =>
+      listBookingTypesAction()
+        .then((t) => !cancelled && setTypes(t))
+        .catch(() => !cancelled && setTypes((prev) => prev ?? []));
+    void load();
+    // Booking types are set up on the Bookings page, in another tab
+    // (leaving the builder would lose a question that can't save yet):
+    // coming back picks up what was made there.
+    window.addEventListener("focus", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", load);
     };
   }, []);
   const set = (patch: Record<string, unknown>) =>
@@ -66,10 +73,16 @@ export function BookingSettingsPanel({
         ) : types.length === 0 ? (
           <p className="text-sm">
             No booking types yet.{" "}
-            <Link href="/bookings" className="font-semibold underline">
+            <Link
+              href="/bookings"
+              target="_blank"
+              rel="noopener"
+              className="font-semibold underline"
+            >
               Set one up
             </Link>{" "}
-            with hosts and hours.
+            with hosts and hours (opens in a new tab; come back here when it&apos;s
+            saved).
           </p>
         ) : (
           select(

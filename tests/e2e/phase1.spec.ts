@@ -151,7 +151,14 @@ test.describe("phase 1", () => {
 
   test("a classic form: pages, every new type, link prefill and custom CSS", async ({
     page,
+    isMobile,
   }) => {
+    // A matrix is a table on wide screens and one group per row on
+    // phones; the same cell either way.
+    const cell = (row: string, column: string) =>
+      isMobile
+        ? page.getByRole("group", { name: row }).getByRole("radio", { name: column })
+        : page.getByRole("radio", { name: `${row}: ${column}` });
     const { formId, liveLink } = await createPublishedForm(user, classicSchema());
     await page.goto(`${liveLink}?name=Grace&utm_source=newsletter`);
 
@@ -175,14 +182,14 @@ test.describe("phase 1", () => {
     await page.getByRole("button", { name: "Security" }).click();
     await page.getByRole("button", { name: "Design" }).click();
     await page.getByRole("button", { name: "Move Design up" }).click();
-    await page.getByRole("radio", { name: "Venue: Great" }).check();
-    await page.getByRole("radio", { name: "Food: Fine" }).check();
+    await cell("Venue", "Great").check();
+    await cell("Food", "Fine").check();
     await page.getByRole("button", { name: "Next" }).click();
 
     // Page 3, then back and forward keeps answers.
     await expect(page.getByRole("heading", { name: "Details" })).toBeVisible();
     await page.getByRole("button", { name: "Back" }).click();
-    await expect(page.getByRole("radio", { name: "Venue: Great" })).toBeChecked();
+    await expect(cell("Venue", "Great")).toBeChecked();
     await page.getByRole("button", { name: "Next" }).click();
     await page.getByLabel("Address line 1").fill("1 Harbour St");
     await page.getByLabel("Country").fill("Australia");
@@ -282,7 +289,9 @@ test.describe("phase 1", () => {
 
   test("a question saved as a shared block is locked in the form and takes a new version on review", async ({
     page,
+    isMobile,
   }) => {
+    test.skip(isMobile, "the builder is a desktop screen");
     const { formId } = await createPublishedForm(user, {
       ...classicSchema(),
       meta: { title: "Uses a block" },

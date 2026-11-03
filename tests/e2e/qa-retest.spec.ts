@@ -207,12 +207,16 @@ test("builder: deletes can be undone, the publish button keeps one label, and un
       page.getByRole("button", { name: "Publish changes", exact: true }),
     ).toBeVisible({ timeout: 15000 });
 
-    // FC-03 / FC-04: without email or Google credentials on this server,
-    // their settings aren't offered, and the checklist doesn't ask for Sheets.
+    // FC-03 / FC-04: settings that need server credentials are offered only
+    // with them. The suite runs with a stand-in email API (so email is on)
+    // and without Google credentials (so Sheets is off, and the checklist
+    // doesn't ask for it).
     await page.goto(`/forms/${formId}/integrations`);
     await expect(page.getByRole("heading", { name: "Webhooks" })).toBeVisible();
-    for (const hidden of ["Google Sheets", "Email notifications", "Confirmation email"]) {
-      await expect(page.getByRole("heading", { name: hidden })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Google Sheets" })).toHaveCount(0);
+    const email = process.env.RESEND_API_KEY ? 1 : 0;
+    for (const name of ["Email notifications", "Confirmation email"]) {
+      await expect(page.getByRole("heading", { name })).toHaveCount(email);
     }
     await expect(page.getByText("Get your first response").first()).toBeVisible();
     await expect(page.getByText("Connect Google Sheets")).toHaveCount(0);

@@ -202,7 +202,13 @@ export async function waitForSaved(page: Page) {
 /** Adds a question from the builder's Add question menu. */
 export async function addQuestion(page: Page, type: string) {
   await page.getByRole("button", { name: "Add question" }).click();
-  await page.getByRole("button", { name: new RegExp(`^${type}`) }).click();
+  // Search first: the list is long, and types near the end are scrolled
+  // out of the menu.
+  await page.getByPlaceholder("Search question types").fill(type);
+  await page
+    .getByRole("button", { name: new RegExp(`^${type}`) })
+    .first()
+    .click();
 }
 
 export async function logOutViaUI(page: Page) {

@@ -56,8 +56,9 @@ export async function saveCouponAction(
   if (!ctx.config)
     return { ok: false, message: "Turn on payment for this form before adding coupons." };
   const c = parsed.data;
+  // Only the columns editors may update (migration 52): never the form
+  // or the use count.
   const row = {
-    form_id: formId,
     code: c.code,
     kind: c.kind,
     percent_off: c.kind === "percent" ? c.value : null,
@@ -76,7 +77,7 @@ export async function saveCouponAction(
         .select("id")
     : await ctx.supabase
         .from("coupons")
-        .insert({ ...row, created_by: ctx.user.id })
+        .insert({ ...row, form_id: formId, created_by: ctx.user.id })
         .select("id");
   if (error?.code === "23505")
     return { ok: false, message: "This form already has a coupon with that code." };
