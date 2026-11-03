@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   connectHubspotAction,
+  connectRazorpayAction,
   connectStripeAction,
   disconnectAction,
 } from "@/app/(dashboard)/settings/connection-actions";
@@ -14,28 +15,35 @@ import { toast } from "@/lib/toast";
 
 type Status = { label: string | null; status: string } | null;
 
-/** Settings → Connections: the workspace's Stripe and HubSpot accounts.
+/** Settings → Connections: the workspace's Stripe, Razorpay and HubSpot accounts.
  * Secrets go to the server, are checked with the provider, and are
  * stored encrypted; only a masked label ever comes back. */
 export function ConnectionSettings({
   stripe,
+  razorpay,
   hubspot,
   payments,
   crm,
   isAdmin,
   stripeWebhookUrl,
+  razorpayWebhookUrl,
 }: {
   stripe: Status;
+  razorpay: Status;
   hubspot: Status;
   payments: boolean;
   crm: boolean;
   isAdmin: boolean;
   stripeWebhookUrl: string;
+  razorpayWebhookUrl: string;
 }) {
   const [pending, start] = useTransition();
   const [secretKey, setSecretKey] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [token, setToken] = useState("");
+  const [rzpKeyId, setRzpKeyId] = useState("");
+  const [rzpSecret, setRzpSecret] = useState("");
+  const [rzpHook, setRzpHook] = useState("");
   const run = (
     work: () => Promise<{ ok: boolean; message?: string }>,
     reset?: () => void,
@@ -48,14 +56,14 @@ export function ConnectionSettings({
       } else toast.error(result.message ?? "Something went wrong.");
     });
 
-  const connected = (status: Status, provider: "stripe" | "hubspot") =>
+  const connected = (status: Status, provider: "stripe" | "razorpay" | "hubspot") =>
     status && (
       <div className="bg-background flex items-center gap-3 rounded-sm px-3 py-2.5 text-sm">
         <span className="flex-1">
           Connected: <code className="font-mono text-[12.5px]">{status.label}</code>
           {status.status === "invalid" && (
             <b className="text-destructive ml-2">
-              needs a new {provider === "stripe" ? "key" : "token"}
+              needs a new {provider === "hubspot" ? "token" : "key"}
             </b>
           )}
         </span>
@@ -100,8 +108,9 @@ export function ConnectionSettings({
             <p className="text-muted-foreground text-[13px] leading-normal">
               In Stripe → Developers → Webhooks, add an endpoint for{" "}
               <code className="font-mono">{stripeWebhookUrl}</code> with the events{" "}
-              <code className="font-mono">checkout.session.*</code>, then paste its
-              signing secret and a secret (or restricted) key below.
+              <code className="font-mono">checkout.session.*</code> and{" "}
+              <code className="font-mono">charge.refunded</code>, then paste its signing
+              secret and a secret (or restricted) key below.
             </p>
             <div className="grid gap-1.5">
               <Label htmlFor="stripe-key">Secret key</Label>
@@ -130,6 +139,81 @@ export function ConnectionSettings({
             >
               {pending && <ButtonSpinner />}
               {stripe ? "Replace keys" : "Connect Stripe"}
+            </Button>
+          </form>
+        )}
+      </SettingsSection>
+      <SettingsSection
+        title="Razorpay"
+        description={
+          payments
+            ? "Take payments in INR with your own Razorpay account — cards, UPI, netbanking and wallets, whichever Razorpay has activated for you. Respondents pay in Razorpay's checkout; their details never reach FormCraft."
+            : "Payments are part of the Business plan."
+        }
+      >
+        {connected(razorpay, "razorpay")}
+        {payments && isAdmin && (
+          <form
+            className="flex flex-col gap-2.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(
+                () => connectRazorpayAction(rzpKeyId, rzpSecret, rzpHook),
+                () => {
+                  setRzpKeyId("");
+                  setRzpSecret("");
+                  setRzpHook("");
+                },
+              );
+            }}
+          >
+            <p className="text-muted-foreground text-[13px] leading-normal">
+              In Razorpay → Account &amp; Settings → Webhooks, add{" "}
+              <code className="font-mono">{razorpayWebhookUrl}</code> with the events{" "}
+              <code className="font-mono">payment.captured</code>,{" "}
+              <code className="font-mono">payment.failed</code>,{" "}
+              <code className="font-mono">order.paid</code> and{" "}
+              <code className="font-mono">refund.processed</code>, and a secret of your
+              choice. Turn on automatic capture. Then paste an API key (Account &amp;
+              Settings → API Keys) and that webhook secret below.
+            </p>
+            <div className="grid gap-1.5">
+              <Label htmlFor="rzp-key">Key id</Label>
+              <Input
+                id="rzp-key"
+                autoComplete="off"
+                placeholder="rzp_live_…"
+                value={rzpKeyId}
+                onChange={(e) => setRzpKeyId(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="rzp-secret">Key secret</Label>
+              <Input
+                id="rzp-secret"
+                type="password"
+                autoComplete="off"
+                value={rzpSecret}
+                onChange={(e) => setRzpSecret(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="rzp-hook">Webhook secret</Label>
+              <Input
+                id="rzp-hook"
+                type="password"
+                autoComplete="off"
+                value={rzpHook}
+                onChange={(e) => setRzpHook(e.target.value)}
+              />
+            </div>
+            <Button
+              type="submit"
+              className="self-start"
+              disabled={pending || !rzpKeyId || !rzpSecret || !rzpHook}
+            >
+              {pending && <ButtonSpinner />}
+              {razorpay ? "Replace keys" : "Connect Razorpay"}
             </Button>
           </form>
         )}

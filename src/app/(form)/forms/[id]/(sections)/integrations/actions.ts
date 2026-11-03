@@ -15,7 +15,7 @@ import { z } from "zod";
 import { EntitlementError, requireFeature, type Feature } from "@/domains/billing";
 import { canEdit } from "@/domains/workspaces";
 import { audit } from "@/domains/audit";
-import { PaymentConfig } from "@/domains/payments/stripe";
+import { PaymentConfig } from "@/domains/payments/config";
 import { mappingProblems, verifyHubspotToken } from "@/domains/integrations/hubspot";
 import { loadCredential } from "@/domains/integrations/credentials";
 import { parseFormSchema } from "@/domains/forms/schema";
@@ -433,7 +433,7 @@ export async function saveTrackingAction(
  * Null removes it. */
 export async function savePaymentConfigAction(
   formId: string,
-  config: PaymentConfig | null,
+  config: z.input<typeof PaymentConfig> | null,
 ): Promise<FeatureResult> {
   if (config !== null && !PaymentConfig.safeParse(config).success) {
     return {
@@ -450,9 +450,22 @@ export async function savePaymentConfigAction(
         return canEdit(c.workspace.role) ? c : { error: "You have view-only access." };
       })();
   if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
+  if (config) {
+    // Only a provider this workspace has connected.
+    const { data: connected } = await ctx.supabase.rpc("integration_status", {
+      p_workspace_id: ctx.workspace.id,
+    });
+    const provider = PaymentConfig.parse(config).provider;
+    if (!connected?.some((c) => c.provider === provider && c.status === "ok")) {
+      return {
+        ok: false,
+        message: `Connect ${provider === "razorpay" ? "Razorpay" : "Stripe"} in Settings → Connections first.`,
+      };
+    }
+  }
   const { data, error } = await ctx.supabase
     .from("forms")
-    .update({ payment_config: config })
+    .update({ payment_config: config ? PaymentConfig.parse(config) : null })
     .eq("id", formId)
     .eq("workspace_id", ctx.workspace.id)
     .select("id");

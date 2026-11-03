@@ -170,7 +170,10 @@ function RuleEditor({
             <Select
               value={draft.attachDocument ?? NO_PDF}
               onValueChange={(v) =>
-                set({ attachDocument: v === NO_PDF ? undefined : (v as DocumentKind) })
+                set({
+                  attachDocument:
+                    v === NO_PDF ? undefined : (v as Exclude<DocumentKind, "receipt">),
+                })
               }
             >
               <SelectTrigger className="w-full" aria-label="Attach a PDF">

@@ -24,7 +24,9 @@ import {
 } from "lucide-react";
 import { PaymentPanel } from "@/components/integrations/payment-panel";
 import { HubspotPanel } from "@/components/integrations/hubspot-panel";
-import { readPaymentConfig } from "@/domains/payments/stripe";
+import { readPaymentConfig } from "@/domains/payments/config";
+import { couponFromRow } from "@/domains/payments/coupons";
+import { formCurrencies } from "@/domains/forms/products";
 import { SlackPanel } from "@/components/integrations/slack-panel";
 import { ConfirmationPanel } from "@/components/integrations/confirmation-panel";
 import { TrackingPanel } from "@/components/integrations/tracking-panel";
@@ -196,16 +198,18 @@ export default async function IntegrationsPage({
   // Lookups are server-only rows; this page is for editors of the form
   // (loadFormForPage checked), and the list carries no secret.
   const lookups = await listLookups(createAdminClient(), formId);
-  const [documents, members, rules, { data: digest }] = await Promise.all([
-    listFormDocuments(supabase, formId),
-    assignableMembers(supabase, workspace.id),
-    listNotificationRules(supabase, formId),
-    supabase
-      .from("notification_digests")
-      .select("enabled, member_ids, time_zone, frequency")
-      .eq("form_id", formId)
-      .maybeSingle(),
-  ]);
+  const [documents, members, rules, { data: digest }, { data: coupons }] =
+    await Promise.all([
+      listFormDocuments(supabase, formId),
+      assignableMembers(supabase, workspace.id),
+      listNotificationRules(supabase, formId),
+      supabase
+        .from("notification_digests")
+        .select("enabled, member_ids, time_zone, frequency")
+        .eq("form_id", formId)
+        .maybeSingle(),
+      supabase.from("coupons").select("*").eq("form_id", formId).order("created_at"),
+    ]);
   // Business apps (Phase 6): only those set up on this server.
   const offeredApps = APPS.filter((a) => isConfigured(a.provider));
   const [links, mayManageApps, { data: appConnections }] = offeredApps.length
@@ -369,13 +373,16 @@ export default async function IntegrationsPage({
         icon={<CreditCard />}
         tint="live"
         title="Payment"
-        description="Charge respondents when they submit, through your Stripe account."
+        description="Charge respondents when they submit, with your Razorpay (INR: cards, UPI…) or Stripe account — a fixed price, a calculated total or their order, with coupons."
       >
         <PaymentPanel
           formId={formId}
           initial={readPaymentConfig(tracking?.payment_config ?? null)}
           allowed={entitlements.payments}
           stripeConnected={!!connections?.some((c) => c.provider === "stripe")}
+          razorpayConnected={!!connections?.some((c) => c.provider === "razorpay")}
+          orderCurrency={schema ? (formCurrencies(schema.questions)[0] ?? null) : null}
+          coupons={(coupons ?? []).map(couponFromRow)}
           numberVariables={(schema?.variables ?? [])
             .filter((v) => v.type === "number")
             .map((v) => ({ id: v.id, name: v.name }))}
@@ -594,7 +601,9 @@ export default async function IntegrationsPage({
               formId={formId}
               schema={schema}
               members={members.map((m) => ({ id: m.id, label: m.name }))}
-              documents={documents.filter((d) => d.enabled).map((d) => d.kind)}
+              documents={documents
+                .filter((d) => d.enabled && d.kind !== "receipt")
+                .map((d) => d.kind as Exclude<typeof d.kind, "receipt">)}
               initialRules={rules}
               initialDigest={
                 digest

@@ -676,6 +676,59 @@ export type Database = {
           },
         ];
       };
+      coupons: {
+        Row: {
+          active: boolean;
+          amount_off: number | null;
+          code: string;
+          created_at: string;
+          created_by: string | null;
+          expires_at: string | null;
+          form_id: string;
+          id: string;
+          kind: string;
+          max_uses: number | null;
+          percent_off: number | null;
+          uses: number;
+        };
+        Insert: {
+          active?: boolean;
+          amount_off?: number | null;
+          code: string;
+          created_at?: string;
+          created_by?: string | null;
+          expires_at?: string | null;
+          form_id: string;
+          id?: string;
+          kind: string;
+          max_uses?: number | null;
+          percent_off?: number | null;
+          uses?: number;
+        };
+        Update: {
+          active?: boolean;
+          amount_off?: number | null;
+          code?: string;
+          created_at?: string;
+          created_by?: string | null;
+          expires_at?: string | null;
+          form_id?: string;
+          id?: string;
+          kind?: string;
+          max_uses?: number | null;
+          percent_off?: number | null;
+          uses?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "coupons_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       custom_domains: {
         Row: {
           created_at: string;
@@ -875,7 +928,7 @@ export type Database = {
           enabled: boolean;
           form_id: string;
           id: string;
-          kind: "summary" | "order" | "registration" | "certificate";
+          kind: "summary" | "order" | "registration" | "certificate" | "receipt";
           member_ids: string[];
           next_number: number;
           recipients: "owner" | "respondent" | "both" | "none";
@@ -887,7 +940,7 @@ export type Database = {
           enabled?: boolean;
           form_id: string;
           id?: string;
-          kind: "summary" | "order" | "registration" | "certificate";
+          kind: "summary" | "order" | "registration" | "certificate" | "receipt";
           member_ids?: string[];
           next_number?: number;
           recipients?: "owner" | "respondent" | "both" | "none";
@@ -899,7 +952,7 @@ export type Database = {
           enabled?: boolean;
           form_id?: string;
           id?: string;
-          kind?: "summary" | "order" | "registration" | "certificate";
+          kind?: "summary" | "order" | "registration" | "certificate" | "receipt";
           member_ids?: string[];
           next_number?: number;
           recipients?: "owner" | "respondent" | "both" | "none";
@@ -1382,41 +1435,147 @@ export type Database = {
           },
         ];
       };
+      payment_attempts: {
+        Row: {
+          amount: number;
+          checkout_url: string | null;
+          coupon_code: string | null;
+          coupon_id: string | null;
+          created_at: string;
+          currency: string;
+          discount: number;
+          error: string | null;
+          form_id: string;
+          id: string;
+          livemode: boolean;
+          provider: string;
+          provider_payment_id: string | null;
+          provider_ref: string;
+          response_id: string;
+          status: string;
+          subtotal: number;
+          updated_at: string;
+        };
+        Insert: {
+          amount: number;
+          checkout_url?: string | null;
+          coupon_code?: string | null;
+          coupon_id?: string | null;
+          created_at?: string;
+          currency: string;
+          discount?: number;
+          error?: string | null;
+          form_id: string;
+          id?: string;
+          livemode?: boolean;
+          provider: string;
+          provider_payment_id?: string | null;
+          provider_ref: string;
+          response_id: string;
+          status?: string;
+          subtotal: number;
+          updated_at?: string;
+        };
+        Update: {
+          amount?: number;
+          checkout_url?: string | null;
+          coupon_code?: string | null;
+          coupon_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          discount?: number;
+          error?: string | null;
+          form_id?: string;
+          id?: string;
+          livemode?: boolean;
+          provider?: string;
+          provider_payment_id?: string | null;
+          provider_ref?: string;
+          response_id?: string;
+          status?: string;
+          subtotal?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payment_attempts_coupon_id_fkey";
+            columns: ["coupon_id"];
+            isOneToOne: false;
+            referencedRelation: "coupons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payment_attempts_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payment_attempts_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       payments: {
         Row: {
           amount: number;
           checkout_session_id: string | null;
+          coupon_code: string | null;
+          coupon_id: string | null;
           created_at: string;
           currency: string;
+          discount: number;
           form_id: string;
           livemode: boolean;
           paid_at: string | null;
+          provider: string;
+          provider_payment_id: string | null;
+          refunded_amount: number;
           response_id: string;
           status: string;
+          subtotal: number | null;
           updated_at: string;
         };
         Insert: {
           amount: number;
           checkout_session_id?: string | null;
+          coupon_code?: string | null;
+          coupon_id?: string | null;
           created_at?: string;
           currency: string;
+          discount?: number;
           form_id: string;
           livemode?: boolean;
           paid_at?: string | null;
+          provider?: string;
+          provider_payment_id?: string | null;
+          refunded_amount?: number;
           response_id: string;
           status?: string;
+          subtotal?: number | null;
           updated_at?: string;
         };
         Update: {
           amount?: number;
           checkout_session_id?: string | null;
+          coupon_code?: string | null;
+          coupon_id?: string | null;
           created_at?: string;
           currency?: string;
+          discount?: number;
           form_id?: string;
           livemode?: boolean;
           paid_at?: string | null;
+          provider?: string;
+          provider_payment_id?: string | null;
+          refunded_amount?: number;
           response_id?: string;
           status?: string;
+          subtotal?: number | null;
           updated_at?: string;
         };
         Relationships: [
@@ -2697,6 +2856,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      record_payment_paid: {
+        Args: { p_provider_ref: string; p_provider_payment_id: string | null };
+        Returns: string;
+      };
       responses_missing_connector_sync: {
         Args: { p_limit: number };
         Returns: { response_id: string }[];

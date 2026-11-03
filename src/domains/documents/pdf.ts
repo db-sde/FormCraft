@@ -30,6 +30,8 @@ export type DocumentContent = {
   order?: {
     currency: string;
     lines: { label: string; quantity: number; unitAmount: number; amount: number }[];
+    /** Lines between the items and the total (a coupon, as a negative). */
+    adjustments?: { label: string; amount: number }[];
     total: number;
     /** What the order's payment state is, in words; "Paid" only when paid. */
     paymentLabel: string;
@@ -354,10 +356,27 @@ export async function renderDocumentPdf(content: DocumentContent): Promise<Uint8
       );
       w.y -= (labelLines.length - 1) * 15;
     }
+    for (const adj of o.adjustments ?? []) {
+      w.ensure(18);
+      w.y -= 16;
+      await w.drawLine(adj.label, margin, w.y, 11, 400, MUTED);
+      const amount =
+        adj.amount < 0
+          ? `−${formatMoney(-adj.amount, o.currency)}`
+          : formatMoney(adj.amount, o.currency);
+      await w.drawLine(
+        amount,
+        right - (await fonts.width(amount, 11, 400)),
+        w.y,
+        11,
+        400,
+        MUTED,
+      );
+    }
     w.rule();
     w.ensure(22);
     w.y -= 18;
-    await w.drawLine("Total", margin, w.y, 13, 700);
+    await w.drawLine(content.kind === "receipt" ? "Paid" : "Total", margin, w.y, 13, 700);
     const total = formatMoney(o.total, o.currency);
     await w.drawLine(total, right - (await fonts.width(total, 13, 700)), w.y, 13, 700);
     w.y -= 8;

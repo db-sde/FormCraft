@@ -233,10 +233,10 @@ form's Integrations tab.
 
 ## Payments (Stripe, P2.17)
 
-- `POST /api/responses/:id/complete` returns `paymentUrl` (a Stripe
-  Checkout URL) when the form takes payment; the amount is computed on
-  the server. The runtime sends the respondent there; answers are
-  already saved.
+- `POST /api/responses/:id/complete` returns `payment: { quote, payLater }`
+  when the response owes a payment (master spec F-22): what's owed,
+  worked out on the server. The runtime shows its payment step; answers
+  are already saved. (Before Phase 7 it returned `paymentUrl`.)
 - `GET /f/:slug/payment?session_id=…` — the return page. It asks Stripe
   (server-side) and shows paid / processing / "try again".
 - `POST /api/payments/stripe/:workspaceId` — the workspace's Stripe
@@ -437,6 +437,32 @@ mode, trigger, pageview }` as a text body; always 204; deduped per
   `disconnectAppAction`.
 - `GET|POST /api/cron/connectors` also queues syncs a killed request
   missed (`recovered` in its reply).
+
+## Phase 7 (payments and Razorpay)
+
+Public, with the respondent's response id; rate limited:
+
+- `POST /api/payments/quote` — `{ responseId, coupon? }` → `{ quote,
+status, couponError? }`: subtotal, discount, total, currency, lines.
+  Checking a coupon doesn't use it.
+- `POST /api/payments/start` — `{ responseId, coupon? }` → `{ kind:
+"razorpay", keyId, orderId, amount, … }` (open Checkout), `{ kind:
+"redirect", url }` (Stripe), or `{ kind: "paid" }`. 422 with a message
+  for a bad coupon or nothing payable; 404 for an unknown response.
+- `POST /api/payments/razorpay/verify` — `{ responseId, orderId,
+paymentId, signature }` from Checkout → `{ status: "paid" | "pending" |
+"failed" }`; 400 when the signature or the payment doesn't check out.
+
+Webhooks:
+
+- `POST /api/payments/razorpay/:workspaceId` — Razorpay events, accepted
+  only with a valid `X-Razorpay-Signature` (the workspace's webhook
+  secret): `payment.captured`, `order.paid`, `payment.failed`,
+  `refund.processed`.
+- `POST /api/payments/stripe/:workspaceId` also records `charge.refunded`.
+
+Server actions: `saveCouponAction`, `deleteCouponAction` (Integrations),
+`connectRazorpayAction` (Settings → Connections).
 
 ## Conventions
 

@@ -423,7 +423,7 @@ describe("Google Calendar through the connector worker (F-43)", () => {
     reply = 409;
     await admin
       .from("connector_jobs")
-      .update({ next_attempt_at: new Date().toISOString() })
+      .update({ next_attempt_at: new Date(Date.now() - 60_000).toISOString() })
       .eq("booking_id", r.bookingId);
     await dispatchConnectorJobs(admin, { fetch: fake });
     expect(await job()).toMatchObject({ status: "succeeded" });

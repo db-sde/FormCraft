@@ -5,13 +5,13 @@ import { decryptJson, encryptJson, type EncryptedPayload } from "@/domains/sheet
 type Client = SupabaseClient<Database>;
 
 /**
- * Third-party credentials (HubSpot tokens, Stripe keys): encrypted with
+ * Third-party credentials (HubSpot tokens, Stripe and Razorpay keys): encrypted with
  * AES-256-GCM before they're stored, kept in a table only the server can
  * read, never sent to a browser. One per provider per workspace.
  * Service-role client only.
  */
 
-export type Provider = "hubspot" | "stripe";
+export type Provider = "hubspot" | "stripe" | "razorpay";
 
 export async function saveCredential(
   admin: Client,

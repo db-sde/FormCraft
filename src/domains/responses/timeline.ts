@@ -73,6 +73,19 @@ export type TimelineSources = {
     createdAt: string;
     paidAt: string | null;
   } | null;
+  /** Each try to pay (F-22): a Razorpay order, a Stripe Checkout, or a
+   * coupon that made it free. */
+  paymentAttempts?: {
+    id: string;
+    provider: string;
+    amount: number;
+    currency: string;
+    couponCode: string | null;
+    status: string;
+    error: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }[];
   events: {
     id: number;
     kind: string;
@@ -96,6 +109,12 @@ const DOCUMENT_LABEL: Record<string, string> = {
   order: "Order confirmation",
   registration: "Registration confirmation",
   certificate: "Certificate",
+};
+
+const PAYMENT_PROVIDER_LABEL: Record<string, string> = {
+  stripe: "Stripe",
+  razorpay: "Razorpay",
+  coupon: "Coupon",
 };
 
 const CONNECTOR_LABEL: Record<string, string> = {
@@ -217,6 +236,8 @@ function eventEntry(event: TimelineSources["events"][number]): TimelineEntry {
                 : "Booking not moved",
         detail: str(d.reason),
       };
+    case "payment":
+      return { ...base, title: str(d.reason) ?? "Payment" };
     case "commented":
       return { ...base, title: "Comment added" };
     default:
@@ -324,7 +345,48 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
       rank: 3,
     });
   }
-  if (sources.payment) {
+  const attempts = sources.paymentAttempts ?? [];
+  for (const a of attempts) {
+    const amount = formatMoney(a.amount, a.currency);
+    const via = PAYMENT_PROVIDER_LABEL[a.provider] ?? a.provider;
+    const coupon = a.couponCode ? ` with coupon ${a.couponCode}` : "";
+    if (a.provider === "coupon") {
+      entries.push({
+        key: `attempt-${a.id}`,
+        at: a.createdAt,
+        title: `Nothing to pay${coupon}`,
+        outcome: "ok",
+        rank: 2,
+      });
+      continue;
+    }
+    entries.push({
+      key: `attempt-${a.id}`,
+      at: a.createdAt,
+      title: `Payment of ${amount} started (${via})${coupon}`,
+      outcome: "ok",
+      rank: 2,
+    });
+    if (a.status === "paid") {
+      entries.push({
+        key: `attempt-paid-${a.id}`,
+        at: a.updatedAt,
+        title: `Paid ${amount} (${via})`,
+        outcome: "ok",
+        rank: 2,
+      });
+    } else if (a.status === "failed" || a.status === "expired") {
+      entries.push({
+        key: `attempt-ended-${a.id}`,
+        at: a.updatedAt,
+        title: a.status === "expired" ? "Payment expired" : "Payment failed",
+        detail: a.error ?? undefined,
+        outcome: "failed",
+        rank: 2,
+      });
+    }
+  }
+  if (sources.payment && attempts.length === 0) {
     const p = sources.payment;
     const amount = formatMoney(p.amount, p.currency);
     entries.push({
@@ -378,7 +440,7 @@ export async function getResponseTimeline(
   supabase: Client,
   response: TimelineSources["response"] & { id: string },
 ): Promise<TimelineEntry[]> {
-  const [deliveries, sheets, payment, events, connectorJobs, bookingJobs] =
+  const [deliveries, sheets, payment, events, connectorJobs, bookingJobs, attempts] =
     await Promise.all([
       supabase
         .from("webhook_deliveries")
@@ -413,6 +475,13 @@ export async function getResponseTimeline(
           "id, provider, action, status, attempt_count, last_error, created_at, bookings!inner(response_id)",
         )
         .eq("bookings.response_id", response.id)
+        .order("created_at"),
+      supabase
+        .from("payment_attempts")
+        .select(
+          "id, provider, amount, currency, coupon_code, status, error, created_at, updated_at",
+        )
+        .eq("response_id", response.id)
         .order("created_at"),
     ]);
   return buildTimeline({
@@ -454,6 +523,17 @@ export async function getResponseTimeline(
           paidAt: payment.data.paid_at,
         }
       : null,
+    paymentAttempts: (attempts.data ?? []).map((a) => ({
+      id: a.id,
+      provider: a.provider,
+      amount: a.amount,
+      currency: a.currency,
+      couponCode: a.coupon_code,
+      status: a.status,
+      error: a.error,
+      createdAt: a.created_at,
+      updatedAt: a.updated_at,
+    })),
     events: (events.data ?? []).map((e) => {
       const profile = e.profiles as { full_name: string | null; email: string } | null;
       return {

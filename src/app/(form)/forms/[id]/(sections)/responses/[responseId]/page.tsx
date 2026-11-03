@@ -1,3 +1,4 @@
+import { formatAmount, PROVIDER_LABEL } from "@/domains/payments/config";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -106,7 +107,9 @@ export default async function ResponseDetailPage({
   const { supabase, form, viewOnly, workspace } = await loadFormForPage(formId);
   const { data: payment } = await supabase
     .from("payments")
-    .select("amount, currency, status, livemode")
+    .select(
+      "amount, currency, status, livemode, provider, discount, coupon_code, refunded_amount, provider_payment_id",
+    )
     .eq("response_id", responseId)
     .maybeSingle();
 
@@ -377,10 +380,7 @@ export default async function ResponseDetailPage({
         <section className="border-ink bg-card flex flex-wrap items-center gap-3 rounded-lg border-[1.5px] px-[18px] py-3 text-sm">
           <b>Payment</b>
           <span className="font-heading text-lg font-bold">
-            {new Intl.NumberFormat("en", {
-              style: "currency",
-              currency: payment.currency.toUpperCase(),
-            }).format(payment.amount / (payment.currency === "jpy" ? 1 : 100))}
+            {formatAmount(payment.amount, payment.currency)}
           </span>
           <span
             className={
@@ -390,16 +390,33 @@ export default async function ResponseDetailPage({
             }
           >
             {payment.status === "paid"
-              ? "Paid"
-              : payment.status === "pending"
-                ? "Not paid yet"
-                : payment.status === "expired"
-                  ? "Expired"
-                  : "Failed"}
+              ? payment.refunded_amount
+                ? "Paid, partly refunded"
+                : "Paid"
+              : payment.status === "refunded"
+                ? "Refunded"
+                : payment.status === "pending"
+                  ? "Not paid yet"
+                  : payment.status === "expired"
+                    ? "Expired"
+                    : "Failed"}
           </span>
-          {!payment.livemode && (
-            <span className="text-muted-foreground text-xs">Stripe test mode</span>
-          )}
+          <span className="text-muted-foreground text-xs">
+            {[
+              PROVIDER_LABEL[payment.provider as keyof typeof PROVIDER_LABEL] ??
+                payment.provider,
+              payment.coupon_code
+                ? `coupon ${payment.coupon_code} (−${formatAmount(payment.discount, payment.currency)})`
+                : null,
+              payment.refunded_amount
+                ? `${formatAmount(payment.refunded_amount, payment.currency)} refunded`
+                : null,
+              payment.provider_payment_id,
+              payment.provider !== "coupon" && !payment.livemode ? "test mode" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
         </section>
       )}
 

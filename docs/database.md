@@ -335,6 +335,33 @@ response.
   has responses.
 - **`notification_digests.frequency`** — `daily` | `weekly`.
 
+## Payments, coupons and Razorpay (migration 52)
+
+- **`payments`** gains `provider` (stripe/razorpay/coupon), `subtotal`,
+  `discount`, `coupon_id`/`coupon_code`, `provider_payment_id`,
+  `refunded_amount`; status adds `refunded`; amount may be 0 (free by
+  coupon). Trigger `payments_state_guard`: paid → only paid or refunded,
+  refunded stays, and a paid amount or provider can't change.
+- **`payment_attempts`** — each try to pay: the provider's id
+  (`provider_ref`, unique: a Razorpay order, a Checkout Session), amounts,
+  coupon, status pending/paid/failed/expired, the provider's payment id.
+  Members read; the server writes. A paid attempt never goes back.
+- **`coupons`** — per form: code (upper-case, unique per form), percent or
+  amount off, expiry, usage limit, `uses` (kept by the server), on/off.
+  Members read; editors write (not `uses`).
+- **`record_payment_paid(ref, payment_id)`** — marks a try paid and the
+  response's payment paid once, counts the coupon use; reports a second
+  paid try as a duplicate (service role).
+- `integration_credentials.provider` adds `razorpay`;
+  `form_documents.kind` adds `receipt`; `response_events.kind` adds
+  `payment`.
+
+## Booking retries (migration 53)
+
+- **`book_slot`** retries a host after a deadlock (concurrent overlapping
+  inserts) instead of failing the request; overlaps still move to the
+  next host.
+
 ## Bookings and connectors (migration 50)
 
 - **`booking_types`**, **`booking_hosts`** — what can be booked, when,

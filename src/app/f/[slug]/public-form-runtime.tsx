@@ -6,6 +6,8 @@ import { compileFormSchema } from "@/domains/forms/schema/compile";
 import { applyVariant, ORIGINAL } from "@/domains/forms/variants";
 import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
+import { PaymentStep } from "@/components/runtime/payment-step";
+import type { Quote } from "@/domains/payments/flow";
 import { FormClosedScreen } from "@/components/runtime/form-closed";
 import { Turnstile, type TurnstileHandle } from "./turnstile";
 import { type CompleteOutcome } from "@/components/runtime/form-runtime";
@@ -302,6 +304,12 @@ export function PublicFormRuntime({
   // Submitted: the response is done, and nothing may be saved (or kept
   // in this browser) for it any more.
   const submittedRef = useRef(false);
+  const [paying, setPaying] = useState<{
+    responseId: string;
+    quote: Quote;
+    payLater: string | null;
+    resolve: (how: "paid" | "later" | { redirect: string }) => void;
+  } | null>(null);
   const viewSentRef = useRef(false);
   // Refs survive React Strict Mode's mount → unmount → mount in dev, so
   // both runs share one localStorage read and one /start request.
@@ -795,19 +803,35 @@ export function PublicFormRuntime({
       if (res.ok) {
         const data = (await res.json()) as {
           endingId: string;
-          paymentUrl?: string;
+          payment?: { quote: Quote; payLater: string | null };
           paymentError?: string;
         };
         pixel("submit");
         // Submitted: nothing left for leaving the page to save.
         submittedRef.current = true;
         savedRevisionRef.current = current.revision;
-        if (data.paymentUrl) {
-          // Answers are saved; payment happens on Stripe, and the form
-          // only shows it as paid once Stripe confirms (P2.17).
+        if (data.payment) {
+          // Answers are saved; the payment step shows over the form, and
+          // the ending follows once the server confirms payment (F-22) —
+          // or when the respondent chooses to pay later.
           store.clear(formId);
-          window.location.assign(data.paymentUrl);
-          return { ok: true, endingId: data.endingId, redirecting: true };
+          const responseId = current.responseId;
+          const how = await new Promise<"paid" | "later" | { redirect: string }>(
+            (resolve) =>
+              setPaying({
+                responseId,
+                quote: data.payment!.quote,
+                payLater: data.payment!.payLater,
+                resolve,
+              }),
+          );
+          setPaying(null);
+          if (typeof how === "object") {
+            window.location.assign(how.redirect);
+            return { ok: true, endingId: data.endingId, redirecting: true };
+          }
+          onCompleted?.();
+          return { ok: true, endingId: data.endingId, responseId };
         }
         // Only now is the response durably complete — clearing earlier
         // would lose the respondent's answers if the submit failed.
@@ -957,6 +981,18 @@ export function PublicFormRuntime({
         </label>
       )}
       {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
+      {paying && (
+        <PaymentStep
+          theme={theme}
+          embedded={embedded}
+          responseId={paying.responseId}
+          initialQuote={paying.quote}
+          payLaterUrl={kiosk ? null : paying.payLater}
+          onPaid={() => paying.resolve("paid")}
+          onLater={() => paying.resolve("later")}
+          onRedirect={(url) => paying.resolve({ redirect: url })}
+        />
+      )}
       <FormRenderer
         compiled={shown}
         language={language}

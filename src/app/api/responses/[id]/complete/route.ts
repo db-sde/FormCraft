@@ -4,7 +4,7 @@ import { NextResponse, after } from "next/server";
 import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
 import { sendConfirmationEmail } from "@/domains/notifications/confirmation";
-import { checkoutForResponse } from "@/domains/payments/checkout";
+import { quotePayment } from "@/domains/payments/flow";
 import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
 import { enqueueSheetsSync, dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { recordAnalyticsEvent } from "@/domains/analytics";
@@ -260,18 +260,38 @@ export async function POST(
       await saveOrder(createAdminClient(), id).catch(() => null);
     }
 
-    // Payment (P2.17): the response is already saved; now the server
-    // starts Stripe Checkout for the amount it works out itself.
+    // Payment (P2.17, F-22): the response is already saved; the server
+    // works out what's owed and the form shows its payment step.
     const payment = parsed.data.trap
       ? null
-      : await checkoutForResponse(createAdminClient(), id, {
-          origin: request.nextUrl.origin,
-        }).catch(() => ({ error: "The payment couldn't be started." }));
+      : await quotePayment(createAdminClient(), id).catch(() => ({
+          ok: false as const,
+          message: "The payment couldn't be started.",
+        }));
+    const owes =
+      payment?.ok && payment.status !== "paid" && payment.status !== "refunded";
+    const { data: formSlug } = owes
+      ? await createAdminClient()
+          .from("forms")
+          .select("slug")
+          .eq("id", result.formId)
+          .maybeSingle()
+      : { data: null };
 
     return NextResponse.json({
       endingId: result.endingId,
-      ...(payment && "url" in payment ? { paymentUrl: payment.url } : {}),
-      ...(payment && "error" in payment ? { paymentError: payment.error } : {}),
+      // The respondent pays in the form's payment step (F-22).
+      ...(owes
+        ? {
+            payment: {
+              quote: payment.quote,
+              // Where to come back and pay later (the response id is the
+              // respondent's own, unguessable).
+              payLater: formSlug ? `/f/${formSlug.slug}/payment?response=${id}` : null,
+            },
+          }
+        : {}),
+      ...(payment && !payment.ok ? { paymentError: payment.message } : {}),
     });
   } catch (error) {
     if (error instanceof ResponseNotFoundError) {

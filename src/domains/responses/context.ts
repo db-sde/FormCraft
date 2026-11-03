@@ -36,7 +36,21 @@ export type ResponseContext = {
     { questionId: string; name: string; storagePath: string; createdAt: string }
   >;
   order: SavedOrder | null;
-  payment: { status: string } | null;
+  payment: ResponsePayment | null;
+};
+
+/** A response's payment (F-22): amounts in minor units. */
+export type ResponsePayment = {
+  status: string;
+  amount: number;
+  currency: string;
+  subtotal: number | null;
+  discount: number;
+  couponCode: string | null;
+  provider: string;
+  providerPaymentId: string | null;
+  paidAt: string | null;
+  refundedAmount: number;
 };
 
 const SCREENS = new Set(["welcome_screen", "statement", "page_break"]);
@@ -72,7 +86,13 @@ export async function loadResponseContext(
       .select("id, question_id, original_filename, storage_path, created_at, status")
       .eq("response_id", responseId),
     getOrder(admin, responseId),
-    admin.from("payments").select("status").eq("response_id", responseId).maybeSingle(),
+    admin
+      .from("payments")
+      .select(
+        "status, amount, currency, subtotal, discount, coupon_code, provider, provider_payment_id, paid_at, refunded_amount",
+      )
+      .eq("response_id", responseId)
+      .maybeSingle(),
   ]);
   if (!version) return null;
   const schema = parseFormSchema(version.schema);
@@ -122,7 +142,20 @@ export async function loadResponseContext(
         ]),
     ),
     order,
-    payment: payment ? { status: payment.status } : null,
+    payment: payment
+      ? {
+          status: payment.status,
+          amount: payment.amount,
+          currency: payment.currency,
+          subtotal: payment.subtotal,
+          discount: payment.discount,
+          couponCode: payment.coupon_code,
+          provider: payment.provider,
+          providerPaymentId: payment.provider_payment_id,
+          paidAt: payment.paid_at,
+          refundedAmount: payment.refunded_amount,
+        }
+      : null,
   };
 }
 

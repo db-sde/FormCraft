@@ -156,6 +156,9 @@ test("respondents pay on Stripe, and only Stripe's word marks it paid", async ({
     await page.goto(liveLink);
     await page.getByRole("textbox").fill("Ada");
     await page.getByRole("button", { name: "Submit" }).click();
+    // The form's payment step (F-22), then Stripe's page.
+    await expect(page.getByRole("heading", { name: "Payment" })).toBeVisible();
+    await page.getByRole("button", { name: "Pay $15.00" }).click();
     await expect(
       page.getByRole("heading", { name: "Fake Stripe checkout" }),
     ).toBeVisible();
@@ -167,6 +170,7 @@ test("respondents pay on Stripe, and only Stripe's word marks it paid", async ({
       page.getByRole("heading", { name: "The payment didn't go through" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Try the payment again" }).click();
+    await page.getByRole("button", { name: "Pay $15.00" }).click();
     await expect(
       page.getByRole("heading", { name: "Fake Stripe checkout" }),
     ).toBeVisible();

@@ -4,6 +4,28 @@ Last updated: 2026-11-02
 
 ## Current milestone
 
+**MASTER SPEC — Phase 7 (final): payments and Razorpay / UPI** (2026-11-03,
+migration 52) — every master-spec phase is now built:
+
+| Item | What                                                                                                       |
+| ---- | ---------------------------------------------------------------------------------------------------------- |
+| F-22 | In-form payment step, order-total amounts, coupons, payment attempts, paid-only receipts, refunds recorded |
+| F-35 | Razorpay (INR: cards, UPI…): orders, verified Checkout signatures, signed webhooks, one paid state         |
+
+Decisions: `DECISIONS.md` (2026-11-03 — the product owner's money rules).
+Tests: `phase7` (unit), `payments-razorpay` (integration), `phase7.spec.ts`
+(E2E, against a stand-in Razorpay); `payments.spec.ts` updated for the
+payment step.
+
+**To deploy:** `npm run db:migrate` (migrations 52–53; 53 fixes booking under load). Each workspace that
+takes Razorpay payments connects it in Settings → Connections and adds
+the shown webhook URL in Razorpay (events `payment.captured`,
+`payment.failed`, `order.paid`, `refund.processed`) with automatic capture
+on. Stripe workspaces add `charge.refunded` to their webhook to record
+refunds.
+
+### Phase 6
+
 **MASTER SPEC — Phase 6: business integrations** (2026-11-02, migration
 51), on the Phase 5 connector framework:
 

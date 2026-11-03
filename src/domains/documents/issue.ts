@@ -10,6 +10,7 @@ import { logResponseEvent } from "@/domains/responses/timeline";
 import { renderEmailHtml } from "@/domains/notifications/email-layout";
 import { cleanAddress, defaultSender, type Send } from "@/domains/notifications/mailer";
 import { renderDocumentPdf, type DocumentContent } from "./pdf";
+import { formatMoney } from "@/domains/forms/products";
 import {
   certificateHasRule,
   DEFAULT_HEADING,
@@ -72,6 +73,9 @@ export function documentApplies(
       return true;
     case "order":
       return Boolean(ctx.order && ctx.order.lines.length > 0);
+    case "receipt":
+      // Only once the payment is confirmed (F-22).
+      return ctx.payment?.status === "paid" || ctx.payment?.status === "refunded";
     case "certificate": {
       if (!certificateHasRule(settings)) return false;
       if (settings.endingIds?.length && !settings.endingIds.includes(ctx.endingId ?? ""))
@@ -86,11 +90,17 @@ export function documentApplies(
 }
 
 /** What the order's payment state says. Never "Paid" unless it is. */
-export function paymentLabel(payment: { status: string } | null): {
+export function paymentLabel(
+  payment: { status: string; refundedAmount?: number } | null,
+): {
   label: string;
   paid: boolean;
 } {
-  if (payment?.status === "paid") return { label: "Paid", paid: true };
+  if (payment?.status === "refunded") return { label: "Refunded", paid: false };
+  if (payment?.status === "paid")
+    return payment.refundedAmount
+      ? { label: "Paid (partly refunded)", paid: true }
+      : { label: "Paid", paid: true };
   if (payment?.status === "pending")
     return { label: "Payment due: not paid yet", paid: false };
   if (payment) return { label: "Not paid", paid: false };
@@ -198,6 +208,63 @@ export async function documentContent(
     ...(doc.kind === "certificate"
       ? { certificate: { name: personName(ctx, s.nameQuestionId) } }
       : {}),
+    ...(doc.kind === "receipt" && ctx.payment ? receiptContent(ctx, ctx.payment) : {}),
+  };
+}
+
+const PROVIDER_NAME: Record<string, string> = {
+  stripe: "Stripe",
+  razorpay: "Razorpay",
+  coupon: "Coupon (nothing to pay)",
+};
+
+/** A receipt's table and details: what was charged, any coupon, and what
+ * the provider's records say — never more than was actually paid. */
+function receiptContent(
+  ctx: ResponseContext,
+  p: NonNullable<ResponseContext["payment"]>,
+): Pick<DocumentContent, "order" | "rows"> {
+  const currency = p.currency.toUpperCase();
+  const lines =
+    ctx.order && ctx.order.lines.length
+      ? ctx.order.lines
+      : [
+          {
+            itemId: "payment",
+            label: ctx.form.title,
+            quantity: 1,
+            unitAmount: p.subtotal ?? p.amount,
+            amount: p.subtotal ?? p.amount,
+          },
+        ];
+  const status = paymentLabel(p);
+  const money = (m: number) => formatMoney(m, currency);
+  return {
+    order: {
+      currency,
+      lines,
+      adjustments: p.discount
+        ? [{ label: `Coupon ${p.couponCode ?? ""}`.trim(), amount: -p.discount }]
+        : [],
+      total: p.amount,
+      paymentLabel: status.label,
+      paid: status.paid,
+    },
+    rows: [
+      {
+        label: "Payment",
+        value: [PROVIDER_NAME[p.provider] ?? p.provider, p.providerPaymentId]
+          .filter(Boolean)
+          .join(" · "),
+      },
+      ...(p.paidAt
+        ? [{ label: "Paid on", value: issuedDate(p.paidAt, ctx.schema.meta.timezone) }]
+        : []),
+      ...(p.refundedAmount
+        ? [{ label: "Refunded", value: money(p.refundedAmount) }]
+        : []),
+      { label: "Note", value: "This is a payment receipt, not a tax invoice." },
+    ],
   };
 }
 

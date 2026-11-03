@@ -35,6 +35,12 @@ const PIXEL_IMG_HOSTS = [
 /** Cloudflare Turnstile, for forms that require a CAPTCHA (F-26): its
  * script, and the frame the challenge runs in. */
 const CAPTCHA_HOST = "https://challenges.cloudflare.com";
+/** Razorpay Checkout (F-35), opened over a published form's payment
+ * step: its script, the frames it runs in, and the calls it makes. */
+const RAZORPAY_SCRIPT = "https://checkout.razorpay.com";
+const RAZORPAY_FRAMES = ["https://api.razorpay.com", "https://checkout.razorpay.com"];
+const RAZORPAY_CONNECT = ["https://api.razorpay.com", "https://lumberjack.razorpay.com"];
+const RAZORPAY_IMG = ["https://cdn.razorpay.com"];
 /** Booking pages shown on endings (scheduler.ts allows only these). */
 const SCHEDULER_FRAMES = [
   "https://calendly.com",
@@ -85,7 +91,7 @@ export function buildCsp({
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
       ...(pixels ? PIXEL_SCRIPT_HOSTS : []),
-      ...(publicForm ? [CAPTCHA_HOST] : []),
+      ...(publicForm ? [CAPTCHA_HOST, RAZORPAY_SCRIPT] : []),
       ...(dev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
@@ -95,16 +101,22 @@ export function buildCsp({
       "blob:",
       ...(supabase ? [supabase] : []),
       ...(pixels ? PIXEL_IMG_HOSTS : []),
+      ...(publicForm ? RAZORPAY_IMG : []),
     ],
     "font-src": ["'self'", "data:", ...(supabase ? [supabase] : [])],
     "connect-src": [
       "'self'",
       ...supabaseHosts,
       ...(pixels ? PIXEL_CONNECT_HOSTS : []),
+      ...(publicForm ? RAZORPAY_CONNECT : []),
       ...(dev ? ["ws:"] : []),
     ],
     "media-src": ["'self'", ...(supabase ? [supabase] : [])],
-    "frame-src": ["'self'", ...SCHEDULER_FRAMES, ...(publicForm ? [CAPTCHA_HOST] : [])],
+    "frame-src": [
+      "'self'",
+      ...SCHEDULER_FRAMES,
+      ...(publicForm ? [CAPTCHA_HOST, ...RAZORPAY_FRAMES] : []),
+    ],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
     "object-src": ["'none'"],

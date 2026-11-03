@@ -10,6 +10,12 @@ import {
 } from "@/domains/integrations/credentials";
 import { isHubspotToken, verifyHubspotToken } from "@/domains/integrations/hubspot";
 import { isStripeSecretKey, isStripeWebhookSecret } from "@/domains/payments";
+import {
+  isRazorpayKeyId,
+  isRazorpaySecret,
+  isTestKey,
+  verifyRazorpayKeys,
+} from "@/domains/payments/razorpay";
 import { canAdmin } from "@/domains/workspaces";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -73,6 +79,55 @@ export async function connectStripeAction(
   return { ok: true, message: "Stripe connected." };
 }
 
+/** Razorpay (F-35): the workspace's key id and secret, checked with
+ * Razorpay before they're stored (encrypted), and the webhook secret
+ * chosen when adding the webhook in the Razorpay dashboard. */
+export async function connectRazorpayAction(
+  keyId: string,
+  keySecret: string,
+  webhookSecret: string,
+): Promise<ConnectionResult> {
+  const id = keyId.trim();
+  const secret = keySecret.trim();
+  const hook = webhookSecret.trim();
+  if (!isRazorpayKeyId(id)) {
+    return {
+      ok: false,
+      message: "Paste a Razorpay key id (rzp_live_… or rzp_test_…).",
+    };
+  }
+  if (!isRazorpaySecret(secret)) {
+    return { ok: false, message: "Paste the key secret shown with that key id." };
+  }
+  if (hook.length < 8 || hook.length > 100) {
+    return {
+      ok: false,
+      message:
+        "Paste the webhook secret you set on the webhook in Razorpay (8+ characters).",
+    };
+  }
+  const allowed = await adminWithFeature("payments");
+  if ("error" in allowed) return { ok: false, message: allowed.error ?? "Not allowed." };
+  if (!(await verifyRazorpayKeys({ keyId: id, keySecret: secret }))) {
+    return { ok: false, message: "Razorpay didn't accept that key id and secret." };
+  }
+  await saveCredential(
+    createAdminClient(),
+    allowed.ctx.workspace.id,
+    "razorpay",
+    { keyId: id, keySecret: secret, webhookSecret: hook },
+    `${id}${isTestKey(id) ? " (test mode)" : ""}`,
+  );
+  await audit(createAdminClient(), {
+    workspaceId: allowed.ctx.workspace.id,
+    actorId: allowed.ctx.user.id,
+    action: "integration.connected",
+    metadata: { provider: "razorpay", mode: isTestKey(id) ? "test" : "live" },
+  });
+  revalidatePath("/settings");
+  return { ok: true, message: "Razorpay connected." };
+}
+
 /** HubSpot: a private-app access token, checked with HubSpot first. */
 export async function connectHubspotAction(token: string): Promise<ConnectionResult> {
   const value = token.trim();
@@ -108,7 +163,7 @@ export async function connectHubspotAction(token: string): Promise<ConnectionRes
 }
 
 export async function disconnectAction(provider: Provider): Promise<ConnectionResult> {
-  if (provider !== "stripe" && provider !== "hubspot")
+  if (provider !== "stripe" && provider !== "hubspot" && provider !== "razorpay")
     return { ok: false, message: "Unknown." };
   const ctx = await getCurrentWorkspace();
   if (!canAdmin(ctx.workspace.role))

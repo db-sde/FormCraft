@@ -35,6 +35,10 @@ export const PAGE_ROUTES = [
 
 /** API / handler routes → the spec that covers them. */
 export const HANDLER_ROUTES: Record<string, string> = {
+  "/api/payments/quote": "phase7.spec.ts",
+  "/api/payments/start": "phase7.spec.ts",
+  "/api/payments/razorpay/verify": "phase7.spec.ts",
+  "/api/payments/razorpay/[workspaceId]": "phase7.spec.ts",
   "/api/connectors/[provider]/authorize": "phase5.spec.ts",
   "/api/connectors/oauth/callback": "phase5.spec.ts",
   "/api/cron/connectors": "api-contract.spec.ts",

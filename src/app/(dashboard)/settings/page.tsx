@@ -242,10 +242,14 @@ export default async function SettingsPage({
         <ConnectionSettings
           stripe={connectionData[0].data?.find((c) => c.provider === "stripe") ?? null}
           hubspot={connectionData[0].data?.find((c) => c.provider === "hubspot") ?? null}
+          razorpay={
+            connectionData[0].data?.find((c) => c.provider === "razorpay") ?? null
+          }
           payments={connectionData[1].entitlements.payments}
           crm={connectionData[1].entitlements.crm}
           isAdmin={canAdmin(workspace.role)}
           stripeWebhookUrl={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payments/stripe/${workspace.id}`}
+          razorpayWebhookUrl={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payments/razorpay/${workspace.id}`}
         />
       )}
 

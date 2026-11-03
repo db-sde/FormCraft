@@ -3,6 +3,76 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-03 — Master spec Phase 7: payments and Razorpay / UPI
+
+Phase 7 of `docs/master-spec.md` (F-22 payments enhancement and F-35
+Razorpay / UPI, one workstream), migration 52. The product owner settled
+§9 item 3 (2026-11-03):
+
+- **Currencies:** Razorpay forms charge INR only. Stripe forms keep their
+  currency list. A form charging its product order uses the products'
+  currency (Razorpay refuses anything but INR).
+- **Coupons:** per form; a percentage (1–100) or an amount off; optional
+  expiry and usage limit; one per payment, no stacking. Checked on the
+  server whenever a payment is priced or started; a use is counted only
+  when the payment is confirmed (`record_payment_paid`), so a code merely
+  tried or abandoned isn't used up. The limit is checked when a payment
+  starts: two people paying at the same moment with the last use may both
+  succeed (money already taken is honoured). A 100% coupon (or one that
+  leaves nothing to pay) records the response as paid by coupon, amount 0.
+  A coupon may not leave a total below the provider's minimum (₹1, ~50¢).
+- **Refunds:** made in the Razorpay or Stripe dashboard; their webhooks
+  (`refund.processed`, `charge.refunded`) record them — partly refunded
+  stays paid with the refunded amount; in full becomes `refunded`.
+  FormCraft issues no refunds.
+- **Unpaid responses** are kept, marked unpaid; they count toward response
+  caps and keep any booking. Respondents can pay later from their payment
+  link (`/f/:slug/payment?response=…`), shown in the payment step.
+- **Taxes:** none calculated; receipts say they aren't tax invoices.
+
+How it holds together:
+
+- **One flow for both providers** (`domains/payments/flow.ts`): the
+  amount is worked out on the server (fixed, a calculated variable, or —
+  new — the product order total), less the coupon. Each try is a
+  `payment_attempts` row with the provider's id (Razorpay order, Stripe
+  Checkout Session, or `coupon:`), so a webhook for any try finds its
+  response. An open try for the same amount is reused (no second order);
+  a newer Stripe session closes older open ones; a paid response can't
+  start another.
+- **Paid only from the server's own check:** Razorpay Checkout's
+  signature (HMAC of `order|payment` with the key secret) plus Razorpay's
+  record showing the payment captured for that order and amount, or a
+  webhook signed with the workspace's secret; for Stripe, its signed
+  webhook or asking Stripe. An `authorized` (uncaptured) Razorpay payment
+  isn't paid — merchants turn on automatic capture.
+- **Exactly one terminal state (spec §6.1 #3):** `record_payment_paid`
+  marks a try paid atomically, once; a database trigger stops a paid
+  payment going back (only to refunded) or changing amount. Repeats and
+  late failures change nothing; a second paid try for an already-paid
+  response is recorded and flagged on the timeline to refund.
+- **In-form payment step:** after the answers are saved, the form shows
+  what's owed, a coupon field (when the form has coupons) and Pay;
+  Razorpay Checkout (cards, UPI, netbanking, wallets — whatever the
+  merchant has activated) opens over the form and the ending shows once
+  the server confirms. Stripe forms go to Stripe's page as before, now
+  after the same step. Card and UPI details never reach FormCraft.
+- **Receipts:** a new "Payment receipt" PDF document, issued (and emailed
+  to its recipients) only once a payment is confirmed: items or the
+  payment's description, the coupon, what was paid, the provider's
+  reference, refunds. Confidential forms issue none. Notification rules
+  can't attach receipts (they email on submit, before payment).
+- **Timeline:** every try (started, paid, failed, expired), refunds and
+  duplicate payments.
+- **Booking fix found while testing (migration 53):** two bookings racing
+  for the same host could deadlock on the overlap check; `book_slot` only
+  handled the overlap error, so the deadlocked request was refused even
+  with another host free (never a double booking). It now retries that
+  host after a deadlock, then moves on.
+- **Credentials:** Razorpay key id, key secret and webhook secret per
+  workspace (Settings → Connections), checked with Razorpay and stored
+  encrypted like Stripe's.
+
 ## 2026-11-02 — Master spec Phase 6: business integrations
 
 Phase 6 of `docs/master-spec.md` (F-33 Airtable, F-34 Salesforce, F-36

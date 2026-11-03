@@ -18,6 +18,8 @@ export const DOCUMENT_KINDS = [
   "order",
   "registration",
   "certificate",
+  // Master spec F-22 (2026-11-03): issued once a payment is confirmed.
+  "receipt",
 ] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
@@ -26,6 +28,7 @@ export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
   order: "Order confirmation",
   registration: "Registration confirmation",
   certificate: "Certificate",
+  receipt: "Payment receipt",
 };
 
 export const DOCUMENT_KIND_HINT: Record<DocumentKind, string> = {
@@ -34,6 +37,8 @@ export const DOCUMENT_KIND_HINT: Record<DocumentKind, string> = {
     "Items, quantities and total, on submit when there's an order. Says “paid” only once payment is confirmed.",
   registration: "A confirmation with a reference number, on submit.",
   certificate: "Issued only when the response meets the rule you set.",
+  receipt:
+    "What was paid, any coupon and the payment's reference, once the payment is confirmed. Not a tax invoice.",
 };
 
 export const DOCUMENT_RECIPIENTS = ["none", "owner", "respondent", "both"] as const;
@@ -85,6 +90,7 @@ export const DEFAULT_HEADING: Record<DocumentKind, string> = {
   order: "Order confirmation",
   registration: "Registration confirmed",
   certificate: "Certificate of completion",
+  receipt: "Payment receipt",
 };
 
 export function parseDocumentSettings(raw: unknown): DocumentSettings {

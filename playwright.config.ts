@@ -21,6 +21,12 @@ process.env.AIRTABLE_API_BASE = `http://127.0.0.1:${FAKE_AIRTABLE_PORT}`;
 process.env.AIRTABLE_CLIENT_ID ??= "e2e-airtable-client";
 process.env.AIRTABLE_CLIENT_SECRET ??= "e2e-airtable-secret";
 
+// Razorpay (master spec Phase 7): its API and its Checkout script are
+// stand-ins that phase7.spec.ts serves — never the real ones in a test.
+export const FAKE_RAZORPAY_PORT = 4603;
+process.env.RAZORPAY_API_BASE = `http://127.0.0.1:${FAKE_RAZORPAY_PORT}`;
+process.env.RAZORPAY_CHECKOUT_SCRIPT = `http://127.0.0.1:${FAKE_RAZORPAY_PORT}/checkout.js`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",

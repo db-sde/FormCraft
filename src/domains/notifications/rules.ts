@@ -50,7 +50,8 @@ export const NotificationRuleInput = z.object({
   condition: Condition.optional(),
   subject: z.string().max(200).optional(),
   includeAnswers: z.boolean(),
-  attachDocument: z.enum(DOCUMENT_KINDS).optional(),
+  // Rules email on submit, before any payment: no receipts.
+  attachDocument: z.enum(DOCUMENT_KINDS).exclude(["receipt"]).optional(),
 });
 export type NotificationRuleInput = z.infer<typeof NotificationRuleInput>;
 

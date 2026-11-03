@@ -7,7 +7,7 @@ import {
   isStripeSecretKey,
   PaymentConfig,
   verifyStripeSignature,
-} from "@/domains/payments/stripe";
+} from "@/domains/payments";
 import {
   contactProperties,
   isHubspotToken,
