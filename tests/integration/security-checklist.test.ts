@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { encryptJson } from "@/domains/sheets/crypto";
+import { sheetsContext } from "@/domains/sheets/queries";
 import { disconnectForm } from "@/domains/sheets";
 import { rotateSigningSecret } from "@/domains/webhooks";
 
@@ -121,11 +122,15 @@ describe("secrets stay on the server", () => {
     await admin.from("sheets_connections").insert({
       workspace_id: workspaceId,
       form_id: formId,
-      encrypted_tokens: encryptJson({
-        accessToken: "ya29.access",
-        refreshToken: "1//refresh",
-        expiresAt: Date.now() + 60_000,
-      }) as unknown as Json,
+      encrypted_tokens: encryptJson(
+        {
+          accessToken: "ya29.access",
+          refreshToken: "1//refresh",
+          expiresAt: Date.now() + 60_000,
+          // Bound to this form's row, as the app stores them.
+        },
+        sheetsContext(formId),
+      ) as unknown as Json,
     });
     const { data, error } = await viewer
       .from("sheets_connections")

@@ -6,6 +6,9 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
+// A batch of background work: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /**
  * Processes due webhook redeliveries (retries whose backoff window has
  * elapsed). There's no long-running worker in this deployment model,

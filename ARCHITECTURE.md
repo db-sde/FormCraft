@@ -126,8 +126,17 @@ lives in `src/domains/analytics` and explicitly filters
 
 ## Observability
 
-Sentry wraps route handlers/server actions for error capture.
-Structured log helper (`src/domains/observability`) tags every log
-line with `operation`, `outcome` (success/rejected/conflict/retry/
-unknown), and a request-scoped correlation id. Secrets are never
-logged (see `CLAUDE.md` rule 8).
+- **Errors:** `src/instrumentation.ts` starts Sentry on the server (and
+  `instrumentation-client.ts` in the browser) when
+  `NEXT_PUBLIC_SENTRY_DSN` is set; `onRequestError` captures route
+  handler, server action and page errors. We attach ids as tags, never
+  answers or secrets.
+- **Handled failures** (a background step after a submit, a provider
+  call) go through `reportError` (`src/lib/observability/report.ts`): one
+  JSON log line — `operation`, `outcome`, `responseId`/`formId` — and a
+  Sentry event with the same tags. Secrets and answers are never logged
+  (`CLAUDE.md` rule 8).
+- **Background machinery:** `/api/cron/health` (CRON_SECRET) answers 503
+  when queues are overdue — webhooks, Sheets, calendar and app syncs —
+  booking reminders are late, or a duplicate payment needs a refund.
+  Point an uptime monitor at it.

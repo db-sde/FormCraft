@@ -9,6 +9,8 @@ import {
   ResponseNotFoundError,
   QuestionNotFoundError,
   UnsupportedFileTypeError,
+  InfectedFileError,
+  ScanUnavailableError,
   FileTooLargeError,
 } from "@/domains/uploads";
 import { hitRateLimit } from "@/domains/abuse";
@@ -101,6 +103,20 @@ function uploadErrorResponse(error: unknown) {
   }
   if (error instanceof UnsupportedFileTypeError) {
     return apiError("unsupported_type", "This file type isn't supported.", 400);
+  }
+  if (error instanceof InfectedFileError) {
+    return apiError(
+      "unsafe_file",
+      "This file was flagged as unsafe and wasn't uploaded.",
+      422,
+    );
+  }
+  if (error instanceof ScanUnavailableError) {
+    return apiError(
+      "scan_unavailable",
+      "The file couldn't be checked right now. Please try again.",
+      503,
+    );
   }
   if (error instanceof FileTooLargeError) {
     return apiError("too_large", error.message, 413);

@@ -1,3 +1,4 @@
+import { signingKey } from "@/lib/crypto/keys";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
@@ -167,12 +168,12 @@ type Payload = {
   e: number;
 };
 
-function secret(value = process.env.APP_SECRET): string {
-  if (!value) throw new Error("APP_SECRET is not set");
-  return value;
+/** The state-signing key: its own, derived from APP_SECRET. */
+function secret(value = process.env.APP_SECRET): Buffer {
+  return signingKey("connect-state", value);
 }
 
-const sign = (body: string, key: string) =>
+const sign = (body: string, key: Buffer) =>
   createHmac("sha256", key).update(body).digest("base64url");
 
 export function safeReturnPath(path: string | null | undefined): string {
@@ -237,7 +238,7 @@ export function verifyConnectState(
 
 /** A PKCE verifier only the browser that started the flow can produce. */
 export function pkceFor(nonce: string, key = process.env.APP_SECRET) {
-  const verifier = createHmac("sha256", secret(key))
+  const verifier = createHmac("sha256", signingKey("connect-pkce", key))
     .update(`connect-pkce:${nonce}`)
     .digest("base64url");
   return {

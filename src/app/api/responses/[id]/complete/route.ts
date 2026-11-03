@@ -5,6 +5,7 @@ import { completeResponse, ResponseNotFoundError } from "@/domains/responses";
 import { notifyFormOwnerOfCompletedResponse } from "@/domains/notifications";
 import { sendConfirmationEmail } from "@/domains/notifications/confirmation";
 import { quotePayment } from "@/domains/payments/flow";
+import { reportError } from "@/lib/observability/report";
 import { enqueueWebhookDeliveries, dispatchDueDeliveries } from "@/domains/webhooks";
 import { enqueueSheetsSync, dispatchDueSheetsSyncs } from "@/domains/sheets";
 import { recordAnalyticsEvent } from "@/domains/analytics";
@@ -23,6 +24,10 @@ import { sendRuleEmails } from "@/domains/notifications/rules";
 import { emailConfirmed, holdBookings, settleBookings } from "@/domains/bookings/submit";
 import { enqueueConnectorSyncs } from "@/domains/connectors/links";
 import "@/domains/connectors/registry";
+
+// Background work (emails, PDFs, deliveries) runs after the reply;
+// this bounds it explicitly (seconds) instead of the platform default.
+export const maxDuration = 60;
 
 const CompleteBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -171,19 +176,26 @@ export async function POST(
       // (missing API key, an unreachable webhook endpoint, ...) can
       // never affect the response itself (see ARCHITECTURE.md).
       after(async () => {
-        await emailConfirmed(admin, confirmedBookings).catch(() => null);
+        await emailConfirmed(admin, confirmedBookings).catch((error) =>
+          reportError(error, { operation: "submit.bookings", responseId: id }),
+        );
         // Each step is independent: one failing (analytics down, no
         // email key, a webhook consumer erroring) must not skip the
         // rest. Anything that still doesn't happen is picked up by the
         // cron recovery sweeps, which create the missing jobs.
-        const step = async (work: () => Promise<unknown>) => {
+        const step = async (operation: string, work: () => Promise<unknown>) => {
           try {
             await work();
-          } catch {
-            // Intentionally swallowed — see above.
+          } catch (error) {
+            // Never affects the response — but reported, not lost.
+            reportError(error, {
+              operation: `submit.${operation}`,
+              responseId: id,
+              formId: result.formId,
+            });
           }
         };
-        await step(() =>
+        await step("analytics", () =>
           recordAnalyticsEvent(admin, {
             formId: result.formId,
             eventType: "form_submitted",
@@ -191,14 +203,14 @@ export async function POST(
             metadata: { endingId: result.endingId || null },
           }),
         );
-        await step(() =>
+        await step("posthog", () =>
           captureServerEvent({
             distinctId: id,
             event: "form_submitted",
             properties: { formId: result.formId, endingId: result.endingId || null },
           }),
         );
-        await step(() => rememberProfile(admin, id));
+        await step("profile", () => rememberProfile(admin, id));
         // Emails go on the response's timeline (F-31) with their outcome.
         const logEmail = async (
           kind: "email_owner" | "email_respondent",
@@ -213,13 +225,13 @@ export async function POST(
             detail: event.reason ? { reason: event.reason } : {},
           });
         };
-        await step(async () =>
+        await step("email_owner", async () =>
           logEmail(
             "email_owner",
             await notifyFormOwnerOfCompletedResponse(admin, result.formId, id),
           ),
         );
-        await step(async () =>
+        await step("email_respondent", async () =>
           logEmail("email_respondent", await sendConfirmationEmail(admin, id)),
         );
         // Confidential feedback (F-30): nothing that carries individual
@@ -231,24 +243,24 @@ export async function POST(
           .eq("id", result.formId)
           .maybeSingle();
         if (formRow?.confidential) return;
-        await step(async () => {
+        await step("webhooks", async () => {
           await enqueueWebhookDeliveries(admin, id);
           // Send right away rather than waiting for the next scheduled
           // sweep; the sweep covers retries.
-          await dispatchDueDeliveries(admin);
+          await dispatchDueDeliveries(admin, { responseId: id });
         });
-        await step(async () => {
+        await step("sheets", async () => {
           const enqueued = await enqueueSheetsSync(admin, result.formId, id);
-          if (enqueued) await dispatchDueSheetsSyncs(admin);
+          if (enqueued) await dispatchDueSheetsSyncs(admin, { responseId: id });
         });
         // PDF documents (F-07): numbered and emailed once; failures are
         // on the response's timeline.
-        await step(() => issueDocumentsForResponse(admin, id));
+        await step("documents", () => issueDocumentsForResponse(admin, id));
         // Notification rules (F-25): teammates, by condition.
-        await step(() => sendRuleEmails(admin, id));
+        await step("rule_emails", () => sendRuleEmails(admin, id));
         // Business apps (Phase 6): one job per linked app, run now; the
         // connectors cron retries and recovers.
-        await step(() => enqueueConnectorSyncs(admin, id));
+        await step("connectors", () => enqueueConnectorSyncs(admin, id));
       });
     }
 

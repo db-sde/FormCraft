@@ -15,6 +15,13 @@ export async function hitRateLimit(
   limit: number,
   windowMs: number,
 ): Promise<{ allowed: boolean }> {
+  // First line, in this process: what one instance has seen can only be
+  // part of the total, so if it's already over the limit the shared count
+  // is too — refuse without a database write. A flood from one address
+  // then costs the database nothing.
+  if (!checkRateLimit(`local:${key}`, limit, windowMs).allowed) {
+    return { allowed: false };
+  }
   const { data, error } = await admin.rpc("hit_rate_limit", {
     p_key: key,
     p_limit: limit,

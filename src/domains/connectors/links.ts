@@ -141,7 +141,7 @@ export async function enqueueConnectorSyncs(
     queued += 1;
   }
   if (queued && options.dispatch !== false) {
-    await dispatchConnectorJobs(admin, { fetch: options.fetch });
+    await dispatchConnectorJobs(admin, { fetch: options.fetch, responseId });
   }
   return queued;
 }

@@ -356,11 +356,20 @@ const CLAIM_LEASE_SECONDS = 120;
  */
 export async function dispatchDueDeliveries(
   admin: Client,
+  options: { responseId?: string } = {},
 ): Promise<{ processed: number }> {
-  const { data: due, error } = await admin.rpc("claim_due_webhook_deliveries", {
-    p_limit: DISPATCH_BATCH_SIZE,
-    p_lease_seconds: CLAIM_LEASE_SECONDS,
-  });
+  // Scoped: a request sends its own response's deliveries only; the
+  // scheduled worker sends everything else.
+  const { data: due, error } = options.responseId
+    ? await admin.rpc("claim_response_webhook_deliveries", {
+        p_response_id: options.responseId,
+        p_limit: DISPATCH_BATCH_SIZE,
+        p_lease_seconds: CLAIM_LEASE_SECONDS,
+      })
+    : await admin.rpc("claim_due_webhook_deliveries", {
+        p_limit: DISPATCH_BATCH_SIZE,
+        p_lease_seconds: CLAIM_LEASE_SECONDS,
+      });
   if (error) throw error;
   if (!due || due.length === 0) return { processed: 0 };
 

@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     case "cancel": {
       await cancelBooking(admin, booking.id, "attendee");
       await sendBookingEmails(admin, booking.id, null, "cancelled").catch(() => null);
-      await dispatchConnectorJobs(admin).catch(() => null);
+      await dispatchConnectorJobs(admin, { bookingId: booking.id }).catch(() => null);
       return NextResponse.json({ ok: true });
     }
     case "reschedule": {

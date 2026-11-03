@@ -1,0 +1,10 @@
+# Secret scanning (see .github/workflows/security.yml). The default rules,
+# minus the test suites, which use made-up keys (sk_test_fake…, rzp_test_…)
+# against fake providers. Real secrets belong only in .env.local and the
+# host's secret store (CLAUDE.md rule 8).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake provider keys in tests"
+paths = ['''^tests/''']

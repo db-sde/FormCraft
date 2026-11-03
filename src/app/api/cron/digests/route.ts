@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 import { sendDueDigests } from "@/domains/notifications/digest";
 
+// A batch of background work: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /** Daily digests (F-25): each form's previous day in its own time zone,
  * sent once. Protected by CRON_SECRET; GET for Vercel Cron, POST for
  * other schedulers. */

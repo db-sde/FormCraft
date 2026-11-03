@@ -3,6 +3,9 @@ import { recheckDomains } from "@/domains/domains";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
+// A batch of background work: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /**
  * Re-checks every custom domain's DNS (P2.2): a domain whose TXT record
  * was removed goes to "error" and stops being served; pending ones are

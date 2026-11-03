@@ -356,6 +356,27 @@ response.
   `form_documents.kind` adds `receipt`; `response_events.kind` adds
   `payment`.
 
+## Hardening (migrations 54–57)
+
+- **54** — `pg_cron` + `pg_net`; `schedule_background_jobs(url, secret)`
+  (secrets in Vault) schedules the cron endpoints;
+  `unschedule_background_jobs()`; `call_cron_endpoint(path)`. Postgres
+  role only.
+- **55** — `claim_response_webhook_deliveries`,
+  `claim_response_sheets_syncs`, `claim_scoped_connector_jobs`: one
+  response's (or booking's) due jobs; indexes on
+  `webhook_deliveries.response_id`, `sheets_sync_log.response_id`.
+- **56** — `prune_operational_data(batch)`: finished deliveries, Sheets
+  rows and connector jobs after 90 days; failed/expired payment attempts
+  after 180.
+- **57** — `forms.embed_origins text[]` (validated origins, ≤ 20; null =
+  any site) and `form_embed_origins(slug)` for the request proxy.
+
+Encrypted columns (`integration_credentials.encrypted`,
+`connector_connections.encrypted`, `sheets_connections.encrypted_tokens`,
+`form_lookups.encrypted_header`) now hold `{ v: 2, kid, iv, authTag,
+ciphertext }`, bound to their row; older values have no `v`.
+
 ## Booking retries (migration 53)
 
 - **`book_slot`** retries a host after a deadlock (concurrent overlapping

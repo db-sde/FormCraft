@@ -18,6 +18,7 @@
     "db:migrate": "supabase db push",
     "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
     "db:seed-templates": "tsx scripts/seed-templates.ts",
+    "secrets:reencrypt": "tsx scripts/reencrypt-secrets.ts",
     "plan:set": "tsx scripts/set-plan.ts",
     "sso:set": "tsx scripts/set-sso.ts",
     "bench:logic": "tsx scripts/bench-logic.ts",

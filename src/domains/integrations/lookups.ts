@@ -5,7 +5,10 @@ import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { formatAnswerValue } from "@/domains/responses/format";
-import { decryptJson, encryptJson, type EncryptedPayload } from "@/domains/sheets/crypto";
+import { decryptJson, encryptJson, type EncryptedPayload } from "@/lib/crypto/encryption";
+
+/** Where a form's lookup headers are stored: they only decrypt there. */
+export const lookupContext = (formId: string) => `lookup:${formId}`;
 import {
   isDisallowedWebhookHost,
   outboundUrlProblem,
@@ -257,7 +260,10 @@ export async function saveLookup(
           ? { header_name: value.headerName }
           : {
               header_name: value.headerName,
-              encrypted_header: encryptJson(value.headerValue) as unknown as Json,
+              encrypted_header: encryptJson(
+                value.headerValue,
+                lookupContext(formId),
+              ) as unknown as Json,
             };
     const { data, error } = await admin
       .from("form_lookups")
@@ -283,7 +289,7 @@ export async function saveLookup(
       form_id: formId,
       header_name: value.headerName,
       encrypted_header: value.headerName
-        ? (encryptJson(value.headerValue) as unknown as Json)
+        ? (encryptJson(value.headerValue, lookupContext(formId)) as unknown as Json)
         : null,
       created_by: options.createdBy,
     })
@@ -414,6 +420,7 @@ export async function runLookups(
             name: lookup.header_name,
             value: decryptJson<string>(
               lookup.encrypted_header as unknown as EncryptedPayload,
+              lookupContext(response.form_id),
             ),
           }
         : null;

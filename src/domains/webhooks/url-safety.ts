@@ -52,6 +52,10 @@ function isReservedIpv4([a, b, c]: number[]): boolean {
     (a === 169 && b === 254) || // link-local, cloud metadata
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 0 && c === 0) || // IETF protocol assignments
+    (a === 192 && b === 0 && c === 2) || // documentation (TEST-NET-1)
+    (a === 192 && b === 88 && c === 99) || // 6to4 relay anycast
+    (a === 198 && b === 51 && c === 100) || // documentation (TEST-NET-2)
+    (a === 203 && b === 0 && c === 113) || // documentation (TEST-NET-3)
     (a === 192 && b === 168) ||
     (a === 198 && (b === 18 || b === 19)) || // benchmarking
     a >= 224 // multicast + reserved
@@ -110,6 +114,17 @@ function classifyAddress(address: string): AddressVerdict | null {
     if (isLoopbackIpv4(embedded)) return "loopback";
     return isReservedIpv4(embedded) ? "reserved" : "public";
   }
+  // 6to4 (2002::/16) embeds an IPv4 address in the next two hextets:
+  // judge that address, so 2002:7f00:1:: can't reach 127.0.0.1.
+  if (v6[0] === 0x2002) {
+    const embedded = [v6[1] >> 8, v6[1] & 0xff, v6[2] >> 8, v6[2] & 0xff];
+    if (isLoopbackIpv4(embedded)) return "loopback";
+    return isReservedIpv4(embedded) ? "reserved" : "public";
+  }
+  // Teredo (2001:0::/32) tunnels to an obfuscated IPv4 address; nothing
+  // legitimate needs it here.
+  if (v6[0] === 0x2001 && v6[1] === 0) return "reserved";
+  if (v6[0] === 0x2001 && v6[1] === 0xdb8) return "reserved"; // documentation
   if ((v6[0] & 0xfe00) === 0xfc00) return "reserved"; // unique local fc00::/7
   if ((v6[0] & 0xffc0) === 0xfe80) return "reserved"; // link-local fe80::/10
   if ((v6[0] & 0xff00) === 0xff00) return "reserved"; // multicast

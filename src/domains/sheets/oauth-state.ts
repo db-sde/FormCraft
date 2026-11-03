@@ -1,3 +1,4 @@
+import { signingKey } from "@/lib/crypto/keys";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
@@ -16,13 +17,13 @@ export const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 
 type StatePayload = { f: string; u: string; n: string; e: number };
 
-function sign(body: string, secret: string): string {
+function sign(body: string, secret: Buffer): string {
   return createHmac("sha256", secret).update(body).digest("base64url");
 }
 
-function secretOrThrow(secret = process.env.APP_SECRET): string {
-  if (!secret) throw new Error("APP_SECRET is not set — required to sign OAuth state");
-  return secret;
+/** The state-signing key: its own, derived from APP_SECRET. */
+function secretOrThrow(secret = process.env.APP_SECRET): Buffer {
+  return signingKey("sheets-state", secret);
 }
 
 export function createOAuthState(

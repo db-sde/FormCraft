@@ -1134,6 +1134,7 @@ export type Database = {
       };
       forms: {
         Row: {
+          embed_origins: string[] | null;
           import_report: Json | null;
           ai_lead_criteria: string | null;
           captcha_required: boolean;
@@ -1166,6 +1167,7 @@ export type Database = {
           confidential: Json | null;
         };
         Insert: {
+          embed_origins?: string[] | null;
           import_report?: Json | null;
           ai_lead_criteria?: string | null;
           captcha_required?: boolean;
@@ -1198,6 +1200,7 @@ export type Database = {
           confidential?: Json | null;
         };
         Update: {
+          embed_origins?: string[] | null;
           import_report?: Json | null;
           ai_lead_criteria?: string | null;
           captcha_required?: boolean;
@@ -2856,6 +2859,26 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      form_embed_origins: { Args: { p_slug: string }; Returns: string[] | null };
+      valid_embed_origins: { Args: { p_origins: string[] }; Returns: boolean };
+      prune_operational_data: { Args: { p_batch?: number }; Returns: Json };
+      claim_response_webhook_deliveries: {
+        Args: { p_response_id: string; p_limit: number; p_lease_seconds: number };
+        Returns: Database["public"]["Tables"]["webhook_deliveries"]["Row"][];
+      };
+      claim_response_sheets_syncs: {
+        Args: { p_response_id: string; p_limit: number; p_lease_seconds: number };
+        Returns: Database["public"]["Tables"]["sheets_sync_log"]["Row"][];
+      };
+      claim_scoped_connector_jobs: {
+        Args: {
+          p_response_id: string | null;
+          p_booking_id: string | null;
+          p_limit: number;
+          p_lease_seconds: number;
+        };
+        Returns: Database["public"]["Tables"]["connector_jobs"]["Row"][];
+      };
       record_payment_paid: {
         Args: { p_provider_ref: string; p_provider_payment_id: string | null };
         Returns: string;

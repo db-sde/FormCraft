@@ -9,6 +9,9 @@ import { purgeStaleProfiles } from "@/domains/responses/profile";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
+// A batch of background work: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /**
  * Daily sweep deleting unfinished responses past each form's retention
  * period (Form settings → "Delete unfinished responses after…").
@@ -23,12 +26,15 @@ async function run(request: NextRequest) {
   const completed = await purgeExpiredCompletedResponses(admin);
   const forms = await purgeDeletedForms(admin);
   await pruneRateLimits(admin);
+  // Finished background work past its keep period (migration 56).
+  const { data: operational } = await admin.rpc("prune_operational_data", {});
   const profilesDeleted = await purgeStaleProfiles(admin);
   return NextResponse.json({
     ...expired,
     completedDeleted: completed.deleted,
     ...forms,
     profilesDeleted,
+    operational,
   });
 }
 

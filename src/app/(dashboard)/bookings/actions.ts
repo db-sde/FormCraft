@@ -149,7 +149,7 @@ export async function cancelBookingAction(bookingId: string): Promise<Result> {
   if (!(await cancelBooking(admin, bookingId, "host")))
     return { ok: false, message: "It's already cancelled." };
   await sendBookingEmails(admin, bookingId, null, "cancelled").catch(() => null);
-  await dispatchConnectorJobs(admin).catch(() => null);
+  await dispatchConnectorJobs(admin, { bookingId }).catch(() => null);
   revalidatePath("/bookings");
   return { ok: true };
 }

@@ -12,12 +12,17 @@ import {
 /** A page's Content-Security-Policy with a fresh nonce: set on the
  * request (Next.js reads the nonce from it and adds it to its own
  * scripts; layouts read `x-nonce`) and on the response. */
-function pageCsp(request: NextRequest, publicForm: boolean) {
+function pageCsp(
+  request: NextRequest,
+  publicForm: boolean,
+  frameAncestors: string[] | null = null,
+) {
   const nonce = newNonce();
   const policy = buildCsp({
     nonce,
     supabaseUrl: supabaseEnv.url,
     publicForm,
+    frameAncestors,
     dev: process.env.NODE_ENV === "development",
     https: request.nextUrl.protocol === "https:",
   });
@@ -115,6 +120,43 @@ async function resolveDomain(host: string): Promise<Resolved> {
   return value;
 }
 
+const embedCache = new Map<string, { value: string[] | null; until: number }>();
+
+/** The sites a form allows to embed it (null: any), cached for a
+ * minute. A lookup that fails allows embedding as before rather than
+ * breaking every embed. */
+async function embedOrigins(slug: string | null): Promise<string[] | null> {
+  if (!slug) return null;
+  const hit = embedCache.get(slug);
+  if (hit && hit.until > Date.now()) return hit.value;
+  let value: string[] | null = null;
+  try {
+    const res = await fetch(`${supabaseEnv.url}/rest/v1/rpc/form_embed_origins`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseEnv.anonKey,
+        Authorization: `Bearer ${supabaseEnv.anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_slug: slug }),
+    });
+    const data = res.ok ? ((await res.json()) as unknown) : null;
+    value = Array.isArray(data)
+      ? data.filter((o): o is string => typeof o === "string")
+      : null;
+  } catch {
+    value = null;
+  }
+  if (embedCache.size > 5000) embedCache.clear();
+  embedCache.set(slug, { value, until: Date.now() + 60_000 });
+  return value;
+}
+
+/** The form a public path is for: /f/<slug>[/…]. */
+function slugOf(path: string): string | null {
+  return /^\/f\/([a-z0-9][a-z0-9-]{0,80})(?:\/|$)/.exec(path)?.[1] ?? null;
+}
+
 const notConnected = () =>
   new NextResponse(
     '<!doctype html><title>Not found</title><p style="font-family:system-ui;padding:2rem">There\'s no form here.</p>',
@@ -138,21 +180,22 @@ async function customDomain(request: NextRequest, host: string) {
     const response = NextResponse.next({ request: { headers } });
     return path.startsWith("/api/") ? apiResponse(response) : response;
   }
-  const { nonce, policy } = pageCsp(request, true);
-  headers.set("x-nonce", nonce);
-  headers.set("Content-Security-Policy", policy);
   // Stripe brings respondents back to /f/<slug>/payment (P2.17).
   const payment = /^\/f\/([a-z0-9][a-z0-9-]{0,80})\/payment\/?$/.exec(path);
+  let slug: string | null = null;
+  if (payment) slug = payment[1];
+  else if (path === "/") slug = domain.defaultSlug;
+  else {
+    const match = /^\/(?:f\/)?([a-z0-9][a-z0-9-]{0,80})\/?$/.exec(path);
+    slug = match ? match[1] : null;
+  }
+  const { nonce, policy } = pageCsp(request, true, await embedOrigins(slug));
+  headers.set("x-nonce", nonce);
+  headers.set("Content-Security-Policy", policy);
   if (payment) {
     const url = request.nextUrl.clone();
     url.pathname = `/f/${payment[1]}/payment`;
     return withCsp(NextResponse.rewrite(url, { request: { headers } }), policy);
-  }
-  let slug: string | null = null;
-  if (path === "/") slug = domain.defaultSlug;
-  else {
-    const match = /^\/(?:f\/)?([a-z0-9][a-z0-9-]{0,80})\/?$/.exec(path);
-    slug = match ? match[1] : null;
   }
   if (!slug) return notConnected();
   const url = request.nextUrl.clone();
@@ -179,7 +222,7 @@ export async function proxy(request: NextRequest) {
   if (path.startsWith("/f/")) {
     const headers = new Headers(request.headers);
     headers.delete(CUSTOM_DOMAIN_HEADER);
-    const { nonce, policy } = pageCsp(request, true);
+    const { nonce, policy } = pageCsp(request, true, await embedOrigins(slugOf(path)));
     headers.set("x-nonce", nonce);
     headers.set("Content-Security-Policy", policy);
     const visitor = ensureVisitor(request, headers);

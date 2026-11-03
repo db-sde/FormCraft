@@ -4,6 +4,32 @@ Last updated: 2026-11-02
 
 ## Current milestone
 
+**Hardening** (2026-11-03, migrations 54–57, branch `claude/hardening`):
+background work every minute via Supabase's scheduler, requests running
+only their own jobs, rotatable and row-bound encryption keys,
+per-purpose signing keys, Sentry actually wired, health checks for every
+queue, pruning of finished work, CI security scanning, optional upload
+malware scanning, per-form embed allowlist. See DECISIONS.md.
+
+**To deploy the hardening:**
+
+1. `npm run db:migrate` (migrations 54–57).
+2. In the Supabase SQL editor, once:
+   `select public.schedule_background_jobs('https://<your app>', '<CRON_SECRET>');`
+3. Set `ENCRYPTION_KEYS` (see `.env.example`), deploy, then run
+   `npm run secrets:reencrypt` against production.
+4. Set `NEXT_PUBLIC_SENTRY_DSN` to receive errors.
+5. Recommended at the edge (Vercel Firewall → rate limiting rules):
+   limit `/api/responses/*`, `/api/payments/*` and `/f/*` per IP.
+6. Optional: `CLAMD_HOST` for upload scanning.
+7. Point an uptime monitor at `/api/cron/health` (Bearer CRON_SECRET).
+
+**Still open:** moving the 64 service-role files onto narrower access;
+analytics rollups so raw events can be pruned; confirm the Supabase
+project is in Singapore, like the Vercel functions (`sin1`).
+
+### Phase 7
+
 **MASTER SPEC — Phase 7 (final): payments and Razorpay / UPI** (2026-11-03,
 migration 52) — every master-spec phase is now built:
 

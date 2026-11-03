@@ -146,7 +146,9 @@ export async function settleBookings(
 /** Confirmation emails for newly confirmed bookings, and their calendar
  * events straight away (the cron only retries). */
 export async function emailConfirmed(admin: Client, confirmed: Held[]): Promise<void> {
-  if (confirmed.length) await dispatchConnectorJobs(admin).catch(() => null);
+  for (const h of confirmed) {
+    await dispatchConnectorJobs(admin, { bookingId: h.bookingId }).catch(() => null);
+  }
   for (const h of confirmed) {
     if (h.token) {
       await sendBookingEmails(admin, h.bookingId, h.token, "confirmed").catch(() => null);

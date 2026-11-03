@@ -149,7 +149,7 @@ export async function replayAttemptAction(
       actorId: auth.user.id,
       detail: { target: "connector", attempt: attemptId },
     });
-    await dispatchConnectorJobs(admin).catch(() => null);
+    await dispatchConnectorJobs(admin, { responseId }).catch(() => null);
     refresh(formId, responseId);
     return { ok: true };
   }
@@ -162,8 +162,8 @@ export async function replayAttemptAction(
   if (!queued)
     return { ok: false, message: "That attempt isn't waiting to be sent again." };
   try {
-    if (target === "webhook") await dispatchDueDeliveries(admin);
-    else await dispatchDueSheetsSyncs(admin);
+    if (target === "webhook") await dispatchDueDeliveries(admin, { responseId });
+    else await dispatchDueSheetsSyncs(admin, { responseId });
   } catch {
     // Still queued: the scheduled sweep sends it.
   }

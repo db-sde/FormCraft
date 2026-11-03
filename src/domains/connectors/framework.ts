@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { decryptJson, encryptJson, type EncryptedPayload } from "@/domains/sheets/crypto";
+import { decryptJson, encryptJson, type EncryptedPayload } from "@/lib/crypto/encryption";
 import { isExhausted, nextBackoffDelayMs } from "@/domains/webhooks/backoff";
 import { refreshIfNeeded, TokenError, type Tokens } from "./oauth";
 import { isReplayable } from "./catalog";
@@ -64,6 +64,15 @@ export function registerAction(provider: string, action: string, run: ConnectorA
 
 // --- connections -------------------------------------------------------------
 
+/** Where a connection's tokens are stored: they only decrypt there. */
+export function connectionContext(c: {
+  workspace_id: string;
+  provider: string;
+  user_id: string | null;
+}): string {
+  return `connector:${c.workspace_id}:${c.provider}:${c.user_id ?? "workspace"}`;
+}
+
 function toConnection(
   row: Database["public"]["Tables"]["connector_connections"]["Row"],
 ): Connection {
@@ -75,7 +84,10 @@ function toConnection(
     label: row.label,
     settings: (row.settings ?? {}) as Record<string, unknown>,
     status: row.status,
-    tokens: decryptJson<Tokens>(row.encrypted as unknown as EncryptedPayload),
+    tokens: decryptJson<Tokens>(
+      row.encrypted as unknown as EncryptedPayload,
+      connectionContext(row),
+    ),
   };
 }
 
@@ -105,7 +117,14 @@ export async function saveConnection(
     workspace_id: input.workspaceId,
     user_id: input.userId,
     provider: input.provider,
-    encrypted: encryptJson(input.tokens) as unknown as Json,
+    encrypted: encryptJson(
+      input.tokens,
+      connectionContext({
+        workspace_id: input.workspaceId,
+        provider: input.provider,
+        user_id: input.userId,
+      }),
+    ) as unknown as Json,
     label: input.label?.slice(0, 200) ?? null,
     status: "ok" as const,
     created_by: input.createdBy,
@@ -183,7 +202,14 @@ export async function usableTokens(
       await admin
         .from("connector_connections")
         .update({
-          encrypted: encryptJson(tokens) as unknown as Json,
+          encrypted: encryptJson(
+            tokens,
+            connectionContext({
+              workspace_id: connection.workspaceId,
+              provider: connection.provider,
+              user_id: connection.userId,
+            }),
+          ) as unknown as Json,
           updated_at: new Date().toISOString(),
         })
         .eq("id", connection.id);
@@ -211,12 +237,21 @@ export async function markConnection(
 
 /** Disconnects: no further jobs run for it (theirs are skipped). */
 export async function revokeConnection(admin: Client, id: string) {
+  const { data: row } = await admin
+    .from("connector_connections")
+    .select("workspace_id, provider, user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!row) return;
   // The tokens are discarded, not just unused.
   await admin
     .from("connector_connections")
     .update({
       status: "revoked",
-      encrypted: encryptJson({ accessToken: "" }) as unknown as Json,
+      encrypted: encryptJson(
+        { accessToken: "" },
+        connectionContext(row),
+      ) as unknown as Json,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -271,13 +306,28 @@ const LEASE_SECONDS = 120;
 /** Runs due jobs. Never throws; each job's outcome is recorded on it. */
 export async function dispatchConnectorJobs(
   admin: Client,
-  options: { fetch?: typeof fetch; limit?: number } = {},
+  options: {
+    fetch?: typeof fetch;
+    limit?: number;
+    /** Only this response's (or booking's) jobs: what a request runs
+     * itself. Unscoped is the scheduled worker. */
+    responseId?: string | null;
+    bookingId?: string | null;
+  } = {},
 ): Promise<{ processed: number }> {
   const fetcher = options.fetch ?? fetch;
-  const { data: jobs } = await admin.rpc("claim_connector_jobs", {
-    p_limit: options.limit ?? BATCH,
-    p_lease_seconds: LEASE_SECONDS,
-  });
+  const scoped = Boolean(options.responseId || options.bookingId);
+  const { data: jobs } = scoped
+    ? await admin.rpc("claim_scoped_connector_jobs", {
+        p_response_id: options.responseId ?? null,
+        p_booking_id: options.bookingId ?? null,
+        p_limit: options.limit ?? BATCH,
+        p_lease_seconds: LEASE_SECONDS,
+      })
+    : await admin.rpc("claim_connector_jobs", {
+        p_limit: options.limit ?? BATCH,
+        p_lease_seconds: LEASE_SECONDS,
+      });
   for (const job of jobs ?? []) {
     await runJob(admin, job, fetcher);
   }

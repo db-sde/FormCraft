@@ -7,6 +7,9 @@ import { recoverMissingConnectorSyncs } from "@/domains/connectors/links";
 import { syncCalendarBookings } from "@/domains/bookings/google-calendar";
 import { sendBookingEmails, sendDueReminders } from "@/domains/bookings/emails";
 
+// A batch of background work: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /**
  * The connectors worker (spec §5.3): runs due connector jobs (calendar
  * events, app records), queues syncs a killed request missed, sends booking reminders, and

@@ -56,6 +56,9 @@ export type CspOptions = {
   /** A published form: may be framed by any site, and may run the
    * creator's analytics pixels (P2.12). */
   publicForm: boolean;
+  /** Sites allowed to frame a published form (its embed_origins); null
+   * or absent: any site. */
+  frameAncestors?: string[] | null;
   /** Development needs eval for React's tooling and plain-http reloads. */
   dev?: boolean;
   /** Served over HTTPS: any stray http:// subresource is upgraded.
@@ -75,6 +78,7 @@ export function buildCsp({
   nonce,
   supabaseUrl,
   publicForm,
+  frameAncestors,
   dev = false,
   https = true,
 }: CspOptions) {
@@ -124,7 +128,11 @@ export function buildCsp({
     "form-action": ["'self'"],
     // Published forms are made to be embedded (Share → Embed); nothing
     // else may be framed (clickjacking).
-    "frame-ancestors": publicForm ? ["*"] : ["'none'"],
+    "frame-ancestors": publicForm
+      ? frameAncestors
+        ? ["'self'", ...frameAncestors]
+        : ["*"]
+      : ["'none'"],
   };
 
   const policy = Object.entries(directives).map(

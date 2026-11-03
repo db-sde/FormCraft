@@ -12,6 +12,7 @@ import { leadCaptureStatus } from "@/domains/leads";
 import { FormSectionHeader } from "@/components/forms/form-top-bar";
 import { CopyLinkField } from "@/components/forms/copy-link-field";
 import { ShareEmbed, ShareQr } from "@/components/forms/share-popover";
+import { EmbedOriginsForm } from "@/components/forms/embed-origins-form";
 import { PublishButton } from "@/components/forms/publish-button";
 import { SettingsSection } from "@/components/dashboard/account-settings";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -46,6 +47,11 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
   });
 
   const embedStats = await embedStatsFor(supabase, formId);
+  const { data: embedAllowed } = await supabase
+    .from("forms")
+    .select("embed_origins")
+    .eq("id", formId)
+    .maybeSingle();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const url = `${appUrl}/f/${form.slug}`;
   const shareText = encodeURIComponent(`${form.title} — ${url}`);
@@ -178,6 +184,10 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
                 title={form.title}
                 popupEmbeds={entitlements.popup_embeds}
                 color={published?.theme.primaryColor ?? draft?.schema.theme.primaryColor}
+              />
+              <EmbedOriginsForm
+                formId={form.id}
+                initial={embedAllowed?.embed_origins ?? null}
               />
             </div>
           </SettingsSection>

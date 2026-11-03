@@ -1,3 +1,4 @@
+import { scanBytes } from "./scan";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
@@ -31,6 +32,22 @@ export class FileTooLargeError extends Error {
   constructor(public readonly maxSizeMb: number) {
     super(`file exceeds the ${maxSizeMb}MB limit`);
     this.name = "FileTooLargeError";
+  }
+}
+
+/** The malware scanner flagged the file. */
+export class InfectedFileError extends Error {
+  constructor(public readonly signature: string) {
+    super("this file was flagged as unsafe");
+    this.name = "InfectedFileError";
+  }
+}
+
+/** A malware scanner is configured but couldn't check the file. */
+export class ScanUnavailableError extends Error {
+  constructor(reason: string) {
+    super(`the file couldn't be checked: ${reason}`);
+    this.name = "ScanUnavailableError";
   }
 }
 
@@ -123,9 +140,10 @@ export async function prepareUpload(
  * for the same question replaces the previous one (rows and storage
  * objects), so resuming and re-uploading doesn't accumulate files.
  *
- * Files are recorded as "clean" without a malware scan — see
- * DECISIONS.md; a scanner must sit between this and "clean" before
- * accepting untrusted uploads at scale.
+ * With a malware scanner configured (CLAMD_HOST, see scan.ts) every
+ * file is scanned before it's stored: flagged files are refused, and so
+ * are files the scanner couldn't check. Without one, files are recorded
+ * as "clean" unscanned (DECISIONS.md).
  */
 export async function recordUpload(
   admin: Client,
@@ -144,6 +162,10 @@ export async function recordUpload(
   if (!sniffed || !matchesAcceptedTypes(sniffed.mimeType, context.acceptedMimeTypes)) {
     throw new UnsupportedFileTypeError();
   }
+
+  const scan = await scanBytes(file.bytes);
+  if (scan.status === "infected") throw new InfectedFileError(scan.signature);
+  if (scan.status === "unavailable") throw new ScanUnavailableError(scan.reason);
 
   const storagePath = `${responseId}/${questionId}/${crypto.randomUUID()}.${sniffed.extension}`;
 

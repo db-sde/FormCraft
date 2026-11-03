@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { AnswerMap } from "@/domains/logic";
-import { encryptJson, decryptJson, type EncryptedPayload } from "./crypto";
+import { encryptJson, decryptJson, type EncryptedPayload } from "@/lib/crypto/encryption";
+
+/** Where a form's Sheets tokens are stored: they only decrypt there. */
+export const sheetsContext = (formId: string) => `sheets:${formId}`;
 import { refreshAccessToken, needsRefresh, revokeToken, type OAuthTokens } from "./oauth";
 import { appendRowToSheet } from "./append";
 import { buildResponseRowForSheet } from "./row";
@@ -52,7 +55,7 @@ export async function saveConnection(
     {
       workspace_id: workspaceId,
       form_id: formId,
-      encrypted_tokens: encryptJson(tokens) as unknown as Json,
+      encrypted_tokens: encryptJson(tokens, sheetsContext(formId)) as unknown as Json,
       enabled: true,
     },
     { onConflict: "form_id" },
@@ -114,6 +117,7 @@ export async function disconnectForm(
   try {
     const tokens = decryptJson<OAuthTokens>(
       stored.encrypted_tokens as unknown as EncryptedPayload,
+      sheetsContext(formId),
     );
     await revoke(tokens.refreshToken);
   } catch {
@@ -247,6 +251,7 @@ async function attemptSync(
 
   let tokens = decryptJson<OAuthTokens>(
     connection.encrypted_tokens as unknown as EncryptedPayload,
+    sheetsContext(connection.form_id),
   );
 
   if (needsRefresh(tokens.expiresAt)) {
@@ -261,7 +266,12 @@ async function attemptSync(
     };
     const { error: tokenUpdateError } = await admin
       .from("sheets_connections")
-      .update({ encrypted_tokens: encryptJson(tokens) as unknown as Json })
+      .update({
+        encrypted_tokens: encryptJson(
+          tokens,
+          sheetsContext(connection.form_id),
+        ) as unknown as Json,
+      })
       .eq("id", connection.id);
     if (tokenUpdateError) throw tokenUpdateError;
   }
@@ -334,12 +344,19 @@ async function recordSyncFailure(
  * Invoked by /api/cron/sheets/dispatch. */
 export async function dispatchDueSheetsSyncs(
   admin: Client,
-  options?: { tokenEndpoint?: string; sheetsApiBase?: string },
+  options?: { tokenEndpoint?: string; sheetsApiBase?: string; responseId?: string },
 ): Promise<{ processed: number }> {
-  const { data: due, error } = await admin.rpc("claim_due_sheets_syncs", {
-    p_limit: DISPATCH_BATCH_SIZE,
-    p_lease_seconds: CLAIM_LEASE_SECONDS,
-  });
+  // Scoped to one response when a request sends its own rows.
+  const { data: due, error } = options?.responseId
+    ? await admin.rpc("claim_response_sheets_syncs", {
+        p_response_id: options.responseId,
+        p_limit: DISPATCH_BATCH_SIZE,
+        p_lease_seconds: CLAIM_LEASE_SECONDS,
+      })
+    : await admin.rpc("claim_due_sheets_syncs", {
+        p_limit: DISPATCH_BATCH_SIZE,
+        p_lease_seconds: CLAIM_LEASE_SECONDS,
+      });
   if (error) throw error;
   if (!due || due.length === 0) return { processed: 0 };
 

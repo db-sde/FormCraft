@@ -3,6 +3,9 @@ import { dispatchDueSheetsSyncs, recoverMissingSheetsSyncs } from "@/domains/she
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rejectUnlessCron } from "@/lib/http/cron-auth";
 
+// A batch of background work: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /**
  * Processes due Google Sheets row syncs (retries whose backoff window
  * has elapsed) — the Sheets counterpart to

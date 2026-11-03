@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { decryptJson, encryptJson, type EncryptedPayload } from "@/domains/sheets/crypto";
+import { decryptJson, encryptJson, type EncryptedPayload } from "@/lib/crypto/encryption";
+
+/** Where a credential is stored: its value only decrypts there. */
+export const credentialContext = (workspaceId: string, provider: string) =>
+  `credential:${workspaceId}:${provider}`;
 
 type Client = SupabaseClient<Database>;
 
@@ -24,7 +28,10 @@ export async function saveCredential(
     {
       workspace_id: workspaceId,
       provider,
-      encrypted: encryptJson(secret) as unknown as Json,
+      encrypted: encryptJson(
+        secret,
+        credentialContext(workspaceId, provider),
+      ) as unknown as Json,
       label,
       status: "ok",
     },
@@ -45,7 +52,10 @@ export async function loadCredential<T>(
     .eq("provider", provider)
     .maybeSingle();
   if (!data) return null;
-  return decryptJson<T>(data.encrypted as unknown as EncryptedPayload);
+  return decryptJson<T>(
+    data.encrypted as unknown as EncryptedPayload,
+    credentialContext(workspaceId, provider),
+  );
 }
 
 export async function markCredentialInvalid(

@@ -1,3 +1,4 @@
+import { signingKey } from "@/lib/crypto/keys";
 import { createHash, createHmac } from "node:crypto";
 /**
  * Google OAuth (authorization-code flow) for the Sheets integration.
@@ -69,8 +70,7 @@ export function pkceForFlow(
   cookieNonce: string,
   secret = process.env.APP_SECRET,
 ): { verifier: string; challenge: string } {
-  if (!secret) throw new Error("APP_SECRET is not set");
-  const verifier = createHmac("sha256", secret)
+  const verifier = createHmac("sha256", signingKey("sheets-pkce", secret))
     .update(`pkce:${cookieNonce}`)
     .digest("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");

@@ -1,3 +1,4 @@
+import { signingKey } from "@/lib/crypto/keys";
 import {
   createHmac,
   randomBytes,
@@ -81,12 +82,12 @@ export function unlockCookieName(formId: string): string {
   return `fc_unlock_${formId}`;
 }
 
-function secretOrThrow(secret = process.env.APP_SECRET): string {
-  if (!secret) throw new Error("APP_SECRET is not set — required to sign form unlocks");
-  return secret;
+/** The unlock-signing key: its own, derived from APP_SECRET. */
+function secretOrThrow(secret = process.env.APP_SECRET): Buffer {
+  return signingKey("form-unlock", secret);
 }
 
-function sign(formId: string, expires: number, passwordHash: string, secret: string) {
+function sign(formId: string, expires: number, passwordHash: string, secret: Buffer) {
   return createHmac("sha256", secret)
     .update(`${formId}.${expires}.${passwordHash}`)
     .digest("base64url");

@@ -14,6 +14,9 @@ import {
 import { renderDocumentPdf } from "@/domains/documents/pdf";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/domains/documents/settings";
 
+// Rendering a PDF: bounded explicitly (seconds).
+export const maxDuration = 60;
+
 /**
  * A response's document as a PDF (master spec F-07), for members who may
  * see responses. Built on demand from the saved response — nothing is

@@ -3,6 +3,75 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-03 — Hardening: system design and network security review
+
+A review of the whole app (architecture, network security, reliability)
+found these; each is fixed here except where noted. Migrations 54–57.
+
+- **Background work every minute, not daily.** Vercel's free plan runs
+  crons once a day, so retries and booking reminders could wait a day.
+  Supabase's own scheduler (pg_cron + pg_net) now calls the same cron
+  endpoints: queues every minute, digests hourly (still once per local
+  day), domains every six hours, retention daily. The app URL and
+  CRON_SECRET live in Supabase Vault, set once with
+  `select public.schedule_background_jobs(url, secret)`. vercel.json's
+  daily crons stay as a fallback.
+- **A request runs only its own jobs.** After a submit (or a replay, a
+  booking change) the request used to run up to 25 jobs from the whole
+  queue — other workspaces' webhooks, Sheets rows and app syncs — in one
+  respondent's request. Scoped claim functions take that response's (or
+  booking's) jobs only; the scheduled workers run the rest. Work-heavy
+  routes have an explicit 60-second limit.
+- **Keys.** Stored secrets were encrypted with sha256(APP_SECRET), the
+  same secret that signs OAuth state and form unlocks, with no key id:
+  rotating it would have broken every connection. Now:
+  - ENCRYPTION_KEYS (versioned, rotatable; default derived from
+    APP_SECRET) encrypts; each value records its key id;
+  - each value is bound to its row (workspace + provider, or form) as
+    associated data, so a value copied into another workspace's row
+    won't decrypt;
+  - each signing use (OAuth state and PKCE for connectors and Sheets,
+    form unlocks) has its own HKDF-derived key — in-flight OAuth flows
+    and form unlock cookies from before the deploy need redoing once;
+  - `npm run secrets:reencrypt` rewrites existing values; old ones keep
+    working until then.
+- **Service-role client:** 64 files use the client that skips row-level
+  security. Not rewritten (a larger refactor, file by file, onto the
+  user's client or narrow database functions); instead a test freezes the
+  list — it may only shrink, new use must be added in review — and keeps
+  the client out of browser code.
+- **Rate limiting:** the review said `rate_limits` was never pruned; it
+  is (daily, by the retention cron) — that finding was wrong. The real
+  cost was a database write per public request even during a flood: an
+  in-process check now refuses a key that's already over its limit
+  without touching the database. Edge rate limiting (Vercel Firewall)
+  is a hosting setting, documented in PROJECT_STATUS.
+- **Operational tables:** finished webhook deliveries, Sheets rows and
+  connector jobs are pruned after 90 days, failed or expired payment
+  attempts after 180 (paid ones and payments are kept), in batches, by
+  the retention cron. `analytics_events` isn't pruned: the analytics
+  pages offer "all time", so pruning needs daily rollups first (left as
+  a follow-up).
+- **Observability:** Sentry was installed and documented but never
+  started; it now starts on the server and in the browser when its DSN
+  is set. Failures in the background steps after a submit were silently
+  swallowed; they're now logged as one JSON line and reported to Sentry
+  with the operation and response id. The health check also covers
+  calendar and app syncs, unsent booking reminders and duplicate
+  payments.
+- **CI:** a Security workflow runs a production dependency audit (fails
+  on high/critical), a full-history secret scan (gitleaks; the test
+  suites' fake keys are allowed) and CodeQL; Dependabot opens grouped
+  weekly updates.
+- **Uploads:** optional malware scanning with a ClamAV daemon (CLAMD_HOST)
+  before a file is stored; flagged files are refused, and a configured
+  scanner that can't be reached refuses too (fail closed).
+- **Embedding:** a form can list the sites allowed to embed it
+  (Share → Embed); its pages then send `frame-ancestors 'self' <sites>`
+  instead of `*`, so other sites can't frame it (or its payment step).
+- **Outbound address guard:** also refuses 6to4 addresses that embed a
+  private IPv4 address, Teredo, and the documentation ranges.
+
 ## 2026-11-03 — Master spec Phase 7: payments and Razorpay / UPI
 
 Phase 7 of `docs/master-spec.md` (F-22 payments enhancement and F-35
