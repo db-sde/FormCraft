@@ -51,7 +51,7 @@ jobs:
       # Pinned: `latest` lets a CLI release change the generated types or
       # the local stack's behaviour under an unrelated change. Bump it
       # deliberately (and regenerate `npm run db:types`) when upgrading.
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           version: 2.107.0
 
