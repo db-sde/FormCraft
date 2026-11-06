@@ -39,6 +39,7 @@ import { canEdit } from "@/domains/workspaces";
 import { audit } from "@/domains/audit";
 import { isWoff2, MAX_FONT_BYTES } from "@/domains/themes/fonts";
 import { hasPermission } from "@/domains/workspaces/permissions";
+import { notSetUpMessage } from "@/lib/not-set-up";
 
 export async function renameFormAction(
   formId: string,
@@ -229,7 +230,7 @@ export async function proposeRuleAction(
     return {
       ok: false,
       code: "not_configured",
-      message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing).",
+      message: notSetUpMessage("AI"),
     };
   }
   const text = instruction.trim();
@@ -294,7 +295,7 @@ export async function proposeRuleAction(
       return {
         ok: false,
         code: "not_configured",
-        message: "The server's ANTHROPIC_API_KEY was rejected.",
+        message: "AI is having a moment on our side. Please try again a little later.",
       };
     }
     return {
@@ -463,7 +464,7 @@ export async function proposeFormEditAction(
     return {
       ok: false,
       code: "not_configured",
-      message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing).",
+      message: notSetUpMessage("AI"),
     };
   }
   const text = instruction.trim();
@@ -536,7 +537,7 @@ export async function proposeFormEditAction(
       return {
         ok: false,
         code: "not_configured",
-        message: "The server's ANTHROPIC_API_KEY was rejected.",
+        message: "AI is having a moment on our side. Please try again a little later.",
       };
     }
     return {

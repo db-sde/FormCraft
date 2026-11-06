@@ -1,5 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { notSetUpMessage } from "@/lib/not-set-up";
 
 export type AiFailure = {
   ok: false;
@@ -10,7 +11,7 @@ export type AiFailure = {
 export const AI_NOT_CONFIGURED: AiFailure = {
   ok: false,
   code: "not_configured",
-  message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing).",
+  message: notSetUpMessage("AI"),
 };
 
 export const AI_OUT_OF_CREDITS: AiFailure = {
@@ -32,7 +33,7 @@ export function aiFailure(error: unknown): AiFailure {
     return {
       ok: false,
       code: "not_configured",
-      message: "The server's ANTHROPIC_API_KEY was rejected.",
+      message: "AI is having a moment on our side. Please try again a little later.",
     };
   }
   return { ok: false, code: "failed", message: "The AI couldn't be reached. Try again." };

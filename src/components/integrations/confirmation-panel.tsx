@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/lib/toast";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 /** Confirmation emails to respondents (P2.18): to the address they gave
  * in the chosen question, once per response. */
@@ -66,10 +67,9 @@ export function ConfirmationPanel({
       }}
     >
       {!emailConfigured && (
-        <p className="text-[13px] text-[var(--chip-draft-fg)]">
-          Email isn&apos;t set up on this server yet (RESEND_API_KEY), so nothing will be
-          sent until it is.
-        </p>
+        <NotSetUpYet feature="Confirmation email">
+          You can set it up now; emails start going out once it&apos;s switched on.
+        </NotSetUpYet>
       )}
       <label className="bg-background flex items-center justify-between gap-3 rounded-sm px-3 py-2.5">
         <b className="text-sm">Send respondents a confirmation</b>

@@ -7,11 +7,12 @@ import { findConnection } from "@/domains/connectors/framework";
 import { isConfigured } from "@/domains/connectors/oauth";
 import { calendarIdOf, listCalendars } from "@/domains/bookings/google-calendar";
 import { BookingsManager } from "@/components/bookings/bookings-manager";
+import { notSetUpMessage } from "@/lib/not-set-up";
 
 export const metadata: Metadata = { title: "Bookings" };
 
 const ERRORS: Record<string, string> = {
-  not_configured: "Google Calendar isn't set up on this server yet.",
+  not_configured: notSetUpMessage("Google Calendar"),
   declined: "Google Calendar wasn't connected: access was declined.",
   expired: "That took too long. Try connecting again.",
   exchange_failed: "Google Calendar couldn't be connected. Try again.",

@@ -345,7 +345,7 @@ export function FormAccessPanel({
             <span className={hintClass}>
               {captchaAvailable
                 ? "Uses Cloudflare Turnstile. If the check can't run, the submission is refused and the person can try again; their answers stay saved."
-                : "Not available yet: the server needs Turnstile keys (see .env.example)."}
+                : "The bot check is almost here. We're putting the finishing touches on it, and it'll switch on right here when it's ready."}
             </span>
           </span>
           <Switch

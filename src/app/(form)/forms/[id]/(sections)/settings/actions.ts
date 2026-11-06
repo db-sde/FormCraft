@@ -39,6 +39,7 @@ import { setFormPassword } from "@/domains/forms/access";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/domains/forms/access-rules";
 import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
 import { KioskConfig, KIOSK_PIN_PATTERN, setKioskPin } from "@/domains/forms/kiosk";
+import { notSetUpMessage } from "@/lib/not-set-up";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
 
@@ -354,7 +355,7 @@ export async function setCaptchaAction(
   if (required && !isTurnstileConfigured()) {
     return {
       ok: false,
-      message: "The CAPTCHA service isn't set up on this server yet.",
+      message: notSetUpMessage("The bot check (CAPTCHA)"),
     };
   }
   const ctx = await publisherOrFail(formId);

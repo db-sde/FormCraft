@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "@/lib/toast";
 import { setNotificationsAction } from "@/app/(form)/forms/[id]/(sections)/settings/actions";
 import { Switch } from "@/components/ui/switch";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 /** "Email me about new responses" (Part 5, Email notifications). Goes
  * to the form owner; the email links to the response, never includes
@@ -53,10 +54,9 @@ export function NotificationsPanel({
         </span>
       </div>
       {!emailConfigured && (
-        <p className="rounded-sm bg-[var(--alert-warning-bg)] px-3 py-2 text-[13px] text-[var(--alert-warning-fg)]">
-          Email sending isn&apos;t set up on this server yet, so no emails go out until an
-          administrator adds it.
-        </p>
+        <NotSetUpYet feature="Email notifications" plural>
+          Every response is still saved and waiting for you in Responses.
+        </NotSetUpYet>
       )}
     </div>
   );

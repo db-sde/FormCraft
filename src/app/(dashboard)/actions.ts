@@ -32,6 +32,7 @@ import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
 import { countLeadsForForm } from "@/domains/leads";
 import { ImportError, importFromUrl } from "@/domains/forms/import";
 import type { Json } from "@/lib/supabase/database.types";
+import { notSetUpMessage } from "@/lib/not-set-up";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -101,7 +102,7 @@ export async function generateFormAction(
   formData: FormData,
 ): Promise<GenerateFormState> {
   if (!aiConfigured()) {
-    return { message: "AI isn't set up on this server (ANTHROPIC_API_KEY is missing)." };
+    return { message: notSetUpMessage("Writing forms with AI") };
   }
   const prompt = String(formData.get("prompt") ?? "").trim();
   if (!prompt) return { message: "Describe the form you want." };
@@ -131,7 +132,9 @@ export async function generateFormAction(
       return { message: "The AI is busy. Try again in a minute." };
     }
     if (error instanceof Anthropic.AuthenticationError) {
-      return { message: "The server's ANTHROPIC_API_KEY was rejected." };
+      return {
+        message: "AI is having a moment on our side. Please try again a little later.",
+      };
     }
     return { message: "The AI couldn't be reached. Try again." };
   }

@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { ImageUploadField } from "@/components/builder/image-upload-field";
 import { toast } from "@/lib/toast";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 export type DocumentRow = {
   kind: DocumentKind;
@@ -410,10 +411,9 @@ export function DocumentsPanel({
   return (
     <div className="flex flex-col gap-2.5">
       {!emailConfigured && (
-        <p className="text-[13px] text-[var(--chip-draft-fg)]">
-          Email isn&apos;t set up on this server yet (RESEND_API_KEY): documents can be
-          downloaded from each response, but nothing is emailed until it is.
-        </p>
+        <NotSetUpYet feature="Emailing documents">
+          Meanwhile, every document can be downloaded from its response.
+        </NotSetUpYet>
       )}
       {DOCUMENT_KINDS.map((kind) => {
         const row = rows.find((r) => r.kind === kind);

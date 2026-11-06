@@ -275,6 +275,9 @@ export default async function SettingsPage({
           forms={domainData[1].map((f) => ({ id: f.id, title: f.title }))}
           isAdmin={canAdmin(workspace.role)}
           limit={domainData[2].entitlements.custom_domains}
+          autoConnect={Boolean(
+            process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID,
+          )}
         />
       )}
 

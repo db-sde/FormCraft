@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { LocalTime } from "@/components/local-time";
 import { toast } from "@/lib/toast";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 type TypeRow = BookingTypeInput & { id: string };
 type Person = { id: string; name: string };
@@ -392,9 +393,10 @@ export function BookingsManager({
           Your calendar
         </h2>
         {!calendar.available ? (
-          <p className="text-muted-foreground text-sm">
-            Google Calendar isn&apos;t set up on this server yet.
-          </p>
+          <NotSetUpYet feature="Google Calendar">
+            Bookings still work: they&apos;re listed here and checked against each other
+            so no one is double-booked.
+          </NotSetUpYet>
         ) : !calendar.connected ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-muted-foreground text-sm">

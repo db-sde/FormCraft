@@ -2108,4 +2108,25 @@ Accepted / not done, with reasons:
   (Turnstile) yet.
 - Response quotas are soft by design (see Plans).
 
+## 2026-11-07 — Features that aren't switched on yet say so, kindly
+
+Before, a feature that needs server setup (email, AI, Google Sheets,
+Google Calendar, business apps, CAPTCHA, automatic custom domains) was
+either hidden or explained with a missing-key message naming an
+environment variable. Creators couldn't tell a missing feature from a
+missing plan, and some notes leaked `RESEND_API_KEY`-style names.
+
+- One shared note, `NotSetUpYet` (`src/components/not-set-up-yet.tsx`),
+  with copy in `src/lib/not-set-up.ts`: "<Feature> is almost here", a
+  line saying there's nothing for them to do, and what still works
+  meanwhile. Toasts and action errors use `notSetUpMessage()`.
+- Sections stay in place with the note instead of settings (FC-03 /
+  FC-04 now show the note rather than hiding the section). Settings
+  aren't shown half-working: you can't save a Sheets or email setup
+  that can't run.
+- "Edit with AI" stays visible and explains itself when AI is off;
+  smaller inline AI helpers in the builder stay hidden.
+- A unit test fails if customer-facing code names an environment
+  variable.
+
 <!-- Add new decisions above this line, newest first. -->

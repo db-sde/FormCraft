@@ -51,6 +51,7 @@ import {
   type SchemaProblem,
 } from "@/domains/forms/schema/validate";
 import { toast } from "@/lib/toast";
+import { notSetUpMessage } from "@/lib/not-set-up";
 import {
   trackBuilderEventAction,
   type SaveDraftResult,
@@ -1132,11 +1133,15 @@ export function FormBuilder({
               />
             </>
           )}
-          {aiEnabled && onProposeEdit && (
+          {onProposeEdit && (
             <Button
               variant="outline"
               className="h-9 px-3"
-              onClick={() => setAiEditOpen(true)}
+              onClick={() =>
+                aiEnabled
+                  ? setAiEditOpen(true)
+                  : toast.info(notSetUpMessage("Editing with AI"))
+              }
             >
               <Sparkles /> <span className="max-xl:sr-only">Edit with AI</span>
             </Button>

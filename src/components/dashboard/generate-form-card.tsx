@@ -5,14 +5,20 @@ import { Sparkles, X } from "lucide-react";
 import { generateFormAction } from "@/app/(dashboard)/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { Textarea } from "@/components/ui/textarea";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 /** "Describe your form" on the new-form page. The result opens in the
  * builder as an ordinary draft, to review and edit before publishing. */
 export function GenerateFormCard({ enabled }: { enabled: boolean }) {
   const [state, action] = useActionState(generateFormAction, null);
 
-  // Not offered at all until the server has an AI key.
-  if (!enabled) return null;
+  // Until the server has an AI key, a friendly note stands in for it.
+  if (!enabled)
+    return (
+      <NotSetUpYet feature="Writing forms with AI">
+        Meanwhile, start from scratch above or pick a template below.
+      </NotSetUpYet>
+    );
 
   return (
     <form

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/lib/toast";
 import { cn } from "cn";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 export type DomainView = {
   id: string;
@@ -76,11 +77,14 @@ export function DomainSettings({
   forms,
   isAdmin,
   limit,
+  autoConnect,
 }: {
   domains: DomainView[];
   forms: { id: string; title: string }[];
   isAdmin: boolean;
   limit: number | null;
+  /** The server can attach a verified domain to the hosting by itself. */
+  autoConnect: boolean;
 }) {
   const [hostname, setHostname] = useState("");
   const [pending, start] = useTransition();
@@ -103,6 +107,12 @@ export function DomainSettings({
         }
         last={domains.length === 0}
       >
+        {!autoConnect && limit !== 0 && (
+          <NotSetUpYet feature="Custom domains" plural className="mb-3">
+            You can add and verify your domain now. It starts showing your forms once this
+            is switched on.
+          </NotSetUpYet>
+        )}
         {isAdmin && limit !== 0 && (
           <form
             className="flex flex-col gap-2 sm:flex-row"

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/toast";
 import { cn } from "cn";
+import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 const SENTIMENTS = [
   ["positive", "Positive", "bg-[var(--chip-live-dot)]"],
@@ -43,8 +44,8 @@ export function AiInsightsPanel({
   const [pending, start] = useTransition();
   const [criteria, setCriteria] = useState(leadCriteria);
 
-  // Not offered at all until the server has an AI key.
-  if (!enabled) return null;
+  // Until the server has an AI key, a friendly note stands in for it.
+  if (!enabled) return <NotSetUpYet feature="AI insights" plural />;
 
   const analyze = () =>
     start(async () => {
