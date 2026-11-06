@@ -88,6 +88,18 @@ function isAppHost(host: string): boolean {
   return extra.includes(host);
 }
 
+/** Headers for an anonymous PostgREST call. A legacy anon key is a JWT
+ * and also goes in Authorization; a new `sb_publishable_` key is not a
+ * JWT and must travel in `apikey` alone. */
+function restHeaders(): Record<string, string> {
+  const key = supabaseEnv.anonKey;
+  return {
+    apikey: key,
+    ...(key.startsWith("eyJ") ? { Authorization: `Bearer ${key}` } : {}),
+    "Content-Type": "application/json",
+  };
+}
+
 type Resolved = { domainId: string; defaultSlug: string | null } | null;
 const cache = new Map<string, { value: Resolved; until: number }>();
 
@@ -100,11 +112,7 @@ async function resolveDomain(host: string): Promise<Resolved> {
   try {
     const res = await fetch(`${supabaseEnv.url}/rest/v1/rpc/resolve_custom_domain`, {
       method: "POST",
-      headers: {
-        apikey: supabaseEnv.anonKey,
-        Authorization: `Bearer ${supabaseEnv.anonKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: restHeaders(),
       body: JSON.stringify({ p_hostname: host }),
     });
     const rows = res.ok
@@ -133,11 +141,7 @@ async function embedOrigins(slug: string | null): Promise<string[] | null> {
   try {
     const res = await fetch(`${supabaseEnv.url}/rest/v1/rpc/form_embed_origins`, {
       method: "POST",
-      headers: {
-        apikey: supabaseEnv.anonKey,
-        Authorization: `Bearer ${supabaseEnv.anonKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: restHeaders(),
       body: JSON.stringify({ p_slug: slug }),
     });
     const data = res.ok ? ((await res.json()) as unknown) : null;
