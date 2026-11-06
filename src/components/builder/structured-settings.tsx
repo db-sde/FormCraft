@@ -226,6 +226,8 @@ export function AddressSettingsPanel({
                   Required
                   <Switch
                     size="sm"
+                    // Several sit side by side: each says which field.
+                    aria-label={`${ADDRESS_FIELD_LABELS[field]} required`}
                     disabled={!shown}
                     checked={requiredFields.includes(field)}
                     onCheckedChange={(checked) =>

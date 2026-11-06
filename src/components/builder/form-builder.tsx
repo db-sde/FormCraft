@@ -422,6 +422,15 @@ export function FormBuilder({
     }
     clearTimeout(retryTimerRef.current);
 
+    // The same content as what's saved, in a new object (a panel filling
+    // in its defaults, say): nothing to send — and nothing new to publish,
+    // so a just-published form doesn't show "Unpublished changes".
+    if (JSON.stringify(schemaToSave) === JSON.stringify(savedSchemaRef.current)) {
+      savedSchemaRef.current = schemaToSave;
+      setSaveState("saved");
+      return;
+    }
+
     // An invalid draft (e.g. min > max) would only bounce off the server
     // with a structural error, so explain it here and wait for the next
     // edit instead of sending it.

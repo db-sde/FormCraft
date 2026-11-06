@@ -453,6 +453,32 @@ export async function savePaymentConfigAction(
       })();
   if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
   if (config) {
+    // Amount-off coupons are stored in the currency they were made in:
+    // changing the currency under them would change what they're worth.
+    const { data: current } = await ctx.supabase
+      .from("forms")
+      .select("payment_config")
+      .eq("id", formId)
+      .maybeSingle();
+    const before = current?.payment_config
+      ? PaymentConfig.safeParse(current.payment_config)
+      : null;
+    if (
+      before?.success &&
+      before.data.currency !== PaymentConfig.parse(config).currency
+    ) {
+      const { count } = await ctx.supabase
+        .from("coupons")
+        .select("id", { count: "exact", head: true })
+        .eq("form_id", formId)
+        .eq("kind", "amount");
+      if (count) {
+        return {
+          ok: false,
+          message: `This form has amount-off coupons in ${before.data.currency.toUpperCase()}. Delete them before changing the currency (percentage coupons are fine).`,
+        };
+      }
+    }
     // Only a provider this workspace has connected.
     const { data: connected } = await ctx.supabase.rpc("integration_status", {
       p_workspace_id: ctx.workspace.id,

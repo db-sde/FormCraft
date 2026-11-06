@@ -888,6 +888,8 @@ function ContactInfoSettings({
                   Required
                   <Switch
                     size="sm"
+                    // Four of these sit side by side: each says which field.
+                    aria-label={`${CONTACT_FIELD_LABELS[field]} required`}
                     disabled={!shown}
                     checked={requiredFields.includes(field)}
                     onCheckedChange={(checked) =>

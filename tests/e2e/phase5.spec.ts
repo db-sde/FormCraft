@@ -143,6 +143,42 @@ test.describe("phase 5", () => {
     await expect(page.getByText(/Intro call · ada@example.com/)).toBeVisible();
   });
 
+  test("a submit caught by the spam trap books nothing", async ({ page }) => {
+    const warmup = schema("00000000-0000-4000-8000-000000000000");
+    await createPublishedForm(user, {
+      ...warmup,
+      questions: warmup.questions.slice(0, 1),
+    });
+    const typeId = await bookingType(user.userId);
+    const { formId, liveLink: link } = await createPublishedForm(user, schema(typeId));
+    await page.goto(link);
+    await page.getByRole("textbox").fill("bot@example.com");
+    await page.keyboard.press("Enter");
+    const first = page.locator("section[aria-label] button").first();
+    await expect(first).toBeVisible({ timeout: 10000 });
+    await first.click();
+    // What a bot does: fill the field people never see.
+    await page.evaluate(() => {
+      const trap = document.querySelector<HTMLInputElement>('input[name="zq7_hp"]');
+      if (trap) trap.value = "https://spam.example";
+    });
+    await page.getByRole("button", { name: "Submit" }).click();
+    // Kept quietly (the bot sees the ending), but nothing is booked.
+    await expect(page.getByRole("heading", { name: "See you then" })).toBeVisible();
+    const admin = adminClient();
+    const { data: response } = await admin
+      .from("responses")
+      .select("status, spam_suspected")
+      .eq("form_id", formId)
+      .single();
+    expect(response).toEqual({ status: "completed", spam_suspected: true });
+    const { data: bookings } = await admin
+      .from("bookings")
+      .select("id")
+      .eq("form_id", formId);
+    expect(bookings).toEqual([]);
+  });
+
   test("the attendee's link cancels the booking", async ({ page }) => {
     const warmup = schema("00000000-0000-4000-8000-000000000000");
     await createPublishedForm(user, {

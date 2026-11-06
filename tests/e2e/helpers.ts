@@ -173,7 +173,7 @@ export async function createPublishedForm(
 export async function publishFromBuilder(page: Page): Promise<string> {
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await page.getByText("Published.", { exact: true }).waitFor({ timeout: 15000 });
-  await page.getByRole("button", { name: "Share" }).click();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
   const href = await page
     .getByRole("link", { name: "Open live form" })
     .getAttribute("href");

@@ -26,6 +26,15 @@
         "/Users/ishanmaheshwari1/Downloads/design_handoff_formcraft"
       ],
       "port": 4100
+    },
+    {
+      "name": "prod-3007",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "node tests/e2e/fake-email-server.mjs & RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3007 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key npm run build && RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3007 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key npx next start -p 3007"
+      ],
+      "port": 3007
     }
   ]
 }

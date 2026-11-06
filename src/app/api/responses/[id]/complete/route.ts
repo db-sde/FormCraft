@@ -21,7 +21,12 @@ import { emailEvent, logResponseEvent } from "@/domains/responses/timeline";
 import { saveOrder } from "@/domains/responses/orders";
 import { issueDocumentsForResponse } from "@/domains/documents/issue";
 import { sendRuleEmails } from "@/domains/notifications/rules";
-import { emailConfirmed, holdBookings, settleBookings } from "@/domains/bookings/submit";
+import {
+  emailConfirmed,
+  holdBookings,
+  settleBookings,
+  type Held,
+} from "@/domains/bookings/submit";
 import { enqueueConnectorSyncs } from "@/domains/connectors/links";
 import "@/domains/connectors/registry";
 
@@ -111,8 +116,12 @@ export async function POST(
     }
 
     // Bookings (F-27): hold the chosen slot before the response
-    // completes; a slot that's gone is an answer error.
-    const holds = await holdBookings(admin, id, parsed.data.answers);
+    // completes; a slot that's gone is an answer error. A submit caught by
+    // the spam trap is kept quietly but books nothing — otherwise a bot
+    // could fill a host's calendar.
+    const holds = parsed.data.trap
+      ? { ok: true as const, held: [] as Held[] }
+      : await holdBookings(admin, id, parsed.data.answers);
     if (!holds.ok) {
       return NextResponse.json(
         {
@@ -127,15 +136,22 @@ export async function POST(
       );
     }
 
-    const result = await completeResponse(
-      admin,
-      id,
-      parsed.data.clientRevision,
-      parsed.data.lastQuestionId,
-      parsed.data.answers,
-      parsed.data.idempotencyKey,
-      { spamSuspected: Boolean(parsed.data.trap) },
-    );
+    let result: Awaited<ReturnType<typeof completeResponse>>;
+    try {
+      result = await completeResponse(
+        admin,
+        id,
+        parsed.data.clientRevision,
+        parsed.data.lastQuestionId,
+        parsed.data.answers,
+        parsed.data.idempotencyKey,
+        { spamSuspected: Boolean(parsed.data.trap) },
+      );
+    } catch (error) {
+      // Nothing completed: free the slots now rather than in 15 minutes.
+      await settleBookings(admin, holds.held, id, false);
+      throw error;
+    }
     // Confirmed or released before the reply, so the booking and the
     // response never disagree.
     const confirmedBookings = await settleBookings(admin, holds.held, id, result.ok);

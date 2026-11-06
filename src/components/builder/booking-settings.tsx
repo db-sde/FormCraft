@@ -22,10 +22,16 @@ export function BookingSettingsPanel({
   const [types, setTypes] = useState<{ id: string; name: string }[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const load = () =>
-      listBookingTypesAction()
-        .then((t) => !cancelled && setTypes(t))
-        .catch(() => !cancelled && setTypes((prev) => prev ?? []));
+    // Only the newest request's answer is shown: an older, slower one
+    // (from before a type was made) never overwrites it.
+    let latest = 0;
+    const load = () => {
+      const request = ++latest;
+      const current = () => !cancelled && request === latest;
+      return listBookingTypesAction()
+        .then((t) => current() && setTypes(t))
+        .catch(() => current() && setTypes((prev) => prev ?? []));
+    };
     void load();
     // Booking types are set up on the Bookings page, in another tab
     // (leaving the builder would lose a question that can't save yet):
