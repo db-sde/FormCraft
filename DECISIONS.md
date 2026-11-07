@@ -2129,4 +2129,23 @@ missing plan, and some notes leaked `RESEND_API_KEY`-style names.
 - A unit test fails if customer-facing code names an environment
   variable.
 
+## 2026-11-07 — Second ZAP scan: an open redirect through `?next=`
+
+The scan of the live site (no High or Low findings) raised the same
+three Medium alerts as 2026-10-26, still accepted for the reasons there:
+`style-src 'unsafe-inline'`, `Access-Control-Allow-Origin: *` on
+public `/_next/static` files, and "no anti-CSRF token" on /login
+(server actions check Origin; cookies are SameSite=Lax).
+
+Its new informational alert, `?next=` echoed into the login form, was
+safe to echo (React escapes it) but led to a real bug: `safeNextPath`
+checked the text, not what a browser makes of it. Browsers drop tabs
+and newlines and read `\` as `/`, so `/login?next=/%09/evil.com` sent
+a user to evil.com right after signing in. `safeNextPath` now resolves
+the value as a URL against a stand-in origin, refuses anything that
+leaves it or normalises to `//…`, and returns the normalised path. It
+guards every `next` (login, sign-up, SSO, 2FA, /auth/confirm).
+Confirmed in the browser before and after the fix; unit tests cover
+the tricks.
+
 <!-- Add new decisions above this line, newest first. -->
