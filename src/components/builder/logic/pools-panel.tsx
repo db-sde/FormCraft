@@ -26,8 +26,14 @@ export function PoolsPanel({
   onChange: (patch: Partial<FormSchemaV1>) => void;
 }) {
   const pools = schema.pools ?? [];
+  // Only questions a respondent answers can be pooled: no welcome
+  // screen, statement or page break (QA FC4-13 listed page breaks as
+  // "0 · Untitled").
   const questions = numberedQuestions(schema).filter(
-    ({ question }) => question.type !== "welcome_screen",
+    ({ question }) =>
+      question.type !== "welcome_screen" &&
+      question.type !== "page_break" &&
+      question.type !== "statement",
   );
   const taken = new Map(pools.flatMap((p) => p.questionIds.map((id) => [id, p.id])));
   const commit = (next: QuestionPoolV1[]) =>

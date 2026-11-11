@@ -1,7 +1,7 @@
 "use client";
 
 import type { RuleProposal } from "@/domains/ai/rule-draft";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -58,7 +58,12 @@ import {
   type PublishResult,
 } from "@/app/(form)/forms/[id]/actions";
 import { QuestionList } from "./question-list";
-import { QUESTION_TYPE_META, TypeTile, type AddKind } from "./question-meta";
+import {
+  QUESTION_TYPE_META,
+  TypeTile,
+  questionTypeLabel,
+  type AddKind,
+} from "./question-meta";
 import { AddQuestionMenu } from "./add-question-menu";
 import { BlockNotice, SaveBlockDialog, type BlockStatus } from "./block-controls";
 import { ImportReportNotice } from "./import-report";
@@ -165,6 +170,12 @@ function deleteSummary(pending: {
 
 /** What a form is called until someone names it (see createFormAction). */
 const UNNAMED_FORM = "Untitled form";
+
+/** For useSyncExternalStore: nothing to subscribe to, only "has this
+ * page hydrated?" (false on the server, true in the browser). */
+function noSubscribe() {
+  return () => {};
+}
 
 export function FormBuilder({
   formTitle,
@@ -276,6 +287,13 @@ export function FormBuilder({
   );
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
   const [publishing, setPublishing] = useState(false);
+  // Publish waits for the editor to be ready: a click before the page
+  // has hydrated did nothing at all (QA FC4-24).
+  const ready = useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
   const [previewOpen, setPreviewOpen] = useState(openPreviewOnLoad);
   const [pendingTypeChange, setPendingTypeChange] = useState<{
     question: QuestionV1;
@@ -863,7 +881,16 @@ export function FormBuilder({
       });
       return;
     }
-    const result = await onPublish(formId);
+    let result: Awaited<ReturnType<typeof onPublish>>;
+    try {
+      result = await onPublish(formId);
+    } catch {
+      setPublishing(false);
+      toast.error("Couldn't publish.", {
+        description: "We couldn't reach the server. Check your connection and try again.",
+      });
+      return;
+    }
     setPublishing(false);
 
     if (result.ok) {
@@ -1164,7 +1191,7 @@ export function FormBuilder({
               isLive && !hasChanges && !publishing && "border-input shadow-none",
               publishing && "bg-accent shadow-none",
             )}
-            disabled={publishing || upToDate}
+            disabled={!ready || publishing || upToDate}
             onClick={handlePublish}
           >
             {publishing && <ButtonSpinner />}
@@ -1498,7 +1525,7 @@ export function FormBuilder({
               {selectedQuestion && (
                 <PanelHeader
                   tile={<TypeTile type={selectedQuestion.type} size={34} />}
-                  title={QUESTION_TYPE_META[selectedQuestion.type].label}
+                  title={questionTypeLabel(selectedQuestion)}
                   subtitle={
                     selectedQuestion.type === "welcome_screen"
                       ? "Always shown first"

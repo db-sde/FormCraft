@@ -584,7 +584,10 @@ export default async function ResponseDetailPage({
                 </dl>
               ) : answer.formatted ? (
                 // pre-wrap: long-text answers keep their line breaks.
-                <p className="text-[17px] leading-[1.45] font-semibold break-words whitespace-pre-wrap">
+                <p
+                  dir="auto"
+                  className="text-[17px] leading-[1.45] font-semibold break-words whitespace-pre-wrap"
+                >
                   {answer.formatted}
                 </p>
               ) : (
@@ -597,7 +600,10 @@ export default async function ResponseDetailPage({
                   <p className="text-muted-foreground text-[13px]">
                     Follow-up (written by AI): {followUps.get(answer.questionId)!.prompt}
                   </p>
-                  <p className="mt-1 text-[15px] leading-[1.45] font-semibold break-words whitespace-pre-wrap">
+                  <p
+                    dir="auto"
+                    className="mt-1 text-[15px] leading-[1.45] font-semibold break-words whitespace-pre-wrap"
+                  >
                     {followUps.get(answer.questionId)!.answer || (
                       <span className="text-subtle-foreground italic">Skipped</span>
                     )}

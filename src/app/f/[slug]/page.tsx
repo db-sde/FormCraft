@@ -28,6 +28,8 @@ import { FormClosedScreen } from "@/components/runtime/form-closed";
 import { PasswordGate } from "./password-gate";
 import { KioskShell } from "./kiosk-shell";
 import { getKioskPinHash } from "@/domains/forms/kiosk";
+import { chargesOrders } from "@/domains/payments/config";
+import { respondentSchema } from "@/domains/forms/respondent-schema";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -188,7 +190,8 @@ export default async function PublicFormPage({
   // Kiosk mode (F-15): only on a form that has it on, and then nothing
   // tied to the device — no remembered answers, no resume link.
   const kiosk = query.kiosk === "1" ? publicForm.kiosk : null;
-  const [known, lookup, resume, kioskPin] = await Promise.all([
+  const hasProducts = compiled.schema.questions.some((q) => q.type === "products");
+  const [known, lookup, resume, kioskPin, paymentRow] = await Promise.all([
     !kiosk && VISITOR_ID_PATTERN.test(visitorId)
       ? knownAnswersFor(
           createAdminClient(),
@@ -202,6 +205,14 @@ export default async function PublicFormPage({
       ? resolveResumeToken(createAdminClient(), query[RESUME_PARAM], publicForm)
       : null,
     kiosk ? getKioskPinHash(createAdminClient(), publicForm.formId) : null,
+    // Only a form with products needs to know whether orders are charged.
+    hasProducts
+      ? createAdminClient()
+          .from("forms")
+          .select("payment_config")
+          .eq("id", publicForm.formId)
+          .maybeSingle()
+      : null,
   ]);
 
   // Views are counted by the page itself once it loads (see
@@ -218,7 +229,9 @@ export default async function PublicFormPage({
   const runtimeProps = {
     formId: publicForm.formId,
     formVersionId: publicForm.formVersionId,
-    compiled: compiled,
+    // Without correct answers and points the browser doesn't need (QA
+    // FC4-02); the server scores from the stored form.
+    compiled: { ...compiled, schema: respondentSchema(compiled.schema) },
     savesProgress: publicForm.savePartialResponses,
     resumeLinks: publicForm.resumeLinksEnabled && publicForm.savePartialResponses,
     resume: resume,
@@ -235,6 +248,9 @@ export default async function PublicFormPage({
         : variant,
     known: known,
     lookup: lookup?.triggers.length ? lookup : undefined,
+    ordersCharged:
+      !hasProducts ||
+      chargesOrders(paymentRow?.data?.payment_config ?? null, entitlements.payments),
     captchaSiteKey: publicForm.captchaRequired
       ? (turnstileSiteKey() ?? undefined)
       : undefined,

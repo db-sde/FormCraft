@@ -6,6 +6,7 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isLikelyBot } from "@/lib/http/bots";
+import { VISITOR_COOKIE, VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
 const ViewBody = z.object({
@@ -38,6 +39,18 @@ export async function POST(request: NextRequest) {
     10 * 60 * 1000,
   );
   if (!limited.allowed) return apiError("rate_limited", "Too many views.", 429);
+  // One view per visitor per form every 30 minutes (QA FC4-03): reloads
+  // and repeated pings from the same browser don't inflate the count.
+  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
+  if (visitor && VISITOR_ID_PATTERN.test(visitor)) {
+    const firstView = await hitRateLimit(
+      admin,
+      `view-visitor:${visitor}:${parsed.data.formId}`,
+      1,
+      30 * 60 * 1000,
+    );
+    if (!firstView.allowed) return new NextResponse(null, { status: 204 });
+  }
 
   const { formId, embedded = false } = parsed.data;
   after(async () => {

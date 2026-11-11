@@ -37,6 +37,13 @@ export async function POST(
     3_600_000,
   );
   if (!limit.allowed) return NextResponse.json({ values: {} });
+  // An unknown response is a 404, as on /answers and /complete (QA FC4-15).
+  const { data: response } = await admin
+    .from("responses")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!response) return apiError("not_found", "Response not found.", 404);
   try {
     return NextResponse.json({
       values: await runLookups(admin, id, parsed.data.questionId, parsed.data.answers),

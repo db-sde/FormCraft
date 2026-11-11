@@ -100,7 +100,9 @@ export function QuestionList({
               }}
               aria-hidden
               className={cn(
-                "relative w-3 shrink-0",
+                // Above the row button's full-row click area (its ::after),
+                // or a drag on the grip grabs the button instead (QA FC4-06).
+                "relative z-10 w-3 shrink-0",
                 pinned
                   ? "invisible"
                   : selected

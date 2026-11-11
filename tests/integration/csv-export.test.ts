@@ -159,11 +159,14 @@ describe("CSV export (integration)", () => {
     const lines = csv.trimEnd().split("\r\n");
 
     expect(lines[0]).toBe(
-      "Submitted at,Ending,Name,CV,Referrer,UTM source,UTM medium,UTM campaign,UTM term,UTM content",
+      "Submitted at,Ending,Name,CV,CV (link),Referrer,UTM source,UTM medium,UTM campaign,UTM term,UTM content",
     );
     expect(lines).toHaveLength(RESPONSE_COUNT + 1);
     expect(lines[1]).toContain("Person 0");
     expect(lines[RESPONSE_COUNT]).toContain(`Person ${RESPONSE_COUNT - 1}`);
-    expect(lines[RESPONSE_COUNT]).toMatch(/,ada-cv\.pdf,/);
+    // The file's name, then a link teammates can open (QA FC4-17).
+    expect(lines[RESPONSE_COUNT]).toMatch(
+      /,ada-cv\.pdf,[^,]*\/api\/uploads\/[0-9a-f-]{36},/,
+    );
   }, 60_000);
 });

@@ -18,6 +18,8 @@ import {
 import { ImportReport } from "@/domains/forms/import/report";
 import { aiConfigured } from "@/domains/ai/config";
 import { getWorkspacePlan } from "@/domains/billing";
+import { OrdersChargedProvider } from "@/components/order-payment";
+import { chargesOrders } from "@/domains/payments/config";
 
 // The title and the page both need the draft: load it once per request.
 const loadDraft = cache(async (formId: string) => {
@@ -55,7 +57,7 @@ export default async function FormBuilderPage({
     getWorkspacePlan(supabase, workspace.id),
     supabase
       .from("forms")
-      .select("import_report")
+      .select("import_report, payment_config")
       .eq("id", id)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
@@ -64,36 +66,40 @@ export default async function FormBuilderPage({
   const importReport = ImportReport.safeParse(imported?.import_report);
 
   return (
-    <FormBuilder
-      addLeadCaptureOnOpen={leadCapture === "1"}
-      openPreviewOnLoad={preview === "1"}
-      formTitle={draft.formTitle}
-      workspaceId={workspace.id}
-      formId={draft.formId}
-      slug={publishInfo?.slug ?? ""}
-      appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
-      draftVersionId={draft.draftVersionId}
-      initialRevision={draft.revision}
-      initialSchema={draft.schema}
-      initialPublishInfo={{
-        isPublished: publishInfo?.isPublished ?? false,
-        publishedAt: publishInfo?.publishedAt ?? null,
-        publishedVersionNumber: publishInfo?.publishedVersionNumber ?? null,
-        hasUnpublishedChanges: publishInfo?.hasUnpublishedChanges ?? false,
-      }}
-      onSave={saveDraftAction}
-      onPublish={publishAction}
-      onUnpublish={unpublishAction}
-      onRename={renameFormAction}
-      aiEnabled={aiConfigured()}
-      brandingRemovable={entitlements.remove_branding}
-      customFonts={entitlements.custom_fonts}
-      multilingual={entitlements.multilingual}
-      onProposeRule={proposeRuleAction}
-      onReviewForm={reviewFormAction}
-      importReport={importReport.success ? importReport.data : null}
-      onDismissImportReport={dismissImportReportAction}
-      onProposeEdit={proposeFormEditAction}
-    />
+    <OrdersChargedProvider
+      value={chargesOrders(imported?.payment_config ?? null, entitlements.payments)}
+    >
+      <FormBuilder
+        addLeadCaptureOnOpen={leadCapture === "1"}
+        openPreviewOnLoad={preview === "1"}
+        formTitle={draft.formTitle}
+        workspaceId={workspace.id}
+        formId={draft.formId}
+        slug={publishInfo?.slug ?? ""}
+        appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        draftVersionId={draft.draftVersionId}
+        initialRevision={draft.revision}
+        initialSchema={draft.schema}
+        initialPublishInfo={{
+          isPublished: publishInfo?.isPublished ?? false,
+          publishedAt: publishInfo?.publishedAt ?? null,
+          publishedVersionNumber: publishInfo?.publishedVersionNumber ?? null,
+          hasUnpublishedChanges: publishInfo?.hasUnpublishedChanges ?? false,
+        }}
+        onSave={saveDraftAction}
+        onPublish={publishAction}
+        onUnpublish={unpublishAction}
+        onRename={renameFormAction}
+        aiEnabled={aiConfigured()}
+        brandingRemovable={entitlements.remove_branding}
+        customFonts={entitlements.custom_fonts}
+        multilingual={entitlements.multilingual}
+        onProposeRule={proposeRuleAction}
+        onReviewForm={reviewFormAction}
+        importReport={importReport.success ? importReport.data : null}
+        onDismissImportReport={dismissImportReportAction}
+        onProposeEdit={proposeFormEditAction}
+      />
+    </OrdersChargedProvider>
   );
 }

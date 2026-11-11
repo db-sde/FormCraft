@@ -239,3 +239,30 @@ export function formatBookingAnswer(value: unknown): string {
     return v.start;
   }
 }
+
+/** Export columns (CSV and Excel): the answer's own columns, plus a link
+ * column after a file or signature (QA FC4-17). The link opens the file
+ * for a signed-in teammate. Not used by the Sheets sync, whose column
+ * layout existing spreadsheets depend on. */
+export function exportColumnLabels(question: QuestionV1): string[] {
+  const labels = questionColumnLabels(question);
+  return question.type === "file_upload" || question.type === "signature"
+    ? [...labels, `${questionColumnLabel(question)} (link)`]
+    : labels;
+}
+
+export function exportAnswerCells(
+  columnsFrom: QuestionV1,
+  question: QuestionV1,
+  value: unknown,
+  context: { uploadNames?: ReadonlyMap<string, string>; appUrl?: string } = {},
+): string[] {
+  const cells = answerCells(columnsFrom, question, value, context);
+  if (columnsFrom.type !== "file_upload" && columnsFrom.type !== "signature")
+    return cells;
+  const link =
+    typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value)
+      ? `${context.appUrl ?? ""}/api/uploads/${value}`
+      : "";
+  return [...cells, link];
+}

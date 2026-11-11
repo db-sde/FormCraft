@@ -78,6 +78,8 @@ export async function POST(
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // Said first, before size or type: an empty file has no type to sniff.
+    if (bytes.length === 0) return apiError("empty", "This file is empty.", 400);
     const result = await recordUpload(
       admin,
       id,

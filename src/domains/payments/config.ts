@@ -67,6 +67,12 @@ export function readPaymentConfig(raw: Json | null): PaymentConfig | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** Whether a form charges for the order from its Products questions:
+ * a payment set to charge the order total, on a plan with payments. */
+export function chargesOrders(raw: Json | null, paymentsAllowed: boolean): boolean {
+  return paymentsAllowed && Boolean(readPaymentConfig(raw)?.fromOrder);
+}
+
 export function minorUnits(currency: string): number {
   return ZERO_DECIMAL.has(currency.toLowerCase()) ? 1 : 100;
 }

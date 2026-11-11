@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { ImageUploadField } from "./image-upload-field";
 import { PANEL_INPUT, PanelField, PanelNote, SectionHead, SwitchRow } from "./panel-ui";
+import { useOrdersCharged } from "@/components/order-payment";
 
 type Change = (next: QuestionV1) => void;
 
@@ -107,6 +108,7 @@ export function ProductsSettingsPanel({
 }) {
   const { currency, items } = question.settings;
   const [currencyDraft, setCurrencyDraft] = useState(currency);
+  const charged = useOrdersCharged();
   const setItems = (next: ProductItemV1[]) =>
     onChange({ ...question, settings: { ...question.settings, items: next } });
   const patch = (id: string, change: Partial<ProductItemV1>) =>
@@ -121,6 +123,13 @@ export function ProductsSettingsPanel({
   return (
     <>
       <SectionHead>Products</SectionHead>
+      {!charged && (
+        <p className="rounded-sm bg-[var(--alert-warning-bg)] px-3 py-2.5 text-[13px] text-[var(--alert-warning-fg)]">
+          Orders are recorded but not charged: this form doesn&apos;t take a payment yet.
+          Respondents are told they won&apos;t be charged. To charge the order total, set
+          up Payment in Integrations.
+        </p>
+      )}
       <PanelField
         label="Currency"
         hint={

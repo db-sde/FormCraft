@@ -923,9 +923,21 @@ export default async function ResponsesPage({
                           </th>
                         ))}
                         {completed ? (
-                          <th scope="col" className="w-[160px] px-4 py-2.5 font-bold">
-                            Ending
-                          </th>
+                          <>
+                            <th scope="col" className="w-[160px] px-4 py-2.5 font-bold">
+                              Ending
+                            </th>
+                            {responses.resultColumns.map((name) => (
+                              <th
+                                key={name}
+                                scope="col"
+                                title={name}
+                                className="w-[120px] truncate px-4 py-2.5 font-bold"
+                              >
+                                {name}
+                              </th>
+                            ))}
+                          </>
                         ) : (
                           <>
                             <th scope="col" className="w-[130px] px-4 py-2.5 font-bold">
@@ -976,27 +988,47 @@ export default async function ResponsesPage({
                           {responses.previewColumns.map((col) => (
                             <td
                               key={col.questionId}
-                              className="truncate px-4"
+                              className="px-4"
                               title={item.preview[col.questionId] || undefined}
                             >
-                              {item.preview[col.questionId] || (
-                                <span className="text-subtle-foreground">—</span>
-                              )}
+                              {/* A width on the content, not just the cell: the
+                                  table sizes to its content, so one long word
+                                  would otherwise widen the column (QA FC4-21). */}
+                              <div className="max-w-[168px] truncate">
+                                {item.preview[col.questionId] || (
+                                  <span className="text-subtle-foreground">—</span>
+                                )}
+                              </div>
                             </td>
                           ))}
                           {completed ? (
-                            <td className="truncate px-4">
-                              {item.endingTitle ?? (
-                                <span className="text-subtle-foreground">—</span>
-                              )}
-                            </td>
+                            <>
+                              <td className="px-4" title={item.endingTitle ?? undefined}>
+                                <div className="max-w-[128px] truncate">
+                                  {item.endingTitle ?? (
+                                    <span className="text-subtle-foreground">—</span>
+                                  )}
+                                </div>
+                              </td>
+                              {responses.resultColumns.map((name) => (
+                                <td key={name} className="px-4 tabular-nums">
+                                  <div className="max-w-[88px] truncate">
+                                    {item.results[name] || (
+                                      <span className="text-subtle-foreground">—</span>
+                                    )}
+                                  </div>
+                                </td>
+                              ))}
+                            </>
                           ) : (
                             <>
                               <td className="px-4">
                                 <ProgressBar {...item.progress} />
                               </td>
-                              <td className="text-muted-foreground truncate px-4">
-                                {item.lastQuestionLabel ?? "—"}
+                              <td className="text-muted-foreground px-4">
+                                <div className="max-w-[148px] truncate">
+                                  {item.lastQuestionLabel ?? "—"}
+                                </div>
                               </td>
                               <td className="px-4">
                                 <ActivityChip

@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { QUESTION_TYPES, type QuestionType } from "@/domains/forms/schema/question-types";
+import type { QuestionV1 } from "@/domains/forms/schema/v1";
 
 /** Question-type groups, one tint each (Part 1 §1 "Question-type icons"). */
 export type QuestionGroup = "Screens" | "Text" | "Choice" | "Scale" | "Other";
@@ -330,4 +331,17 @@ export function TypeTile({
       <Icon style={{ width: icon, height: icon }} strokeWidth={1.75} />
     </span>
   );
+}
+
+/** The name a question goes by in the builder: "Picture choice" for a
+ * multiple-choice question shown as pictures (QA FC4-26), otherwise its
+ * type's label. */
+export function questionTypeLabel(question: QuestionV1): string {
+  if (
+    (question.type === "single_select" || question.type === "multi_select") &&
+    question.settings.layout === "pictures"
+  ) {
+    return ADD_KIND_META.picture_choice.label;
+  }
+  return QUESTION_TYPE_META[question.type].label;
 }

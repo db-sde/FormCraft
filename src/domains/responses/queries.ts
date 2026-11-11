@@ -240,6 +240,15 @@ function filterAnswersToKnownQuestions(
  * details.
  */
 export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
+  // A website typed without its scheme ("example.com") is stored as a
+  // link that opens ("https://example.com"), so exports agree (QA FC4-19).
+  if (question.type === "url") {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed && !/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)
+      ? `https://${trimmed}`
+      : trimmed;
+  }
   if (question.type !== "contact_info") return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const record = value as Record<string, unknown>;
@@ -330,7 +339,15 @@ export async function saveResponseAnswers(
 }
 
 export type CompleteResult =
-  | { ok: true; endingId: string; formId: string; alreadyCompleted: boolean }
+  | {
+      ok: true;
+      endingId: string;
+      formId: string;
+      alreadyCompleted: boolean;
+      /** The final scores and results, by variable id, for the ending's
+       * recall: the respondent's browser doesn't get option points. */
+      variables?: Record<string, unknown>;
+    }
   | {
       ok: false;
       code: "missing_required" | "invalid_answer";
@@ -344,6 +361,12 @@ export type CompleteResult =
       reason: "closed" | "full";
       /** What to tell the respondent — the creator's own text. */
       message: string;
+    }
+  | {
+      ok: false;
+      /** Completed already, by a different submission (QA FC4-04). */
+      code: "already_submitted";
+      endingId: string;
     };
 
 /**
@@ -377,12 +400,28 @@ export async function completeResponse(
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
-    .select("status, form_id, form_version_id, ending_id, hidden_fields, random_seed")
+    .select(
+      "status, form_id, form_version_id, ending_id, hidden_fields, random_seed, idempotency_key",
+    )
     .eq("id", responseId)
     .maybeSingle();
   if (error) throw error;
   if (!response) throw new ResponseNotFoundError();
 
+  // Completing is one-way. The same submission again (same key: a retry
+  // whose reply was lost) gets the same answer; a different one is told
+  // it's already in, and changes nothing.
+  if (
+    response.status === "completed" &&
+    response.idempotency_key &&
+    response.idempotency_key !== idempotencyKey
+  ) {
+    return {
+      ok: false,
+      code: "already_submitted",
+      endingId: response.ending_id ?? "",
+    };
+  }
   if (response.status === "completed") {
     return {
       ok: true,
@@ -518,5 +557,6 @@ export async function completeResponse(
     formId: result.form_id ?? response.form_id,
     // "already": another request completed it first; its ending stands.
     alreadyCompleted: result.outcome === "already",
+    variables: result.outcome === "already" ? undefined : walk.variables,
   };
 }

@@ -65,7 +65,7 @@ async function viewCount(formId: string) {
   return count ?? 0;
 }
 
-test("each page load counts as one view; bots don't, and starts never outrun views", async ({
+test("a visitor's page loads count as one view; bots don't, and starts never outrun views", async ({
   browser,
   request,
 }) => {
@@ -93,7 +93,16 @@ test("each page load counts as one view; bots don't, and starts never outrun vie
       await page.close();
     }
     await context.close();
-    await expect.poll(() => viewCount(formId), { timeout: 10000 }).toBe(3);
+    // Three loads by one visitor within half an hour: one view (QA FC4-03).
+    await expect.poll(() => viewCount(formId), { timeout: 10000 }).toBe(1);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await viewCount(formId)).toBe(1);
+
+    // Another visitor: a second view.
+    const other = await browser.newContext({ userAgent: BROWSER_UA });
+    await (await other.newPage()).goto(liveLink);
+    await expect.poll(() => viewCount(formId), { timeout: 10000 }).toBe(2);
+    await other.close();
 
     const bot = await request.post("/api/responses/view", {
       headers: { "user-agent": "curl/8.0" },
@@ -102,7 +111,7 @@ test("each page load counts as one view; bots don't, and starts never outrun vie
     expect(bot.status()).toBe(204);
     // Give a (wrongly) recorded bot view time to land before checking.
     await new Promise((r) => setTimeout(r, 1500));
-    expect(await viewCount(formId)).toBe(3);
+    expect(await viewCount(formId)).toBe(2);
   } finally {
     await deleteUser(user.userId);
   }

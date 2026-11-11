@@ -41,6 +41,8 @@ describe("neutralizeFormulaInjection", () => {
     for (const value of [
       "=1+1",
       "+cmd",
+      "+5",
+      "+14155550123",
       "-cmd",
       "@SUM(A1)",
       "\tx",
@@ -57,7 +59,6 @@ describe("neutralizeFormulaInjection", () => {
       "Ada",
       "5",
       "-5",
-      "+5",
       "-5.25",
       "a=b",
       "2026-09-30",

@@ -12,7 +12,7 @@ import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { VISITOR_COOKIE } from "@/domains/experiments/visitor";
+import { VISITOR_COOKIE, VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
 const StartBody = z.object({
@@ -68,6 +68,25 @@ export async function POST(request: NextRequest) {
   );
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
+  }
+  // Tighter per visitor (QA FC4-03): one browser starting the same form
+  // over and over is a script, not a respondent. The per-address limit
+  // above is the backstop for callers without the visitor cookie.
+  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
+  if (visitor && VISITOR_ID_PATTERN.test(visitor)) {
+    const perVisitor = await hitRateLimit(
+      createAdminClient(),
+      `start-visitor:${visitor}:${parsed.data.formId}`,
+      10,
+      10 * 60 * 1000,
+    );
+    if (!perVisitor.allowed) {
+      return apiError(
+        "rate_limited",
+        "Too many attempts. Please try again shortly.",
+        429,
+      );
+    }
   }
 
   try {

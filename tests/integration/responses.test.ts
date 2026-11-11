@@ -200,7 +200,10 @@ describe("response engine (integration)", () => {
     );
 
     expect(result.ok).toBe(false);
-    if (!result.ok && result.code !== "form_closed")
+    if (
+      !result.ok &&
+      (result.code === "missing_required" || result.code === "invalid_answer")
+    )
       expect(result.missingQuestionIds).toContain("q_name");
 
     const { data: row } = await supabase
@@ -242,6 +245,36 @@ describe("response engine (integration)", () => {
       // of the same submission.
       expect(retry.alreadyCompleted).toBe(true);
     }
+  });
+
+  it("refuses a second, different submission of a completed response (QA FC4-04)", async () => {
+    const started = await startResponse(supabase, formId);
+    const first = await completeResponse(
+      supabase,
+      started.responseId,
+      1,
+      "q_name",
+      { q_name: "Ada" },
+      crypto.randomUUID(),
+    );
+    expect(first.ok).toBe(true);
+    const other = await completeResponse(
+      supabase,
+      started.responseId,
+      1,
+      "q_name",
+      { q_name: "Someone else" },
+      crypto.randomUUID(),
+    );
+    expect(other).toMatchObject({ ok: false, code: "already_submitted" });
+    if (first.ok && !other.ok && other.code === "already_submitted")
+      expect(other.endingId).toBe(first.endingId);
+    const { data: answers } = await supabase
+      .from("answers")
+      .select("value")
+      .eq("response_id", started.responseId)
+      .eq("question_id", "q_name");
+    expect(answers?.map((a) => a.value)).toEqual(["Ada"]);
   });
 
   it("never regresses a completed response back to partial via a late autosave", async () => {

@@ -95,6 +95,12 @@ export function parseFormSchema(raw: unknown): FormSchemaV1Type {
  * option-scoped operators used against non-option question types, and
  * exactly one default ending.
  */
+/** Problems that only matter once the form goes live: a draft with them
+ * still saves, so one unfinished question never freezes the rest of the
+ * form (QA FC4-09: a Booking question without its type stopped autosave,
+ * uploads and every other edit). */
+const PUBLISH_ONLY_CODES = new Set(["booking_without_type"]);
+
 export function validateSemantics(schema: FormSchemaV1Type): void {
   const questionIds = new Set<string>();
   for (const q of schema.questions) {
@@ -243,7 +249,11 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
   }
 
   // Rules, variables, visibility and checks (the logic engine's model).
-  const logicError = analyzeLogic(schema).find((issue) => issue.severity === "error");
+  // Settings still being filled in (a booking question without its type)
+  // don't stop a draft saving; they stop publishing (validateForPublish).
+  const logicError = analyzeLogic(schema).find(
+    (issue) => issue.severity === "error" && !PUBLISH_ONLY_CODES.has(issue.code),
+  );
   if (logicError) {
     throw new FormSchemaError(logicError.message, logicError.code, {
       message: logicError.message,
@@ -273,6 +283,15 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
  */
 export function validateForPublish(schema: FormSchemaV1Type): void {
   validateSemantics(schema);
+  const unfinished = analyzeLogic(schema).find(
+    (issue) => issue.severity === "error" && PUBLISH_ONLY_CODES.has(issue.code),
+  );
+  if (unfinished) {
+    throw new FormSchemaError(unfinished.message, unfinished.code, {
+      message: unfinished.message,
+      questionId: unfinished.questionId,
+    });
+  }
   for (const rule of schema.logic) {
     if (!OPERATORS_NEEDING_VALUE.has(rule.operator)) continue;
     if (rule.value === undefined || rule.value === null || rule.value === "") {

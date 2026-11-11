@@ -15,7 +15,7 @@ import {
   stageLabelClass,
   stageTitleClass,
 } from "@/components/runtime/stage";
-import { QUESTION_TYPE_META, TypeTile } from "./question-meta";
+import { TypeTile, questionTypeLabel } from "./question-meta";
 import { cn } from "cn";
 
 /** Text edited in place on the stage: auto-sizing, no chrome until
@@ -84,7 +84,7 @@ export function BuilderCanvas({
   if (item.kind === "question") {
     const q = item.question;
     chip = <TypeTile type={q.type} size={20} bordered={false} />;
-    typeLabel = QUESTION_TYPE_META[q.type].label;
+    typeLabel = questionTypeLabel(q);
     hint = "Click the text to edit it. Enter ↵ moves on.";
     if (
       q.type !== "welcome_screen" &&

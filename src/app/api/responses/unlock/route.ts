@@ -6,7 +6,6 @@ import {
   createUnlockToken,
   getPasswordHash,
   PASSWORD_MAX_LENGTH,
-  UNLOCK_TTL_SECONDS,
   unlockCookieName,
   verifyPassword,
 } from "@/domains/forms/access";
@@ -59,7 +58,8 @@ export async function POST(request: NextRequest) {
       {
         httpOnly: true,
         path: "/",
-        maxAge: UNLOCK_TTL_SECONDS,
+        // No maxAge: a session cookie, gone when the browser closes. The
+        // token inside still expires after UNLOCK_TTL_SECONDS.
         // Embeds load the form in a third-party iframe; partitioned
         // keeps the cookie to that one embedding site.
         sameSite: secure ? "none" : "lax",

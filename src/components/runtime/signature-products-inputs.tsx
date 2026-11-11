@@ -10,6 +10,8 @@ import {
   quantities,
 } from "@/domains/forms/products";
 import { cn } from "cn";
+import { useOrdersCharged } from "@/components/order-payment";
+import { beginPendingSave } from "./pending-saves";
 import { StageError } from "./stage";
 
 // --- signature (F-10) -------------------------------------------------------
@@ -63,9 +65,22 @@ export function SignatureInput({
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set from the last stroke until the upload ends: moving on waits.
+  const endPending = useRef<(() => void) | null>(null);
   const signedEarlier = typeof value === "string" && value !== "" && blank;
 
-  useEffect(() => () => clearTimeout(timer.current ?? undefined), []);
+  function settle() {
+    endPending.current?.();
+    endPending.current = null;
+  }
+
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current ?? undefined);
+      endPending.current?.();
+    },
+    [],
+  );
 
   function context() {
     const canvas = canvasRef.current;
@@ -98,6 +113,7 @@ export function SignatureInput({
 
   function clear() {
     clearTimeout(timer.current ?? undefined);
+    settle();
     reset();
     setBlank(true);
     setTyped("");
@@ -109,7 +125,8 @@ export function SignatureInput({
    * drawing replaces the stored one. */
   function scheduleSave() {
     clearTimeout(timer.current ?? undefined);
-    timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
+    endPending.current ??= beginPendingSave();
+    timer.current = setTimeout(() => void save().finally(settle), SAVE_DELAY_MS);
   }
 
   async function save() {
@@ -320,6 +337,7 @@ export function ProductsInput({
   const qty = quantities(value);
   const { currency, items } = question.settings;
   const order = orderFromAnswer(question, value);
+  const charged = useOrdersCharged();
 
   function set(itemId: string, next: number) {
     const updated: Record<string, number> = {};
@@ -423,6 +441,12 @@ export function ProductsInput({
         <span className="text-(--st-muted)">Total</span>
         <b className="text-[19px]">{formatMoney(order.total, currency)}</b>
       </p>
+      {!charged && (
+        <p className="text-[13.5px] text-(--st-muted)">
+          You won&apos;t be charged here. Your order is sent to the form&apos;s owner, who
+          will arrange payment.
+        </p>
+      )}
     </div>
   );
 }

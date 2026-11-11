@@ -66,6 +66,7 @@ export function AddressInput({
             </label>
             <input
               id={id}
+              dir="auto"
               autoFocus={autoFocus && index === 0}
               autoComplete={ADDRESS_AUTOCOMPLETE[field]}
               maxLength={200}

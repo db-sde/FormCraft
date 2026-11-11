@@ -403,6 +403,8 @@ export function BookingsManager({
               Connect your Google Calendar: your busy times are skipped, and bookings you
               host are added to it with an invitation to the attendee.
             </p>
+            {/* A full page load on purpose: the route redirects to Google. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/api/connectors/google_calendar/authorize?returnTo=/bookings"
               className="border-ink bg-card fc-focus rounded-sm border-[1.5px] px-3 py-1.5 text-sm font-semibold"
@@ -436,6 +438,7 @@ export function BookingsManager({
               </label>
             )}
             {calendar.status !== "ok" && (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages -- redirects to Google
               <a
                 href="/api/connectors/google_calendar/authorize?returnTo=/bookings"
                 className="text-sm font-semibold underline"

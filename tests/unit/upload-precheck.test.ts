@@ -23,6 +23,17 @@ describe("checking a file before it's uploaded", () => {
     );
   });
 
+  it("says an empty file is empty, and size comes before type (QA FC4-23)", () => {
+    expect(precheckUpload({ size: 0, type: "image/png" }, limits)).toMatch(/empty/);
+    expect(precheckUpload({ size: 0, type: "application/octet-stream" }, limits)).toMatch(
+      /empty/,
+    );
+    expect(
+      precheckUpload({ size: 25 * MB, type: "application/octet-stream" }, limits),
+    ).toMatch(/larger than 5 MB/);
+    expect(uploadRefusalMessage("empty", limits)).toMatch(/empty/);
+  });
+
   it("leaves a file of unknown type to the server", () => {
     expect(precheckUpload({ size: 11, type: "" }, limits)).toBeNull();
   });

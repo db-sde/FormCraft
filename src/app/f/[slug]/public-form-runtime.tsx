@@ -7,10 +7,12 @@ import { applyVariant, ORIGINAL } from "@/domains/forms/variants";
 import type { AnswerMap } from "@/domains/logic";
 import { Stage } from "@/components/runtime/stage";
 import { PaymentStep } from "@/components/runtime/payment-step";
+import { OrdersChargedProvider } from "@/components/order-payment";
 import type { Quote } from "@/domains/payments/flow";
 import { FormClosedScreen } from "@/components/runtime/form-closed";
 import { Turnstile, type TurnstileHandle } from "./turnstile";
 import { type CompleteOutcome } from "@/components/runtime/form-runtime";
+import type { Value } from "@/domains/forms/schema/logic-model";
 import { FormCustomCss, FormRenderer } from "@/components/runtime/form-renderer";
 import { prefillFromParams } from "@/domains/forms/prefill";
 import type { ResumeResult } from "@/domains/responses/resume";
@@ -222,9 +224,12 @@ export function PublicFormRuntime({
   known,
   lookup,
   captchaSiteKey,
+  ordersCharged = true,
   kiosk = false,
   onCompleted,
 }: {
+  /** False when the form's Products orders aren't charged (FC4-08). */
+  ordersCharged?: boolean;
   /** Kiosk mode (F-15): nothing is kept in this browser between people
    * (no resume, no finish later), and the response isn't tied to the
    * device's visitor id. */
@@ -803,6 +808,7 @@ export function PublicFormRuntime({
       if (res.ok) {
         const data = (await res.json()) as {
           endingId: string;
+          variables?: Record<string, Value>;
           payment?: { quote: Quote; payLater: string | null };
           paymentError?: string;
         };
@@ -831,22 +837,45 @@ export function PublicFormRuntime({
             return { ok: true, endingId: data.endingId, redirecting: true };
           }
           onCompleted?.();
-          return { ok: true, endingId: data.endingId, responseId };
+          return {
+            ok: true,
+            endingId: data.endingId,
+            responseId,
+            variables: data.variables,
+          };
         }
         // Only now is the response durably complete — clearing earlier
         // would lose the respondent's answers if the submit failed.
         store.clear(formId);
         onCompleted?.();
-        return { ok: true, endingId: data.endingId, responseId: current.responseId };
+        return {
+          ok: true,
+          endingId: data.endingId,
+          responseId: current.responseId,
+          variables: data.variables,
+        };
       }
 
       const body = (await res.json().catch(() => null)) as {
         error?: {
           code?: string;
           message?: string;
+          endingId?: string;
           errors?: { questionId: string; message: string }[];
         };
       } | null;
+      // Already submitted (another tab, or a resume link opened after the
+      // response was finished elsewhere): show its ending, not an error.
+      if (res.status === 409 && body?.error?.code === "already_submitted") {
+        submittedRef.current = true;
+        store.clear(formId);
+        onCompleted?.();
+        return {
+          ok: true,
+          endingId: body.error.endingId ?? "",
+          responseId: current.responseId,
+        };
+      }
       if (res.status === 429) {
         return {
           ok: false,
@@ -957,72 +986,74 @@ export function PublicFormRuntime({
   }
 
   return (
-    <div
-      ref={frameRef}
-      dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
-      className="fc-custom-scope relative"
-    >
-      <FormCustomCss css={compiled.schema.theme.customCss} />
-      {languages.length > 1 && (
-        <label className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-[12.5px] shadow-sm">
-          <span className="sr-only">{uiStrings(language).language}</span>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="bg-transparent font-semibold outline-none"
-            aria-label={uiStrings(language).language}
-          >
-            {languages.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
-      {paying && (
-        <PaymentStep
-          theme={theme}
-          embedded={embedded}
-          responseId={paying.responseId}
-          initialQuote={paying.quote}
-          payLaterUrl={kiosk ? null : paying.payLater}
-          onPaid={() => paying.resolve("paid")}
-          onLater={() => paying.resolve("later")}
-          onRedirect={(url) => paying.resolve({ redirect: url })}
+    <OrdersChargedProvider value={ordersCharged}>
+      <div
+        ref={frameRef}
+        dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
+        className="fc-custom-scope relative"
+      >
+        <FormCustomCss css={compiled.schema.theme.customCss} />
+        {languages.length > 1 && (
+          <label className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-[12.5px] shadow-sm">
+            <span className="sr-only">{uiStrings(language).language}</span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="bg-transparent font-semibold outline-none"
+              aria-label={uiStrings(language).language}
+            >
+              {languages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
+        {paying && (
+          <PaymentStep
+            theme={theme}
+            embedded={embedded}
+            responseId={paying.responseId}
+            initialQuote={paying.quote}
+            payLaterUrl={kiosk ? null : paying.payLater}
+            onPaid={() => paying.resolve("paid")}
+            onLater={() => paying.resolve("later")}
+            onRedirect={(url) => paying.resolve({ redirect: url })}
+          />
+        )}
+        <FormRenderer
+          compiled={shown}
+          language={language}
+          initialAnswers={
+            resumed?.answers ?? (Object.keys(prefilled).length ? prefilled : undefined)
+          }
+          initialQuestionId={resumed?.lastQuestionId}
+          initialHistory={resumed?.history}
+          welcomeBack={!!resumed && !!resumed.lastQuestionId}
+          hidden={shownHidden}
+          seed={resumed?.seed ?? freshSeed}
+          brandingRemovable={brandingRemovable}
+          schedulingAllowed={schedulingAllowed}
+          redirectOnEnding
+          onAnswerChange={handleAnswerChange}
+          onComplete={handleComplete}
+          getResponseId={() => ensureSession().then((s) => s.responseId)}
+          savesProgress={savesProgress}
+          onStepEvent={sendStepEvent}
+          followUps={followUps}
+          known={resumed ? known : knownForRuntime}
+          lookups={lookups}
+          onFinishLater={resumeLinks && savesProgress && !kiosk ? finishLater : undefined}
+          notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
+          // Embedded: natural height, reported to the host page so its
+          // iframe grows/shrinks to fit (full-viewport height would pin the
+          // iframe at whatever size it started with).
+          className={embedded ? "min-h-[480px]" : "min-h-dvh"}
         />
-      )}
-      <FormRenderer
-        compiled={shown}
-        language={language}
-        initialAnswers={
-          resumed?.answers ?? (Object.keys(prefilled).length ? prefilled : undefined)
-        }
-        initialQuestionId={resumed?.lastQuestionId}
-        initialHistory={resumed?.history}
-        welcomeBack={!!resumed && !!resumed.lastQuestionId}
-        hidden={shownHidden}
-        seed={resumed?.seed ?? freshSeed}
-        brandingRemovable={brandingRemovable}
-        schedulingAllowed={schedulingAllowed}
-        redirectOnEnding
-        onAnswerChange={handleAnswerChange}
-        onComplete={handleComplete}
-        getResponseId={() => ensureSession().then((s) => s.responseId)}
-        savesProgress={savesProgress}
-        onStepEvent={sendStepEvent}
-        followUps={followUps}
-        known={resumed ? known : knownForRuntime}
-        lookups={lookups}
-        onFinishLater={resumeLinks && savesProgress && !kiosk ? finishLater : undefined}
-        notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
-        // Embedded: natural height, reported to the host page so its
-        // iframe grows/shrinks to fit (full-viewport height would pin the
-        // iframe at whatever size it started with).
-        className={embedded ? "min-h-[480px]" : "min-h-dvh"}
-      />
-    </div>
+      </div>
+    </OrdersChargedProvider>
   );
 }
 

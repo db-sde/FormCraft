@@ -2148,4 +2148,46 @@ guards every `next` (login, sign-up, SSO, 2FA, /auth/confirm).
 Confirmed in the browser before and after the fix; unit tests cover
 the tricks.
 
+## 2026-11-11 — QA run 4 (FC4-01…FC4-30)
+
+What changed, and why where it isn't obvious:
+
+- **Quiz answers stay on the server (FC4-02).** The public page gets the
+  form through `respondentSchema()`: no `correct` flags (kept only for
+  adaptive pools, which choose the next question from them) and no
+  option points unless a score is used mid-form (a question rule, a show
+  condition or check, or a question's wording). `/complete` returns the
+  final variables, so an ending's `{{score}}` still reads right. A form
+  that branches on a running score still ships its points: hiding those
+  would need the server to choose each next question.
+- **Password unlock (FC4-01)** was working as designed: the server
+  refuses start/complete without the unlock cookie; QA's browser had
+  unlocked earlier. The unlock is now a session cookie (gone when the
+  browser closes) and lasts at most 2 hours, down from 12.
+- **Per-visitor limits (FC4-03).** Rate limits existed (120 per address
+  per form per 10 min: shared addresses at schools and offices). Added:
+  10 starts per visitor per form per 10 min, and one view per visitor
+  per form per 30 min (views were counted per page load).
+- **A completed response refuses a different submission (FC4-04)** with
+  409 `already_submitted`; the same key still replays 200. Completion
+  was already one-way and side effects already fired once; the "extra"
+  rows QA saw were separate test responses.
+- **Rules on skipped questions (FC4-07).** A question left out of a
+  random pool (or hidden) still runs its "after this question" rules'
+  navigation where it would have been. Only navigation: its variable
+  actions don't run, so every replay of the path agrees on scores.
+- **Unfinished settings save as drafts (FC4-09).** `booking_without_type`
+  only blocks publishing (`PUBLISH_ONLY_CODES` in validate.ts).
+- **CSV (FC4-10, 11, 17).** A leading `+` is always escaped (phones);
+  questions deleted since keep a "(deleted)" column; files and
+  signatures get a "(link)" column to `/api/uploads/<id>`, which opens
+  for a signed-in teammate (RLS decides) via a 5-minute signed URL. The
+  Sheets sync keeps its old columns.
+- **Products without payment (FC4-08):** the builder and the respondent
+  are told nothing is charged.
+- **Not done:** phone numbers aren't converted to E.164 (needs a phone
+  library and a default country per field); no per-response write
+  secret (FC4-14: ids are random UUIDs); no builder-wide undo/redo
+  (FC4-22, a feature); final submit time (FC4-28) not profiled.
+
 <!-- Add new decisions above this line, newest first. -->

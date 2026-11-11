@@ -13,8 +13,10 @@ export class ExportTooLargeError extends Error {
 
 const FORMULA_TRIGGER_CHARS = new Set(["=", "+", "-", "@", "\t", "\r"]);
 /** Plain numbers can't be formulas, so "-5" stays a number rather than
- * becoming the text "'-5". */
-const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/;
+ * becoming the text "'-5". A leading "+" is always escaped (QA FC4-10):
+ * that's how phone numbers arrive ("+14155550123"), and unescaped Excel
+ * turns them into 1.4E+10. */
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 
 /**
  * Guards against CSV/spreadsheet formula injection: a cell whose content

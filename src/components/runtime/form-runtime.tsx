@@ -41,9 +41,19 @@ import {
   type StageMode,
 } from "./stage";
 import { cn } from "cn";
+import { usePendingSaves } from "./pending-saves";
+import type { Value } from "@/domains/forms/schema/logic-model";
 
 export type CompleteOutcome =
-  | { ok: true; endingId: string; responseId?: string; redirecting?: boolean }
+  | {
+      ok: true;
+      endingId: string;
+      responseId?: string;
+      redirecting?: boolean;
+      /** The server's final scores, by variable id (the browser may not
+       * have the option points to work them out). */
+      variables?: Record<string, Value>;
+    }
   | { ok: false; message: string; errors?: { questionId: string; message: string }[] };
 
 /** Choosing one of these is a complete answer on its own, so the form
@@ -264,6 +274,10 @@ export function FormRuntime({
   const [currentId, setCurrentId] = useState(opening.id);
   // Lead capture asks one detail per screen: which one is showing.
   const [contactStep, setContactStep] = useState(0);
+  // OK pressed while an answer (a signature) was still saving: move on
+  // once it's saved, with the saved answer (QA FC4-16).
+  const pendingSaves = usePendingSaves();
+  const advanceWhenSavedRef = useRef(false);
   const [answers, setAnswers] = useState<AnswerMap>(opening.answers);
   const [history, setHistory] = useState<string[]>(opening.history);
   // "Ask once" questions filled in from what the visitor said before.
@@ -346,12 +360,19 @@ export function FormRuntime({
   );
   const recall = (text: string | undefined) => renderRecall(text, recallSource);
 
-  function showEnding(finalAnswers: AnswerMap, endingId: string) {
+  function showEnding(
+    finalAnswers: AnswerMap,
+    endingId: string,
+    serverVariables?: Record<string, Value>,
+  ) {
     setEnding(compiled.schema.endings.find((e) => e.id === endingId) ?? null);
     setEndingRecall({
       schema: compiled.schema,
       answers: finalAnswers,
-      variables: walkForm(compiled, finalAnswers, engineOptions).variables,
+      variables: {
+        ...walkForm(compiled, finalAnswers, engineOptions).variables,
+        ...serverVariables,
+      },
       hidden: resolvedHidden,
     });
   }
@@ -379,7 +400,7 @@ export function FormRuntime({
       )
         ? outcome.endingId
         : endingId;
-      showEnding(finalAnswers, serverEndingId);
+      showEnding(finalAnswers, serverEndingId, outcome.variables);
       return;
     }
 
@@ -401,6 +422,10 @@ export function FormRuntime({
   function goNext(currentAnswers: AnswerMap = answers) {
     if (!question || submitting || thinkingRef.current) return;
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+    if (pendingSaves > 0) {
+      advanceWhenSavedRef.current = true;
+      return;
+    }
 
     // Lead capture: each detail gets its own screen, checked as they go;
     // the whole block is checked again once the last one is done.
@@ -617,6 +642,12 @@ export function FormRuntime({
   useEffect(() => {
     if (resumeAfterLookup > 0) goNextRef.current();
   }, [resumeAfterLookup]);
+  // Likewise once the save OK was waiting for has finished (FC4-16).
+  useEffect(() => {
+    if (pendingSaves > 0 || !advanceWhenSavedRef.current) return;
+    advanceWhenSavedRef.current = false;
+    goNextRef.current();
+  }, [pendingSaves]);
 
   useEffect(() => {
     // Listening on the document (not the form container) so Enter
@@ -629,12 +660,21 @@ export function FormRuntime({
         pickByKey(e, containerRef.current);
         return;
       }
+      const target = e.target as HTMLElement | null;
+      // Radix radio/checkbox items (they carry data-state) deliberately
+      // ignore Enter per WAI-ARIA — and mark it handled — so for them
+      // Enter means "done, next" (QA FC4-20: it did nothing on a
+      // checkbox, because the check below saw it as handled).
+      const radixChoice =
+        !!target &&
+        (target.getAttribute("role") === "radio" ||
+          target.getAttribute("role") === "checkbox") &&
+        target.hasAttribute("data-state");
       // A field that handles Enter itself (e.g. the contact block moving
       // to its next input) marks the event handled. stopPropagation
       // can't express that here: React's own listeners live on the
       // document too, alongside this one.
-      if (e.defaultPrevented) return;
-      const target = e.target as HTMLElement | null;
+      if (e.defaultPrevented && !radixChoice) return;
       const container = containerRef.current;
       if (!target || !container) return;
       // Only when focus is ours: inside the runtime, on <body>, or on an
@@ -647,14 +687,9 @@ export function FormRuntime({
       if (!ours) return;
       const tag = target.tagName;
       if (tag === "TEXTAREA" && e.shiftKey) return; // newline
-      const role = target.getAttribute("role");
-      // Radix radio/checkbox items (they carry data-state) deliberately
-      // ignore Enter per WAI-ARIA, so for them Enter means "done, next".
       // Every other button/link activates itself natively — Enter on
       // "Yes" must choose Yes, not skip past it.
-      const isRadixChoice =
-        (role === "radio" || role === "checkbox") && target.hasAttribute("data-state");
-      if ((tag === "BUTTON" && !isRadixChoice) || tag === "A") return;
+      if ((tag === "BUTTON" && !radixChoice) || tag === "A") return;
       e.preventDefault();
       goNextRef.current();
     }

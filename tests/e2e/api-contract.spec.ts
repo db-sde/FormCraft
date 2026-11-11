@@ -118,7 +118,11 @@ test("complete: per-question errors, idempotent success, and the spam trap", asy
 
   // A filled spam trap never loses the submission: it completes, but
   // flagged — autofill can fill hidden fields in a real person's browser.
-  const trapped = await complete({ q_email: "bot@example.com" }, { trap: "http://spam" });
+  const trapKey = crypto.randomUUID();
+  const trapped = await complete(
+    { q_email: "bot@example.com" },
+    { trap: "http://spam", idempotencyKey: trapKey },
+  );
   expect(trapped.status()).toBe(200);
   const { data: afterTrap } = await adminClient()
     .from("responses")
@@ -127,10 +131,20 @@ test("complete: per-question errors, idempotent success, and the spam trap", asy
     .single();
   expect(afterTrap).toEqual({ status: "completed", spam_suspected: true });
 
-  // Retrying a completed response is idempotent, not an error.
-  const again = await complete({ q_email: "real@example.com" });
+  // Retrying the same submission (same key) is idempotent, not an error.
+  const again = await complete(
+    { q_email: "bot@example.com" },
+    { idempotencyKey: trapKey },
+  );
   expect(again.status()).toBe(200);
   expect((await again.json()).endingId).toBe("end");
+  // A different submission of a completed response is refused (QA FC4-04).
+  const other = await complete({ q_email: "real@example.com" });
+  expect(other.status()).toBe(409);
+  expect((await other.json()).error).toMatchObject({
+    code: "already_submitted",
+    endingId: "end",
+  });
 });
 
 test("complete: a normal submission is stored on the path taken and not flagged", async ({
@@ -235,11 +249,11 @@ test("lookups and follow-ups: validate input, and answer 'nothing' rather than f
     data: { questionId: "q_email", answer: "a@b.co" },
   });
   expect(await followUp.json()).toEqual({ question: null });
-  // A response that doesn't exist looks the same.
+  // A response that doesn't exist is a 404, as on /answers (QA FC4-15).
   const missing = await request.post(`/api/responses/${crypto.randomUUID()}/lookup`, {
     data: { questionId: "q_email", answers: {} },
   });
-  expect(await missing.json()).toEqual({ values: {} });
+  expect(missing.status()).toBe(404);
 });
 
 test("cron routes require the shared secret", async ({ request }) => {

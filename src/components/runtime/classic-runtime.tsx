@@ -24,6 +24,7 @@ import {
   type RecallSource,
 } from "@/domains/logic";
 import { cn } from "cn";
+import { usePendingSaves } from "./pending-saves";
 import { RuntimeStringsContext } from "./runtime-strings";
 import { RuntimeQuestionInput } from "./runtime-question-input";
 import {
@@ -41,6 +42,7 @@ import {
   stageDescClass,
   stageTitleClass,
 } from "./stage";
+import type { Value } from "@/domains/forms/schema/logic-model";
 
 const PAGE_TITLE = cn(
   stageTitleClass,
@@ -129,6 +131,9 @@ export function ClassicFormRuntime({
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [thinking, setThinking] = useState(false);
+  // Next pressed while a signature was still saving: go on once saved.
+  const pendingSaves = usePendingSaves();
+  const advanceWhenSavedRef = useRef(false);
   const [ending, setEnding] = useState<EndingV1 | null>(null);
   const [endingRecall, setEndingRecall] = useState<RecallSource | null>(null);
   const [completedResponseId, setCompletedResponseId] = useState<string | undefined>();
@@ -212,12 +217,17 @@ export function ClassicFormRuntime({
   }
 
   async function finish(finalAnswers: AnswerMap, endingId: string) {
-    const show = (id: string) => {
+    const show = (id: string, serverVariables?: Record<string, Value>) => {
       setEnding(compiled.schema.endings.find((e) => e.id === id) ?? null);
       setEndingRecall({
         schema: compiled.schema,
         answers: finalAnswers,
-        variables: walkForm(compiled, finalAnswers, engineOptions).variables,
+        // The server's final scores win: the browser may not have the
+        // option points to work them out (QA FC4-02).
+        variables: {
+          ...walkForm(compiled, finalAnswers, engineOptions).variables,
+          ...serverVariables,
+        },
         hidden: resolvedHidden,
       });
     };
@@ -232,6 +242,7 @@ export function ClassicFormRuntime({
         compiled.schema.endings.some((e) => e.id === outcome.endingId)
           ? outcome.endingId
           : endingId,
+        outcome.variables,
       );
       return;
     }
@@ -254,6 +265,10 @@ export function ClassicFormRuntime({
 
   function goNext() {
     if (submitting || thinking) return;
+    if (pendingSaves > 0) {
+      advanceWhenSavedRef.current = true;
+      return;
+    }
     const found = pageErrors();
     setErrors(found);
     const firstInvalid = shown.find((id) => found[id]);
@@ -328,6 +343,11 @@ export function ClassicFormRuntime({
   useEffect(() => {
     if (resumeAfterLookup > 0) goNextRef.current();
   }, [resumeAfterLookup]);
+  useEffect(() => {
+    if (pendingSaves > 0 || !advanceWhenSavedRef.current) return;
+    advanceWhenSavedRef.current = false;
+    goNextRef.current();
+  }, [pendingSaves]);
 
   // A new page: back to its top, the page heading focused for screen
   // readers, and its questions counted as viewed (ids only).

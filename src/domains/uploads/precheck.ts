@@ -19,6 +19,8 @@ export function describeAcceptedTypes(mimeTypes: string[]): string {
     .join(", ");
 }
 
+export const EMPTY_FILE_MESSAGE = "This file is empty. Choose another one.";
+
 export function tooLargeMessage(maxSizeMb: number): string {
   return `That file is larger than ${maxSizeMb} MB. Choose a smaller one.`;
 }
@@ -39,11 +41,13 @@ export function precheckUpload(
   file: { size: number; type: string },
   limits: UploadLimits,
 ): string | null {
+  // Empty, then size, then type: each with its own reason (QA FC4-23).
+  if (file.size === 0) return EMPTY_FILE_MESSAGE;
+  if (file.size > limits.maxSizeMb * 1024 * 1024)
+    return tooLargeMessage(limits.maxSizeMb);
   if (file.type && !typeAllowed(file.type, limits.acceptedMimeTypes)) {
     return wrongTypeMessage(limits.acceptedMimeTypes);
   }
-  if (file.size > limits.maxSizeMb * 1024 * 1024)
-    return tooLargeMessage(limits.maxSizeMb);
   return null;
 }
 
@@ -52,6 +56,7 @@ export function uploadRefusalMessage(
   code: string | undefined,
   limits: UploadLimits,
 ): string {
+  if (code === "empty") return EMPTY_FILE_MESSAGE;
   if (code === "too_large") return tooLargeMessage(limits.maxSizeMb);
   if (code === "unsupported_type") return wrongTypeMessage(limits.acceptedMimeTypes);
   return "The upload failed. Try again.";

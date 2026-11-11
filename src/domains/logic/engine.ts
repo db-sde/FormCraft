@@ -62,6 +62,10 @@ export type EngineOptions = {
 export type EngineState = {
   variables: Record<string, Value>;
   trace: TraceEntry[];
+  /** An ending chosen by the rules of a question that was skipped (left
+   * out of a random pool, or hidden) — it stands in for the question's
+   * own rules, where it would have been. */
+  skippedEnding?: NextStep & { ruleId: string };
 };
 
 const MAX_TRACE = 2000;
@@ -350,13 +354,15 @@ type QuestionOption = { id: string; scores?: { variableId: string; points: numbe
 // --- rules -------------------------------------------------------------------------
 
 /** Runs every matching rule's variable actions; returns the first
- * navigation any of them asks for (legacy-compatible "first match wins"). */
+ * navigation any of them asks for (legacy-compatible "first match wins").
+ * `navigationOnly` (a skipped question's rules) leaves variables alone. */
 function runRules(
   run: Run,
   state: EngineState,
   rules: NormalizedRule[],
   visited: ReadonlySet<string>,
   allowQuestionJumps: boolean,
+  navigationOnly = false,
 ): (NextStep & { ruleId: string }) | null {
   let navigation: (NextStep & { ruleId: string }) | null = null;
   for (const rule of rules) {
@@ -368,7 +374,7 @@ function runRules(
     trace(state, { kind: "rule_matched", ruleId: rule.id });
     for (const action of rule.then) {
       if (action.type === "set_variable") {
-        setVariable(run, state, action, { ruleId: rule.id });
+        if (!navigationOnly) setVariable(run, state, action, { ruleId: rule.id });
         continue;
       }
       if (navigation) continue;
@@ -489,6 +495,30 @@ function nextVisible(
       questionId: id,
       reason: run.leftOut.has(id) || group ? "pool" : "condition",
     });
+    // Its "after this question" rules still decide where to go, as if
+    // the respondent had passed it (FC4-07: an ending rule on a pool
+    // question that wasn't drawn). Only their navigation: a skipped
+    // question's variable actions don't run, so every replay of the
+    // path agrees on the variables.
+    const navigation = runRules(
+      run,
+      state,
+      rulesFor(run, { event: "question_answered", questionId: id }),
+      visited,
+      true,
+      true,
+    );
+    if (navigation?.type === "ending") {
+      state.skippedEnding = navigation;
+      return null;
+    }
+    if (navigation?.type === "question") {
+      const target = ordered.indexOf(navigation.questionId);
+      if (target > i) {
+        trace(state, { kind: "jump", ruleId: navigation.ruleId, to: navigation });
+        i = target - 1;
+      }
+    }
   }
   return null;
 }
@@ -578,7 +608,7 @@ function finish(
     new Set(),
     false,
   );
-  const pick = chosen ?? completion;
+  const pick = chosen ?? state.skippedEnding ?? completion;
   const endings = run.schema.endings;
   if (pick?.type === "ending" && endings.some((e) => e.id === pick.endingId)) {
     const reason = run.rules

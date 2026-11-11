@@ -156,6 +156,18 @@ export async function POST(
     // response never disagree.
     const confirmedBookings = await settleBookings(admin, holds.held, id, result.ok);
 
+    if (!result.ok && result.code === "already_submitted") {
+      return NextResponse.json(
+        {
+          error: {
+            code: "already_submitted",
+            message: "This response has already been submitted.",
+            endingId: result.endingId,
+          },
+        },
+        { status: 409 },
+      );
+    }
     if (!result.ok && result.code === "form_closed") {
       return NextResponse.json(
         {
@@ -308,6 +320,9 @@ export async function POST(
 
     return NextResponse.json({
       endingId: result.endingId,
+      // Final scores for the ending's recall ("You scored {{score}}"): the
+      // browser wasn't sent option points (QA FC4-02).
+      ...(result.variables ? { variables: result.variables } : {}),
       // The respondent pays in the form's payment step (F-22).
       ...(owes
         ? {

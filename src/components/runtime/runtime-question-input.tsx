@@ -202,6 +202,9 @@ export function RuntimeQuestionInput({
         return (
           <input
             autoFocus={focus}
+            // Text runs in its own direction: Arabic right to left in an
+            // English form, and the reverse (QA FC4-25).
+            dir="auto"
             value={text}
             aria-invalid={invalid || undefined}
             aria-label={question.label}
@@ -216,6 +219,7 @@ export function RuntimeQuestionInput({
         return (
           <textarea
             autoFocus={focus}
+            dir="auto"
             rows={2}
             value={text}
             aria-invalid={invalid || undefined}
@@ -814,6 +818,38 @@ function YesNo({
   );
 }
 
+/**
+ * Arrow keys (and Home/End) move focus between a group's star or scale
+ * buttons, and only one of them is a Tab stop (QA FC4-20). They don't
+ * choose: choosing moves the form on, so Space or Enter does that.
+ */
+function moveFocusInGroup(e: React.KeyboardEvent<HTMLElement>) {
+  const step: Record<string, number> = {
+    ArrowRight: 1,
+    ArrowDown: 1,
+    ArrowLeft: -1,
+    ArrowUp: -1,
+  };
+  if (!(e.key in step) && e.key !== "Home" && e.key !== "End") return;
+  const items = Array.from(
+    e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'),
+  );
+  if (items.length === 0) return;
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  // In a right-to-left form, ArrowLeft goes to the next item.
+  const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+  const horizontal = e.key === "ArrowLeft" || e.key === "ArrowRight";
+  const by = (step[e.key] ?? 0) * (rtl && horizontal ? -1 : 1);
+  const next =
+    e.key === "Home"
+      ? 0
+      : e.key === "End"
+        ? items.length - 1
+        : (Math.max(at, 0) + by + items.length) % items.length;
+  e.preventDefault();
+  items[next].focus();
+}
+
 function Rating({
   scale,
   value,
@@ -831,6 +867,7 @@ function Rating({
     <div
       role="radiogroup"
       aria-label="Rating"
+      onKeyDown={moveFocusInGroup}
       onMouseLeave={() => setHover(0)}
       className={cn("flex flex-nowrap", ten ? "gap-1 sm:gap-2.5" : "gap-2.5")}
     >
@@ -840,6 +877,8 @@ function Rating({
           type="button"
           role="radio"
           aria-checked={rating === n}
+          // One Tab stop: the chosen star, or the first.
+          tabIndex={rating === n || (rating === 0 && n === 1) ? 0 : -1}
           aria-label={`${n} star${n === 1 ? "" : "s"}`}
           data-key={n <= 9 ? String(n) : undefined}
           onMouseEnter={() => setHover(n)}
@@ -882,6 +921,7 @@ function OpinionScale({
       <div
         role="radiogroup"
         aria-label={question.label}
+        onKeyDown={moveFocusInGroup}
         className="flex gap-(--st-cell-gap)"
       >
         {nums.map((n) => {
@@ -892,6 +932,7 @@ function OpinionScale({
               type="button"
               role="radio"
               aria-checked={checked}
+              tabIndex={checked || (chosen === undefined && n === nums[0]) ? 0 : -1}
               data-key={n >= 0 && n <= 9 ? String(n) : undefined}
               data-beat={beat === String(n) || undefined}
               onClick={() => {

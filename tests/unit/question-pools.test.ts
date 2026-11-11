@@ -119,3 +119,60 @@ describe("pools in the analyser and on delete", () => {
     expect(removeQuestionReferences(two, "c").pools).toEqual([]);
   });
 });
+
+describe("rules on a pool question that wasn't drawn (QA FC4-07)", () => {
+  // Pool r1–r3, ask 2; the ending rule hangs off r3. Runs that don't draw
+  // r3 must still reach that ending.
+  const withRule = parseFormSchema({
+    schemaVersion: 1,
+    meta: { title: "Quiz" },
+    theme: {},
+    endings: [
+      { id: "none", title: "None", isDefault: true },
+      { id: "both", title: "Both" },
+    ],
+    questions: [q("intro", 0), q("r1", 1), q("r2", 2), q("r3", 3)],
+    logic: [],
+    pools: [{ id: "p", name: "Pool", questionIds: ["r1", "r2", "r3"], pick: 2 }],
+    rules: [
+      {
+        id: "after_r3",
+        on: { event: "question_answered", questionId: "r3" },
+        when: {
+          type: "compare",
+          left: { type: "answer", questionId: "intro" },
+          op: "eq",
+          right: { type: "literal", value: "yes" },
+        },
+        then: [{ type: "jump_to_ending", endingId: "both" }],
+      },
+    ],
+  });
+  const compiled = compileFormSchema(withRule);
+  const seeds = Array.from({ length: 60 }, (_, i) => `pool-seed-${i}`);
+  const drawsR3 = (seed: string) => !questionsLeftOut(withRule, seed).has("r3");
+  const answersFor = (seed: string, intro: string) => {
+    const asked = ["r1", "r2", "r3"].filter(
+      (id) => !questionsLeftOut(withRule, seed).has(id),
+    );
+    return Object.fromEntries([["intro", intro], ...asked.map((id) => [id, "x"])]);
+  };
+
+  it("reaches the rule's ending whether or not r3 was drawn", () => {
+    const skipped = seeds.filter((s) => !drawsR3(s));
+    const drawn = seeds.filter(drawsR3);
+    expect(skipped.length).toBeGreaterThan(5);
+    expect(drawn.length).toBeGreaterThan(5);
+    for (const seed of seeds) {
+      const walk = walkForm(compiled, answersFor(seed, "yes"), { seed });
+      expect(walk.endingId, seed).toBe("both");
+      expect(walk.visitedQuestionIds).not.toContain(drawsR3(seed) ? "nothing" : "r3");
+    }
+  });
+
+  it("still uses the default ending when the rule doesn't match", () => {
+    for (const seed of seeds) {
+      expect(walkForm(compiled, answersFor(seed, "no"), { seed }).endingId).toBe("none");
+    }
+  });
+});

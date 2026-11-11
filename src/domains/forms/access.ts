@@ -24,8 +24,11 @@ type Client = SupabaseClient<Database>;
  */
 
 export { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./access-rules";
-/** How long one unlock lasts. */
-export const UNLOCK_TTL_SECONDS = 12 * 60 * 60;
+/** How long one unlock lasts at most: long enough to fill in a long
+ * form. The cookie itself also ends when the browser closes (QA FC4-01:
+ * a browser that had unlocked the form went straight in hours later). A
+ * response started while unlocked can still be submitted after this. */
+export const UNLOCK_TTL_SECONDS = 2 * 60 * 60;
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 32 } as const;
 

@@ -4,7 +4,13 @@ import { useState } from "react";
 import { ImagePlus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+const ACCEPTED_TYPES = Object.keys(EXTENSIONS);
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 /** The file name at the end of a storage URL, without our upload prefix. */
@@ -52,7 +58,7 @@ export function ImageUploadField({
     // privacy-sensitive happens server-side for respondent uploads;
     // this bucket only ever holds creator-supplied theme assets.
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError("Use a PNG, JPEG, WebP or SVG image.");
+      setError("Use a PNG, JPEG, WebP or GIF image.");
       return;
     }
     if (file.size > MAX_SIZE_BYTES) {
@@ -63,14 +69,17 @@ export function ImageUploadField({
     setUploading(true);
     try {
       const supabase = createClient();
-      const ext = file.name.split(".").pop() ?? "png";
-      const path = `${workspaceId}/${formId}/${label.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.${ext}`;
+      // A random, plain-ASCII name: storage refuses keys with characters
+      // like the "·" in a picture option's label ("A · Blue"), which made
+      // every option-image upload fail (QA FC4-05).
+      const path = `${workspaceId}/${formId}/${crypto.randomUUID()}.${EXTENSIONS[file.type]}`;
 
       const { error: uploadError } = await supabase.storage
         .from("theme-assets")
-        .upload(path, file, { upsert: true });
+        .upload(path, file, { contentType: file.type });
 
       if (uploadError) {
+        console.error("Image upload failed", uploadError.message);
         setError("The upload failed. Try again.");
         return;
       }
@@ -116,7 +125,7 @@ export function ImageUploadField({
           <span className="flex flex-col">
             <b className="text-[13.5px]">{uploading ? "Uploading…" : `Upload ${noun}`}</b>
             <span className="text-muted-foreground text-xs">
-              PNG, JPEG, WebP or SVG · up to 5 MB
+              PNG, JPEG, WebP or GIF · up to 5 MB
             </span>
           </span>
           <input

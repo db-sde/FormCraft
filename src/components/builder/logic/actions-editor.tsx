@@ -244,6 +244,10 @@ function ActionFields({
           <SelectValue placeholder="Choose question" />
         </SelectTrigger>
         <SelectContent position="popper">
+          {/* Says why earlier questions aren't offered (QA FC4-29). */}
+          <p className="text-muted-foreground px-2 py-1.5 text-xs">
+            Jumps only go forward, so respondents can&apos;t loop.
+          </p>
           {targets.map((q) => (
             <SelectItem key={q.id} value={q.id}>
               {numbers.get(q.id)} · {q.label.trim() || "Untitled question"}

@@ -99,19 +99,25 @@ test.describe("creator setup screens", () => {
     await picker.selectOption({ label: "Discovery call" });
     await page.getByLabel("Attendee's email from").selectOption("q_email");
     await waitForSaved(page);
-    const { data: draft } = await adminClient()
-      .from("form_versions")
-      .select("schema")
-      .eq("form_id", formId)
-      .eq("status", "draft")
-      .single();
-    const booking = (draft!.schema as unknown as FormSchemaV1).questions.find(
-      (q) => q.type === "booking",
-    );
-    expect(booking?.settings).toMatchObject({
-      bookingTypeId: expect.any(String),
-      emailQuestionId: "q_email",
-    });
+    // Polled: the draft also saved before the type was chosen (an
+    // unfinished booking question no longer blocks saving, QA FC4-09), so
+    // "Saved" can show for that earlier save.
+    await expect
+      .poll(async () => {
+        const { data: draft } = await adminClient()
+          .from("form_versions")
+          .select("schema")
+          .eq("form_id", formId)
+          .eq("status", "draft")
+          .single();
+        return (draft!.schema as unknown as FormSchemaV1).questions.find(
+          (q) => q.type === "booking",
+        )?.settings;
+      })
+      .toMatchObject({
+        bookingTypeId: expect.any(String),
+        emailQuestionId: "q_email",
+      });
   });
 
   test("payment settings and coupons: add, switch off, delete", async ({ page }) => {

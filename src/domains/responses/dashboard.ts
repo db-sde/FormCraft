@@ -3,10 +3,11 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
-  answerCells,
   formatAnswerValue,
   questionColumnLabel,
   questionColumnLabels,
+  exportColumnLabels,
+  exportAnswerCells,
 } from "./format";
 import { hasAnswer } from "@/domains/logic/validate-answer";
 import { ABANDONED_AFTER_MINUTES, describeSource } from "./activity";
@@ -158,6 +159,9 @@ export type ResponseListItem = {
   endingTitle: string | null;
   /** Formatted answers for `previewColumns`, keyed by question id. */
   preview: Record<string, string>;
+  /** Score and result values for `resultColumns`, keyed by variable name
+   * (completed responses only). */
+  results: Record<string, string>;
   /** How far the respondent got: answered questions / answerable ones. */
   progress: { answered: number; total: number };
   /** Where an unfinished respondent stopped. */
@@ -174,6 +178,9 @@ export type ResponseListPage = {
   page: number;
   pageCount: number;
   previewColumns: { questionId: string; label: string }[];
+  /** The form's scores and results (variables), a column each, so the
+   * creator sees why someone got their ending (QA FC4-12). */
+  resultColumns: string[];
 };
 
 const ATTRIBUTION_COLUMNS = [
@@ -324,6 +331,8 @@ export async function listResponses(
   // Same column rule as CSV export: the latest version's questions.
   const latest = await getLatestSchema(supabase, formId);
   const previewQuestions = pickPreviewQuestions(latest);
+  const resultColumns =
+    view === "completed" ? (latest?.variables ?? []).map((v) => v.name) : [];
 
   // Every answer for this page (not just preview columns) — progress
   // needs the full count. 25 responses × up to 200 questions can exceed
@@ -345,6 +354,18 @@ export async function listResponses(
       answersByResponse.set(a.response_id, forResponse);
     }
     if ((answerRows?.length ?? 0) < FETCH_PAGE) break;
+  }
+  // File names for upload answers, so the table shows "cv.pdf", not
+  // "Uploaded file" (QA FC4-17).
+  const uploadNames = new Map<string, string>();
+  if (responseIds.length > 0 && previewQuestions.some((q) => q.type === "file_upload")) {
+    const { data: uploads } = await supabase
+      .from("uploads")
+      .select("id, original_filename")
+      .in("response_id", responseIds)
+      .limit(FETCH_PAGE);
+    for (const upload of uploads ?? [])
+      uploadNames.set(upload.id, upload.original_filename);
   }
 
   // Ending titles and answer formatting come from each response's own
@@ -372,10 +393,25 @@ export async function listResponses(
           })
         : rawEnding;
 
+    const results: Record<string, string> = {};
+    if (resultColumns.length > 0 && schema) {
+      const { variables } = computeResponseResults({
+        schema,
+        answers: Object.fromEntries(answers ?? new Map()),
+        hidden: row.hidden_fields,
+        completedAt: row.completed_at,
+        seed: row.random_seed,
+      });
+      for (const name of resultColumns) {
+        const value = variables[name];
+        results[name] = value === null || value === undefined ? "" : String(value);
+      }
+    }
+
     const preview: Record<string, string> = {};
     for (const ref of previewQuestions) {
       const own = schema?.questions.find((q) => q.id === ref.id) ?? ref;
-      preview[ref.id] = formatAnswerValue(own, answers?.get(ref.id));
+      preview[ref.id] = formatAnswerValue(own, answers?.get(ref.id), { uploadNames });
     }
 
     const ownAnswerable = (schema?.questions ?? []).filter(isAnswerable);
@@ -390,6 +426,7 @@ export async function listResponses(
       lastActiveAt: row.last_active_at,
       endingTitle,
       preview,
+      results,
       progress: { answered, total: ownAnswerable.length },
       lastQuestionLabel: lastQuestion ? questionColumnLabel(lastQuestion) : null,
       source: describeSource({ utmSource: row.utm_source, referrer: row.referrer }),
@@ -407,6 +444,7 @@ export async function listResponses(
       questionId: q.id,
       label: q.type === "contact_info" ? "Contact" : questionColumnLabel(q),
     })),
+    resultColumns,
   };
 }
 
@@ -802,6 +840,12 @@ export async function buildResponsesTable(
   }
 
   const rows: Record<string, unknown>[] = [];
+  // Questions answered in an earlier version but gone from the latest one
+  // keep their column, marked "(deleted)", so editing the form never
+  // drops old answers from the export (QA FC4-11).
+  const referenceIds = new Set(referenceQuestions.map((q) => q.id));
+  const deletedColumns = new Set<string>();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   for (const response of responses) {
     const schema = await getSchemaForVersion(
       supabase,
@@ -834,14 +878,25 @@ export async function buildResponsesTable(
     for (const refQuestion of referenceQuestions) {
       const ownQuestion =
         schema?.questions.find((q) => q.id === refQuestion.id) ?? refQuestion;
-      const labels = questionColumnLabels(refQuestion);
-      const cells = answerCells(
+      const labels = exportColumnLabels(refQuestion);
+      const cells = exportAnswerCells(
         refQuestion,
         ownQuestion,
         answersByQuestion?.get(refQuestion.id),
-        { uploadNames },
+        { uploadNames, appUrl },
       );
       labels.forEach((label, i) => (row[label] = cells[i]));
+    }
+    for (const own of schema?.questions ?? []) {
+      if (referenceIds.has(own.id) || NON_ANSWERABLE_TYPES.has(own.type)) continue;
+      const value = answersByQuestion?.get(own.id);
+      if (value === undefined) continue;
+      const cells = exportAnswerCells(own, own, value, { uploadNames, appUrl });
+      exportColumnLabels(own).forEach((label, i) => {
+        const column = `${label} (deleted)`;
+        deletedColumns.add(column);
+        row[column] = cells[i];
+      });
     }
 
     Object.assign(row, {
@@ -858,7 +913,8 @@ export async function buildResponsesTable(
 
   const columns = [
     ...(view === "completed" ? ["Submitted at", "Ending"] : ["Last active"]),
-    ...referenceQuestions.flatMap(questionColumnLabels),
+    ...referenceQuestions.flatMap(exportColumnLabels),
+    ...deletedColumns,
     ...variableNames.map(variableColumn),
     ...ATTRIBUTION_COLUMNS,
   ];
