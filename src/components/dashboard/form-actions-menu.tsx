@@ -111,7 +111,7 @@ export function FormActionsMenu({
 
   function rename() {
     startTransition(async () => {
-      const result = await renameFormAction(form.id, newTitle);
+      const result = await renameFormAction(form.id, newTitle, { syncWelcome: true });
       if (result.ok) {
         setRenaming(false);
         toast.success("Renamed.");

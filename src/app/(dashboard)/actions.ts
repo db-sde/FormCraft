@@ -13,6 +13,7 @@ import { z } from "zod";
 import {
   createFolder,
   createFormWithDraft,
+  blankFormSchema,
   deleteFolder,
   duplicateForm,
   FolderError,
@@ -48,6 +49,26 @@ export async function createFormAction(): Promise<void> {
     eventType: "form_created",
     actorId: user.id,
     metadata: { source: "scratch" },
+  });
+  redirect(`/forms/${id}`);
+}
+
+/** A blank form: only a welcome screen (QA FC4-26). */
+export async function createBlankFormAction(): Promise<void> {
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) redirect("/dashboard");
+  const { id } = await createFormWithDraft(
+    supabase,
+    workspace.id,
+    user.id,
+    "Untitled form",
+    blankFormSchema("Untitled form"),
+  );
+  trackEvent({
+    formId: id,
+    eventType: "form_created",
+    actorId: user.id,
+    metadata: { source: "blank" },
   });
   redirect(`/forms/${id}`);
 }

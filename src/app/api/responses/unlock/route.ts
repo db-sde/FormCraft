@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { hitRateLimit } from "@/domains/abuse";
+import { hitRateLimit, rateLimitSpent } from "@/domains/abuse";
 import {
   createUnlockToken,
   getPasswordHash,
@@ -11,6 +11,10 @@ import {
 } from "@/domains/forms/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, getClientIp, readJsonBody } from "../shared";
+
+/** Wrong passwords per form, from anywhere, before it pauses (FC4-03). */
+const UNLOCK_FAILURES_PER_FORM = 20;
+const UNLOCK_WINDOW_MS = 10 * 60 * 1000;
 
 const UnlockBody = z.object({
   formId: z.string().uuid(),
@@ -38,7 +42,15 @@ export async function POST(request: NextRequest) {
     5,
     10 * 60 * 1000,
   );
-  if (!rateLimit.allowed) {
+  // And per form, whatever address the guesses come from (a caller can
+  // change address on every request): 20 wrong passwords every 10
+  // minutes. Right ones don't count, so a class entering it together is
+  // never locked out by its own success.
+  const failuresKey = `unlock-fail:${parsed.data.formId}`;
+  if (
+    !rateLimit.allowed ||
+    (await rateLimitSpent(admin, failuresKey, UNLOCK_FAILURES_PER_FORM, UNLOCK_WINDOW_MS))
+  ) {
     return apiError("rate_limited", "Too many attempts. Please try again later.", 429);
   }
 
@@ -57,6 +69,7 @@ export async function POST(request: NextRequest) {
     if (hash === null)
       return apiError("no_password", "This form doesn't need a password.", 400);
     if (!(await verifyPassword(parsed.data.password, hash))) {
+      await hitRateLimit(admin, failuresKey, UNLOCK_FAILURES_PER_FORM, UNLOCK_WINDOW_MS);
       return apiError("wrong_password", "That password isn't right.", 401);
     }
 

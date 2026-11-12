@@ -10,7 +10,14 @@ import {
 } from "@/domains/responses";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp, readJsonBody, writeDenied } from "../../shared";
+import {
+  apiError,
+  getClientIp,
+  readJsonBody,
+  writeDenied,
+  ANSWERS_BODY_BYTES,
+  respondentCountry,
+} from "../../shared";
 
 const AnswersBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -27,9 +34,13 @@ export async function PATCH(
     return apiError("invalid_body", "Invalid response id.", 400);
   }
 
-  const body = await readJsonBody(request);
+  const body = await readJsonBody(request, ANSWERS_BODY_BYTES);
   if (body === null)
-    return apiError("invalid_body", "Request body is missing or too large.", 400);
+    return apiError(
+      "invalid_body",
+      "These answers are too long to send. Shorten the longest one and try again.",
+      400,
+    );
 
   const parsed = AnswersBody.safeParse(body);
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
@@ -56,6 +67,7 @@ export async function PATCH(
       parsed.data.clientRevision,
       parsed.data.lastQuestionId,
       parsed.data.answers,
+      { respondentCountry: respondentCountry(request) },
     );
     return NextResponse.json({ status: result.status, revision: result.revision });
   } catch (error) {

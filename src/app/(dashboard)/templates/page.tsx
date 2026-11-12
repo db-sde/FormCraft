@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, LayoutTemplate, Plus } from "lucide-react";
+import { ArrowLeft, FilePlus, LayoutTemplate, Plus } from "lucide-react";
 import { listTemplates } from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
-import { createFormAction, createFormFromTemplateAction } from "../actions";
+import {
+  createBlankFormAction,
+  createFormAction,
+  createFormFromTemplateAction,
+} from "../actions";
 import { SubmitButton } from "@/components/submit-button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FormPreviewArt } from "@/components/forms/form-preview-art";
@@ -36,24 +40,45 @@ export default async function TemplatesPage() {
         </p>
       </div>
 
-      <form action={createFormAction}>
-        <button
-          type="submit"
-          className="fc-focus group border-ink bg-card hover:bg-accent flex w-full items-center gap-[18px] rounded-lg border-[1.5px] border-dashed px-5 py-4 text-left"
-        >
-          <span className="border-ink bg-primary shadow-raised grid size-11 shrink-0 place-items-center rounded-sm border-[1.5px] text-[#2b2118]">
-            <Plus className="size-5" />
-          </span>
-          <span className="flex flex-col gap-[3px]">
-            <span className="font-heading text-lg leading-[1.2] font-bold">
-              Start from scratch
+      <div className="grid gap-3 sm:grid-cols-2">
+        <form action={createFormAction}>
+          <button
+            type="submit"
+            className="fc-focus group border-ink bg-card hover:bg-accent flex h-full w-full items-center gap-[18px] rounded-lg border-[1.5px] border-dashed px-5 py-4 text-left"
+          >
+            <span className="border-ink bg-primary shadow-raised grid size-11 shrink-0 place-items-center rounded-sm border-[1.5px] text-[#2b2118]">
+              <Plus className="size-5" />
             </span>
-            <span className="text-muted-foreground text-sm">
-              A short contact form to reshape: a welcome, a question and contact details.
+            <span className="flex flex-col gap-[3px]">
+              <span className="font-heading text-lg leading-[1.2] font-bold">
+                Start from scratch
+              </span>
+              <span className="text-muted-foreground text-sm">
+                A short contact form to reshape: a welcome, a question and contact
+                details.
+              </span>
             </span>
-          </span>
-        </button>
-      </form>
+          </button>
+        </form>
+        <form action={createBlankFormAction}>
+          <button
+            type="submit"
+            className="fc-focus group border-ink bg-card hover:bg-accent flex h-full w-full items-center gap-[18px] rounded-lg border-[1.5px] border-dashed px-5 py-4 text-left"
+          >
+            <span className="border-ink bg-card shadow-raised grid size-11 shrink-0 place-items-center rounded-sm border-[1.5px]">
+              <FilePlus className="size-5" />
+            </span>
+            <span className="flex flex-col gap-[3px]">
+              <span className="font-heading text-lg leading-[1.2] font-bold">
+                Blank form
+              </span>
+              <span className="text-muted-foreground text-sm">
+                Just a welcome screen. Add every question yourself.
+              </span>
+            </span>
+          </button>
+        </form>
+      </div>
 
       <GenerateFormCard enabled={aiConfigured()} />
       <ImportFormCard />

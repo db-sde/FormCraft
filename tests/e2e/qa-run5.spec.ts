@@ -266,3 +266,63 @@ test.describe("QA run 5", () => {
     await expect.poll(order).toEqual(["q_notes", "q_name"]);
   });
 });
+
+test.describe("QA run 6", () => {
+  let user: Awaited<ReturnType<typeof createConfirmedUser>>;
+  test.beforeEach(async () => {
+    user = await createConfirmedUser("e2e-qa6");
+  });
+  test.afterEach(async () => {
+    await deleteUser(user.userId);
+  });
+
+  test("FC4-03: limits hold when every request comes from a different address", async ({
+    request,
+  }) => {
+    // QA's tool sent each request through a relay with a new address, so
+    // per-address limits never filled. These can't be stepped around.
+    const { formId } = await createPublishedForm(user, form);
+    const from = (i: number) => ({ "x-forwarded-for": `198.51.100.${i + 1}` });
+    const statuses = async (send: (i: number) => Promise<{ status(): number }>) => {
+      const out: number[] = [];
+      for (let i = 0; i < 25; i += 1) out.push((await send(i)).status());
+      return out;
+    };
+
+    const starts = await statuses((i) =>
+      request.post("/api/responses/start", { data: { formId }, headers: from(i) }),
+    );
+    expect(starts.filter((s) => s === 200)).toHaveLength(20);
+    expect(starts.slice(20).every((s) => s === 429)).toBe(true);
+
+    const views = await statuses((i) =>
+      request.post("/api/responses/view", {
+        data: { formId },
+        headers: { ...from(i), "user-agent": "Mozilla/5.0 Chrome/130" },
+      }),
+    );
+    expect(views.slice(20).every((s) => s === 429)).toBe(true);
+
+    await setFormPassword(adminClient(), formId, "right-password");
+    const guesses = await statuses((i) =>
+      request.post("/api/responses/unlock", {
+        data: { formId, password: `wrong-${i}` },
+        headers: from(100 + i),
+      }),
+    );
+    expect(guesses.slice(0, 20).every((s) => s === 401)).toBe(true);
+    expect(guesses.slice(20).every((s) => s === 429)).toBe(true);
+  });
+
+  test("FC5-05: an over-long answer is named, not refused whole", async ({ request }) => {
+    const { formId } = await createPublishedForm(user, form);
+    const responseId = await start(request, formId);
+    const res = await complete(request, responseId, { q_notes: "x".repeat(200_000) });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error.errors[0]).toMatchObject({
+      questionId: "q_notes",
+      message: "Enter at most 10,000 characters.",
+    });
+  });
+});

@@ -47,6 +47,7 @@ import {
   rulesBrokenByTypeChange,
   questionsWithPlaceholders,
   pictureChoiceQuestion,
+  welcomeTakesNewName,
 } from "@/domains/forms/builder";
 import {
   describeSchemaProblem,
@@ -1141,9 +1142,11 @@ export function FormBuilder({
               if (result.ok) {
                 if (result.slug) setLiveSlug(result.slug);
                 const welcome = schema.questions.find((q) => q.type === "welcome_screen");
-                // Only a welcome screen still showing the placeholder name
-                // takes the new one; a real welcome title is its own text.
-                const welcomeFollows = !!welcome && welcome.label.trim() === UNNAMED_FORM;
+                // Only a welcome title still showing the placeholder, or the
+                // name of the form this was copied from, takes the new name;
+                // otherwise it's its own text.
+                const welcomeFollows =
+                  !!welcome && welcomeTakesNewName(welcome.label, formName);
                 if (welcome && welcomeFollows) {
                   setSchema((s) => ({
                     ...s,

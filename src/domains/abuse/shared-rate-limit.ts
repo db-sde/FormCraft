@@ -38,3 +38,24 @@ export async function pruneRateLimits(admin: SupabaseClient<Database>): Promise<
   const cutoff = new Date(Date.now() - 86_400_000).toISOString();
   await admin.from("rate_limits").delete().lt("window_start", cutoff);
 }
+
+/**
+ * Whether `key` has already used up `limit` in its current window,
+ * without counting a hit. For budgets that only failures spend (wrong
+ * passwords), checked before the attempt.
+ */
+export async function rateLimitSpent(
+  admin: SupabaseClient<Database>,
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<boolean> {
+  const { data } = await admin
+    .from("rate_limits")
+    .select("count, window_start")
+    .eq("key", key)
+    .maybeSingle();
+  if (!data) return false;
+  const windowOpen = Date.now() - new Date(data.window_start).getTime() < windowMs;
+  return windowOpen && data.count >= limit;
+}

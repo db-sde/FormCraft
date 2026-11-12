@@ -2239,4 +2239,33 @@ What changed, and why where it isn't obvious:
   server (FC5-13); the slow booking submit (FC5-09) and the 2.5 s submit
   (FC4-28) weren't reproduced or profiled.
 
+## 2026-11-12 — QA run 6: limits a changing address can't avoid
+
+- **Why run 5's limits did nothing live (FC4-03).** They were per
+  address. QA's tool sent every request from a different address (a
+  relay: 104.28.x.x), so no address ever filled its budget; locally all
+  requests come from one address, so every test passed. Now also:
+  callers without the visitor cookie a real page load always gets share
+  one budget per form (starts and views: 20 a minute); browsers with it
+  have 10 starts per visitor per form per 10 minutes (kiosks exempt);
+  wrong passwords are counted per form from anywhere (20 per 10
+  minutes; right ones don't count, so a class entering it together is
+  never locked out). A test sends each request from a new address.
+- **Long answers (FC5-05):** saving and submitting accept up to 1 MB, so
+  an over-long answer reaches validation and is named on its question
+  ("Enter at most 10,000 characters").
+- **Copies (FC5-11):** renaming a copy (builder or dashboard) also renames
+  its welcome title while that still shows the original form's name.
+  Copies renamed before this keep their old welcome title until edited.
+- **Helper text (FC5-16)** is cleared when a question changes to another
+  kind of field, kept between close kinds (single ↔ multiple choice).
+- **Phones (FC4-19):** without a default country on the question, the
+  respondent's own country (from the host) is used. Numbers that aren't
+  real anywhere ("(555) 010-6666") stay as typed.
+- **Blank form (FC4-26)** next to "Start from scratch": only a welcome
+  screen. Opinion scale stays 0–10.
+- **Not changed:** submit time (FC4-28) is one request; the rest is
+  distance (India ↔ Sydney) and the free plan's cold starts. Enter in a
+  contact block moving to the next detail (FC5-14) is by design.
+
 <!-- Add new decisions above this line, newest first. -->

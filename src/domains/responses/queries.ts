@@ -232,12 +232,13 @@ export async function startResponse(
 function filterAnswersToKnownQuestions(
   schema: FormSchemaV1,
   answers: AnswerMap,
+  respondentCountry?: string,
 ): AnswerMap {
   const byId = new Map(schema.questions.map((q) => [q.id, q]));
   const known: AnswerMap = {};
   for (const [questionId, value] of Object.entries(answers)) {
     const question = byId.get(questionId);
-    if (question) known[questionId] = normalizeAnswer(question, value);
+    if (question) known[questionId] = normalizeAnswer(question, value, respondentCountry);
   }
   return known;
 }
@@ -249,7 +250,13 @@ function filterAnswersToKnownQuestions(
  * which the database removes, instead of lingering as a "lead" with no
  * details.
  */
-export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
+export function normalizeAnswer(
+  question: QuestionV1,
+  value: unknown,
+  /** Where the respondent is (two letters), for phones typed without a
+   * country code when the question doesn't set one (QA FC4-19). */
+  respondentCountry?: string,
+): unknown {
   // A website typed without its scheme ("example.com") is stored as a
   // link that opens ("https://example.com"), so exports agree (QA FC4-19).
   if (question.type === "url") {
@@ -261,7 +268,7 @@ export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
   }
   if (question.type === "phone") {
     return typeof value === "string"
-      ? normalizePhone(value, question.settings.defaultCountry)
+      ? normalizePhone(value, question.settings.defaultCountry ?? respondentCountry)
       : value;
   }
   if (question.type !== "contact_info") return value;
@@ -271,7 +278,8 @@ export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
   for (const field of question.settings.fields) {
     const raw = record[field];
     if (typeof raw === "string" && raw.trim() !== "")
-      kept[field] = field === "phone" ? normalizePhone(raw) : raw.trim();
+      kept[field] =
+        field === "phone" ? normalizePhone(raw, respondentCountry) : raw.trim();
   }
   // Fields outside the block's configuration are left for validation
   // to reject rather than silently discarded here.
@@ -323,6 +331,7 @@ export async function saveResponseAnswers(
   expectedRevision: number,
   lastQuestionId: string,
   answers: AnswerMap,
+  options: { respondentCountry?: string } = {},
 ): Promise<{ status: ResponseStatus; revision: number }> {
   const { data: response, error: responseError } = await admin
     .from("responses")
@@ -345,6 +354,7 @@ export async function saveResponseAnswers(
   const known = filterAnswersToKnownQuestions(
     parseFormSchema(versionRow.schema),
     answers,
+    options.respondentCountry,
   );
 
   const { data, error } = await admin.rpc("save_response_progress", {
@@ -426,7 +436,7 @@ export async function completeResponse(
   lastQuestionId: string,
   answers: AnswerMap,
   idempotencyKey: string,
-  options: { spamSuspected?: boolean } = {},
+  options: { spamSuspected?: boolean; respondentCountry?: string } = {},
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
@@ -468,7 +478,11 @@ export async function completeResponse(
     .single();
   if (versionError) throw versionError;
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
-  const knownAnswers = filterAnswersToKnownQuestions(compiled.schema, answers);
+  const knownAnswers = filterAnswersToKnownQuestions(
+    compiled.schema,
+    answers,
+    options.respondentCountry,
+  );
 
   // Said before any answer is checked: fixing answers can't help once
   // the form has closed. complete_response_atomic decides for certain.

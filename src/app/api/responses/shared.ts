@@ -17,16 +17,24 @@ export function getClientIp(request: NextRequest): string {
 }
 
 const MAX_BODY_BYTES = 200_000;
+/** Answers can be long (10,000 characters per long answer by default):
+ * saving and submitting take up to 1 MB, so an over-long answer reaches
+ * validation and is named ("Enter at most…") rather than refused whole
+ * (QA FC5-05). */
+export const ANSWERS_BODY_BYTES = 1_000_000;
 
 /** Parses the request body as JSON, rejecting oversized payloads before
  * ever handing them to Zod — a public endpoint must not let an
  * arbitrarily large body reach validation. */
-export async function readJsonBody(request: NextRequest): Promise<unknown | null> {
+export async function readJsonBody(
+  request: NextRequest,
+  maxBytes = MAX_BODY_BYTES,
+): Promise<unknown | null> {
   const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) return null;
+  if (contentLength && Number(contentLength) > maxBytes) return null;
 
   const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) return null;
+  if (text.length > maxBytes) return null;
   if (text.length === 0) return {};
 
   try {
@@ -60,4 +68,12 @@ export async function writeDenied(
     "This response can only be changed from the browser that started it.",
     403,
   );
+}
+
+/** The respondent's country, two letters, as the host reports it
+ * (Vercel's edge sets it); undefined when unknown. Used to read phone
+ * numbers typed without a country code (QA FC4-19). */
+export function respondentCountry(request: NextRequest): string | undefined {
+  const code = request.headers.get("x-vercel-ip-country")?.toUpperCase();
+  return code && /^[A-Z]{2}$/.test(code) ? code : undefined;
 }

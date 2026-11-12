@@ -58,15 +58,39 @@ export async function POST(request: NextRequest) {
   const parsed = StartBody.safeParse(body);
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
 
-  // Per address: a burst limit (QA FC4-03) and a generous overall one —
-  // a school, office or event shares one address. The browser waits and
-  // tries again when it's turned away, so a class starting together is
-  // only slowed, never refused.
+  // Limits (QA FC4-03). Per address alone isn't enough: a caller can
+  // send each request from a different address (QA's tool did, through a
+  // relay), so there are also limits it can't step around:
+  // - a browser that opened the form has a visitor cookie: 10 starts per
+  //   visitor per form every 10 minutes (a kiosk, many people on one
+  //   device, is exempt from this one);
+  // - a caller without the cookie (a script) shares one budget per form:
+  //   20 a minute, whatever address it comes from;
+  // - per address: a burst limit and a generous overall one, since a
+  //   school or office shares one address.
+  // The browser waits and tries again when it's turned away, so a class
+  // starting together is only slowed, never refused.
   const ip = getClientIp(request);
-  for (const [key, limit, windowMs] of [
-    [`start-burst:${ip}:${parsed.data.formId}`, 20, 60 * 1000],
-    [`start:${ip}:${parsed.data.formId}`, 120, 10 * 60 * 1000],
-  ] as const) {
+  const formId = parsed.data.formId;
+  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
+  const hasVisitor = !!visitor && VISITOR_ID_PATTERN.test(visitor);
+  const isKiosk =
+    !!parsed.data.kiosk &&
+    !!(
+      await createAdminClient()
+        .from("forms")
+        .select("kiosk_config")
+        .eq("id", formId)
+        .maybeSingle()
+    ).data?.kiosk_config;
+  const limits: [string, number, number][] = [
+    [`start-burst:${ip}:${formId}`, 20, 60 * 1000],
+    [`start:${ip}:${formId}`, 120, 10 * 60 * 1000],
+  ];
+  if (!hasVisitor) limits.push([`start-anon:${formId}`, 20, 60 * 1000]);
+  else if (!isKiosk)
+    limits.push([`start-visitor:${visitor}:${formId}`, 10, 10 * 60 * 1000]);
+  for (const [key, limit, windowMs] of limits) {
     if (!(await hitRateLimit(createAdminClient(), key, limit, windowMs)).allowed) {
       const refused = apiError(
         "rate_limited",
@@ -75,25 +99,6 @@ export async function POST(request: NextRequest) {
       );
       refused.headers.set("Retry-After", "10");
       return refused;
-    }
-  }
-  // Tighter per visitor (QA FC4-03): one browser starting the same form
-  // over and over is a script, not a respondent. The per-address limit
-  // above is the backstop for callers without the visitor cookie.
-  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
-  if (visitor && VISITOR_ID_PATTERN.test(visitor)) {
-    const perVisitor = await hitRateLimit(
-      createAdminClient(),
-      `start-visitor:${visitor}:${parsed.data.formId}`,
-      10,
-      10 * 60 * 1000,
-    );
-    if (!perVisitor.allowed) {
-      return apiError(
-        "rate_limited",
-        "Too many attempts. Please try again shortly.",
-        429,
-      );
     }
   }
 

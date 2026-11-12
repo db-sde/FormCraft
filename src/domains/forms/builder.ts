@@ -448,6 +448,18 @@ function family(type: QuestionType): "text" | "choice" | QuestionType {
  * placeholder/length limits, choice types keep their options. `lossy`
  * is true when settings had to be reset, so the builder can warn first.
  */
+/**
+ * Whether a welcome title should take a form's new name (QA FC5-11):
+ * only when it's still the placeholder, or still the name of the form
+ * this one was copied from ("Survey" on "Survey (copy)"). Otherwise the
+ * welcome title and the form name are separate (FC5-17).
+ */
+export function welcomeTakesNewName(welcomeLabel: string, oldFormName: string): boolean {
+  const label = welcomeLabel.trim();
+  const copied = /^(.*) \(copy\)$/.exec(oldFormName.trim());
+  return label === "Untitled form" || (!!copied && label === copied[1].trim());
+}
+
 /** Helper text that only fits one type (the starter form's contact
  * question). It's dropped when the question becomes another type; the
  * creator's own text is kept (QA FC5-16). */
@@ -465,7 +477,12 @@ export function convertQuestion(
     ...fresh,
     id: question.id,
     label: question.label,
+    // Helper text is about the kind of answer, so it goes when that kind
+    // changes (contact details → a short text, QA FC5-16) and stays
+    // between close kinds (single → multiple choice). Starter text that
+    // only fits its own type always goes.
     description:
+      family(question.type) !== family(to) ||
       question.description === TYPE_HELPER_TEXT[question.type]
         ? undefined
         : question.description,

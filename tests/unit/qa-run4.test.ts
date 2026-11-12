@@ -207,3 +207,24 @@ describe("phone answers (QA FC4-19)", () => {
     expect(normalizeAnswer(phone("US"), "12")).toBe("12");
   });
 });
+
+describe("phones without a set country (QA run 6, FC4-19)", () => {
+  const phone = {
+    id: "p",
+    type: "phone",
+    order: 0,
+    label: "Phone",
+    required: false,
+    settings: {},
+  } as Parameters<typeof normalizeAnswer>[0];
+
+  it("are read in the respondent's own country", () => {
+    expect(normalizeAnswer(phone, "415 555 2671", "US")).toBe("+14155552671");
+    expect(normalizeAnswer(phone, "98765 43210", "IN")).toBe("+919876543210");
+  });
+
+  it("stay as typed when they aren't a real number there", () => {
+    // 555-01xx numbers are reserved for fiction.
+    expect(normalizeAnswer(phone, "(555) 010-6666", "US")).toBe("(555) 010-6666");
+  });
+});

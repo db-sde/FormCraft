@@ -372,7 +372,7 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
         return fail(`Enter at least ${minLength} characters.`);
       }
       if (maxLength !== undefined && length > maxLength) {
-        return fail(`Enter at most ${maxLength} characters.`);
+        return fail(`Enter at most ${maxLength.toLocaleString("en")} characters.`);
       }
       return OK;
     }

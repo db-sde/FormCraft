@@ -12,7 +12,7 @@ import type { FormSchemaV1 } from "./schema/v1";
 import { availabilityOf } from "./availability";
 import { readKioskConfig, type KioskConfig } from "./kiosk";
 import { assertBlockLocks } from "@/domains/blocks/queries";
-import { TYPE_HELPER_TEXT } from "./builder";
+import { TYPE_HELPER_TEXT, welcomeTakesNewName } from "./builder";
 
 type Client = SupabaseClient<Database>;
 
@@ -157,6 +157,13 @@ export function previewFromSchema(raw: unknown): FormPreview {
  * screen leads to one starter question, then the default ending. Kept
  * intentionally small — the builder is where a creator actually shapes
  * the form. */
+/** A blank form (QA FC4-26): only its welcome screen, for a creator who
+ * would rather add every question themselves than reshape the starter. */
+export function blankFormSchema(title: string): FormSchemaV1 {
+  const starter = starterFormSchema(title);
+  return { ...starter, questions: starter.questions.slice(0, 1) };
+}
+
 export function starterFormSchema(title: string): FormSchemaV1 {
   return {
     schemaVersion: 1,
@@ -557,7 +564,7 @@ export async function renameForm(
   formId: string,
   workspaceId: string,
   title: string,
-): Promise<{ slug: string }> {
+): Promise<{ slug: string; previousTitle: string }> {
   const { data: form, error: readError } = await supabase
     .from("forms")
     .select("title, slug, form_versions(status)")
@@ -583,10 +590,36 @@ export async function renameForm(
       .eq("id", formId)
       .eq("workspace_id", workspaceId)
       .is("deleted_at", null);
-    if (!error) return { slug };
+    if (!error) return { slug, previousTitle: form.title };
     if (!(followName && error.code === "23505")) throw error;
   }
   throw new Error("failed to allocate a unique form slug after 5 attempts");
+}
+
+/** A copy renamed from the dashboard: its welcome title, if it's still
+ * the original form's name, takes the new one (QA FC5-11). */
+export async function renameCopiedWelcome(
+  supabase: Client,
+  formId: string,
+  previousTitle: string,
+  title: string,
+): Promise<void> {
+  const { data: draft } = await supabase
+    .from("form_versions")
+    .select("id, revision, schema")
+    .eq("form_id", formId)
+    .eq("status", "draft")
+    .maybeSingle();
+  if (!draft) return;
+  const schema = parseFormSchema(draft.schema);
+  const welcome = schema.questions.find((q) => q.type === "welcome_screen");
+  if (!welcome || !welcomeTakesNewName(welcome.label, previousTitle)) return;
+  await saveDraftSchema(supabase, draft.id, draft.revision, {
+    ...schema,
+    questions: schema.questions.map((q) =>
+      q.id === welcome.id ? { ...q, label: title.slice(0, 1000) } : q,
+    ),
+  });
 }
 
 /** Copies a form's current *draft* into a brand-new, unpublished form,

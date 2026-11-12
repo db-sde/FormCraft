@@ -10,6 +10,7 @@ import {
   publishForm,
   unpublishForm,
   renameForm,
+  renameCopiedWelcome,
   StaleDraftError,
   FormSchemaError,
   schemaErrorMessage,
@@ -44,6 +45,9 @@ import { notSetUpMessage } from "@/lib/not-set-up";
 export async function renameFormAction(
   formId: string,
   title: string,
+  /** From the dashboard: also update a copy's welcome title (FC5-11).
+   * The builder does that itself, in the form it has open. */
+  options: { syncWelcome?: boolean } = {},
 ): Promise<{ ok: true; title: string; slug: string } | { ok: false; message: string }> {
   const trimmed = title.trim();
   if (!trimmed) return { ok: false, message: "Give your form a name." };
@@ -55,7 +59,17 @@ export async function renameFormAction(
   }
   const { supabase, workspace } = await getCurrentWorkspace();
   try {
-    const { slug } = await renameForm(supabase, formId, workspace.id, trimmed);
+    const { slug, previousTitle } = await renameForm(
+      supabase,
+      formId,
+      workspace.id,
+      trimmed,
+    );
+    if (options.syncWelcome) {
+      await renameCopiedWelcome(supabase, formId, previousTitle, trimmed).catch(
+        () => undefined,
+      );
+    }
     revalidatePath("/dashboard");
     return { ok: true, title: trimmed, slug };
   } catch {

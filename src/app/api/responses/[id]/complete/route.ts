@@ -12,7 +12,14 @@ import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp, readJsonBody, writeDenied } from "../../shared";
+import {
+  apiError,
+  getClientIp,
+  readJsonBody,
+  writeDenied,
+  ANSWERS_BODY_BYTES,
+  respondentCountry,
+} from "../../shared";
 import { rememberProfile } from "@/domains/responses/profile";
 import { markCaptchaVerified, submissionGuards } from "@/domains/responses/guards";
 import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
@@ -57,9 +64,13 @@ export async function POST(
     return apiError("invalid_body", "Invalid response id.", 400);
   }
 
-  const body = await readJsonBody(request);
+  const body = await readJsonBody(request, ANSWERS_BODY_BYTES);
   if (body === null)
-    return apiError("invalid_body", "Request body is missing or too large.", 400);
+    return apiError(
+      "invalid_body",
+      "These answers are too long to send. Shorten the longest one and try again.",
+      400,
+    );
 
   const parsed = CompleteBody.safeParse(body);
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
@@ -148,7 +159,10 @@ export async function POST(
         parsed.data.lastQuestionId,
         parsed.data.answers,
         parsed.data.idempotencyKey,
-        { spamSuspected: Boolean(parsed.data.trap) },
+        {
+          spamSuspected: Boolean(parsed.data.trap),
+          respondentCountry: respondentCountry(request),
+        },
       );
     } catch (error) {
       // Nothing completed: free the slots now rather than in 15 minutes.

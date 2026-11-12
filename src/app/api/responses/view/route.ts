@@ -38,9 +38,15 @@ export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
   // Bursts from one address are refused (QA FC4-03). A view ping that's
   // refused costs the respondent nothing: the form works either way.
+  // Without the visitor cookie a real page load always gets, views share
+  // one budget per form, whatever address they come from (a caller can
+  // change address on every request).
+  const visitorCookie = request.cookies.get(VISITOR_COOKIE)?.value;
+  const anonymous = !visitorCookie || !VISITOR_ID_PATTERN.test(visitorCookie);
   for (const [key, limit, windowMs] of [
     [`view-burst:${ip}:${formId}`, 20, 60 * 1000],
     [`view:${ip}:${formId}`, 120, 10 * 60 * 1000],
+    ...(anonymous ? ([[`view-anon:${formId}`, 20, 60 * 1000]] as const) : []),
   ] as const) {
     if (!(await hitRateLimit(admin, key, limit, windowMs)).allowed)
       return apiError("rate_limited", "Too many views.", 429);
