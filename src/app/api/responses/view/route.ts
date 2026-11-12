@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
+import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import type { NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
 import { recordAnalyticsEvent } from "@/domains/analytics";
@@ -32,36 +34,57 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const limited = await hitRateLimit(
-    admin,
-    `view:${getClientIp(request)}:${parsed.data.formId}`,
-    120,
-    10 * 60 * 1000,
-  );
-  if (!limited.allowed) return apiError("rate_limited", "Too many views.", 429);
-  // One view per visitor per form every 30 minutes (QA FC4-03): reloads
-  // and repeated pings from the same browser don't inflate the count.
-  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
-  if (visitor && VISITOR_ID_PATTERN.test(visitor)) {
-    const firstView = await hitRateLimit(
-      admin,
-      `view-visitor:${visitor}:${parsed.data.formId}`,
-      1,
-      30 * 60 * 1000,
-    );
-    if (!firstView.allowed) return new NextResponse(null, { status: 204 });
+  const { formId } = parsed.data;
+  const ip = getClientIp(request);
+  // Bursts from one address are refused (QA FC4-03). A view ping that's
+  // refused costs the respondent nothing: the form works either way.
+  for (const [key, limit, windowMs] of [
+    [`view-burst:${ip}:${formId}`, 20, 60 * 1000],
+    [`view:${ip}:${formId}`, 120, 10 * 60 * 1000],
+  ] as const) {
+    if (!(await hitRateLimit(admin, key, limit, windowMs)).allowed)
+      return apiError("rate_limited", "Too many views.", 429);
   }
 
-  const { formId, embedded = false } = parsed.data;
+  // Only a live form has views (QA FC5-03): not a draft, an unknown id,
+  // or a password-protected form this browser hasn't unlocked.
+  const { data: live } = await admin
+    .from("form_versions")
+    .select("id")
+    .eq("form_id", formId)
+    .eq("status", "published")
+    .maybeSingle();
+  if (!live) return apiError("not_found", "Form not found.", 404);
+  if (
+    !(await isUnlocked(
+      admin,
+      formId,
+      request.cookies.get(unlockCookieName(formId))?.value,
+    ))
+  )
+    return apiError("locked", "Enter the form's password to continue.", 403);
+
+  // One view per visitor per form every 30 minutes (QA FC4-03): reloads
+  // and repeated pings don't inflate the count. Without the visitor
+  // cookie, the address and browser stand in for the visitor.
+  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
+  const who =
+    visitor && VISITOR_ID_PATTERN.test(visitor)
+      ? visitor
+      : createHash("sha256")
+          .update(`${ip}|${request.headers.get("user-agent") ?? ""}`)
+          .digest("base64url");
+  const firstView = await hitRateLimit(
+    admin,
+    `view-visitor:${who}:${formId}`,
+    1,
+    30 * 60 * 1000,
+  );
+  if (!firstView.allowed) return new NextResponse(null, { status: 204 });
+
+  const { embedded = false } = parsed.data;
   after(async () => {
     try {
-      const { data: live } = await admin
-        .from("form_versions")
-        .select("id")
-        .eq("form_id", formId)
-        .eq("status", "published")
-        .maybeSingle();
-      if (!live) return;
       await recordAnalyticsEvent(admin, {
         formId,
         eventType: "form_viewed",

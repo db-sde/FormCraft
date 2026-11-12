@@ -61,6 +61,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/view": "views-and-exit-save.spec.ts",
   "/api/[...unknown]": "qa-run4.spec.ts",
   "/api/uploads/[uploadId]": "qa-run4.spec.ts",
+  "/api/responses/[id]/claim": "qa-run5.spec.ts",
   "/api/responses/unlock": "form-access.spec.ts",
   "/api/responses/kiosk-exit": "phase1.spec.ts",
   "/api/forms/[id]/export.csv": "access-control.spec.ts",

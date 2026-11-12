@@ -17,7 +17,12 @@ import { createHash, hkdfSync } from "node:crypto";
  */
 
 export type SigningPurpose =
-  "connect-state" | "connect-pkce" | "sheets-state" | "sheets-pkce" | "form-unlock";
+  | "connect-state"
+  | "connect-pkce"
+  | "sheets-state"
+  | "sheets-pkce"
+  | "form-unlock"
+  | "response-write";
 
 function appSecret(value = process.env.APP_SECRET): string {
   if (!value) throw new Error("APP_SECRET is not set");

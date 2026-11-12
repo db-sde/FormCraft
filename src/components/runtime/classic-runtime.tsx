@@ -425,7 +425,11 @@ export function ClassicFormRuntime({
         ref={stageRef}
         theme={theme}
         mode={mode}
-        progress={contentPages.length > 1 ? position / contentPages.length : undefined}
+        progress={
+          contentPages.length > 1 && compiled.schema.theme.showProgress !== false
+            ? position / contentPages.length
+            : undefined
+        }
         banner={
           notice && pageStack.length === 0 ? (
             <NoticeBanner>{notice}</NoticeBanner>

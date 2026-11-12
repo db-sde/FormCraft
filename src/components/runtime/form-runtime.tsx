@@ -1,6 +1,6 @@
 "use client";
 
-import { seededShuffle } from "@/domains/logic/random";
+import { questionsLeftOut, seededShuffle } from "@/domains/logic/random";
 import { availableOptionIds } from "@/domains/forms/options";
 import { endingRedirect } from "@/domains/forms/redirect";
 import { showsMadeWith } from "@/domains/forms/branding";
@@ -662,9 +662,8 @@ export function FormRuntime({
       }
       const target = e.target as HTMLElement | null;
       // Radix radio/checkbox items (they carry data-state) deliberately
-      // ignore Enter per WAI-ARIA — and mark it handled — so for them
-      // Enter means "done, next" (QA FC4-20: it did nothing on a
-      // checkbox, because the check below saw it as handled).
+      // ignore Enter per WAI-ARIA, and mark it handled; they're handled
+      // below.
       const radixChoice =
         !!target &&
         (target.getAttribute("role") === "radio" ||
@@ -691,6 +690,14 @@ export function FormRuntime({
       // "Yes" must choose Yes, not skip past it.
       if ((tag === "BUTTON" && !radixChoice) || tag === "A") return;
       e.preventDefault();
+      // Enter on a focused option presses it, as Space does: ticks a
+      // checkbox, picks a radio (which moves on by itself). Moving on
+      // here too skipped a question and showed it "required" (QA FC4-20,
+      // FC5-10).
+      if (radixChoice) {
+        target.click();
+        return;
+      }
       goNextRef.current();
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -705,10 +712,13 @@ export function FormRuntime({
   );
 
   const theme = compiled.schema.theme;
-  // Numbers count every step after the welcome screen, as the builder does.
-  const numbered = compiled.orderedQuestionIds.filter(
-    (id) => compiled.schema.questions.find((q) => q.id === id)?.type !== "welcome_screen",
-  );
+  // The steps this respondent can be asked: not the welcome screen, page
+  // breaks (never a step here), or pool questions they weren't dealt.
+  const leftOut = seed ? questionsLeftOut(compiled.schema, seed) : new Set<string>();
+  const numbered = compiled.orderedQuestionIds.filter((id) => {
+    const type = compiled.schema.questions.find((q) => q.id === id)?.type;
+    return type !== "welcome_screen" && type !== "page_break" && !leftOut.has(id);
+  });
   const total = numbered.length || 1;
 
   if (ending) {
@@ -746,7 +756,11 @@ export function FormRuntime({
   }
 
   const entry = isEntryScreen(question);
-  const number = numbered.indexOf(question.id) + 1;
+  // Counted along the way they actually go, so nothing they skipped (a
+  // page break, a question they weren't dealt) leaves a gap (QA FC5-15).
+  const number = numbered.includes(question.id)
+    ? history.filter((id) => numbered.includes(id)).length + 1
+    : 0;
   const autoAdvances = AUTO_ADVANCE_TYPES.has(question.type);
   const primaryLabel = entry
     ? recall(question.settings.buttonLabel) ||
@@ -769,7 +783,7 @@ export function FormRuntime({
         ref={containerRef}
         theme={theme}
         mode={mode}
-        progress={progress}
+        progress={compiled.schema.theme.showProgress === false ? undefined : progress}
         banner={
           notice && history.length === 0 ? (
             <NoticeBanner>{notice}</NoticeBanner>

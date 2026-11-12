@@ -2068,6 +2068,7 @@ export type Database = {
           utm_medium: string | null;
           utm_source: string | null;
           utm_term: string | null;
+          write_protected: boolean;
           visitor_id: string | null;
           variant_test_id: string | null;
           variant: string | null;
@@ -2102,6 +2103,7 @@ export type Database = {
           utm_medium?: string | null;
           utm_source?: string | null;
           utm_term?: string | null;
+          write_protected?: boolean;
           visitor_id?: string | null;
           variant_test_id?: string | null;
           variant?: string | null;
@@ -2136,6 +2138,7 @@ export type Database = {
           utm_medium?: string | null;
           utm_source?: string | null;
           utm_term?: string | null;
+          write_protected?: boolean;
           visitor_id?: string | null;
           variant_test_id?: string | null;
           variant?: string | null;

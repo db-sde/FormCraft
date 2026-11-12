@@ -995,8 +995,23 @@ export default async function ResponsesPage({
                                   table sizes to its content, so one long word
                                   would otherwise widen the column (QA FC4-21). */}
                               <div className="max-w-[168px] truncate">
-                                {item.preview[col.questionId] || (
-                                  <span className="text-subtle-foreground">—</span>
+                                {item.previewLinks[col.questionId] ? (
+                                  // Above the row's own link (z-10), like the
+                                  // delete button: opens the file itself.
+                                  <a
+                                    href={item.previewLinks[col.questionId]}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="relative z-10 underline underline-offset-2"
+                                  >
+                                    {item.preview[col.questionId] === "Signed"
+                                      ? "View signature"
+                                      : item.preview[col.questionId]}
+                                  </a>
+                                ) : (
+                                  item.preview[col.questionId] || (
+                                    <span className="text-subtle-foreground">—</span>
+                                  )
                                 )}
                               </div>
                             </td>

@@ -6,13 +6,14 @@ import {
   evaluateExpr,
   type ExprContext,
 } from "./expressions";
+import { visibleText } from "./text";
 
 const MAX_DEPTH = 16;
 
 /** Empty in the sense respondents mean: nothing typed or chosen. */
 export function isEmptyValue(v: Value): boolean {
   if (v === null) return true;
-  if (typeof v === "string") return v.trim() === "";
+  if (typeof v === "string") return visibleText(v) === "";
   if (Array.isArray(v)) return v.length === 0;
   return false;
 }

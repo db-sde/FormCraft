@@ -12,6 +12,7 @@ import type { FormSchemaV1 } from "./schema/v1";
 import { availabilityOf } from "./availability";
 import { readKioskConfig, type KioskConfig } from "./kiosk";
 import { assertBlockLocks } from "@/domains/blocks/queries";
+import { TYPE_HELPER_TEXT } from "./builder";
 
 type Client = SupabaseClient<Database>;
 
@@ -192,7 +193,7 @@ export function starterFormSchema(title: string): FormSchemaV1 {
         type: "contact_info",
         order: 2,
         label: "Where can we reach you?",
-        description: "We'll only use this to get back to you.",
+        description: TYPE_HELPER_TEXT.contact_info,
         required: true,
         settings: {
           fields: ["name", "email", "phone"],

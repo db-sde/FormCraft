@@ -100,6 +100,15 @@ const KIND_LABEL: Record<ActionKind, string> = {
   go_to_highest: "Show top outcome",
 };
 
+/** Where a rule after `questionId` can jump: later questions, but not
+ * page breaks, which are never a step (QA FC5-07: listed as
+ * "0 · Untitled question"). */
+function jumpTargets(schema: FormSchemaV1, questionId: string) {
+  return questionsAfter(schema.questions, questionId).filter(
+    (q) => q.type !== "page_break",
+  );
+}
+
 function newAction(
   kind: ActionKind,
   schema: FormSchemaV1,
@@ -109,7 +118,7 @@ function newAction(
     case "jump_to_question": {
       const target =
         rule.on.event === "question_answered"
-          ? questionsAfter(schema.questions, rule.on.questionId)[0]
+          ? jumpTargets(schema, rule.on.questionId)[0]
           : undefined;
       return target ? { type: "jump_to_question", questionId: target.id } : null;
     }
@@ -230,31 +239,33 @@ function ActionFields({
   if (action.type === "jump_to_question") {
     const targets =
       rule.on.event === "question_answered"
-        ? questionsAfter(schema.questions, rule.on.questionId)
+        ? jumpTargets(schema, rule.on.questionId)
         : [];
     const numbers = new Map(
       numberedQuestions(schema).map((e) => [e.question.id, e.number]),
     );
     return (
-      <Select
-        value={action.questionId}
-        onValueChange={(questionId) => onChange({ ...action, questionId })}
-      >
-        <SelectTrigger size="sm" className={TRIGGER} aria-label={`${label}: question`}>
-          <SelectValue placeholder="Choose question" />
-        </SelectTrigger>
-        <SelectContent position="popper">
-          {/* Says why earlier questions aren't offered (QA FC4-29). */}
-          <p className="text-muted-foreground px-2 py-1.5 text-xs">
-            Jumps only go forward, so respondents can&apos;t loop.
-          </p>
-          {targets.map((q) => (
-            <SelectItem key={q.id} value={q.id}>
-              {numbers.get(q.id)} · {q.label.trim() || "Untitled question"}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <span className="flex flex-col gap-1">
+        <Select
+          value={action.questionId}
+          onValueChange={(questionId) => onChange({ ...action, questionId })}
+        >
+          <SelectTrigger size="sm" className={TRIGGER} aria-label={`${label}: question`}>
+            <SelectValue placeholder="Choose question" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            {targets.map((q) => (
+              <SelectItem key={q.id} value={q.id}>
+                {numbers.get(q.id)} · {q.label.trim() || "Untitled question"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* Why earlier questions aren't offered, where it's seen (QA FC4-29). */}
+        <span className="text-muted-foreground text-xs">
+          Later questions only: jumps go forward, so no one gets stuck in a loop.
+        </span>
+      </span>
     );
   }
   if (action.type === "jump_to_ending") {

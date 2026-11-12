@@ -15,7 +15,7 @@ import {
 } from "@/domains/uploads";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp } from "../../../shared";
+import { apiError, getClientIp, writeDenied } from "../../../shared";
 
 const idSchema = z.string().uuid();
 
@@ -45,6 +45,9 @@ export async function POST(
   // big it may be — so an oversized body is refused before it's read
   // into memory.
   const admin = createAdminClient();
+  // Only the browser that started it may change it (QA FC4-14).
+  const denied = await writeDenied(request, admin, id);
+  if (denied) return denied;
   let prepared: PreparedUpload;
   try {
     prepared = await prepareUpload(admin, id, questionId);

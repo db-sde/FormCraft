@@ -14,6 +14,7 @@ import {
   parseDateTime,
   timeFits,
 } from "./datetime";
+import { visibleText } from "./text";
 
 /** Prefix for a free-text "Other" choice on single/multi-select, e.g.
  * `"other:Purple"`. Shared with formatAnswerValue and the runtime input
@@ -35,7 +36,20 @@ function isOtherValue(value: unknown): boolean {
 }
 
 function otherText(value: string): string {
-  return value.slice(OTHER_PREFIX.length).trim();
+  return visibleText(value.slice(OTHER_PREFIX.length));
+}
+
+/** A long answer with no limit set still has one, well under what a
+ * request may carry, so an essay gets "Enter at most…" rather than a
+ * generic failure (QA FC5-05). */
+export const DEFAULT_LONG_TEXT_MAX = 10_000;
+
+/** The most characters a text answer may have. */
+export function effectiveMaxLength(question: QuestionV1): number | undefined {
+  if (question.type === "long_text")
+    return question.settings.maxLength ?? DEFAULT_LONG_TEXT_MAX;
+  if (question.type === "short_text") return question.settings.maxLength;
+  return undefined;
 }
 
 /** Whether the respondent actually gave an answer — stricter than a
@@ -44,7 +58,7 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "string") {
     if (isOtherValue(value)) return otherText(value).length > 0;
-    return value.trim().length > 0;
+    return visibleText(value).length > 0;
   }
   if (Array.isArray(value)) {
     return value.some((v) =>
@@ -55,7 +69,7 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
   if (question.type === "contact_info" || question.type === "address") {
     return (
       typeof value === "object" &&
-      Object.values(value).some((v) => typeof v === "string" && v.trim() !== "")
+      Object.values(value).some((v) => typeof v === "string" && visibleText(v) !== "")
     );
   }
   if (question.type === "booking") {
@@ -116,7 +130,7 @@ function checkContactField(
   if (raw !== undefined && typeof raw !== "string") {
     return fail("Enter your contact details.");
   }
-  const text = (raw ?? "").trim();
+  const text = visibleText(raw ?? "");
   const label = CONTACT_FIELD_LABELS[field].toLowerCase();
   if (!text) {
     return settings.requiredFields.includes(field) ? fail(`Enter your ${label}.`) : OK;
@@ -168,14 +182,14 @@ function validateAddress(
     return fail("Enter the address.");
   }
   const filled = settings.fields.filter(
-    (f) => typeof parts[f] === "string" && (parts[f] as string).trim() !== "",
+    (f) => typeof parts[f] === "string" && visibleText(parts[f] as string) !== "",
   );
   // An optional address left empty is fine; once started, required parts count.
   if (filled.length === 0 && !required) return OK;
   for (const field of settings.fields) {
     const raw = parts[field];
     if (raw !== undefined && typeof raw !== "string") return fail("Enter the address.");
-    const text = ((raw as string | undefined) ?? "").trim();
+    const text = visibleText((raw as string | undefined) ?? "");
     const label = ADDRESS_FIELD_LABELS[field].toLowerCase();
     if (!text && settings.requiredFields.includes(field))
       return fail(`Enter the ${label}.`);
@@ -350,8 +364,8 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
     case "short_text":
     case "long_text": {
       if (typeof value !== "string") return fail("Enter a text answer.");
-      const length = value.trim().length;
-      const { maxLength } = question.settings;
+      const length = visibleText(value).length;
+      const maxLength = effectiveMaxLength(question);
       const minLength =
         question.type === "short_text" ? question.settings.minLength : undefined;
       if (minLength !== undefined && length < minLength) {

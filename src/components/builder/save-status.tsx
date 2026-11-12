@@ -2,7 +2,8 @@ import { Check, CircleAlert, MonitorSmartphone, RefreshCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "cn";
 
-export type SaveState = "idle" | "saving" | "saved" | "error" | "stale" | "invalid";
+export type SaveState =
+  "idle" | "saving" | "slow" | "saved" | "error" | "stale" | "invalid";
 
 const PILL =
   "flex h-7 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] px-2.5 text-[12.5px] font-semibold whitespace-nowrap";
@@ -30,6 +31,31 @@ export function SaveStatus({
           <span className="size-[11px] animate-spin rounded-full border-2 border-current border-t-transparent" />
           Saving…
         </span>
+      );
+    case "slow":
+      // A save that's taking much longer than usual says so, instead of
+      // spinning on "Saving…" with no word (QA FC5-08).
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="status"
+              data-save-state={state}
+              tabIndex={0}
+              className={cn(
+                PILL,
+                "fc-focus border-warning bg-[var(--chip-draft-bg)] text-[var(--chip-draft-fg)]",
+              )}
+            >
+              <span className="size-[11px] animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Still saving…
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-[250px]">
+            Saving is taking longer than usual; the connection may be slow. Keep this tab
+            open: your changes are kept here until they&apos;re saved.
+          </TooltipContent>
+        </Tooltip>
       );
     case "idle":
     case "saved":

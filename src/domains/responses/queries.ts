@@ -22,8 +22,18 @@ import {
   getAvailabilitySettings,
   refusalMessage,
 } from "@/domains/forms/availability";
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/min";
 
 type Client = SupabaseClient<Database>;
+
+/** Answers sent for a response that's already submitted (QA FC5-01):
+ * refused, not quietly accepted with a new revision. */
+export class ResponseAlreadySubmittedError extends Error {
+  constructor() {
+    super("this response was already submitted");
+    this.name = "ResponseAlreadySubmittedError";
+  }
+}
 
 export class ResponseNotFoundError extends Error {
   constructor() {
@@ -249,13 +259,19 @@ export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
       ? `https://${trimmed}`
       : trimmed;
   }
+  if (question.type === "phone") {
+    return typeof value === "string"
+      ? normalizePhone(value, question.settings.defaultCountry)
+      : value;
+  }
   if (question.type !== "contact_info") return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const record = value as Record<string, unknown>;
   const kept: Record<string, string> = {};
   for (const field of question.settings.fields) {
     const raw = record[field];
-    if (typeof raw === "string" && raw.trim() !== "") kept[field] = raw.trim();
+    if (typeof raw === "string" && raw.trim() !== "")
+      kept[field] = field === "phone" ? normalizePhone(raw) : raw.trim();
   }
   // Fields outside the block's configuration are left for validation
   // to reject rather than silently discarded here.
@@ -263,6 +279,21 @@ export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
     (key) => !(question.settings.fields as string[]).includes(key),
   );
   return unexpected ? value : kept;
+}
+
+/**
+ * A phone number in the international format ("+14155552671") when it
+ * can be read as one: with its own "+country" code, or in the
+ * question's default country. Otherwise kept as typed (QA FC4-19), so
+ * nothing a respondent entered is lost.
+ */
+export function normalizePhone(value: string, defaultCountry?: string): string {
+  const typed = value.trim();
+  const parsed = parsePhoneNumberFromString(
+    typed,
+    (defaultCountry?.toUpperCase() as CountryCode | undefined) ?? undefined,
+  );
+  return parsed?.isValid() ? parsed.format("E.164") : typed;
 }
 
 /** Only defined values, as plain JSON for the database functions. */
@@ -300,11 +331,10 @@ export async function saveResponseAnswers(
     .maybeSingle();
   if (responseError) throw responseError;
   if (!response) throw new ResponseNotFoundError();
-  // A closed form keeps no new answers either; a late autosave of a
-  // completed response stays the harmless no-op below.
-  if (response.status !== "completed") {
-    await assertAcceptingResponses(admin, response.form_id);
-  }
+  // Submitted: nothing more is stored, and the caller is told so.
+  if (response.status === "completed") throw new ResponseAlreadySubmittedError();
+  // A closed form keeps no new answers either.
+  await assertAcceptingResponses(admin, response.form_id);
 
   const { data: versionRow, error: versionError } = await admin
     .from("form_versions")

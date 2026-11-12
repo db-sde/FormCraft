@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createResumeLink, ResumeUnavailableError } from "@/domains/responses/resume";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp } from "../../shared";
+import { apiError, getClientIp, writeDenied } from "../../shared";
 
 /**
  * "Finish later" (PRD P2.8): a resume link for an unfinished response.
@@ -29,6 +29,9 @@ export async function POST(
   if (!limit.allowed) {
     return apiError("rate_limited", "Too many links. Please try again later.", 429);
   }
+  // Only the browser that started it may change it (QA FC4-14).
+  const denied = await writeDenied(request, admin, id);
+  if (denied) return denied;
   try {
     return NextResponse.json(await createResumeLink(admin, id));
   } catch (error) {

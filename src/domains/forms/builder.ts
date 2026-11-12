@@ -448,6 +448,13 @@ function family(type: QuestionType): "text" | "choice" | QuestionType {
  * placeholder/length limits, choice types keep their options. `lossy`
  * is true when settings had to be reset, so the builder can warn first.
  */
+/** Helper text that only fits one type (the starter form's contact
+ * question). It's dropped when the question becomes another type; the
+ * creator's own text is kept (QA FC5-16). */
+export const TYPE_HELPER_TEXT: Partial<Record<QuestionType, string>> = {
+  contact_info: "We'll only use this to get back to you.",
+};
+
 export function convertQuestion(
   question: QuestionV1,
   to: QuestionType,
@@ -458,7 +465,10 @@ export function convertQuestion(
     ...fresh,
     id: question.id,
     label: question.label,
-    description: question.description,
+    description:
+      question.description === TYPE_HELPER_TEXT[question.type]
+        ? undefined
+        : question.description,
     required:
       to === "welcome_screen" || to === "statement"
         ? false

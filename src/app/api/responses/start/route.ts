@@ -13,6 +13,7 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VISITOR_COOKIE, VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
+import { writeSecretCookie } from "@/domains/responses/write-secret";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
 const StartBody = z.object({
@@ -57,17 +58,24 @@ export async function POST(request: NextRequest) {
   const parsed = StartBody.safeParse(body);
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
 
-  const rateLimitKey = `start:${getClientIp(request)}:${parsed.data.formId}`;
-  const rateLimit = await hitRateLimit(
-    createAdminClient(),
-    rateLimitKey,
-    // Generous: a school, office or event shares one address, and each
-    // respondent starts a form exactly once.
-    120,
-    10 * 60 * 1000,
-  );
-  if (!rateLimit.allowed) {
-    return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
+  // Per address: a burst limit (QA FC4-03) and a generous overall one —
+  // a school, office or event shares one address. The browser waits and
+  // tries again when it's turned away, so a class starting together is
+  // only slowed, never refused.
+  const ip = getClientIp(request);
+  for (const [key, limit, windowMs] of [
+    [`start-burst:${ip}:${parsed.data.formId}`, 20, 60 * 1000],
+    [`start:${ip}:${parsed.data.formId}`, 120, 10 * 60 * 1000],
+  ] as const) {
+    if (!(await hitRateLimit(createAdminClient(), key, limit, windowMs)).allowed) {
+      const refused = apiError(
+        "rate_limited",
+        "Too many attempts. Please try again shortly.",
+        429,
+      );
+      refused.headers.set("Retry-After", "10");
+      return refused;
+    }
   }
   // Tighter per visitor (QA FC4-03): one browser starting the same form
   // over and over is a script, not a respondent. The per-address limit
@@ -136,10 +144,17 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       responseId: result.responseId,
       formVersionId: result.formVersionId,
     });
+    // The response's write secret, for this browser only (QA FC4-14).
+    const secret = writeSecretCookie(
+      result.responseId,
+      request.nextUrl.protocol === "https:",
+    );
+    response.cookies.set(secret.name, secret.value, secret.options);
+    return response;
   } catch (error) {
     if (error instanceof FormClosedError) {
       return NextResponse.json(

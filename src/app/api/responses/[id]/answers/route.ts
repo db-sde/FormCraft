@@ -4,12 +4,13 @@ import { NextResponse } from "next/server";
 import {
   saveResponseAnswers,
   FormClosedError,
+  ResponseAlreadySubmittedError,
   ResponseNotFoundError,
   StaleResponseWriteError,
 } from "@/domains/responses";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp, readJsonBody } from "../../shared";
+import { apiError, getClientIp, readJsonBody, writeDenied } from "../../shared";
 
 const AnswersBody = z.object({
   clientRevision: z.number().int().nonnegative(),
@@ -46,6 +47,9 @@ export async function PATCH(
 
   try {
     const admin = createAdminClient();
+    // Only the browser that started it may change it (QA FC4-14).
+    const denied = await writeDenied(request, admin, id);
+    if (denied) return denied;
     const result = await saveResponseAnswers(
       admin,
       id,
@@ -57,6 +61,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof ResponseNotFoundError) {
       return apiError("not_found", "Response not found.", 404);
+    }
+    if (error instanceof ResponseAlreadySubmittedError) {
+      return apiError("already_submitted", "This response was already submitted.", 409);
     }
     if (error instanceof FormClosedError) {
       return NextResponse.json(

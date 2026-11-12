@@ -45,7 +45,9 @@ export function PasswordGate({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ formId, password }),
       });
-      if (res.ok) {
+      // Unlocked; or the password was removed, or the form taken down,
+      // meanwhile: either way the page itself now says what's next.
+      if (res.ok || res.status === 400 || res.status === 404) {
         router.refresh();
         return;
       }

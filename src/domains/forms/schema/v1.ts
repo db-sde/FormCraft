@@ -512,6 +512,9 @@ export const ThemeV1 = z.object({
   /** An uploaded, licensed WOFF2 font (with fontFamily "custom"). */
   customFont: z.object({ name: safeText(60), url: webUrl }).optional(),
   buttonStyle: z.enum(["rounded", "square", "pill"]).default("rounded"),
+  /** The bar across the top showing how far through the form they are;
+   * shown unless switched off (QA FC5-18). */
+  showProgress: z.boolean().optional(),
   logoUrl: webUrl.optional(),
   backgroundImageUrl: webUrl.optional(),
   preset: z.string().max(50).optional(),

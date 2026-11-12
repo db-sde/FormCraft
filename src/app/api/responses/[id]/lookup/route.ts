@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { hitRateLimit } from "@/domains/abuse";
 import { runLookups } from "@/domains/integrations/lookups";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp, readJsonBody } from "../../shared";
+import { apiError, getClientIp, readJsonBody, writeDenied } from "../../shared";
 
 /**
  * External data during a response (logic spec phase 24). After a
@@ -44,6 +44,9 @@ export async function POST(
     .eq("id", id)
     .maybeSingle();
   if (!response) return apiError("not_found", "Response not found.", 404);
+  // Only the browser that started it may change it (QA FC4-14).
+  const denied = await writeDenied(request, admin, id);
+  if (denied) return denied;
   try {
     return NextResponse.json({
       values: await runLookups(admin, id, parsed.data.questionId, parsed.data.answers),

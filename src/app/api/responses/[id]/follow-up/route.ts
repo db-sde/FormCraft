@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { hitRateLimit } from "@/domains/abuse";
 import { askFollowUp, replyToFollowUp } from "@/domains/responses/follow-ups";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp, readJsonBody } from "../../shared";
+import { apiError, getClientIp, readJsonBody, writeDenied } from "../../shared";
 
 /**
  * AI follow-up questions (PRD P3.7). POST asks for one about an answer
@@ -38,6 +38,9 @@ export async function POST(
     3_600_000,
   );
   if (!limit.allowed) return NextResponse.json({ question: null });
+  // Only the browser that started it may change it (QA FC4-14).
+  const denied = await writeDenied(request, admin, id);
+  if (denied) return denied;
   try {
     return NextResponse.json({
       question: await askFollowUp(admin, id, parsed.data.questionId, parsed.data.answer),
@@ -65,6 +68,9 @@ export async function PUT(
   );
   if (!limit.allowed)
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
+  // Only the browser that started it may change it (QA FC4-14).
+  const denied = await writeDenied(request, admin, id);
+  if (denied) return denied;
   const saved = await replyToFollowUp(
     admin,
     id,

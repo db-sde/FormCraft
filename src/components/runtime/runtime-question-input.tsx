@@ -20,7 +20,7 @@ import { ProductsInput, SignatureInput } from "./signature-products-inputs";
 import { BookingInput } from "./booking-input";
 import { Checkbox as CheckboxPrimitive, RadioGroup as RadioPrimitive } from "radix-ui";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
-import { OTHER_PREFIX } from "@/domains/logic";
+import { DEFAULT_LONG_TEXT_MAX, OTHER_PREFIX } from "@/domains/logic";
 import { cn } from "cn";
 import {
   CONTACT_FIELD_LABELS,
@@ -32,6 +32,7 @@ import {
   precheckUpload,
   uploadRefusalMessage,
 } from "@/domains/uploads/precheck";
+import { beginPendingSave } from "./pending-saves";
 
 /** Radio item value for the "Other" choice only — never stored. */
 const OTHER_OPTION_ID = "__other__";
@@ -226,7 +227,7 @@ export function RuntimeQuestionInput({
             aria-label={question.label}
             onChange={(e) => onChange(e.target.value)}
             placeholder={question.settings.placeholder || strings.typeAnswer}
-            maxLength={question.settings.maxLength}
+            maxLength={question.settings.maxLength ?? DEFAULT_LONG_TEXT_MAX}
             className={cn(
               UNDERLINE,
               "field-sizing-content min-h-(--st-long-h) resize-none leading-[1.45]",
@@ -1010,6 +1011,9 @@ function FileUploadInput({
     }
 
     setStatus("uploading");
+    // Moving on waits for the upload, rather than calling the question
+    // unanswered meanwhile (QA FC5-10).
+    const endPending = beginPendingSave();
     try {
       const responseId = await getResponseId();
       const body = new FormData();
@@ -1038,6 +1042,8 @@ function FileUploadInput({
       setErrorMessage(uploadRefusalMessage(undefined, question.settings));
       setStatus("error");
       if (!hasStoredFile) onChange(undefined);
+    } finally {
+      endPending();
     }
   }
 

@@ -20,6 +20,8 @@ import {
   Trash2,
   X,
   Sparkles,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import type {
   FormSchemaV1,
@@ -131,6 +133,7 @@ import {
   AlertDialogMedia,
 } from "@/components/ui/alert-dialog";
 import { cn } from "cn";
+import { createEditHistory } from "./edit-history";
 
 type Selection =
   | { kind: "question"; id: string }
@@ -167,6 +170,9 @@ function deleteSummary(pending: {
   ].filter(Boolean);
   return `It's used by ${parts.join(" and ")}. Deleting the question also removes what depends on it.`;
 }
+
+/** When a save still hasn't come back, the pill says it's taking long. */
+const SLOW_SAVE_MS = 15_000;
 
 /** What a form is called until someone names it (see createFormAction). */
 const UNNAMED_FORM = "Untitled form";
@@ -285,6 +291,52 @@ export function FormBuilder({
       ),
     [],
   );
+  // Undo and redo for every kind of edit (QA FC4-22), recorded as the
+  // form changes; an undo or redo itself isn't recorded.
+  const [history] = useState(() => createEditHistory<FormSchemaV1>());
+  const historyCounts = useSyncExternalStore(
+    history.subscribe,
+    history.snapshot,
+    () => "0:0",
+  );
+  const [undoCount, redoCount] = historyCounts.split(":").map(Number);
+  const recordedSchemaRef = useRef(opening.schema);
+  const travellingRef = useRef(false);
+  useEffect(() => {
+    if (schema === recordedSchemaRef.current) return;
+    if (travellingRef.current) travellingRef.current = false;
+    else history.record(recordedSchemaRef.current);
+    recordedSchemaRef.current = schema;
+  }, [schema, history]);
+  function travel(direction: "undo" | "redo") {
+    const target = direction === "undo" ? history.undo(schema) : history.redo(schema);
+    if (!target) return;
+    travellingRef.current = true;
+    setSchema(target);
+  }
+  const travelRef = useRef(travel);
+  useEffect(() => {
+    travelRef.current = travel;
+  });
+  // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y), outside text fields:
+  // inside one, the browser's own undo for the typing stays.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest("input, textarea, select, [contenteditable='true']") ||
+        target?.isContentEditable
+      )
+        return;
+      e.preventDefault();
+      travelRef.current(key === "y" || e.shiftKey ? "redo" : "undo");
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
   const [publishing, setPublishing] = useState(false);
   // Publish waits for the editor to be ready: a click before the page
@@ -312,16 +364,13 @@ export function FormBuilder({
     const welcome = initialSchema.questions.find((q) => q.type === "welcome_screen");
     return formTitle === UNNAMED_FORM && welcome?.label === formTitle ? welcome.id : null;
   });
-  // The form's name (top bar, dashboard). It follows the welcome
-  // screen's title for as long as the two are the same, so a form is
-  // named once; renaming it to something else in the top bar unlinks them.
+  // The form's name (top bar, dashboard) and the welcome screen's title
+  // are separate (QA FC5-17). The one exception: a form nobody has named
+  // yet is named by typing its welcome title, for that first session.
   const [formName, setFormName] = useState(formTitle);
   // The public link: until a form is first published it follows the name.
   const [liveSlug, setLiveSlug] = useState(slug);
-  const nameLinkedRef = useRef(
-    initialSchema.questions.find((q) => q.type === "welcome_screen")?.label.trim() ===
-      formTitle.trim(),
-  );
+  const nameLinkedRef = useRef(formTitle.trim() === UNNAMED_FORM);
   const renameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearFocusLabel = useCallback(() => setFocusLabelId(null), []);
   const router = useRouter();
@@ -464,12 +513,17 @@ export function FormBuilder({
     isSavingRef.current = true;
     setSaveState("saving");
 
+    // Slow, not lost: after a while say so. Not retried meanwhile, since
+    // the first save may still land (a second would then look stale).
+    const slowTimer = setTimeout(() => setSaveState("slow"), SLOW_SAVE_MS);
     let result: SaveDraftResult;
     try {
       result = await onSave(draftVersionId, revisionRef.current, schemaToSave);
     } catch {
       // Network failure / server action crash — treated as transient.
       result = { ok: false, code: "unknown", message: "Failed to save." };
+    } finally {
+      clearTimeout(slowTimer);
     }
 
     if (result.ok) {
@@ -1010,7 +1064,10 @@ export function FormBuilder({
   const hasChanges =
     publishInfo.hasUnpublishedChanges ||
     (isLive &&
-      (saveState === "saving" || saveState === "error" || saveState === "invalid"));
+      (saveState === "saving" ||
+        saveState === "slow" ||
+        saveState === "error" ||
+        saveState === "invalid"));
   // One label per state: there's nothing to publish when the live form
   // is already up to date.
   const upToDate = isLive && !hasChanges && !publishing;
@@ -1035,7 +1092,10 @@ export function FormBuilder({
 
   // Tab title: "• " while edits haven't reached the server (Part 8).
   const dirty =
-    saveState === "saving" || saveState === "error" || saveState === "invalid";
+    saveState === "saving" ||
+    saveState === "slow" ||
+    saveState === "error" ||
+    saveState === "invalid";
   useEffect(() => {
     document.title = `${dirty ? "• " : ""}${currentTitle} · Build · FormCraft`;
   }, [dirty, currentTitle]);
@@ -1081,11 +1141,9 @@ export function FormBuilder({
               if (result.ok) {
                 if (result.slug) setLiveSlug(result.slug);
                 const welcome = schema.questions.find((q) => q.type === "welcome_screen");
-                // A welcome screen still showing the old name (or the
-                // placeholder one) takes the new name too.
-                const welcomeFollows =
-                  !!welcome &&
-                  (nameLinkedRef.current || welcome.label.trim() === UNNAMED_FORM);
+                // Only a welcome screen still showing the placeholder name
+                // takes the new one; a real welcome title is its own text.
+                const welcomeFollows = !!welcome && welcome.label.trim() === UNNAMED_FORM;
                 if (welcome && welcomeFollows) {
                   setSchema((s) => ({
                     ...s,
@@ -1094,8 +1152,8 @@ export function FormBuilder({
                     ),
                   }));
                 }
-                nameLinkedRef.current =
-                  welcomeFollows || welcome?.label.trim() === result.title;
+                // Named in the top bar: the welcome title no longer names it.
+                nameLinkedRef.current = false;
                 setFormName(result.title);
               }
               return result;
@@ -1104,6 +1162,30 @@ export function FormBuilder({
               setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
             }
           />
+          <span className="flex shrink-0 items-center">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              aria-label="Undo last change"
+              title="Undo (Ctrl+Z)"
+              disabled={undoCount === 0}
+              onClick={() => travel("undo")}
+            >
+              <Undo2 className="size-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              aria-label="Redo last change"
+              title="Redo (Ctrl+Shift+Z)"
+              disabled={redoCount === 0}
+              onClick={() => travel("redo")}
+            >
+              <Redo2 className="size-4" />
+            </Button>
+          </span>
           <SaveStatus
             state={saveState}
             problem={saveProblem?.message}
@@ -1288,6 +1370,7 @@ export function FormBuilder({
                   onPick: (id) => void handleAddBlock(id),
                 }}
                 canAddWelcome={!schema.questions.some((q) => q.type === "welcome_screen")}
+                canAddPageBreak={schema.meta.layout === "classic"}
               />
             </div>
 

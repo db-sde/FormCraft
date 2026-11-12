@@ -201,7 +201,7 @@ test("builder: deletes can be undone, the publish button keeps one label, and un
     await expect(page.getByRole("button", { name: 'Delete "QA website"' })).toHaveCount(
       0,
     );
-    await page.getByRole("button", { name: "Undo" }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(page.getByRole("button", { name: 'Delete "QA website"' })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Publish changes", exact: true }),

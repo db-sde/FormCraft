@@ -30,6 +30,7 @@ import { KioskShell } from "./kiosk-shell";
 import { getKioskPinHash } from "@/domains/forms/kiosk";
 import { chargesOrders } from "@/domains/payments/config";
 import { respondentSchema } from "@/domains/forms/respondent-schema";
+import { writeSecretFor } from "@/domains/responses/write-secret";
 
 /** One lookup per request, shared by the page and its metadata. */
 const loadPublicForm = cache(async (slug: string) => {
@@ -234,7 +235,16 @@ export default async function PublicFormPage({
     compiled: { ...compiled, schema: respondentSchema(compiled.schema) },
     savesProgress: publicForm.savePartialResponses,
     resumeLinks: publicForm.resumeLinksEnabled && publicForm.savePartialResponses,
-    resume: resume,
+    // A valid resume link may write to its response from this browser.
+    resume: resume?.ok
+      ? {
+          ...resume,
+          response: {
+            ...resume.response,
+            writeSecret: writeSecretFor(resume.response.responseId),
+          },
+        }
+      : resume,
     brandingRemovable: entitlements.remove_branding,
     languages: offered.map((code) => ({ code, name: LANGUAGES[code] })),
     initialLanguage: language,

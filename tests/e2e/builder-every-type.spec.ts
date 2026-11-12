@@ -41,8 +41,8 @@ const TYPES = [
   "Signature",
   "Products",
   "Picture choice",
-  "Page break",
 ];
+// (Page break is offered only in the classic layout: see QA FC4-27.)
 
 function watch(page: Page, problems: string[], who: string) {
   page.on("console", (m) => {

@@ -158,20 +158,31 @@ async function startSession(
   responseId: string;
   formVersionId: string;
 }> {
-  const res = await fetch("/api/responses/start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      formId,
-      ...attribution(),
-      hidden,
-      seed,
-      language,
-      experimentId,
-      kiosk: kiosk || undefined,
-      ...(variant?.testId ? { variantTestId: variant.testId, variant: variant.id } : {}),
-    }),
-  });
+  const send = () =>
+    fetch("/api/responses/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        formId,
+        ...attribution(),
+        hidden,
+        seed,
+        language,
+        experimentId,
+        kiosk: kiosk || undefined,
+        ...(variant?.testId
+          ? { variantTestId: variant.testId, variant: variant.id }
+          : {}),
+      }),
+    });
+  let res = await send();
+  // Turned away by the burst limit (a class on one address starting
+  // together): wait as asked and try again, a few times.
+  for (let attempt = 1; res.status === 429 && attempt <= 4; attempt += 1) {
+    const wait = Number(res.headers.get("Retry-After")) || 10;
+    await new Promise((resolve) => setTimeout(resolve, wait * 1000 * attempt));
+    res = await send();
+  }
   if (res.status === 410) throw new FormClosedSignal(await closedMessageOf(res));
   if (res.status === 403) throw new FormLockedSignal();
   if (!res.ok) throw new Error(`start failed: ${res.status}`);
@@ -556,12 +567,23 @@ export function PublicFormRuntime({
       window.history.replaceState(null, "", url);
     }
     if (!resumeCheckRef.current && resume?.ok) {
+      const { writeSecret, ...resumed } = resume.response;
       const fromLink: StoredResponse = {
-        ...resume.response,
+        ...resumed,
         idempotencyKey: crypto.randomUUID(),
       };
       if (savesProgress) store.write(formId, fromLink);
-      resumeCheckRef.current = Promise.resolve(fromLink);
+      // This browser didn't start the response: claim its write secret
+      // (a cookie) before anything is saved to it (QA FC4-14).
+      resumeCheckRef.current = (
+        writeSecret
+          ? fetch(`/api/responses/${resumed.responseId}/claim`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ secret: writeSecret }),
+            }).catch(() => undefined)
+          : Promise.resolve()
+      ).then(() => fromLink);
     }
     if (!resumeCheckRef.current && resume && !resume.ok) {
       // A link that no longer works starts fresh, as its note says —
@@ -730,12 +752,15 @@ export function PublicFormRuntime({
       });
 
       if (res.status === 409 && retriesLeft > 0) {
+        const body = (await res.json().catch(() => null)) as {
+          currentRevision?: number;
+          error?: { code?: string };
+        } | null;
+        // Already submitted (in another tab): nothing left to save.
+        if (body?.error?.code === "already_submitted") return;
         // The server already holds a newer revision (e.g. this response
         // is open in another tab). Jump past it and save again — these
         // are the respondent's own answers either way.
-        const body = (await res.json().catch(() => null)) as {
-          currentRevision?: number;
-        } | null;
         const serverRevision = body?.currentRevision ?? claimed.revision;
         updateSession({
           revision: Math.max(sessionRef.current?.revision ?? 0, serverRevision),

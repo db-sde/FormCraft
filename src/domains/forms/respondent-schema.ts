@@ -13,7 +13,8 @@ import type { FormSchemaV1, QuestionV1 } from "./schema/v1";
  *   rule, a show condition or check, or a question's text that shows a
  *   score. At the end the server sends the final scores back with the
  *   ending (see /complete), so an ending's "You scored {{score}}" still
- *   reads right.
+ *   reads right;
+ * - no end-of-form rules: the server chooses the ending.
  */
 export function respondentSchema(schema: FormSchemaV1): FormSchemaV1 {
   const adaptive = new Set(
@@ -26,6 +27,12 @@ export function respondentSchema(schema: FormSchemaV1): FormSchemaV1 {
     questions: schema.questions.map((question) =>
       stripQuestion(question, !adaptive.has(question.id), !keepPoints),
     ),
+    // End-of-form rules (score thresholds, which ending) run on the
+    // server, which sends back the ending and the final scores (QA
+    // FC5-06). The browser only needs the rules it navigates by.
+    ...(schema.rules
+      ? { rules: schema.rules.filter((rule) => rule.on.event !== "form_completed") }
+      : {}),
   };
 }
 

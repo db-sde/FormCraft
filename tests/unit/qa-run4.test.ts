@@ -166,3 +166,44 @@ describe("website answers (FC4-19)", () => {
     expect(normalizeAnswer(url, "")).toBe("");
   });
 });
+
+describe("end-of-form rules (QA FC5-06)", () => {
+  it("aren't sent to the browser; question rules are", () => {
+    const schema = quiz({
+      rules: [
+        ...(quiz().rules ?? []),
+        {
+          id: "jump",
+          on: { event: "question_answered", questionId: "q1" },
+          then: [{ type: "jump_to_ending", endingId: "end" }],
+        },
+      ],
+    });
+    const sent = respondentSchema(schema);
+    expect(sent.rules?.map((r) => r.id)).toEqual(["jump"]);
+    expect(JSON.stringify(sent)).not.toContain('"gte"');
+  });
+});
+
+describe("phone answers (QA FC4-19)", () => {
+  const phone = (defaultCountry?: string) =>
+    ({
+      id: "p",
+      type: "phone",
+      order: 0,
+      label: "Phone",
+      required: false,
+      settings: defaultCountry ? { defaultCountry } : {},
+    }) as Parameters<typeof normalizeAnswer>[0];
+
+  it("are stored in the international format when they can be read", () => {
+    expect(normalizeAnswer(phone("US"), "415 555 2671")).toBe("+14155552671");
+    expect(normalizeAnswer(phone("IN"), "9876543210")).toBe("+919876543210");
+    expect(normalizeAnswer(phone(), "+44 20 7946 0958")).toBe("+442079460958");
+  });
+
+  it("are kept as typed when they can't", () => {
+    expect(normalizeAnswer(phone(), "415 555 2671")).toBe("415 555 2671");
+    expect(normalizeAnswer(phone("US"), "12")).toBe("12");
+  });
+});

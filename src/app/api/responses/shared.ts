@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveClientIp } from "@/lib/http/ip";
+import type { Database } from "@/lib/supabase/database.types";
+import { isWriteSecretFor, WRITE_SECRET_COOKIE } from "@/domains/responses/write-secret";
 
 /** Consistent error shape across every route handler — see docs/api.md. */
 export function apiError(code: string, message: string, status: number) {
@@ -31,4 +34,30 @@ export async function readJsonBody(request: NextRequest): Promise<unknown | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Refuses a write to a response from anyone without its write secret
+ * (QA FC4-14). Null when the write may go ahead: the cookie matches, the
+ * response predates secrets, or it doesn't exist (the route's own 404).
+ */
+export async function writeDenied(
+  request: NextRequest,
+  admin: SupabaseClient<Database>,
+  responseId: string,
+): Promise<NextResponse | null> {
+  if (isWriteSecretFor(responseId, request.cookies.get(WRITE_SECRET_COOKIE)?.value)) {
+    return null;
+  }
+  const { data } = await admin
+    .from("responses")
+    .select("write_protected")
+    .eq("id", responseId)
+    .maybeSingle();
+  if (!data || !data.write_protected) return null;
+  return apiError(
+    "forbidden",
+    "This response can only be changed from the browser that started it.",
+    403,
+  );
 }

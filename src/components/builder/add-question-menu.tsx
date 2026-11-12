@@ -14,8 +14,12 @@ import { cn } from "cn";
 export function AddQuestionMenu({
   onAdd,
   canAddWelcome,
+  canAddPageBreak = true,
   library,
 }: {
+  /** Page breaks only divide the classic layout; one question at a time
+   * they'd do nothing, so they aren't offered there (QA FC4-27). */
+  canAddPageBreak?: boolean;
   /** The workspace's shared question blocks (F-09), loaded on open. */
   library?: {
     load: () => Promise<{ id: string; name: string; currentVersion: number }[]>;
@@ -50,7 +54,9 @@ export function AddQuestionMenu({
     name: group.name,
     types: group.types.filter(
       (type) =>
-        (type !== "welcome_screen" || canAddWelcome) && rank(type, group.name) !== null,
+        (type !== "welcome_screen" || canAddWelcome) &&
+        (type !== "page_break" || canAddPageBreak) &&
+        rank(type, group.name) !== null,
     ),
   })).filter((group) => group.types.length > 0);
   // What Enter adds: the best match (ties go to the one listed first).

@@ -288,16 +288,12 @@ describe("response engine (integration)", () => {
       crypto.randomUUID(),
     );
 
-    const lateAutosave = await saveResponseAnswers(
-      supabase,
-      started.responseId,
-      99,
-      "q_notes",
-      {
+    // Refused, not quietly accepted (QA FC5-01).
+    await expect(
+      saveResponseAnswers(supabase, started.responseId, 99, "q_notes", {
         q_notes: "too late",
-      },
-    );
-    expect(lateAutosave.status).toBe("completed");
+      }),
+    ).rejects.toThrow(/already submitted/);
 
     const { data: row } = await supabase
       .from("responses")

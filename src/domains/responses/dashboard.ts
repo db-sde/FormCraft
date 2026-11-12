@@ -159,6 +159,9 @@ export type ResponseListItem = {
   endingTitle: string | null;
   /** Formatted answers for `previewColumns`, keyed by question id. */
   preview: Record<string, string>;
+  /** Where a file or signature answer opens, keyed by question id
+   * (QA FC4-17): a sign-in-protected link, as in the exports. */
+  previewLinks: Record<string, string>;
   /** Score and result values for `resultColumns`, keyed by variable name
    * (completed responses only). */
   results: Record<string, string>;
@@ -409,9 +412,18 @@ export async function listResponses(
     }
 
     const preview: Record<string, string> = {};
+    const previewLinks: Record<string, string> = {};
     for (const ref of previewQuestions) {
       const own = schema?.questions.find((q) => q.id === ref.id) ?? ref;
-      preview[ref.id] = formatAnswerValue(own, answers?.get(ref.id), { uploadNames });
+      const value = answers?.get(ref.id);
+      preview[ref.id] = formatAnswerValue(own, value, { uploadNames });
+      if (
+        (own.type === "file_upload" || own.type === "signature") &&
+        typeof value === "string" &&
+        /^[0-9a-f-]{36}$/i.test(value)
+      ) {
+        previewLinks[ref.id] = `/api/uploads/${value}`;
+      }
     }
 
     const ownAnswerable = (schema?.questions ?? []).filter(isAnswerable);
@@ -426,6 +438,7 @@ export async function listResponses(
       lastActiveAt: row.last_active_at,
       endingTitle,
       preview,
+      previewLinks,
       results,
       progress: { answered, total: ownAnswerable.length },
       lastQuestionLabel: lastQuestion ? questionColumnLabel(lastQuestion) : null,

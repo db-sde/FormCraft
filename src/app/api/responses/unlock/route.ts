@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
   const rateLimit = await hitRateLimit(
     admin,
     `unlock:${getClientIp(request)}:${parsed.data.formId}`,
-    10,
+    // Five guesses per address per form every 10 minutes (QA FC4-03).
+    5,
     10 * 60 * 1000,
   );
   if (!rateLimit.allowed) {
@@ -42,10 +43,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Only a live form can be unlocked (QA FC5-04).
+    const { data: live } = await admin
+      .from("form_versions")
+      .select("id")
+      .eq("form_id", parsed.data.formId)
+      .eq("status", "published")
+      .maybeSingle();
+    if (!live) return apiError("form_not_available", "This form isn't available.", 404);
     const hash = await getPasswordHash(admin, parsed.data.formId);
-    // No password (removed meanwhile, or never set): nothing to unlock,
-    // and the answer doesn't say which forms have one.
-    if (hash === null) return NextResponse.json({ ok: true });
+    // No password: nothing to unlock. (Whether a form has one is no
+    // secret: its page shows the password screen.)
+    if (hash === null)
+      return apiError("no_password", "This form doesn't need a password.", 400);
     if (!(await verifyPassword(parsed.data.password, hash))) {
       return apiError("wrong_password", "That password isn't right.", 401);
     }

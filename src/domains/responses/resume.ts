@@ -78,6 +78,9 @@ export type ResumedResponse = {
   /** The in-form variant it was served (F-29); kept on resume. */
   variantTestId?: string;
   variant?: string;
+  /** The response's write secret, so this browser can claim it (FC4-14).
+   * Only on the page a valid resume link opened. */
+  writeSecret?: string;
 };
 
 export type ResumeResult =

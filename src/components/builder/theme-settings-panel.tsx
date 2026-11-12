@@ -197,6 +197,15 @@ export function ThemeSettingsPanel({
         ]}
         onChange={(buttonStyle) => set({ buttonStyle })}
       />
+      <Segmented
+        label="Progress bar"
+        value={theme.showProgress === false ? "off" : "on"}
+        options={[
+          { value: "on", label: "Shown" },
+          { value: "off", label: "Hidden" },
+        ]}
+        onChange={(value) => set({ showProgress: value === "off" ? false : undefined })}
+      />
 
       <SectionHead>Images</SectionHead>
       <ImageUploadField

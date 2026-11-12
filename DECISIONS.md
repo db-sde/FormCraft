@@ -2190,4 +2190,53 @@ What changed, and why where it isn't obvious:
   secret (FC4-14: ids are random UUIDs); no builder-wide undo/redo
   (FC4-22, a feature); final submit time (FC4-28) not profiled.
 
+## 2026-11-12 — QA run 5 (FC5-01…FC5-18, run 4 leftovers)
+
+- **Response write secret (FC4-14).** `/start` sets `fc_rt`, an httpOnly
+  cookie scoped to `/api/responses/<id>` holding an HMAC of the id
+  (`signingKey("response-write")`). Answers, complete, uploads, lookup,
+  follow-up and resume-link refuse a request without it (403
+  `forbidden`). A resume link opened elsewhere gets it from the page and
+  sets it via `/claim`. Responses that existed before migration 60 have
+  `write_protected = false` and don't need it. Payment links stay
+  shareable (pay later) and don't check it.
+- **Limits (FC4-03).** Start: 20 per address per form per minute plus
+  120 per 10 min; the browser waits and retries on 429, so a class on
+  one address is slowed, not refused. Views: 20 per address per minute;
+  only for a live, unlocked form (FC5-03); one per visitor per 30 min,
+  the address and browser standing in for a visitor without the cookie.
+  Unlock: 5 tries per address per form per 10 min; 404 for a form that
+  isn't live, 400 `no_password` when there's none (FC5-04: whether a
+  form has a password is no secret, its page shows the screen).
+- **After submit (FC5-01):** `/answers` answers 409 `already_submitted`.
+- **Invisible text (FC5-02):** required and length checks ignore Unicode
+  Cf characters (zero-width space, ZWJ, BOM…) and surrounding spaces.
+- **Long answers (FC5-05):** 10,000 characters unless the creator sets a
+  limit, enforced in the browser and on the server.
+- **End-of-form rules (FC5-06)** aren't sent to the browser; the server
+  chooses the ending and returns the final scores.
+- **CSV phones (FC5-12):** a value of only digits, spaces, brackets, dots
+  and dashes after an optional sign can't run in a spreadsheet, so it
+  isn't apostrophe-prefixed (this reverses part of FC4-10's change).
+- **Phones (FC4-19):** stored as E.164 when they can be read (their own
+  `+code`, or the question's default country), otherwise as typed.
+- **Welcome title vs form name (FC5-17, FC5-11):** separate. Only a form
+  still called "Untitled form" is named by typing its welcome title. So
+  a renamed copy keeps its own welcome title until it's edited.
+- **Enter on an option (FC4-20, FC5-10)** presses it, like Space; it no
+  longer also moves on (which skipped a question and showed "required").
+- **Undo/redo (FC4-22)** for every edit: history of the form's states,
+  quick bursts merged; buttons by the save status, Ctrl/Cmd+Z and
+  Ctrl/Cmd+Shift+Z or Ctrl+Y outside text fields.
+- Also: file uploads and signatures hold "OK" until saved; question
+  numbers follow the respondent's path; Page break is offered only in
+  the classic layout; a starter helper text goes when the type changes;
+  a slow save says "Still saving…" after 15 s; a progress bar switch in
+  Design.
+- **Not changed:** new forms still open with the short starter (FC4-26;
+  opinion scale 0–10 kept); Enter in a contact block moves to the next
+  detail (FC5-14, by design); owner emails need `RESEND_API_KEY` on the
+  server (FC5-13); the slow booking submit (FC5-09) and the 2.5 s submit
+  (FC4-28) weren't reproduced or profiled.
+
 <!-- Add new decisions above this line, newest first. -->

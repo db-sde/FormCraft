@@ -100,6 +100,8 @@ test("a respondent's uploaded file opens as a download for the creator", async (
       .getByRole("link", { name: /Today|ago|AM|PM/ })
       .first()
       .click();
+    // On the response itself (the table has a link to the file too).
+    await page.waitForURL(/\/responses\/[0-9a-f-]{36}$/);
     const link = page.getByRole("link", { name: /logo\.png/ });
     const href = await link.getAttribute("href");
     expect(href).toContain("download=");

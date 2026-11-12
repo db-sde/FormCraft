@@ -12,7 +12,7 @@ import { recordAnalyticsEvent } from "@/domains/analytics";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { apiError, getClientIp, readJsonBody } from "../../shared";
+import { apiError, getClientIp, readJsonBody, writeDenied } from "../../shared";
 import { rememberProfile } from "@/domains/responses/profile";
 import { markCaptchaVerified, submissionGuards } from "@/domains/responses/guards";
 import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
@@ -77,6 +77,9 @@ export async function POST(
 
   try {
     const admin = createAdminClient();
+    // Only the browser that started it may change it (QA FC4-14).
+    const denied = await writeDenied(request, admin, id);
+    if (denied) return denied;
     const guards = await submissionGuards(admin, id);
     if (!guards) return apiError("not_found", "Response not found.", 404);
 

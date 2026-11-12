@@ -202,6 +202,6 @@ describe("logic engine properties", () => {
       }
       // Guard against the generator quietly producing nothing testable.
       expect(compiledCount).toBeGreaterThan(FORMS_PER_SEED / 2);
-    });
+    }, 20_000); // Hundreds of random forms: under a second alone, slower when every test runs at once.
   }
 });
