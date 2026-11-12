@@ -325,4 +325,20 @@ test.describe("QA run 6", () => {
       message: "Enter at most 10,000 characters.",
     });
   });
+
+  test("FC5-05: the builder shows a long answer's 10,000-character default", async ({
+    page,
+  }) => {
+    const { formId } = await createPublishedForm(user, form);
+    await loginViaUI(page, user.email, user.password);
+    await page.goto(`/forms/${formId}`);
+    await page
+      .getByRole("list", { name: "Questions" })
+      .getByRole("button", { name: /^\d+ Notes/ })
+      .click();
+    const max = page.getByLabel("Max length");
+    await expect(max).toHaveValue("");
+    await expect(max).toHaveAttribute("placeholder", "10,000");
+    await expect(page.getByText("Leave empty for the default, 10,000.")).toBeVisible();
+  });
 });

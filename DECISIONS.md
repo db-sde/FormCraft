@@ -2289,4 +2289,12 @@ What changed, and why where it isn't obvious:
   "Start from scratch" on the templates page keeps the short starter.
   The opinion scale stays 0–10 (Typeform's default).
 
+## 2026-11-13 — QA run 8: builder labels, opinion scale confirmed
+
+- **Builder labels (FC5-05):** every builder setting's label and hint are
+  now tied to its field, so "Max length" (placeholder 10,000) can be found
+  by its name, by screen readers and test tools alike.
+- **Opinion scale stays 0–10**, confirmed by the product owner: it's the
+  NPS scale and Typeform's default. Creators can set 1–5 per question.
+
 <!-- Add new decisions above this line, newest first. -->

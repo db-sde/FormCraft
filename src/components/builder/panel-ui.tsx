@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { Children, cloneElement, isValidElement, useId } from "react";
 import { CircleAlert, Info } from "lucide-react";
 import { cn } from "cn";
 import { Switch } from "@/components/ui/switch";
@@ -69,6 +69,24 @@ export function PanelField({
   children: React.ReactNode;
   className?: string;
 }) {
+  // The label names its field, and the hint describes it, for screen
+  // readers too (QA run 8: "Max length" was announced as just "10,000"):
+  // a single field child gets an id when the caller didn't give one.
+  const generated = useId();
+  const child =
+    Children.count(children) === 1 && isValidElement(children) ? children : null;
+  const childProps = (child?.props ?? {}) as { id?: string; "aria-describedby"?: string };
+  const fieldId = htmlFor ?? childProps.id ?? (child ? `${generated}-field` : undefined);
+  const hintId = hint ? `${generated}-hint` : undefined;
+  const field =
+    child && !htmlFor
+      ? cloneElement(child as React.ReactElement<Record<string, unknown>>, {
+          id: fieldId,
+          "aria-describedby":
+            [childProps["aria-describedby"], hintId].filter(Boolean).join(" ") ||
+            undefined,
+        })
+      : children;
   return (
     <div
       className={cn(
@@ -77,11 +95,15 @@ export function PanelField({
         className,
       )}
     >
-      <label htmlFor={htmlFor} className="text-[13.5px] font-semibold">
+      <label htmlFor={fieldId} className="text-[13.5px] font-semibold">
         {label}
       </label>
-      {children}
-      {hint && <span className="text-muted-foreground text-xs">{hint}</span>}
+      {field}
+      {hint && (
+        <span id={hintId} className="text-muted-foreground text-xs">
+          {hint}
+        </span>
+      )}
     </div>
   );
 }
