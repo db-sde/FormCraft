@@ -208,7 +208,7 @@ describe("phone answers (QA FC4-19)", () => {
   });
 });
 
-describe("phones without a set country (QA run 6, FC4-19)", () => {
+describe("phones without a set country (QA run 7, FC4-19)", () => {
   const phone = {
     id: "p",
     type: "phone",
@@ -218,13 +218,22 @@ describe("phones without a set country (QA run 6, FC4-19)", () => {
     settings: {},
   } as Parameters<typeof normalizeAnswer>[0];
 
-  it("are read in the respondent's own country", () => {
-    expect(normalizeAnswer(phone, "415 555 2671", "US")).toBe("+14155552671");
-    expect(normalizeAnswer(phone, "98765 43210", "IN")).toBe("+919876543210");
+  it("are never guessed into a country: kept as typed", () => {
+    // QA's "(555) 010-7777", typed from India, became +91…: a global form
+    // can't assume where a number is from.
+    expect(normalizeAnswer(phone, "(555) 010-7777")).toBe("(555) 010-7777");
+    expect(normalizeAnswer(phone, "415 555 2671")).toBe("415 555 2671");
   });
 
-  it("stay as typed when they aren't a real number there", () => {
-    // 555-01xx numbers are reserved for fiction.
-    expect(normalizeAnswer(phone, "(555) 010-6666", "US")).toBe("(555) 010-6666");
+  it("are converted when the respondent typed the country code", () => {
+    expect(normalizeAnswer(phone, "+1 415 555 2671")).toBe("+14155552671");
+    expect(normalizeAnswer(phone, "+91 98765 43210")).toBe("+919876543210");
+  });
+
+  it("aren't converted when the number isn't real in the set country", () => {
+    const india = { ...phone, settings: { defaultCountry: "IN" } } as typeof phone;
+    expect(normalizeAnswer(india, "98765 43210")).toBe("+919876543210");
+    // Right length, but no Indian number starts with 5.
+    expect(normalizeAnswer(india, "5550107777")).toBe("5550107777");
   });
 });

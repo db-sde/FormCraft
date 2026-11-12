@@ -2268,4 +2268,25 @@ What changed, and why where it isn't obvious:
   distance (India ↔ Sydney) and the free plan's cold starts. Enter in a
   contact block moving to the next detail (FC5-14) is by design.
 
+## 2026-11-13 — QA run 7: phones never guessed, leaner submit, blank New form
+
+- **Phones (FC4-19), reversing run 6.** Reading a number in the
+  respondent's own country was wrong for global forms: QA, in India,
+  typed "(555) 010-7777" and got +91…. Now a number becomes "+…" only
+  when that's certain: the respondent typed a "+country" code, or the
+  creator set the question's default country (its hint says so). Full
+  phone metadata, not the length-only "min" set, so a number of the right
+  length that isn't real there isn't converted.
+- **Long answers (FC5-05):** the builder shows the 10,000-character
+  default as the Max length placeholder and hint.
+- **Submit time (FC4-28):** the server's own work was ~50 ms locally, but
+  ~18 database round trips ran one after another before replying. Now
+  independent ones run together, and booking, order and payment lookups
+  are skipped on forms without them (about 12 for a simple form). A
+  `Server-Timing` header reports the server's time, so network distance
+  (India ↔ Sydney) and cold starts can be told apart from it.
+- **New form (FC4-26)** creates a blank form (only a welcome screen).
+  "Start from scratch" on the templates page keeps the short starter.
+  The opinion scale stays 0–10 (Typeform's default).
+
 <!-- Add new decisions above this line, newest first. -->

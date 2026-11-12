@@ -16,7 +16,6 @@ import {
   readJsonBody,
   writeDenied,
   ANSWERS_BODY_BYTES,
-  respondentCountry,
 } from "../../shared";
 
 const AnswersBody = z.object({
@@ -67,7 +66,6 @@ export async function PATCH(
       parsed.data.clientRevision,
       parsed.data.lastQuestionId,
       parsed.data.answers,
-      { respondentCountry: respondentCountry(request) },
     );
     return NextResponse.json({ status: result.status, revision: result.revision });
   } catch (error) {

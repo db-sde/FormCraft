@@ -22,7 +22,7 @@ import {
   getAvailabilitySettings,
   refusalMessage,
 } from "@/domains/forms/availability";
-import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/min";
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 
 type Client = SupabaseClient<Database>;
 
@@ -232,13 +232,12 @@ export async function startResponse(
 function filterAnswersToKnownQuestions(
   schema: FormSchemaV1,
   answers: AnswerMap,
-  respondentCountry?: string,
 ): AnswerMap {
   const byId = new Map(schema.questions.map((q) => [q.id, q]));
   const known: AnswerMap = {};
   for (const [questionId, value] of Object.entries(answers)) {
     const question = byId.get(questionId);
-    if (question) known[questionId] = normalizeAnswer(question, value, respondentCountry);
+    if (question) known[questionId] = normalizeAnswer(question, value);
   }
   return known;
 }
@@ -250,13 +249,7 @@ function filterAnswersToKnownQuestions(
  * which the database removes, instead of lingering as a "lead" with no
  * details.
  */
-export function normalizeAnswer(
-  question: QuestionV1,
-  value: unknown,
-  /** Where the respondent is (two letters), for phones typed without a
-   * country code when the question doesn't set one (QA FC4-19). */
-  respondentCountry?: string,
-): unknown {
+export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
   // A website typed without its scheme ("example.com") is stored as a
   // link that opens ("https://example.com"), so exports agree (QA FC4-19).
   if (question.type === "url") {
@@ -268,7 +261,7 @@ export function normalizeAnswer(
   }
   if (question.type === "phone") {
     return typeof value === "string"
-      ? normalizePhone(value, question.settings.defaultCountry ?? respondentCountry)
+      ? normalizePhone(value, question.settings.defaultCountry)
       : value;
   }
   if (question.type !== "contact_info") return value;
@@ -278,8 +271,7 @@ export function normalizeAnswer(
   for (const field of question.settings.fields) {
     const raw = record[field];
     if (typeof raw === "string" && raw.trim() !== "")
-      kept[field] =
-        field === "phone" ? normalizePhone(raw, respondentCountry) : raw.trim();
+      kept[field] = field === "phone" ? normalizePhone(raw) : raw.trim();
   }
   // Fields outside the block's configuration are left for validation
   // to reject rather than silently discarded here.
@@ -290,10 +282,13 @@ export function normalizeAnswer(
 }
 
 /**
- * A phone number in the international format ("+14155552671") when it
- * can be read as one: with its own "+country" code, or in the
- * question's default country. Otherwise kept as typed (QA FC4-19), so
- * nothing a respondent entered is lost.
+ * A phone number in the international format ("+14155552671"), but only
+ * when that's certain: the respondent typed a "+country" code, or the
+ * creator set the question's default country. Forms are global, so the
+ * country is never guessed (from where the respondent is, say: QA run 7
+ * saw a US number read as Indian). Anything else is kept exactly as
+ * typed. Full metadata, so a number of the right length that isn't a
+ * real number there isn't "converted" (FC4-19).
  */
 export function normalizePhone(value: string, defaultCountry?: string): string {
   const typed = value.trim();
@@ -331,7 +326,6 @@ export async function saveResponseAnswers(
   expectedRevision: number,
   lastQuestionId: string,
   answers: AnswerMap,
-  options: { respondentCountry?: string } = {},
 ): Promise<{ status: ResponseStatus; revision: number }> {
   const { data: response, error: responseError } = await admin
     .from("responses")
@@ -354,7 +348,6 @@ export async function saveResponseAnswers(
   const known = filterAnswersToKnownQuestions(
     parseFormSchema(versionRow.schema),
     answers,
-    options.respondentCountry,
   );
 
   const { data, error } = await admin.rpc("save_response_progress", {
@@ -436,7 +429,7 @@ export async function completeResponse(
   lastQuestionId: string,
   answers: AnswerMap,
   idempotencyKey: string,
-  options: { spamSuspected?: boolean; respondentCountry?: string } = {},
+  options: { spamSuspected?: boolean } = {},
 ): Promise<CompleteResult> {
   const { data: response, error } = await admin
     .from("responses")
@@ -478,11 +471,7 @@ export async function completeResponse(
     .single();
   if (versionError) throw versionError;
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
-  const knownAnswers = filterAnswersToKnownQuestions(
-    compiled.schema,
-    answers,
-    options.respondentCountry,
-  );
+  const knownAnswers = filterAnswersToKnownQuestions(compiled.schema, answers);
 
   // Said before any answer is checked: fixing answers can't help once
   // the form has closed. complete_response_atomic decides for certain.

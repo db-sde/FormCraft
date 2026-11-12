@@ -69,11 +69,3 @@ export async function writeDenied(
     403,
   );
 }
-
-/** The respondent's country, two letters, as the host reports it
- * (Vercel's edge sets it); undefined when unknown. Used to read phone
- * numbers typed without a country code (QA FC4-19). */
-export function respondentCountry(request: NextRequest): string | undefined {
-  const code = request.headers.get("x-vercel-ip-country")?.toUpperCase();
-  return code && /^[A-Z]{2}$/.test(code) ? code : undefined;
-}

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "cn";
 import { Dialog } from "radix-ui";
-import { createFormAction, switchWorkspaceAction } from "@/app/(dashboard)/actions";
+import { createBlankFormAction, switchWorkspaceAction } from "@/app/(dashboard)/actions";
 import { logOutAction } from "@/app/(auth)/actions";
 import type { OnboardingStep } from "@/domains/workspaces";
 import { SubmitButton } from "@/components/submit-button";
@@ -306,9 +306,11 @@ function AccountMenu({ userName, userEmail }: { userName: string; userEmail: str
   );
 }
 
+/** "New form": a blank one, only a welcome screen (QA FC4-26). The
+ * short starter is "Start from scratch" on the templates page. */
 function NewFormButton({ className }: { className?: string }) {
   return (
-    <form action={createFormAction}>
+    <form action={createBlankFormAction}>
       <SubmitButton
         className={cn("shadow-card h-11 w-full", className)}
         icon={<Plus />}

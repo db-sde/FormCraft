@@ -48,6 +48,7 @@ import {
   ProductsSettingsPanel,
   SignatureSettingsPanel,
 } from "./signature-products-settings";
+import { DEFAULT_LONG_TEXT_MAX } from "@/domains/logic/validate-answer";
 
 /** Accepted-file chips → the MIME patterns uploads are checked against.
  * Only types the server can verify from the file's bytes are offered. */
@@ -325,11 +326,15 @@ export function SettingsPanel({
               }
             />
           </PanelField>
-          <PanelField label="Max length" hint="Characters. Leave empty for no limit.">
+          <PanelField
+            label="Max length"
+            hint={`Characters. Leave empty for the default, ${DEFAULT_LONG_TEXT_MAX.toLocaleString("en")}.`}
+          >
             <Input
               className={PANEL_INPUT}
               type="number"
               min={1}
+              placeholder={DEFAULT_LONG_TEXT_MAX.toLocaleString("en")}
               value={question.settings.maxLength ?? ""}
               onChange={(e) =>
                 onChange({
@@ -377,7 +382,7 @@ export function SettingsPanel({
           <SectionHead>Answer</SectionHead>
           <PanelField
             label="Default country"
-            hint="Two-letter code, like US or GB. Used when people leave out the +."
+            hint="Two-letter code, like US or GB. Numbers typed without a +code are read in this country and saved as +1…; with no country set, they're kept as typed."
           >
             <Input
               className={cn(PANEL_INPUT, "uppercase")}

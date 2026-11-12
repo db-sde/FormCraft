@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Check, ChevronDown, LayoutGrid, List, Plus, Search, X } from "lucide-react";
 import type { FormListItem, PublishState } from "@/domains/forms";
-import { createFormAction } from "@/app/(dashboard)/actions";
+import { createBlankFormAction } from "@/app/(dashboard)/actions";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
@@ -502,7 +502,7 @@ export function FormsBrowser({
         {/* Phones: the New form button floats bottom right. */}
         {canEdit && (
           <form
-            action={createFormAction}
+            action={createBlankFormAction}
             className="fixed right-4 bottom-6 z-20 sm:hidden"
           >
             <SubmitButton

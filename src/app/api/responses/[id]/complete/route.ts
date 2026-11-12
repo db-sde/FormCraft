@@ -18,7 +18,6 @@ import {
   readJsonBody,
   writeDenied,
   ANSWERS_BODY_BYTES,
-  respondentCountry,
 } from "../../shared";
 import { rememberProfile } from "@/domains/responses/profile";
 import { markCaptchaVerified, submissionGuards } from "@/domains/responses/guards";
@@ -75,30 +74,47 @@ export async function POST(
   const parsed = CompleteBody.safeParse(body);
   if (!parsed.success) return apiError("invalid_body", "Invalid request.", 400);
 
-  const rateLimitKey = `complete:${getClientIp(request)}:${id}`;
-  const rateLimit = await hitRateLimit(
-    createAdminClient(),
-    rateLimitKey,
-    10,
-    10 * 60 * 1000,
-  );
+  // Independent lookups go together, not one after another: each is a
+  // round trip to the database, and a submit used to make ~18 in a row
+  // (QA FC4-28). Server-Timing reports the server's own time.
+  const startedAt = performance.now();
+  const admin = createAdminClient();
+  const [rateLimit, denied, guards] = await Promise.all([
+    hitRateLimit(admin, `complete:${getClientIp(request)}:${id}`, 10, 10 * 60 * 1000),
+    // Only the browser that started it may change it (QA FC4-14).
+    writeDenied(request, admin, id),
+    submissionGuards(admin, id),
+  ]);
   if (!rateLimit.allowed) {
     return apiError("rate_limited", "Too many attempts. Please try again shortly.", 429);
   }
 
   try {
-    const admin = createAdminClient();
-    // Only the browser that started it may change it (QA FC4-14).
-    const denied = await writeDenied(request, admin, id);
     if (denied) return denied;
-    const guards = await submissionGuards(admin, id);
     if (!guards) return apiError("not_found", "Response not found.", 404);
 
-    // A retry of a submit that already went through skips these: it
-    // must succeed even after the password changed or the token expired.
+    // What this form needs at submit: bookings, a product order. Read
+    // alongside the password check.
+    const unlock = request.cookies.get(unlockCookieName(guards.formId))?.value;
+    const [unlocked, version] = await Promise.all([
+      // A retry of a submit that already went through skips the checks:
+      // it must succeed even after the password changed or the token
+      // expired.
+      guards.completed ? true : isUnlocked(admin, guards.formId, unlock),
+      admin
+        .from("form_versions")
+        .select("schema")
+        .eq("id", guards.formVersionId)
+        .single(),
+    ]);
+    const questionTypes = new Set(
+      (
+        (version.data?.schema as { questions?: { type: string }[] } | null)?.questions ??
+        []
+      ).map((q) => q.type),
+    );
     if (!guards.completed) {
-      const unlock = request.cookies.get(unlockCookieName(guards.formId))?.value;
-      if (!(await isUnlocked(admin, guards.formId, unlock))) {
+      if (!unlocked) {
         return apiError("locked", "Enter the form's password to continue.", 403);
       }
       if (guards.needsCaptcha) {
@@ -133,9 +149,10 @@ export async function POST(
     // completes; a slot that's gone is an answer error. A submit caught by
     // the spam trap is kept quietly but books nothing — otherwise a bot
     // could fill a host's calendar.
-    const holds = parsed.data.trap
-      ? { ok: true as const, held: [] as Held[] }
-      : await holdBookings(admin, id, parsed.data.answers);
+    const holds =
+      parsed.data.trap || !questionTypes.has("booking")
+        ? { ok: true as const, held: [] as Held[] }
+        : await holdBookings(admin, id, parsed.data.answers);
     if (!holds.ok) {
       return NextResponse.json(
         {
@@ -159,10 +176,7 @@ export async function POST(
         parsed.data.lastQuestionId,
         parsed.data.answers,
         parsed.data.idempotencyKey,
-        {
-          spamSuspected: Boolean(parsed.data.trap),
-          respondentCountry: respondentCountry(request),
-        },
+        { spamSuspected: Boolean(parsed.data.trap) },
       );
     } catch (error) {
       // Nothing completed: free the slots now rather than in 15 minutes.
@@ -313,18 +327,19 @@ export async function POST(
     // Saved before the reply so the response and its order arrive
     // together. A failure never fails the submission; a repeat submit
     // (same idempotency key) tries again, and saving is idempotent.
-    if (!parsed.data.trap) {
-      await saveOrder(createAdminClient(), id).catch(() => null);
+    if (!parsed.data.trap && questionTypes.has("products")) {
+      await saveOrder(admin, id).catch(() => null);
     }
 
     // Payment (P2.17, F-22): the response is already saved; the server
     // works out what's owed and the form shows its payment step.
-    const payment = parsed.data.trap
-      ? null
-      : await quotePayment(createAdminClient(), id).catch(() => ({
-          ok: false as const,
-          message: "The payment couldn't be started.",
-        }));
+    const payment =
+      parsed.data.trap || !guards.takesPayment
+        ? null
+        : await quotePayment(admin, id).catch(() => ({
+            ok: false as const,
+            message: "The payment couldn't be started.",
+          }));
     const owes =
       payment?.ok && payment.status !== "paid" && payment.status !== "refunded";
     const { data: formSlug } = owes
@@ -335,7 +350,7 @@ export async function POST(
           .maybeSingle()
       : { data: null };
 
-    return NextResponse.json({
+    const reply = NextResponse.json({
       endingId: result.endingId,
       // Final scores for the ending's recall ("You scored {{score}}"): the
       // browser wasn't sent option points (QA FC4-02).
@@ -353,6 +368,11 @@ export async function POST(
         : {}),
       ...(payment && !payment.ok ? { paymentError: payment.message } : {}),
     });
+    reply.headers.set(
+      "Server-Timing",
+      `app;desc="submit";dur=${Math.round(performance.now() - startedAt)}`,
+    );
+    return reply;
   } catch (error) {
     if (error instanceof ResponseNotFoundError) {
       return apiError("not_found", "Response not found.", 404);
