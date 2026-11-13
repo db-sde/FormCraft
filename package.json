@@ -86,7 +86,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^18.0.4",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.4.3",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.9",
