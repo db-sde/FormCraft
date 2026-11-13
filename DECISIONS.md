@@ -2289,6 +2289,22 @@ What changed, and why where it isn't obvious:
   "Start from scratch" on the templates page keeps the short starter.
   The opinion scale stays 0–10 (Typeform's default).
 
+## 2026-11-13 — CI: database types regenerated, never hand-edited
+
+- **Why CI was red:** `database.types.ts` had been edited by hand (null
+  arguments, narrowed status values) and CI's Supabase CLI (2.107.0) was
+  older than the one used locally (2.122.0). The "types are up to date"
+  step failed on every push, so integration and browser tests never ran
+  on GitHub.
+- **Now:** CI's CLI is pinned to 2.122.0, the local version. The file is
+  the generator's output, untouched. Where the code needs more than the
+  generator knows, it says so at the call site: `SQL_NULL`
+  (`src/lib/supabase/sql-null.ts`) for a NULL function argument, and a
+  cast where a text column only holds a few known values.
+- **`NonNullable<Json>` → `Json`** in `npm run db:types`: the newer
+  generator marks NOT NULL json columns that way, which broke ~90 call
+  sites for no gain (the database refuses a NULL there anyway).
+
 ## 2026-11-13 — QA run 8: builder labels, opinion scale confirmed
 
 - **Builder labels (FC5-05):** every builder setting's label and hint are

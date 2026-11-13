@@ -24,6 +24,7 @@ import {
   type RazorpaySecrets,
 } from "./razorpay";
 import { createCheckout, expireCheckout, type StripeSecrets } from "./stripe";
+import { SQL_NULL } from "@/lib/supabase/sql-null";
 
 type Client = SupabaseClient<Database>;
 
@@ -458,7 +459,7 @@ export async function confirmAttemptPaid(
 ): Promise<"paid" | "already" | "duplicate" | "not_found"> {
   const { data, error } = await admin.rpc("record_payment_paid", {
     p_provider_ref: providerRef,
-    p_provider_payment_id: providerPaymentId,
+    p_provider_payment_id: providerPaymentId ?? SQL_NULL,
   });
   if (error) throw error;
   const outcome = (data ?? "not_found") as "paid" | "already" | "duplicate" | "not_found";

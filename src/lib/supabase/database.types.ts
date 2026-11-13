@@ -37,6 +37,7 @@ export type Database = {
           form_id: string;
           is_preview: boolean;
         };
+        ComputedFields: never;
         Insert: {
           count: number;
           day: string;
@@ -71,6 +72,7 @@ export type Database = {
           metadata: Json;
           session_id: string | null;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           event_type: string;
@@ -108,6 +110,7 @@ export type Database = {
           updated_at: string;
           value: Json;
         };
+        ComputedFields: never;
         Insert: {
           id?: string;
           question_id: string;
@@ -147,6 +150,7 @@ export type Database = {
           scopes: string[];
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           created_by?: string | null;
@@ -199,6 +203,7 @@ export type Database = {
           target_type: string | null;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           action: string;
           actor_id?: string | null;
@@ -242,6 +247,7 @@ export type Database = {
           booking_type_id: string;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           added_at?: string;
           booking_type_id: string;
@@ -290,6 +296,7 @@ export type Database = {
           weekly: Json;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           archived_at?: string | null;
           blocked_dates?: string[];
@@ -332,6 +339,13 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "booking_types_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "booking_types_workspace_id_fkey";
             columns: ["workspace_id"];
             isOneToOne: false;
@@ -345,7 +359,7 @@ export type Database = {
           attendee_email: string | null;
           attendee_name: string | null;
           attendee_time_zone: string | null;
-          blocked: string;
+          blocked: unknown;
           booking_type_id: string;
           cancelled_at: string | null;
           cancelled_by: string | null;
@@ -360,13 +374,14 @@ export type Database = {
           rescheduled_from: string | null;
           response_id: string | null;
           starts_at: string;
-          status: "pending" | "confirmed" | "cancelled";
+          status: string;
         };
+        ComputedFields: never;
         Insert: {
           attendee_email?: string | null;
           attendee_name?: string | null;
           attendee_time_zone?: string | null;
-          blocked: string;
+          blocked: unknown;
           booking_type_id: string;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
@@ -381,13 +396,13 @@ export type Database = {
           rescheduled_from?: string | null;
           response_id?: string | null;
           starts_at: string;
-          status?: "pending" | "confirmed" | "cancelled";
+          status?: string;
         };
         Update: {
           attendee_email?: string | null;
           attendee_name?: string | null;
           attendee_time_zone?: string | null;
-          blocked?: string;
+          blocked?: unknown;
           booking_type_id?: string;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
@@ -402,7 +417,7 @@ export type Database = {
           rescheduled_from?: string | null;
           response_id?: string | null;
           starts_at?: string;
-          status?: "pending" | "confirmed" | "cancelled";
+          status?: string;
         };
         Relationships: [
           {
@@ -413,6 +428,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "bookings_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "bookings_host_id_fkey";
             columns: ["host_id"];
             isOneToOne: false;
@@ -420,10 +442,10 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "bookings_form_id_fkey";
-            columns: ["form_id"];
+            foreignKeyName: "bookings_rescheduled_from_fkey";
+            columns: ["rescheduled_from"];
             isOneToOne: false;
-            referencedRelation: "forms";
+            referencedRelation: "bookings";
             referencedColumns: ["id"];
           },
           {
@@ -443,6 +465,7 @@ export type Database = {
           response_id: string;
           status: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           error?: string | null;
@@ -485,6 +508,7 @@ export type Database = {
           subject: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           body?: string;
           cta_label?: string | null;
@@ -524,11 +548,12 @@ export type Database = {
           label: string | null;
           provider: string;
           settings: Json;
-          status: "ok" | "invalid" | "revoked";
+          status: string;
           updated_at: string;
           user_id: string | null;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           created_by?: string | null;
@@ -537,7 +562,7 @@ export type Database = {
           label?: string | null;
           provider: string;
           settings?: Json;
-          status?: "ok" | "invalid" | "revoked";
+          status?: string;
           updated_at?: string;
           user_id?: string | null;
           workspace_id: string;
@@ -550,17 +575,17 @@ export type Database = {
           label?: string | null;
           provider?: string;
           settings?: Json;
-          status?: "ok" | "invalid" | "revoked";
+          status?: string;
           updated_at?: string;
           user_id?: string | null;
           workspace_id?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "connector_connections_workspace_id_fkey";
-            columns: ["workspace_id"];
+            foreignKeyName: "connector_connections_created_by_fkey";
+            columns: ["created_by"];
             isOneToOne: false;
-            referencedRelation: "workspaces";
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
           {
@@ -568,6 +593,13 @@ export type Database = {
             columns: ["user_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "connector_connections_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
             referencedColumns: ["id"];
           },
         ];
@@ -587,11 +619,11 @@ export type Database = {
           provider: string;
           response_id: string | null;
           result: Json | null;
-          status:
-            "pending" | "running" | "succeeded" | "failed" | "exhausted" | "skipped";
+          status: string;
           updated_at: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           action: string;
           attempt_count?: number;
@@ -606,8 +638,7 @@ export type Database = {
           provider: string;
           response_id?: string | null;
           result?: Json | null;
-          status?:
-            "pending" | "running" | "succeeded" | "failed" | "exhausted" | "skipped";
+          status?: string;
           updated_at?: string;
           workspace_id: string;
         };
@@ -625,24 +656,23 @@ export type Database = {
           provider?: string;
           response_id?: string | null;
           result?: Json | null;
-          status?:
-            "pending" | "running" | "succeeded" | "failed" | "exhausted" | "skipped";
+          status?: string;
           updated_at?: string;
           workspace_id?: string;
         };
         Relationships: [
           {
+            foreignKeyName: "connector_jobs_booking_id_fkey";
+            columns: ["booking_id"];
+            isOneToOne: false;
+            referencedRelation: "bookings";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "connector_jobs_connection_id_fkey";
             columns: ["connection_id"];
             isOneToOne: false;
             referencedRelation: "connector_connections";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "connector_jobs_workspace_id_fkey";
-            columns: ["workspace_id"];
-            isOneToOne: false;
-            referencedRelation: "workspaces";
             referencedColumns: ["id"];
           },
           {
@@ -653,10 +683,10 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "connector_jobs_booking_id_fkey";
-            columns: ["booking_id"];
+            foreignKeyName: "connector_jobs_workspace_id_fkey";
+            columns: ["workspace_id"];
             isOneToOne: false;
-            referencedRelation: "bookings";
+            referencedRelation: "workspaces";
             referencedColumns: ["id"];
           },
         ];
@@ -674,6 +704,7 @@ export type Database = {
           settings: Json;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           condition?: Json | null;
           created_at?: string;
@@ -700,6 +731,13 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "connector_links_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "connector_links_form_id_fkey";
             columns: ["form_id"];
             isOneToOne: false;
@@ -723,6 +761,7 @@ export type Database = {
           percent_off: number | null;
           uses: number;
         };
+        ComputedFields: never;
         Insert: {
           active?: boolean;
           amount_off?: number | null;
@@ -753,6 +792,13 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "coupons_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "coupons_form_id_fkey";
             columns: ["form_id"];
             isOneToOne: false;
@@ -774,6 +820,7 @@ export type Database = {
           verified_at: string | null;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           default_form_id?: string | null;
@@ -829,6 +876,7 @@ export type Database = {
           winner: string | null;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_by?: string | null;
           ended_at?: string | null;
@@ -893,6 +941,7 @@ export type Database = {
           name: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -915,6 +964,33 @@ export type Database = {
           },
         ];
       };
+      form_access_secrets: {
+        Row: {
+          form_id: string;
+          password_hash: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          form_id: string;
+          password_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          form_id?: string;
+          password_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_access_secrets_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: true;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       form_ai_summaries: {
         Row: {
           form_id: string;
@@ -923,6 +999,7 @@ export type Database = {
           response_count: number;
           summary: Json;
         };
+        ComputedFields: never;
         Insert: {
           form_id: string;
           generated_at?: string;
@@ -960,22 +1037,23 @@ export type Database = {
           enabled: boolean;
           form_id: string;
           id: string;
-          kind: "summary" | "order" | "registration" | "certificate" | "receipt";
+          kind: string;
           member_ids: string[];
           next_number: number;
-          recipients: "owner" | "respondent" | "both" | "none";
+          recipients: string;
           settings: Json;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           enabled?: boolean;
           form_id: string;
           id?: string;
-          kind: "summary" | "order" | "registration" | "certificate" | "receipt";
+          kind: string;
           member_ids?: string[];
           next_number?: number;
-          recipients?: "owner" | "respondent" | "both" | "none";
+          recipients?: string;
           settings?: Json;
           updated_at?: string;
         };
@@ -984,10 +1062,10 @@ export type Database = {
           enabled?: boolean;
           form_id?: string;
           id?: string;
-          kind?: "summary" | "order" | "registration" | "certificate" | "receipt";
+          kind?: string;
           member_ids?: string[];
           next_number?: number;
-          recipients?: "owner" | "respondent" | "both" | "none";
+          recipients?: string;
           settings?: Json;
           updated_at?: string;
         };
@@ -996,6 +1074,33 @@ export type Database = {
             foreignKeyName: "form_documents_form_id_fkey";
             columns: ["form_id"];
             isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      form_kiosk_secrets: {
+        Row: {
+          form_id: string;
+          pin_hash: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          form_id: string;
+          pin_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          form_id?: string;
+          pin_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "form_kiosk_secrets_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: true;
             referencedRelation: "forms";
             referencedColumns: ["id"];
           },
@@ -1015,6 +1120,7 @@ export type Database = {
           trigger_question_id: string;
           url: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           created_by?: string | null;
@@ -1058,58 +1164,6 @@ export type Database = {
           },
         ];
       };
-      form_access_secrets: {
-        Row: {
-          form_id: string;
-          password_hash: string;
-          updated_at: string;
-        };
-        Insert: {
-          form_id: string;
-          password_hash: string;
-          updated_at?: string;
-        };
-        Update: {
-          form_id?: string;
-          password_hash?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "form_access_secrets_form_id_fkey";
-            columns: ["form_id"];
-            isOneToOne: true;
-            referencedRelation: "forms";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      form_kiosk_secrets: {
-        Row: {
-          form_id: string;
-          pin_hash: string;
-          updated_at: string;
-        };
-        Insert: {
-          form_id: string;
-          pin_hash: string;
-          updated_at?: string;
-        };
-        Update: {
-          form_id?: string;
-          pin_hash?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "form_kiosk_secrets_form_id_fkey";
-            columns: ["form_id"];
-            isOneToOne: true;
-            referencedRelation: "forms";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       form_versions: {
         Row: {
           created_at: string;
@@ -1123,6 +1177,7 @@ export type Database = {
           updated_at: string;
           version_number: number;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           form_id: string;
@@ -1166,103 +1221,104 @@ export type Database = {
       };
       forms: {
         Row: {
-          embed_origins: string[] | null;
-          import_report: Json | null;
           ai_lead_criteria: string | null;
           captcha_required: boolean;
           closed_message: string | null;
           closes_at: string | null;
+          confidential: Json | null;
           created_at: string;
           created_by: string;
           deleted_at: string | null;
           description: string | null;
+          embed_origins: string[] | null;
           folder_id: string | null;
           full_message: string | null;
           ga_measurement_id: string | null;
           gtm_container_id: string | null;
           id: string;
+          import_report: Json | null;
           kiosk_config: Json | null;
+          linkedin_conversion_id: string | null;
+          linkedin_partner_id: string | null;
           meta_pixel_id: string | null;
           partial_retention_days: number | null;
           payment_config: Json | null;
+          pixel_consent: string;
           response_cap: number | null;
           resume_links_enabled: boolean;
           save_partial_responses: boolean;
           slug: string;
+          tiktok_pixel_id: string | null;
           title: string;
           updated_at: string;
           workspace_id: string;
-          linkedin_conversion_id: string | null;
-          linkedin_partner_id: string | null;
-          pixel_consent: string;
-          tiktok_pixel_id: string | null;
-          confidential: Json | null;
         };
+        ComputedFields: never;
         Insert: {
-          embed_origins?: string[] | null;
-          import_report?: Json | null;
           ai_lead_criteria?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
           closes_at?: string | null;
+          confidential?: Json | null;
           created_at?: string;
           created_by: string;
           deleted_at?: string | null;
           description?: string | null;
+          embed_origins?: string[] | null;
           folder_id?: string | null;
           full_message?: string | null;
           ga_measurement_id?: string | null;
           gtm_container_id?: string | null;
           id?: string;
+          import_report?: Json | null;
           kiosk_config?: Json | null;
+          linkedin_conversion_id?: string | null;
+          linkedin_partner_id?: string | null;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           payment_config?: Json | null;
+          pixel_consent?: string;
           response_cap?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug: string;
+          tiktok_pixel_id?: string | null;
           title: string;
           updated_at?: string;
           workspace_id: string;
-          linkedin_conversion_id?: string | null;
-          linkedin_partner_id?: string | null;
-          pixel_consent?: string;
-          tiktok_pixel_id?: string | null;
-          confidential?: Json | null;
         };
         Update: {
-          embed_origins?: string[] | null;
-          import_report?: Json | null;
           ai_lead_criteria?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
           closes_at?: string | null;
+          confidential?: Json | null;
           created_at?: string;
           created_by?: string;
           deleted_at?: string | null;
           description?: string | null;
+          embed_origins?: string[] | null;
           folder_id?: string | null;
           full_message?: string | null;
           ga_measurement_id?: string | null;
           gtm_container_id?: string | null;
           id?: string;
+          import_report?: Json | null;
           kiosk_config?: Json | null;
+          linkedin_conversion_id?: string | null;
+          linkedin_partner_id?: string | null;
           meta_pixel_id?: string | null;
           partial_retention_days?: number | null;
           payment_config?: Json | null;
+          pixel_consent?: string;
           response_cap?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           slug?: string;
+          tiktok_pixel_id?: string | null;
           title?: string;
           updated_at?: string;
           workspace_id?: string;
-          linkedin_conversion_id?: string | null;
-          linkedin_partner_id?: string | null;
-          pixel_consent?: string;
-          tiktok_pixel_id?: string | null;
-          confidential?: Json | null;
         };
         Relationships: [
           {
@@ -1298,6 +1354,7 @@ export type Database = {
           status: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           encrypted: Json;
@@ -1334,6 +1391,7 @@ export type Database = {
           used_at: string | null;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           code_hash: string;
           created_at?: string;
@@ -1354,35 +1412,36 @@ export type Database = {
         Row: {
           enabled: boolean;
           form_id: string;
+          frequency: string;
           last_sent_on: string | null;
           member_ids: string[];
           time_zone: string;
           updated_at: string;
-          frequency: string;
         };
+        ComputedFields: never;
         Insert: {
           enabled?: boolean;
           form_id: string;
+          frequency?: string;
           last_sent_on?: string | null;
           member_ids: string[];
           time_zone?: string;
           updated_at?: string;
-          frequency?: string;
         };
         Update: {
           enabled?: boolean;
           form_id?: string;
+          frequency?: string;
           last_sent_on?: string | null;
           member_ids?: string[];
           time_zone?: string;
           updated_at?: string;
-          frequency?: string;
         };
         Relationships: [
           {
             foreignKeyName: "notification_digests_form_id_fkey";
             columns: ["form_id"];
-            isOneToOne: false;
+            isOneToOne: true;
             referencedRelation: "forms";
             referencedColumns: ["id"];
           },
@@ -1402,6 +1461,7 @@ export type Database = {
           subject: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           attach_document?: string | null;
           condition?: Json | null;
@@ -1446,6 +1506,7 @@ export type Database = {
           id: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           enabled?: boolean;
@@ -1491,6 +1552,7 @@ export type Database = {
           subtotal: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           amount: number;
           checkout_url?: string | null;
@@ -1575,6 +1637,7 @@ export type Database = {
           subtotal: number | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           amount: number;
           checkout_session_id?: string | null;
@@ -1615,6 +1678,13 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "payments_coupon_id_fkey";
+            columns: ["coupon_id"];
+            isOneToOne: false;
+            referencedRelation: "coupons";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "payments_form_id_fkey";
             columns: ["form_id"];
             isOneToOne: false;
@@ -1637,6 +1707,7 @@ export type Database = {
           name: string;
           sort_order: number;
         };
+        ComputedFields: never;
         Insert: {
           entitlements?: Json;
           id: string;
@@ -1659,6 +1730,7 @@ export type Database = {
           id: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           email: string;
@@ -1684,6 +1756,7 @@ export type Database = {
           questions: Json;
           version: number;
         };
+        ComputedFields: never;
         Insert: {
           block_id: string;
           created_at?: string;
@@ -1729,6 +1802,7 @@ export type Database = {
           updated_at: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           archived_at?: string | null;
           created_at?: string;
@@ -1774,6 +1848,7 @@ export type Database = {
           key: string;
           window_start: string;
         };
+        ComputedFields: never;
         Insert: {
           count: number;
           key: string;
@@ -1794,6 +1869,7 @@ export type Database = {
           id: string;
           response_id: string;
         };
+        ComputedFields: never;
         Insert: {
           author_id?: string | null;
           body: string;
@@ -1834,6 +1910,7 @@ export type Database = {
           number: number;
           response_id: string;
         };
+        ComputedFields: never;
         Insert: {
           document_id: string;
           emailed_at?: string | null;
@@ -1877,11 +1954,12 @@ export type Database = {
           outcome: string;
           response_id: string;
         };
+        ComputedFields: never;
         Insert: {
           actor_id?: string | null;
           created_at?: string;
           detail?: Json;
-          id?: number;
+          id?: never;
           kind: string;
           outcome?: string;
           response_id: string;
@@ -1890,7 +1968,7 @@ export type Database = {
           actor_id?: string | null;
           created_at?: string;
           detail?: Json;
-          id?: number;
+          id?: never;
           kind?: string;
           outcome?: string;
           response_id?: string;
@@ -1922,6 +2000,7 @@ export type Database = {
           question_id: string;
           response_id: string;
         };
+        ComputedFields: never;
         Insert: {
           answer?: string | null;
           answered_at?: string | null;
@@ -1960,6 +2039,7 @@ export type Database = {
           sentiment: string | null;
           tags: string[];
         };
+        ComputedFields: never;
         Insert: {
           analyzed_at?: string;
           form_id: string;
@@ -2004,6 +2084,7 @@ export type Database = {
           response_id: string;
           total_amount: number;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           currency: string;
@@ -2040,7 +2121,6 @@ export type Database = {
       responses: {
         Row: {
           assignee_id: string | null;
-          review_status: string;
           captcha_verified_at: string | null;
           client_revision: number;
           completed_at: string | null;
@@ -2060,6 +2140,7 @@ export type Database = {
           lookup_calls: number;
           random_seed: string | null;
           referrer: string | null;
+          review_status: string;
           spam_suspected: boolean;
           started_at: string;
           status: Database["public"]["Enums"]["response_status"];
@@ -2068,14 +2149,14 @@ export type Database = {
           utm_medium: string | null;
           utm_source: string | null;
           utm_term: string | null;
-          write_protected: boolean;
-          visitor_id: string | null;
-          variant_test_id: string | null;
           variant: string | null;
+          variant_test_id: string | null;
+          visitor_id: string | null;
+          write_protected: boolean;
         };
+        ComputedFields: never;
         Insert: {
           assignee_id?: string | null;
-          review_status?: string;
           captcha_verified_at?: string | null;
           client_revision?: number;
           completed_at?: string | null;
@@ -2095,6 +2176,7 @@ export type Database = {
           lookup_calls?: number;
           random_seed?: string | null;
           referrer?: string | null;
+          review_status?: string;
           spam_suspected?: boolean;
           started_at?: string;
           status?: Database["public"]["Enums"]["response_status"];
@@ -2103,14 +2185,13 @@ export type Database = {
           utm_medium?: string | null;
           utm_source?: string | null;
           utm_term?: string | null;
-          write_protected?: boolean;
-          visitor_id?: string | null;
-          variant_test_id?: string | null;
           variant?: string | null;
+          variant_test_id?: string | null;
+          visitor_id?: string | null;
+          write_protected?: boolean;
         };
         Update: {
           assignee_id?: string | null;
-          review_status?: string;
           captcha_verified_at?: string | null;
           client_revision?: number;
           completed_at?: string | null;
@@ -2130,6 +2211,7 @@ export type Database = {
           lookup_calls?: number;
           random_seed?: string | null;
           referrer?: string | null;
+          review_status?: string;
           spam_suspected?: boolean;
           started_at?: string;
           status?: Database["public"]["Enums"]["response_status"];
@@ -2138,12 +2220,19 @@ export type Database = {
           utm_medium?: string | null;
           utm_source?: string | null;
           utm_term?: string | null;
-          write_protected?: boolean;
-          visitor_id?: string | null;
-          variant_test_id?: string | null;
           variant?: string | null;
+          variant_test_id?: string | null;
+          visitor_id?: string | null;
+          write_protected?: boolean;
         };
         Relationships: [
+          {
+            foreignKeyName: "responses_assignee_id_fkey";
+            columns: ["assignee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "responses_experiment_id_fkey";
             columns: ["experiment_id"];
@@ -2165,6 +2254,13 @@ export type Database = {
             referencedRelation: "form_versions";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "responses_variant_test_id_fkey";
+            columns: ["variant_test_id"];
+            isOneToOne: false;
+            referencedRelation: "variant_tests";
+            referencedColumns: ["id"];
+          },
         ];
       };
       resume_tokens: {
@@ -2175,6 +2271,7 @@ export type Database = {
           revoked_at: string | null;
           token_hash: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           expires_at?: string;
@@ -2208,6 +2305,7 @@ export type Database = {
           token_hash: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           created_by?: string | null;
@@ -2253,6 +2351,7 @@ export type Database = {
           user_id: string | null;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           active?: boolean;
           created_at?: string;
@@ -2303,6 +2402,7 @@ export type Database = {
           updated_at: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           enabled?: boolean;
@@ -2359,6 +2459,7 @@ export type Database = {
           status: Database["public"]["Enums"]["sheets_sync_status"];
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           attempt_count?: number;
           connection_id: string;
@@ -2409,6 +2510,7 @@ export type Database = {
           title: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           category: string;
           created_at?: string;
@@ -2443,6 +2545,7 @@ export type Database = {
           status: Database["public"]["Enums"]["upload_status"];
           storage_path: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -2482,6 +2585,7 @@ export type Database = {
           value: number;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           metric: string;
           period_start: string;
@@ -2513,10 +2617,11 @@ export type Database = {
           name: string;
           split: number;
           started_at: string;
-          status: "running" | "paused" | "ended";
+          status: string;
           variant_id: string;
           winner: string | null;
         };
+        ComputedFields: never;
         Insert: {
           created_by?: string | null;
           ended_at?: string | null;
@@ -2525,7 +2630,7 @@ export type Database = {
           name: string;
           split: number;
           started_at?: string;
-          status?: "running" | "paused" | "ended";
+          status?: string;
           variant_id: string;
           winner?: string | null;
         };
@@ -2537,23 +2642,23 @@ export type Database = {
           name?: string;
           split?: number;
           started_at?: string;
-          status?: "running" | "paused" | "ended";
+          status?: string;
           variant_id?: string;
           winner?: string | null;
         };
         Relationships: [
           {
-            foreignKeyName: "variant_tests_form_id_fkey";
-            columns: ["form_id"];
-            isOneToOne: false;
-            referencedRelation: "forms";
-            referencedColumns: ["id"];
-          },
-          {
             foreignKeyName: "variant_tests_created_by_fkey";
             columns: ["created_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "variant_tests_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
             referencedColumns: ["id"];
           },
         ];
@@ -2567,6 +2672,7 @@ export type Database = {
           visitor_id: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           key: string;
           question_type: string;
@@ -2608,6 +2714,7 @@ export type Database = {
           status: Database["public"]["Enums"]["webhook_delivery_status"];
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           attempt_count?: number;
           created_at?: string;
@@ -2666,6 +2773,7 @@ export type Database = {
           updated_at: string;
           url: string;
         };
+        ComputedFields: never;
         Insert: {
           api_key_id?: string | null;
           config?: Json;
@@ -2720,6 +2828,7 @@ export type Database = {
           token_hash: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           accepted_at?: string | null;
           created_at?: string;
@@ -2770,6 +2879,7 @@ export type Database = {
           user_id: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -2812,6 +2922,7 @@ export type Database = {
           provider_id: string;
           workspace_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           default_role?: string;
@@ -2850,6 +2961,7 @@ export type Database = {
           slug: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           entitlement_overrides?: Json;
@@ -2894,41 +3006,9 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      rollup_analytics_events: {
-        Args: { p_keep_days?: number; p_batch?: number };
-        Returns: number;
-      };
       analytics_rolled_count: {
-        Args: { p_form_id: string; p_event_type: string; p_since: string | null };
+        Args: { p_event_type: string; p_form_id: string; p_since: string };
         Returns: number;
-      };
-      form_embed_origins: { Args: { p_slug: string }; Returns: string[] | null };
-      valid_embed_origins: { Args: { p_origins: string[] }; Returns: boolean };
-      prune_operational_data: { Args: { p_batch?: number }; Returns: Json };
-      claim_response_webhook_deliveries: {
-        Args: { p_response_id: string; p_limit: number; p_lease_seconds: number };
-        Returns: Database["public"]["Tables"]["webhook_deliveries"]["Row"][];
-      };
-      claim_response_sheets_syncs: {
-        Args: { p_response_id: string; p_limit: number; p_lease_seconds: number };
-        Returns: Database["public"]["Tables"]["sheets_sync_log"]["Row"][];
-      };
-      claim_scoped_connector_jobs: {
-        Args: {
-          p_response_id: string | null;
-          p_booking_id: string | null;
-          p_limit: number;
-          p_lease_seconds: number;
-        };
-        Returns: Database["public"]["Tables"]["connector_jobs"]["Row"][];
-      };
-      record_payment_paid: {
-        Args: { p_provider_ref: string; p_provider_payment_id: string | null };
-        Returns: string;
-      };
-      responses_missing_connector_sync: {
-        Args: { p_limit: number };
-        Returns: { response_id: string }[];
       };
       book_slot: {
         Args: {
@@ -2943,19 +3023,42 @@ export type Database = {
           p_response_id: string;
           p_starts_at: string;
         };
-        Returns: { ends_at: string; host_id: string; id: string; starts_at: string }[];
+        Returns: {
+          ends_at: string;
+          host_id: string;
+          id: string;
+          starts_at: string;
+        }[];
       };
-      can_admin_workspace: {
-        Args: { target_workspace_id: string };
-        Returns: boolean;
-      };
-      can_edit_workspace: {
-        Args: { target_workspace_id: string };
-        Returns: boolean;
-      };
+      call_cron_endpoint: { Args: { p_path: string }; Returns: undefined };
+      can_admin_workspace: { Args: { target_workspace_id: string }; Returns: boolean };
+      can_edit_workspace: { Args: { target_workspace_id: string }; Returns: boolean };
       claim_connector_jobs: {
         Args: { p_lease_seconds: number; p_limit: number };
-        Returns: Database["public"]["Tables"]["connector_jobs"]["Row"][];
+        Returns: {
+          action: string;
+          attempt_count: number;
+          booking_id: string | null;
+          connection_id: string | null;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          response_id: string | null;
+          result: Json | null;
+          status: string;
+          updated_at: string;
+          workspace_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "connector_jobs";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       claim_due_sheets_syncs: {
         Args: { p_lease_seconds: number; p_limit: number };
@@ -3000,6 +3103,81 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      claim_response_sheets_syncs: {
+        Args: { p_lease_seconds: number; p_limit: number; p_response_id: string };
+        Returns: {
+          attempt_count: number;
+          connection_id: string;
+          created_at: string;
+          id: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          response_id: string | null;
+          status: Database["public"]["Enums"]["sheets_sync_status"];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "sheets_sync_log";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      claim_response_webhook_deliveries: {
+        Args: { p_lease_seconds: number; p_limit: number; p_response_id: string };
+        Returns: {
+          attempt_count: number;
+          created_at: string;
+          endpoint_id: string;
+          event_id: string;
+          event_type: string;
+          id: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          response_id: string | null;
+          status: Database["public"]["Enums"]["webhook_delivery_status"];
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "webhook_deliveries";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      claim_scoped_connector_jobs: {
+        Args: {
+          p_booking_id: string;
+          p_lease_seconds: number;
+          p_limit: number;
+          p_response_id: string;
+        };
+        Returns: {
+          action: string;
+          attempt_count: number;
+          booking_id: string | null;
+          connection_id: string | null;
+          created_at: string;
+          id: string;
+          idempotency_key: string;
+          last_error: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          response_id: string | null;
+          result: Json | null;
+          status: string;
+          updated_at: string;
+          workspace_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "connector_jobs";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       complete_response_atomic: {
         Args: {
           p_answers: Json;
@@ -3021,11 +3199,11 @@ export type Database = {
         Returns: {
           created_at: string;
           id: string;
-          label: string | null;
+          label: string;
           provider: string;
           settings: Json;
           status: string;
-          user_id: string | null;
+          user_id: string;
         }[];
       };
       create_form_with_draft: {
@@ -3066,6 +3244,7 @@ export type Database = {
           started: number;
         }[];
       };
+      form_embed_origins: { Args: { p_slug: string }; Returns: string[] };
       has_permission: {
         Args: { permission: string; target_workspace_id: string };
         Returns: boolean;
@@ -3087,20 +3266,17 @@ export type Database = {
           status: string;
         }[];
       };
-      is_workspace_member: {
-        Args: { target_workspace_id: string };
-        Returns: boolean;
-      };
-      jwt_has_sso: { Args: { claims: Json }; Returns: boolean };
+      is_workspace_member: { Args: { target_workspace_id: string }; Returns: boolean };
       issue_response_document: {
         Args: { p_document_id: string; p_response_id: string };
         Returns: {
-          emailed_at: string | null;
+          emailed_at: string;
           id: string;
           issued_at: string;
           number: number;
         }[];
       };
+      jwt_has_sso: { Args: { claims: Json }; Returns: boolean };
       list_leads: {
         Args: {
           p_form_id?: string;
@@ -3122,7 +3298,8 @@ export type Database = {
           value: Json;
         }[];
       };
-      mfa_satisfied: { Args: never; Returns: boolean };
+      mfa_satisfied: { Args: Record<PropertyKey, never>; Returns: boolean };
+      prune_operational_data: { Args: { p_batch?: number }; Returns: Json };
       publish_form_version: {
         Args: { compiled_schema: Json; target_form_id: string };
         Returns: {
@@ -3148,6 +3325,10 @@ export type Database = {
         Args: { p_block_id: string; p_questions: Json };
         Returns: number;
       };
+      record_payment_paid: {
+        Args: { p_provider_payment_id: string; p_provider_ref: string };
+        Returns: string;
+      };
       resolve_custom_domain: {
         Args: { p_hostname: string };
         Returns: {
@@ -3162,10 +3343,7 @@ export type Database = {
           stopped: number;
         }[];
       };
-      response_is_confidential: {
-        Args: { p_form_id: string };
-        Returns: boolean;
-      };
+      response_is_confidential: { Args: { p_form_id: string }; Returns: boolean };
       response_reach: {
         Args: { since?: string; target_form_id: string };
         Returns: {
@@ -3193,6 +3371,12 @@ export type Database = {
           status: Database["public"]["Enums"]["response_status"];
         }[];
       };
+      responses_missing_connector_sync: {
+        Args: { p_limit: number };
+        Returns: {
+          response_id: string;
+        }[];
+      };
       responses_missing_sheets_sync: {
         Args: { p_limit: number };
         Returns: {
@@ -3206,6 +3390,10 @@ export type Database = {
           endpoint_id: string;
           response_id: string;
         }[];
+      };
+      rollup_analytics_events: {
+        Args: { p_batch?: number; p_keep_days?: number };
+        Returns: number;
       };
       save_response_progress: {
         Args: {
@@ -3221,6 +3409,10 @@ export type Database = {
           status: Database["public"]["Enums"]["response_status"];
         }[];
       };
+      schedule_background_jobs: {
+        Args: { p_app_url: string; p_cron_secret: string };
+        Returns: undefined;
+      };
       scim_status: {
         Args: { p_workspace_id: string };
         Returns: {
@@ -3229,17 +3421,19 @@ export type Database = {
           prefix: string;
         }[];
       };
-      shares_workspace_with: {
-        Args: { target_user_id: string };
-        Returns: boolean;
-      };
+      shares_workspace_with: { Args: { target_user_id: string }; Returns: boolean };
       sso_satisfied: { Args: { target_workspace_id: string }; Returns: boolean };
       unpublish_form: { Args: { target_form_id: string }; Returns: undefined };
+      unschedule_background_jobs: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
+      valid_embed_origins: { Args: { p_origins: string[] }; Returns: boolean };
       workspace_role_for: {
         Args: { target_workspace_id: string };
         Returns: Database["public"]["Enums"]["workspace_role"];
       };
-      workspaces_requiring_sso: { Args: never; Returns: number };
+      workspaces_requiring_sso: { Args: Record<PropertyKey, never>; Returns: number };
     };
     Enums: {
       form_version_status: "draft" | "published" | "archived";
@@ -3269,9 +3463,7 @@ export type Tables<
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never) = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
-}
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R;
@@ -3296,9 +3488,7 @@ export type TablesInsert<
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never) = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
-}
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I;
     }
@@ -3320,9 +3510,7 @@ export type TablesUpdate<
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never) = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
-}
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U;
     }
@@ -3344,9 +3532,7 @@ export type Enums<
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never) = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
-}
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
@@ -3360,9 +3546,7 @@ export type CompositeTypes<
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never) = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
-}
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]

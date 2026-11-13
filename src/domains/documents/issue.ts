@@ -50,10 +50,10 @@ export async function listFormDocuments(
     .eq("form_id", formId);
   return (data ?? []).map((d) => ({
     id: d.id,
-    kind: d.kind,
+    kind: d.kind as DocumentKind,
     enabled: d.enabled,
     settings: parseDocumentSettings(d.settings),
-    recipients: d.recipients,
+    recipients: d.recipients as FormDocument["recipients"],
     memberIds: d.member_ids,
   }));
 }

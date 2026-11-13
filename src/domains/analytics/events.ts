@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { AnalyticsEventLite, FunnelSummary } from "./completion-rate";
+import { SQL_NULL } from "@/lib/supabase/sql-null";
 
 type Client = SupabaseClient<Database>;
 
@@ -117,7 +118,7 @@ export async function getFunnelSummaryForForm(
   const rolled = await supabase.rpc("analytics_rolled_count", {
     p_form_id: formId,
     p_event_type: "form_viewed",
-    p_since: sinceIso ? sinceIso.slice(0, 10) : null,
+    p_since: sinceIso ? sinceIso.slice(0, 10) : SQL_NULL,
   });
   if (rolled.error) throw rolled.error;
   const views = rawViews + Number(rolled.data ?? 0);

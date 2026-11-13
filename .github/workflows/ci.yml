@@ -53,7 +53,7 @@ jobs:
       # deliberately (and regenerate `npm run db:types`) when upgrading.
       - uses: supabase/setup-cli@v1
         with:
-          version: 2.107.0
+          version: 2.122.0
 
       # Starts the same local Postgres/Auth/Storage/Data-API stack
       # `supabase start` gives every contributor locally, applying all

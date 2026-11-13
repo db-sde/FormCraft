@@ -4,6 +4,7 @@ import { decryptJson, encryptJson, type EncryptedPayload } from "@/lib/crypto/en
 import { isExhausted, nextBackoffDelayMs } from "@/domains/webhooks/backoff";
 import { refreshIfNeeded, TokenError, type Tokens } from "./oauth";
 import { isReplayable } from "./catalog";
+import { SQL_NULL } from "@/lib/supabase/sql-null";
 
 type Client = SupabaseClient<Database>;
 type JobRow = Database["public"]["Tables"]["connector_jobs"]["Row"];
@@ -83,7 +84,7 @@ function toConnection(
     provider: row.provider,
     label: row.label,
     settings: (row.settings ?? {}) as Record<string, unknown>,
-    status: row.status,
+    status: row.status as Connection["status"],
     tokens: decryptJson<Tokens>(
       row.encrypted as unknown as EncryptedPayload,
       connectionContext(row),
@@ -319,8 +320,8 @@ export async function dispatchConnectorJobs(
   const scoped = Boolean(options.responseId || options.bookingId);
   const { data: jobs } = scoped
     ? await admin.rpc("claim_scoped_connector_jobs", {
-        p_response_id: options.responseId ?? null,
-        p_booking_id: options.bookingId ?? null,
+        p_response_id: options.responseId ?? SQL_NULL,
+        p_booking_id: options.bookingId ?? SQL_NULL,
         p_limit: options.limit ?? BATCH,
         p_lease_seconds: LEASE_SECONDS,
       })

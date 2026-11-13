@@ -34,7 +34,7 @@ function toTest(row: {
   variant_id: string;
   name: string;
   split: number;
-  status: "running" | "paused" | "ended";
+  status: string;
   winner: string | null;
   started_at: string;
   ended_at: string | null;
@@ -45,7 +45,7 @@ function toTest(row: {
     variantId: row.variant_id,
     name: row.name,
     split: row.split,
-    status: row.status,
+    status: row.status as VariantTest["status"],
     winner: row.winner,
     startedAt: row.started_at,
     endedAt: row.ended_at,

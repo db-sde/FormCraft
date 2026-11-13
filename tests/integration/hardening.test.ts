@@ -8,6 +8,7 @@ import { reencryptSecrets } from "@/lib/crypto/reencrypt";
 import type { EncryptedPayload } from "@/lib/crypto/encryption";
 import { getFunnelSummaryForForm } from "@/domains/analytics";
 import { listLookups } from "@/domains/integrations/lookups";
+import { SQL_NULL } from "@/lib/supabase/sql-null";
 
 /**
  * Hardening (2026-11-03) against the real database: old secrets
@@ -185,7 +186,7 @@ describe("background jobs", () => {
     ]);
     const { data: claimed } = await admin.rpc("claim_scoped_connector_jobs", {
       p_response_id: mine,
-      p_booking_id: null,
+      p_booking_id: SQL_NULL,
       p_limit: 25,
       p_lease_seconds: 60,
     });

@@ -104,7 +104,7 @@ export async function busyTimes(
     .gt("ends_at", new Date(window.start - 86_400_000).toISOString());
   for (const b of data ?? []) {
     if (b.status === "pending" && b.created_at < holdSince) continue;
-    busy.get(b.host_id)?.push(parseRange(b.blocked));
+    busy.get(b.host_id)?.push(parseRange(b.blocked as string));
   }
   if (!options.skipCalendar) {
     await Promise.all(
