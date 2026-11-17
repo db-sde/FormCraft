@@ -92,6 +92,10 @@ jobs:
 
       - run: npm run test:integration
 
+      # The built-in template gallery (scripts/seed-templates.ts): the
+      # browser tests use it, and a fresh database starts without it.
+      - run: npm run db:seed-templates
+
       - run: npx playwright install --with-deps chromium
 
       # webServer in playwright.config.ts runs `npm run build && npm
