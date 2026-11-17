@@ -1,5 +1,8 @@
 "use client";
 
+import { ConsentInput, DateRangeInput } from "./range-consent-inputs";
+import { RepeatGroupInput } from "./repeat-group-input";
+import { useUploadNames } from "./upload-names";
 import { useRuntimeStrings } from "./runtime-strings";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -159,6 +162,51 @@ export function RuntimeQuestionInput({
       case "datetime":
         return (
           <DateTimeInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+            autoFocus={focus}
+            invalid={invalid}
+          />
+        );
+
+      case "repeat_group":
+        return (
+          <RepeatGroupInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+            autoFocus={focus}
+            renderField={(field) => (
+              <RuntimeQuestionInput
+                question={field.question}
+                value={field.value}
+                onChange={field.onChange}
+                idPrefix={field.idPrefix}
+                autoFocus={field.autoFocus}
+                getResponseId={getResponseId}
+              />
+            )}
+          />
+        );
+
+      case "date_range":
+        return (
+          <DateRangeInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            idPrefix={ids}
+            autoFocus={focus}
+            invalid={invalid}
+          />
+        );
+
+      case "consent":
+        return (
+          <ConsentInput
             question={question}
             value={value}
             onChange={onChange}
@@ -985,6 +1033,7 @@ function FileUploadInput({
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [dragging, setDragging] = useState(false);
+  const uploadNames = useUploadNames();
   const inputRef = useRef<HTMLInputElement>(null);
   const accepted = describeAcceptedTypes(question.settings.acceptedMimeTypes);
   const limits = `${accepted} · up to ${question.settings.maxSizeMb} MB`;
@@ -1034,6 +1083,7 @@ function FileUploadInput({
         return;
       }
       const data = (await res.json()) as { uploadId: string };
+      uploadNames?.set(data.uploadId, file.name);
       setStatus("idle");
       // The answer value is the upload reference id, never the raw
       // file or a public URL — see docs/api.md.

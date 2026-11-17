@@ -1,6 +1,7 @@
 "use server";
 
 import { rateLimit } from "@/domains/abuse/limit";
+import { trackAccountEvent } from "@/lib/analytics/account-events";
 
 import { redirect } from "next/navigation";
 import {
@@ -83,6 +84,10 @@ export async function signUpAction(
     },
   });
 
+  if (!error && data.user) {
+    // Foundations §2: one definition of signup, sent once.
+    void trackAccountEvent({ event: "signup_completed", distinctId: data.user.id });
+  }
   if (error) {
     const mapped = mapAuthError(error.message);
     // The message shown is deliberately generic; the host's logs get the cause.

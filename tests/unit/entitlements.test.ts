@@ -49,6 +49,7 @@ describe("usage", () => {
       periodStart: "2026-10-01",
       completedResponses: 1001,
       aiCredits: 0,
+      placesLookups: 0,
       members: 1,
       storageMb: 10,
     };

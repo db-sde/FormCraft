@@ -16,12 +16,22 @@ import {
   blankFormSchema,
   deleteFolder,
   duplicateForm,
+  getDraftForEdit,
   FolderError,
   moveFormToFolder,
   renameFolder,
   softDeleteForm,
 } from "@/domains/forms";
-import { getTemplateById } from "@/domains/templates";
+import {
+  deleteWorkspaceTemplate,
+  duplicateWorkspaceTemplate,
+  getTemplateById,
+  saveFormAsTemplate,
+  schemaFromWorkspaceTemplate,
+  TEMPLATE_VISIBILITIES,
+  TemplateError,
+  updateWorkspaceTemplate,
+} from "@/domains/templates";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
 import Anthropic from "@anthropic-ai/sdk";
@@ -393,4 +403,178 @@ export async function moveFormToFolderAction(
       message: error instanceof FolderError ? error.message : "Couldn't move it.",
     };
   }
+}
+
+// --- custom templates (F-61) ---------------------------------------------------
+
+const TemplateInput = z.object({
+  title: z.string().trim().min(1, "Give the template a name.").max(120),
+  description: z.string().max(500).optional(),
+  category: z.string().max(40).optional(),
+  visibility: z.enum(TEMPLATE_VISIBILITIES),
+});
+
+/** Saves a form's current draft as a template. Only the schema goes in:
+ * no responses, integrations, keys or payment settings. */
+export async function saveFormAsTemplateAction(
+  formId: string,
+  input: z.input<typeof TemplateInput>,
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (!FormId.safeParse(formId).success) return { ok: false, message: "Form not found." };
+  const parsed = TemplateInput.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Check the details.",
+    };
+  }
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { ok: false, message: "You have view-only access to this workspace." };
+  }
+  if (!(await rateLimit(`template:${user.id}`, 30, 60 * 60 * 1000)).allowed) {
+    return { ok: false, message: "That's a lot of templates. Try again in a while." };
+  }
+  const draft = await getDraftForEdit(supabase, formId, workspace.id);
+  if (!draft) return { ok: false, message: "Form not found." };
+  try {
+    const saved = await saveFormAsTemplate(supabase, {
+      workspaceId: workspace.id,
+      userId: user.id,
+      schema: draft.schema,
+      sourceFormId: formId,
+      ...parsed.data,
+    });
+    void recordAudit({
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: "template.created",
+      target: { type: "template", id: saved.id },
+      metadata: { formId, visibility: parsed.data.visibility },
+    });
+    revalidatePath("/templates");
+    return { ok: true, id: saved.id };
+  } catch (error) {
+    if (error instanceof TemplateError) return { ok: false, message: error.message };
+    return { ok: false, message: "Couldn't save the template. Please try again." };
+  }
+}
+
+export async function createFormFromWorkspaceTemplateAction(
+  templateId: string,
+): Promise<void> {
+  if (!FormId.safeParse(templateId).success) redirect("/templates");
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) redirect("/dashboard");
+  const template = await schemaFromWorkspaceTemplate(supabase, workspace.id, templateId);
+  if (!template) redirect("/templates");
+  const { id } = await createFormWithDraft(
+    supabase,
+    workspace.id,
+    user.id,
+    template.title,
+    template.schema,
+  );
+  trackEvent({
+    formId: id,
+    eventType: "form_created",
+    actorId: user.id,
+    metadata: { source: "workspace_template", templateId },
+  });
+  redirect(`/forms/${id}`);
+}
+
+export async function duplicateWorkspaceTemplateAction(
+  templateId: string,
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (!FormId.safeParse(templateId).success) {
+    return { ok: false, message: "Template not found." };
+  }
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { ok: false, message: "You have view-only access to this workspace." };
+  }
+  try {
+    const copy = await duplicateWorkspaceTemplate(supabase, {
+      workspaceId: workspace.id,
+      userId: user.id,
+      templateId,
+    });
+    if (!copy) return { ok: false, message: "Template not found." };
+    void recordAudit({
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: "template.created",
+      target: { type: "template", id: copy.id },
+      metadata: { copiedFrom: templateId, visibility: "private" },
+    });
+    revalidatePath("/templates");
+    return { ok: true, id: copy.id };
+  } catch (error) {
+    if (error instanceof TemplateError) return { ok: false, message: error.message };
+    return { ok: false, message: "Couldn't copy the template. Please try again." };
+  }
+}
+
+export async function updateWorkspaceTemplateAction(
+  templateId: string,
+  patch: { title?: string; category?: string; visibility?: "private" | "workspace" },
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!FormId.safeParse(templateId).success) {
+    return { ok: false, message: "Template not found." };
+  }
+  const parsed = z
+    .object({
+      title: z.string().max(120).optional(),
+      category: z.string().max(40).optional(),
+      visibility: z.enum(TEMPLATE_VISIBILITIES).optional(),
+    })
+    .safeParse(patch);
+  if (!parsed.success) return { ok: false, message: "Check the details." };
+  const { supabase, workspace } = await getCurrentWorkspace();
+  try {
+    const changed = await updateWorkspaceTemplate(
+      supabase,
+      workspace.id,
+      templateId,
+      parsed.data,
+    );
+    if (!changed) {
+      return {
+        ok: false,
+        message: "Only its creator or an admin can change this template.",
+      };
+    }
+    revalidatePath("/templates");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof TemplateError) return { ok: false, message: error.message };
+    return { ok: false, message: "Couldn't change the template. Please try again." };
+  }
+}
+
+export async function deleteWorkspaceTemplateAction(
+  templateId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!FormId.safeParse(templateId).success) {
+    return { ok: false, message: "Template not found." };
+  }
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  const removed = await deleteWorkspaceTemplate(supabase, workspace.id, templateId).catch(
+    () => false,
+  );
+  if (!removed) {
+    return {
+      ok: false,
+      message: "Only its creator or an admin can delete this template.",
+    };
+  }
+  void recordAudit({
+    workspaceId: workspace.id,
+    actorId: user.id,
+    action: "template.deleted",
+    target: { type: "template", id: templateId },
+  });
+  revalidatePath("/templates");
+  return { ok: true };
 }

@@ -183,7 +183,7 @@ export function AddressSettingsPanel({
     onChange({
       ...question,
       required: required.length > 0,
-      settings: { fields: ordered, requiredFields: required },
+      settings: { ...question.settings, fields: ordered, requiredFields: required },
     });
   }
   return (
@@ -244,6 +244,57 @@ export function AddressSettingsPanel({
             );
           })}
         </div>
+      </div>
+      <SectionHead>Suggestions</SectionHead>
+      <div className="col-span-full flex flex-col gap-2">
+        <label className="flex items-center justify-between gap-3 text-sm font-semibold">
+          Suggest addresses as they type
+          <Switch
+            aria-label="Suggest addresses as they type"
+            checked={!!question.settings.autocomplete}
+            onCheckedChange={(on) =>
+              onChange({
+                ...question,
+                settings: { ...question.settings, autocomplete: on ? {} : undefined },
+              })
+            }
+          />
+        </label>
+        <p className="text-muted-foreground text-[12.5px]">
+          From Google Maps, picked from a list and filled into the parts above. People can
+          always type the address instead, and do whenever suggestions aren&apos;t
+          available. Needs Google address suggestions set up for this site.
+        </p>
+        {question.settings.autocomplete && (
+          <label className="flex flex-col gap-1 text-[13px] font-semibold">
+            Only these countries
+            <Input
+              className="h-[38px] text-sm uppercase"
+              placeholder="Any country, or e.g. IN, US, GB"
+              defaultValue={(question.settings.autocomplete.countries ?? []).join(", ")}
+              onBlur={(e) => {
+                const countries = [
+                  ...new Set(
+                    e.target.value
+                      .toUpperCase()
+                      .split(/[\s,]+/)
+                      .filter((c) => /^[A-Z]{2}$/.test(c)),
+                  ),
+                ].slice(0, 15);
+                onChange({
+                  ...question,
+                  settings: {
+                    ...question.settings,
+                    autocomplete: countries.length ? { countries } : {},
+                  },
+                });
+              }}
+            />
+            <span className="text-muted-foreground text-xs font-normal">
+              Two-letter codes, up to 15.
+            </span>
+          </label>
+        )}
       </div>
     </>
   );

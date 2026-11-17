@@ -2,7 +2,8 @@
 
 A Typeform-style form builder. Everything below is built, tested
 (unit, database and browser tests) and deployed at
-<https://form-craft-ivory.vercel.app>, as of 12 November 2026.
+<https://form-craft-ivory.vercel.app>, as of 12 November 2026. Features
+49–68 (marked **new**) are built and tested locally, not yet deployed.
 
 Features marked **(needs setup)** are built but stay switched off, with a
 friendly "almost here" note, until a key or account is added on the
@@ -29,6 +30,7 @@ server. See "Needs setup to go live" at the end.
 ## 2. Creating forms
 
 - New form from a starter, a **blank form**, or one of 30 templates
+- **new** Save any form as a template, private or for the workspace (F-61)
 - **Describe your form** with AI **(needs setup)**
 - Import a form from a public Google Forms or Typeform link, with a report
 - Duplicate, rename, delete; drafts autosave
@@ -36,13 +38,15 @@ server. See "Needs setup to go live" at the end.
 - Version history: see each published version and restore it to the draft
 - Publish / unpublish; live edits go out only on republish
 - Preview (desktop and phone) with a logic "why" trace
+- **new** Build and publish from a phone browser: Questions, Edit and
+  Settings as tabs (F-52)
 - Shared question blocks: a library of reusable questions with versions,
   locked copies and reviewed updates
 - **Edit with AI**: describe a change, review it, apply or undo **(needs setup)**
 - AI review of the form with suggested rewordings **(needs setup)**
 - Checks before publishing (unfinished settings, starter wording)
 
-## 3. Question types (26)
+## 3. Question types (29)
 
 | Text and contact            | Choice          | Scales and dates    | Special                               |
 | --------------------------- | --------------- | ------------------- | ------------------------------------- |
@@ -52,7 +56,8 @@ server. See "Needs setup to go live" at the end.
 | Phone                       | Yes / No        | Time                | Booking (pick a time)                 |
 | Website URL                 | Picture choice  | Date & time         | Matrix / grid                         |
 | Number                      | Ranking         |                     | Address                               |
-| Contact info (lead capture) |                 |                     | Statement, Welcome screen, Page break |
+| Contact info (lead capture) |                 | **new** Date range  | Statement, Welcome screen, Page break |
+| **new** Repeating group     |                 |                     | **new** Consent page                  |
 
 Per-question options include required, placeholder, length limits,
 "Other" option, shuffled options, options carried from another question,
@@ -69,6 +74,7 @@ time windows and 12/24 h, and an optional AI follow-up question
 - Multiple endings, chosen by rules or by the highest score
 - Recall answers and scores in later text ("Hi {{name}}")
 - Hidden fields and UTM values from the link; prefill visible answers by link
+  (they steer logic, never prices or access, F-54)
 - Random question groups ("ask 2 of 5") and shuffled order
 - Adaptive assessments (next question harder or easier)
 - Progressive profiling: skip what a visitor already answered on another form
@@ -80,7 +86,8 @@ time windows and 12/24 h, and an optional AI follow-up question
 
 - Themes and presets, colours, fonts (incl. uploaded fonts on paid plans)
 - Button style, logo, background image
-- Progress bar on / off
+- Progress bar on / off, **new** with optional words: 40% complete,
+  Question 3 of 8, 5 questions left (F-51)
 - Layouts: one question at a time, or classic pages (split by page breaks)
 - Custom CSS, scoped to the form
 - Multiple languages, with the right one picked per respondent
@@ -104,6 +111,9 @@ time windows and 12/24 h, and an optional AI follow-up question
 
 - Mobile-first, keyboard-friendly and screen-reader friendly
 - Answers saved as they go (unfinished responses kept, if the form allows)
+- **new** Moving on after a single choice: per form and per question (F-63)
+- **new** A review of every answer before submitting, with Edit (F-60)
+- **new** Address suggestions from Google Maps as they type (F-65) **(needs setup)**
 - Server checks every answer; friendly per-question error messages
 - Redirect after submit (with delay), or custom endings
 - Payment step at the end (see Payments)
@@ -137,7 +147,10 @@ time windows and 12/24 h, and an optional AI follow-up question
 
 ## 10. Integrations
 
-- Webhooks (signed, retried, with delivery log)
+- Webhooks (signed, retried, with delivery log), **new** with events for
+  unfinished responses: answers saved, abandoned, resumed (F-53)
+- **new** n8n: send responses to an n8n workflow, with a sample (F-49)
+- **new** Google Drive: uploaded files copied to a Drive folder (F-50) **(needs setup)**
 - Google Sheets (a row per response) **(needs setup)**
 - HubSpot (contacts)
 - Airtable, Salesforce, Notion, Mailchimp, Zoho CRM, Pipedrive **(needs setup)**
@@ -183,7 +196,8 @@ time windows and 12/24 h, and an optional AI follow-up question
 | -------------------------------------------------------- | -------------------------------------------------------------------- |
 | All emails (owner, respondent, invites, digests)         | `RESEND_API_KEY`, `EMAIL_FROM` (and a verified domain in Resend)     |
 | AI features                                              | `ANTHROPIC_API_KEY`                                                  |
-| Google Sheets and Google Calendar                        | Google OAuth client id / secret                                      |
+| Google Sheets, Calendar and Drive                        | Google OAuth client id / secret (Drive API enabled for Drive)        |
+| Address suggestions                                      | `GOOGLE_PLACES_API_KEY` (Places API (New))                           |
 | Airtable, Salesforce, Notion, Mailchimp, Zoho, Pipedrive | That app's OAuth client id / secret                                  |
 | CAPTCHA                                                  | Cloudflare Turnstile site key and secret                             |
 | Automatic HTTPS for custom domains                       | `VERCEL_API_TOKEN`, `VERCEL_PROJECT_ID`                              |

@@ -119,6 +119,9 @@ export function PlanUsage({
               limit={e.ai_credits_per_month}
             />
           )}
+          {usage.placesLookups > 0 && (
+            <Meter label="Address lookups" used={usage.placesLookups} limit={null} />
+          )}
           <Meter label="Members" used={usage.members} limit={e.members} />
           <Meter
             label="File storage"

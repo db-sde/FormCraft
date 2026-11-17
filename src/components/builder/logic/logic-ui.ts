@@ -117,6 +117,10 @@ export function questionKind(q: QuestionV1 | undefined, field?: string): Operand
     // A matrix row is a choice among the columns; a ranked option, its
     // place (1 = first); contact and address parts, text.
     if (q.type === "matrix") return q.settings.multiple ? "multi" : "choice";
+    // A date range's two dates, and its length (F-58).
+    if (q.type === "date_range") return field === "days" ? "number" : "date";
+    // A consent page's ticks (F-62).
+    if (q.type === "consent") return "boolean";
     if (q.type === "ranking" || q.type === "products") return "number";
     return "text";
   }
@@ -145,6 +149,9 @@ export function questionKind(q: QuestionV1 | undefined, field?: string): Operand
     case "address":
     case "matrix":
     case "page_break":
+    case "date_range":
+    case "consent":
+    case "repeat_group":
       return "unknown";
     default:
       return "text";

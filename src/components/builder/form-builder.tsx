@@ -22,6 +22,9 @@ import {
   Sparkles,
   Undo2,
   Redo2,
+  ListOrdered,
+  PencilLine,
+  SlidersHorizontal,
 } from "lucide-react";
 import type {
   FormSchemaV1,
@@ -358,6 +361,20 @@ export function FormBuilder({
     kind: "question",
     id: opening.selectedId,
   });
+  // On a phone (below 1024px) the three columns are three tabs (F-52):
+  // the list, the item being edited, and its settings. Choosing anything
+  // opens it for editing.
+  const [mobilePane, setMobilePane] = useState<"questions" | "edit" | "settings">(
+    "questions",
+  );
+  const firstSelectionRef = useRef(true);
+  useEffect(() => {
+    if (firstSelectionRef.current) {
+      firstSelectionRef.current = false;
+      return;
+    }
+    setMobilePane("edit");
+  }, [selection]);
   // The question whose text takes focus (selected) when it reaches the
   // stage: one just added or duplicated, so typing names it right away.
   // A form nobody has named yet opens with its title selected.
@@ -460,6 +477,17 @@ export function FormBuilder({
   const [saveProblem, setSaveProblem] = useState<SchemaProblem | null>(null);
 
   useEffect(() => () => clearTimeout(retryTimerRef.current), []);
+  // Back online (a phone leaving a tunnel, F-52): save what's waiting now
+  // rather than at the next retry.
+  useEffect(() => {
+    function onOnline() {
+      if (latestSchemaRef.current !== savedSchemaRef.current) {
+        void performSaveRef.current(latestSchemaRef.current);
+      }
+    }
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
 
   // Leaving with edits that haven't reached the server — still in the
   // autosave debounce, mid-save, failing, or invalid — must not be
@@ -1117,7 +1145,7 @@ export function FormBuilder({
 
   return (
     <div className="bg-background flex h-dvh min-h-[600px] flex-col">
-      <header className="border-ink bg-card relative z-20 grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-b-[1.5px] px-4 max-xl:gap-2.5">
+      <header className="border-ink bg-card relative z-20 grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-b-[1.5px] px-4 max-xl:gap-2.5 max-lg:h-auto max-lg:grid-cols-1 max-lg:gap-y-2 max-lg:px-2.5 max-lg:py-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1206,9 +1234,11 @@ export function FormBuilder({
           )}
         </div>
 
-        <FormTabs formId={formId} active="build" />
+        <div className="max-lg:order-last max-lg:col-span-full max-lg:flex max-lg:justify-center">
+          <FormTabs formId={formId} active="build" />
+        </div>
 
-        <div className="flex min-w-0 items-center justify-end gap-2">
+        <div className="flex min-w-0 items-center justify-end gap-2 max-lg:justify-start">
           {isLive && (
             <>
               <Tooltip>
@@ -1248,7 +1278,7 @@ export function FormBuilder({
           {onProposeEdit && (
             <Button
               variant="outline"
-              className="h-9 px-3"
+              className="h-9 px-3 max-lg:hidden"
               onClick={() =>
                 aiEnabled
                   ? setAiEditOpen(true)
@@ -1339,13 +1369,18 @@ export function FormBuilder({
 
       <div
         className={cn(
-          "grid min-h-0 flex-1",
+          "grid min-h-0 flex-1 max-lg:flex max-lg:flex-col max-lg:pb-[calc(56px+env(safe-area-inset-bottom))]",
           selection.kind === "logic" || selection.kind === "languages"
             ? "grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-[248px_minmax(0,1fr)]"
             : "grid-cols-[280px_minmax(0,1fr)_300px] max-xl:grid-cols-[248px_minmax(0,1fr)_300px]",
         )}
       >
-        <aside className="border-ink bg-card flex min-h-0 flex-col border-r-[1.5px]">
+        <aside
+          className={cn(
+            "border-ink bg-card flex min-h-0 flex-col border-r-[1.5px] max-lg:flex-1 max-lg:border-r-0",
+            mobilePane !== "questions" && "max-lg:hidden",
+          )}
+        >
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-2.5 pt-3.5 pb-2.5">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center justify-between px-2 pb-1.5">
@@ -1545,7 +1580,12 @@ export function FormBuilder({
           </div>
         </aside>
 
-        <main className="bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px]">
+        <main
+          className={cn(
+            "bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px] max-lg:flex-1",
+            mobilePane !== "edit" && "max-lg:hidden",
+          )}
+        >
           {importReport && onDismissImportReport && (
             <ImportReportNotice
               report={importReport}
@@ -1606,7 +1646,12 @@ export function FormBuilder({
         </main>
 
         {selection.kind !== "logic" && selection.kind !== "languages" && (
-          <aside className="border-ink bg-card min-h-0 overflow-y-auto border-l-[1.5px]">
+          <aside
+            className={cn(
+              "border-ink bg-card min-h-0 overflow-y-auto border-l-[1.5px] max-lg:flex-1 max-lg:border-l-0",
+              mobilePane !== "settings" && "max-lg:hidden",
+            )}
+          >
             <div className="flex flex-col gap-[18px] px-[18px] pt-[18px] pb-10">
               {selectedQuestion && (
                 <PanelHeader
@@ -1656,6 +1701,7 @@ export function FormBuilder({
                     workspaceId={workspaceId}
                     formId={formId}
                     layout={schema.meta.layout ?? "conversational"}
+                    formAutoAdvance={schema.meta.autoAdvance}
                     allQuestions={numberedQuestions(schema).map(
                       ({ question: q, number }) => ({
                         id: q.id,
@@ -1738,6 +1784,20 @@ export function FormBuilder({
                       },
                     }))
                   }
+                  reviewStep={schema.meta.reviewStep}
+                  onReviewStepChange={(on) =>
+                    setSchema((s) => ({
+                      ...s,
+                      meta: { ...s.meta, reviewStep: on || undefined },
+                    }))
+                  }
+                  autoAdvance={schema.meta.autoAdvance}
+                  onAutoAdvanceChange={(on) =>
+                    setSchema((s) => ({
+                      ...s,
+                      meta: { ...s.meta, autoAdvance: on ? undefined : false },
+                    }))
+                  }
                 />
               )}
             </div>
@@ -1745,66 +1805,39 @@ export function FormBuilder({
         )}
       </div>
 
-      {/* Below 1024px the builder doesn't fit; offer what does (Part 4). */}
-      <div className="bg-background fixed inset-0 z-40 flex flex-col gap-[18px] px-6 pt-6 pb-7 lg:hidden">
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/dashboard"
-            aria-label="Back to forms"
-            className="fc-focus border-border grid size-11 place-items-center rounded-sm border-[1.5px]"
-          >
-            <ArrowLeft className="size-[18px]" />
-          </Link>
-          <b className="font-heading truncate text-base">{currentTitle}</b>
-        </div>
-        <div className="flex flex-1 flex-col justify-center gap-3.5">
-          <div aria-hidden className="relative h-[100px] w-[130px]">
-            <div className="border-ink bg-card shadow-card absolute top-3.5 left-0 h-[72px] w-[110px] rounded-[8px] border-[1.5px]" />
-            <div className="border-ink bg-primary absolute top-0 right-0 h-20 w-11 rotate-8 rounded-[8px] border-[1.5px]" />
-          </div>
-          <h2 className="font-heading text-[30px] leading-[1.05] font-bold tracking-[-0.03em]">
-            The builder is best on a bigger screen
-          </h2>
-          <p className="text-muted-foreground text-[15.5px] leading-[1.55]">
-            Editing questions, logic and themes needs room. On your phone you can still
-            preview, share and read responses.
-          </p>
-        </div>
-        <Button
-          size="lg"
-          className="h-[50px] text-base"
-          onClick={() => setPreviewOpen(true)}
-        >
-          Preview form
-        </Button>
-        <div className="grid grid-cols-2 gap-2.5">
-          <Button
-            variant="outline"
-            size="lg"
-            disabled={!isLive}
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(publicFormUrl(liveSlug));
-                toast.success("Link copied.", {
-                  description: "Paste it anywhere to share.",
-                });
-              } catch {
-                toast.error("Couldn't copy the link.");
-              }
-            }}
-          >
-            Share link
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <Link href={`/forms/${formId}/responses`}>Responses</Link>
-          </Button>
-        </div>
-        {!isLive && (
-          <p className="text-muted-foreground text-center text-[13.5px]">
-            Publish on a bigger screen to get a link.
-          </p>
-        )}
-      </div>
+      {/* Phones: the columns as tabs (F-52). */}
+      <nav
+        aria-label="Builder"
+        className="border-ink bg-card fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t-[1.5px] pb-[env(safe-area-inset-bottom)] lg:hidden"
+      >
+        {(
+          [
+            ["questions", "Questions", ListOrdered],
+            ["edit", "Edit", PencilLine],
+            ["settings", "Settings", SlidersHorizontal],
+          ] as const
+        ).map(([pane, label, Icon]) => {
+          const unavailable =
+            pane === "settings" &&
+            (selection.kind === "logic" || selection.kind === "languages");
+          return (
+            <button
+              key={pane}
+              type="button"
+              aria-current={mobilePane === pane ? "page" : undefined}
+              disabled={unavailable}
+              onClick={() => setMobilePane(pane)}
+              className={cn(
+                "fc-focus flex h-14 flex-col items-center justify-center gap-0.5 text-[12px] font-semibold disabled:opacity-40",
+                mobilePane === pane ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <Icon className="size-5" />
+              {label}
+            </button>
+          );
+        })}
+      </nav>
 
       <AlertDialog open={confirmUnpublish} onOpenChange={setConfirmUnpublish}>
         <AlertDialogContent>

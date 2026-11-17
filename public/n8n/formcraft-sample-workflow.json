@@ -1,0 +1,60 @@
+{
+  "name": "FormCraft responses (sample)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "formcraft",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "FormCraft webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "formcraft-sample"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.headers['x-formcraft-timestamp'] + '.' + JSON.stringify($json.body) }}",
+        "dataPropertyName": "expectedSignature",
+        "secret": "PASTE_THE_SIGNING_SECRET_FROM_FORMCRAFT_HERE",
+        "encoding": "hex"
+      },
+      "name": "Work out the signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only genuine, recent FormCraft requests get past this step.\nconst item = $input.first().json;\nconst header = String(item.headers['x-formcraft-signature'] || '');\nconst parts = Object.fromEntries(header.split(',').map((p) => [p.slice(0, p.indexOf('=')), p.slice(p.indexOf('=') + 1)]));\nconst ageSeconds = Math.abs(Date.now() / 1000 - Number(parts.t));\nif (!parts.v1 || parts.v1 !== item.expectedSignature || !(ageSeconds <= 300)) {\n  throw new Error('Not a genuine FormCraft request: check the signing secret in the previous step.');\n}\n// The event: eventType is response.completed, or response.partial_saved,\n// response.abandoned or response.resumed if you chose those in FormCraft.\nreturn [{ json: item.body }];"
+      },
+      "name": "Check it came from FormCraft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {},
+      "name": "Your steps here",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "FormCraft webhook": {
+      "main": [[{ "node": "Work out the signature", "type": "main", "index": 0 }]]
+    },
+    "Work out the signature": {
+      "main": [[{ "node": "Check it came from FormCraft", "type": "main", "index": 0 }]]
+    },
+    "Check it came from FormCraft": {
+      "main": [[{ "node": "Your steps here", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {}
+}

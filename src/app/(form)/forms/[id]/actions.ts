@@ -1,5 +1,6 @@
 "use server";
 
+import { trackAccountEvent } from "@/lib/analytics/account-events";
 import { rateLimit } from "@/domains/abuse/limit";
 
 import { recordAudit } from "@/domains/audit/record";
@@ -157,6 +158,20 @@ export async function publishAction(formId: string): Promise<PublishResult> {
       actorId: user.id,
       metadata: { version: result.versionNumber },
     });
+    // Activation (foundations §2): the workspace's first form goes live.
+    const { count: everPublished } = await admin
+      .from("form_versions")
+      .select("id, forms!inner(workspace_id)", { count: "exact", head: true })
+      .eq("forms.workspace_id", workspace.id)
+      .in("status", ["published", "archived"]);
+    if (everPublished === 1) {
+      void trackAccountEvent({
+        event: "workspace_activated",
+        distinctId: user.id,
+        workspaceId: workspace.id,
+        properties: { formId },
+      });
+    }
     return { ok: true, publishedVersionNumber: result.versionNumber };
   } catch (error) {
     if (error instanceof FormSchemaError) {

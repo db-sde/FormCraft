@@ -1,5 +1,6 @@
 "use client";
 
+import { AddressLookupContext } from "@/components/runtime/address-lookup";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import { compileFormSchema } from "@/domains/forms/schema/compile";
@@ -1048,35 +1049,39 @@ export function PublicFormRuntime({
             onRedirect={(url) => paying.resolve({ redirect: url })}
           />
         )}
-        <FormRenderer
-          compiled={shown}
-          language={language}
-          initialAnswers={
-            resumed?.answers ?? (Object.keys(prefilled).length ? prefilled : undefined)
-          }
-          initialQuestionId={resumed?.lastQuestionId}
-          initialHistory={resumed?.history}
-          welcomeBack={!!resumed && !!resumed.lastQuestionId}
-          hidden={shownHidden}
-          seed={resumed?.seed ?? freshSeed}
-          brandingRemovable={brandingRemovable}
-          schedulingAllowed={schedulingAllowed}
-          redirectOnEnding
-          onAnswerChange={handleAnswerChange}
-          onComplete={handleComplete}
-          getResponseId={() => ensureSession().then((s) => s.responseId)}
-          savesProgress={savesProgress}
-          onStepEvent={sendStepEvent}
-          followUps={followUps}
-          known={resumed ? known : knownForRuntime}
-          lookups={lookups}
-          onFinishLater={resumeLinks && savesProgress && !kiosk ? finishLater : undefined}
-          notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
-          // Embedded: natural height, reported to the host page so its
-          // iframe grows/shrinks to fit (full-viewport height would pin the
-          // iframe at whatever size it started with).
-          className={embedded ? "min-h-[480px]" : "min-h-dvh"}
-        />
+        <AddressLookupContext.Provider value={{ formId, language }}>
+          <FormRenderer
+            compiled={shown}
+            language={language}
+            initialAnswers={
+              resumed?.answers ?? (Object.keys(prefilled).length ? prefilled : undefined)
+            }
+            initialQuestionId={resumed?.lastQuestionId}
+            initialHistory={resumed?.history}
+            welcomeBack={!!resumed && !!resumed.lastQuestionId}
+            hidden={shownHidden}
+            seed={resumed?.seed ?? freshSeed}
+            brandingRemovable={brandingRemovable}
+            schedulingAllowed={schedulingAllowed}
+            redirectOnEnding
+            onAnswerChange={handleAnswerChange}
+            onComplete={handleComplete}
+            getResponseId={() => ensureSession().then((s) => s.responseId)}
+            savesProgress={savesProgress}
+            onStepEvent={sendStepEvent}
+            followUps={followUps}
+            known={resumed ? known : knownForRuntime}
+            lookups={lookups}
+            onFinishLater={
+              resumeLinks && savesProgress && !kiosk ? finishLater : undefined
+            }
+            notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
+            // Embedded: natural height, reported to the host page so its
+            // iframe grows/shrinks to fit (full-viewport height would pin the
+            // iframe at whatever size it started with).
+            className={embedded ? "min-h-[480px]" : "min-h-dvh"}
+          />
+        </AddressLookupContext.Provider>
       </div>
     </OrdersChargedProvider>
   );

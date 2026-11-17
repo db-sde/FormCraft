@@ -12,6 +12,7 @@ import {
   outboundUrlProblem,
   resolvesToDisallowedAddress,
   isSlackWebhookUrl,
+  WEBHOOK_EVENTS,
 } from "@/domains/webhooks";
 import { z } from "zod";
 import { EntitlementError, requireFeature, type Feature } from "@/domains/billing";
@@ -46,7 +47,11 @@ export type CreateWebhookResult =
 export async function createWebhookEndpointAction(
   formId: string,
   url: string,
+  /** "n8n": the production URL of an n8n Webhook node (F-49). */
+  kind: "webhook" | "n8n" = "webhook",
 ): Promise<CreateWebhookResult> {
+  if (kind !== "webhook" && kind !== "n8n")
+    return { ok: false, message: "Unknown kind." };
   if (!url || url.length > MAX_URL_LENGTH) {
     return { ok: false, message: "Enter a URL." };
   }
@@ -76,19 +81,19 @@ export async function createWebhookEndpointAction(
 
   const { supabase, user, workspace } = await getCurrentWorkspace();
   try {
-    const result = await createWebhookEndpoint(supabase, formId, url);
+    const result = await createWebhookEndpoint(supabase, formId, url, { kind });
     await recordAudit({
       workspaceId: workspace.id,
       actorId: user.id,
       action: "integration.connected",
       target: { type: "form", id: formId },
-      metadata: { provider: "webhook", host: parsed.hostname },
+      metadata: { provider: kind, host: parsed.hostname },
     });
     revalidatePath(`/forms/${formId}/integrations`);
     trackEvent({
       formId,
       eventType: "integration_connected",
-      metadata: { provider: "webhook" },
+      metadata: { provider: kind },
     });
     return {
       ok: true,
@@ -100,6 +105,54 @@ export async function createWebhookEndpointAction(
   } catch {
     return { ok: false, message: "Failed to add webhook. Please try again." };
   }
+}
+
+const EventsInput = z.object({
+  events: z.array(z.enum(WEBHOOK_EVENTS)).min(1, "Choose at least one event.").max(4),
+  abandonAfterMinutes: z.number().int().min(5).max(1440),
+});
+
+/** What an endpoint is sent (F-53): completed responses, and optionally
+ * unfinished ones (saved, abandoned after an idle time, resumed). The
+ * unfinished ones only flow for forms that keep unfinished responses. */
+export async function setWebhookEventsAction(
+  formId: string,
+  endpointId: string,
+  input: z.input<typeof EventsInput>,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const parsed = EventsInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the events." };
+  }
+  const { supabase, workspace } = await getCurrentWorkspace();
+  if (
+    !canEdit(workspace.role) ||
+    !(await hasPermission(supabase, workspace.id, "manage_integrations"))
+  ) {
+    return { ok: false, message: "You can't change this form's integrations." };
+  }
+  const { data: endpoint } = await supabase
+    .from("webhook_endpoints")
+    .select("id, kind, config")
+    .eq("id", endpointId)
+    .eq("form_id", formId)
+    .maybeSingle();
+  if (!endpoint || (endpoint.kind !== "webhook" && endpoint.kind !== "n8n")) {
+    return { ok: false, message: "Webhook not found." };
+  }
+  const { error } = await supabase
+    .from("webhook_endpoints")
+    .update({
+      config: {
+        ...((endpoint.config ?? {}) as Record<string, unknown>),
+        events: parsed.data.events,
+        abandonAfterMinutes: parsed.data.abandonAfterMinutes,
+      },
+    })
+    .eq("id", endpointId);
+  if (error) return { ok: false, message: "Couldn't save. Please try again." };
+  revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
 }
 
 export async function setWebhookEnabledAction(

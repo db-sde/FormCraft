@@ -8,6 +8,7 @@ import {
   type AddressField,
 } from "@/domains/forms/schema/question-types";
 import { cn } from "cn";
+import { useAddressSuggestions } from "./address-lookup";
 
 const UNDERLINE =
   "fc-input w-full min-w-0 rounded-none border-0 border-b-2 border-(--st-line) bg-transparent py-1.5 text-[calc(var(--st-input)*0.82)] text-(--st-text) outline-none placeholder:text-(--st-muted) focus:border-(--st-primary) focus-visible:shadow-none aria-invalid:border-[#c8372d]";
@@ -45,6 +46,21 @@ export function AddressInput({
 }) {
   const parts = asRecord(value);
   const { fields, requiredFields } = question.settings;
+  // Suggestions as they type the first line (F-65), when switched on.
+  const places = useAddressSuggestions(question.id, !!question.settings.autocomplete);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const listId = `${idPrefix}-suggestions`;
+  const open = places.active && places.suggestions.length > 0;
+  async function choose(placeId: string) {
+    setActiveSuggestion(-1);
+    const found = await places.pick(placeId);
+    if (!found) return;
+    // Only the parts this question asks for; what Google doesn't know
+    // (a flat number, say) stays as typed.
+    const next: Record<string, unknown> = { ...parts };
+    for (const field of fields) if (found[field]) next[field] = found[field];
+    onChange(next);
+  }
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {fields.map((field, index) => {
@@ -68,16 +84,58 @@ export function AddressInput({
               id={id}
               dir="auto"
               autoFocus={autoFocus && index === 0}
-              autoComplete={ADDRESS_AUTOCOMPLETE[field]}
+              autoComplete={
+                field === "line1" && places.active ? "off" : ADDRESS_AUTOCOMPLETE[field]
+              }
               maxLength={200}
               required={required}
               value={typeof parts[field] === "string" ? (parts[field] as string) : ""}
+              {...(field === "line1" && places.active
+                ? {
+                    role: "combobox",
+                    "aria-autocomplete": "list" as const,
+                    "aria-expanded": open,
+                    "aria-controls": listId,
+                    "aria-activedescendant":
+                      open && activeSuggestion >= 0
+                        ? `${listId}-${activeSuggestion}`
+                        : undefined,
+                  }
+                : {})}
               onChange={(e) => {
                 const next = { ...parts, [field]: e.target.value };
                 if (!e.target.value) delete next[field];
                 onChange(Object.keys(next).length ? next : undefined);
+                if (field === "line1") {
+                  setActiveSuggestion(-1);
+                  places.search(e.target.value);
+                }
+              }}
+              onBlur={() => {
+                // After a click on a suggestion has landed.
+                if (field === "line1") setTimeout(places.close, 150);
               }}
               onKeyDown={(e) => {
+                if (field === "line1" && open) {
+                  const count = places.suggestions.length;
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setActiveSuggestion((i) =>
+                      e.key === "ArrowDown" ? (i + 1) % count : (i - 1 + count) % count,
+                    );
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    places.close();
+                    return;
+                  }
+                  if (e.key === "Enter" && activeSuggestion >= 0) {
+                    e.preventDefault();
+                    void choose(places.suggestions[activeSuggestion].placeId);
+                    return;
+                  }
+                }
                 // Enter moves through the parts; on the last one it reaches
                 // the form (next question / page).
                 if (e.key !== "Enter" || index === fields.length - 1) return;
@@ -86,6 +144,38 @@ export function AddressInput({
               }}
               className={UNDERLINE}
             />
+            {field === "line1" && open && (
+              <div className="relative">
+                <div className="absolute top-1 right-0 left-0 z-10 overflow-hidden rounded-(--st-tile-br) border-[1.5px] border-(--st-line) bg-(--st-bg) shadow-lg">
+                  <ul id={listId} role="listbox" aria-label="Address suggestions">
+                    {places.suggestions.map((s, i) => (
+                      <li
+                        key={s.placeId}
+                        id={`${listId}-${i}`}
+                        role="option"
+                        aria-selected={i === activeSuggestion}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => void choose(s.placeId)}
+                        className={cn(
+                          "cursor-pointer px-3 py-2 text-[15px] text-(--st-text)",
+                          i === activeSuggestion && "bg-(--st-line)",
+                        )}
+                      >
+                        {s.text}
+                        {s.secondary && (
+                          <span className="ml-1.5 text-[13px] text-(--st-muted)">
+                            {s.secondary}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="px-3 py-1 text-right text-[11px] text-(--st-muted)">
+                    Suggestions from Google Maps
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

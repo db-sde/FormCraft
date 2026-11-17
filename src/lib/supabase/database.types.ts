@@ -199,6 +199,9 @@ export type Database = {
           created_at: string;
           id: number;
           metadata: Json;
+          outcome: string;
+          reason: string | null;
+          request_id: string | null;
           target_id: string | null;
           target_type: string | null;
           workspace_id: string;
@@ -210,6 +213,9 @@ export type Database = {
           created_at?: string;
           id?: never;
           metadata?: Json;
+          outcome?: string;
+          reason?: string | null;
+          request_id?: string | null;
           target_id?: string | null;
           target_type?: string | null;
           workspace_id: string;
@@ -220,6 +226,9 @@ export type Database = {
           created_at?: string;
           id?: never;
           metadata?: Json;
+          outcome?: string;
+          reason?: string | null;
+          request_id?: string | null;
           target_id?: string | null;
           target_type?: string | null;
           workspace_id?: string;
@@ -1534,6 +1543,7 @@ export type Database = {
       payment_attempts: {
         Row: {
           amount: number;
+          checked_at: string | null;
           checkout_url: string | null;
           coupon_code: string | null;
           coupon_id: string | null;
@@ -1555,6 +1565,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           amount: number;
+          checked_at?: string | null;
           checkout_url?: string | null;
           coupon_code?: string | null;
           coupon_id?: string | null;
@@ -1575,6 +1586,7 @@ export type Database = {
         };
         Update: {
           amount?: number;
+          checked_at?: string | null;
           checkout_url?: string | null;
           coupon_code?: string | null;
           coupon_id?: string | null;
@@ -2703,6 +2715,7 @@ export type Database = {
         Row: {
           attempt_count: number;
           created_at: string;
+          dedupe_key: string;
           endpoint_id: string;
           event_id: string;
           event_type: string;
@@ -2718,6 +2731,7 @@ export type Database = {
         Insert: {
           attempt_count?: number;
           created_at?: string;
+          dedupe_key?: string;
           endpoint_id: string;
           event_id?: string;
           event_type: string;
@@ -2732,6 +2746,7 @@ export type Database = {
         Update: {
           attempt_count?: number;
           created_at?: string;
+          dedupe_key?: string;
           endpoint_id?: string;
           event_id?: string;
           event_type?: string;
@@ -2949,6 +2964,71 @@ export type Database = {
           },
         ];
       };
+      workspace_templates: {
+        Row: {
+          category: string;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          id: string;
+          schema: Json;
+          source_form_id: string | null;
+          title: string;
+          updated_at: string;
+          visibility: string;
+          workspace_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          category?: string;
+          created_at?: string;
+          created_by: string;
+          description?: string | null;
+          id?: string;
+          schema: Json;
+          source_form_id?: string | null;
+          title: string;
+          updated_at?: string;
+          visibility?: string;
+          workspace_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          created_by?: string;
+          description?: string | null;
+          id?: string;
+          schema?: Json;
+          source_form_id?: string | null;
+          title?: string;
+          updated_at?: string;
+          visibility?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workspace_templates_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspace_templates_source_form_id_fkey";
+            columns: ["source_form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspace_templates_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       workspaces: {
         Row: {
           created_at: string;
@@ -3085,6 +3165,7 @@ export type Database = {
         Returns: {
           attempt_count: number;
           created_at: string;
+          dedupe_key: string;
           endpoint_id: string;
           event_id: string;
           event_type: string;
@@ -3128,6 +3209,7 @@ export type Database = {
         Returns: {
           attempt_count: number;
           created_at: string;
+          dedupe_key: string;
           endpoint_id: string;
           event_id: string;
           event_type: string;
@@ -3299,6 +3381,15 @@ export type Database = {
         }[];
       };
       mfa_satisfied: { Args: Record<PropertyKey, never>; Returns: boolean };
+      payment_attempts_to_reconcile: {
+        Args: { p_limit: number };
+        Returns: {
+          id: string;
+          provider: string;
+          provider_ref: string;
+          response_id: string;
+        }[];
+      };
       prune_operational_data: { Args: { p_batch?: number }; Returns: Json };
       publish_form_version: {
         Args: { compiled_schema: Json; target_form_id: string };
@@ -3371,6 +3462,14 @@ export type Database = {
           status: Database["public"]["Enums"]["response_status"];
         }[];
       };
+      responses_due_abandoned_event: {
+        Args: { p_limit: number };
+        Returns: {
+          endpoint_id: string;
+          last_active_at: string;
+          response_id: string;
+        }[];
+      };
       responses_missing_connector_sync: {
         Args: { p_limit: number };
         Returns: {
@@ -3422,6 +3521,15 @@ export type Database = {
         }[];
       };
       shares_workspace_with: { Args: { target_user_id: string }; Returns: boolean };
+      spend_usage: {
+        Args: {
+          p_amount?: number;
+          p_limit: number;
+          p_metric: string;
+          p_workspace_id: string;
+        };
+        Returns: number;
+      };
       sso_satisfied: { Args: { target_workspace_id: string }; Returns: boolean };
       unpublish_form: { Args: { target_form_id: string }; Returns: undefined };
       unschedule_background_jobs: {
@@ -3429,6 +3537,10 @@ export type Database = {
         Returns: undefined;
       };
       valid_embed_origins: { Args: { p_origins: string[] }; Returns: boolean };
+      webhook_endpoint_wants: {
+        Args: { p_config: Json; p_event: string };
+        Returns: boolean;
+      };
       workspace_role_for: {
         Args: { target_workspace_id: string };
         Returns: Database["public"]["Enums"]["workspace_role"];

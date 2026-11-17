@@ -101,6 +101,14 @@ export const PipedriveSettings = z.object({
   target: z.enum(["person", "lead"]),
 });
 
+/** Google Drive (F-50): where a response's files go. */
+export const GoogleDriveSettings = z.object({
+  /** A folder FormCraft made, or "new": one made for this form. */
+  folderId: id,
+  /** A folder per response inside it, so files stay together. */
+  perResponseFolder: z.boolean().default(true),
+});
+
 export const SETTINGS_SCHEMAS = {
   airtable: AirtableSettings,
   salesforce: SalesforceSettings,
@@ -108,6 +116,7 @@ export const SETTINGS_SCHEMAS = {
   mailchimp: MailchimpSettings,
   zoho_crm: ZohoSettings,
   pipedrive: PipedriveSettings,
+  google_drive: GoogleDriveSettings,
 } as const;
 
 export type AppInfo = {
@@ -277,6 +286,32 @@ export const APPS: AppInfo[] = [
     dedupe: "People are matched by email and updated; a response makes at most one lead.",
   },
 ];
+
+APPS.push({
+  provider: "google_drive",
+  label: "Google Drive",
+  description:
+    "Copy each response's uploaded files into a Drive folder. FormCraft only sees the folders it makes there.",
+  noun: "file",
+  settings: [
+    {
+      key: "folderId",
+      label: "Folder",
+      kind: "choice",
+      source: "folders",
+      help: "A new folder for this form, or one FormCraft made for another.",
+    },
+    {
+      key: "perResponseFolder",
+      label: "A folder for each response",
+      kind: "switch",
+      help: "Keeps each response's files together.",
+    },
+  ],
+  fieldsNeed: [],
+  dedupe:
+    "Each file is copied once, even when a sync is retried. Files stay private unless you share the folder, and stay in Drive if the response is deleted here.",
+});
 
 export function appInfo(provider: string): AppInfo | null {
   return APPS.find((a) => a.provider === provider) ?? null;

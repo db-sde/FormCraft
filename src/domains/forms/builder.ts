@@ -42,6 +42,9 @@ const DEFAULT_LABEL: Record<QuestionType, string> = {
   signature: "Sign here",
   products: "What would you like to order?",
   booking: "Pick a time",
+  date_range: "When will you be staying?",
+  consent: "Before you start",
+  repeat_group: "Who's coming?",
 };
 
 /** Type-appropriate default `settings`, matching each type's Zod
@@ -117,6 +120,24 @@ function defaultSettings(type: QuestionType): QuestionV1["settings"] {
       return { consentText: "By signing, I confirm the information above is correct." };
     case "booking":
       return {};
+    case "date_range":
+      return { count: "days" };
+    case "repeat_group":
+      return {
+        fields: [
+          { id: newId("f"), type: "short_text", label: "Name", required: true },
+          { id: newId("f"), type: "email", label: "Email", required: false },
+        ],
+        minEntries: 1,
+        maxEntries: 10,
+        entryLabel: "Guest",
+      };
+    case "consent":
+      return {
+        content:
+          "## How we use your answers\n\nWe use what you tell us to reply to you. We don't sell it.",
+        acknowledgeLabel: "I have read and accept this notice",
+      };
     case "products":
       return {
         currency: "USD",
@@ -375,7 +396,10 @@ export function availableOperators(type: QuestionType): LogicOperator[] {
     type === "matrix" ||
     type === "ranking" ||
     type === "time" ||
-    type === "datetime"
+    type === "datetime" ||
+    type === "date_range" ||
+    type === "consent" ||
+    type === "repeat_group"
   )
     return answered;
   if (type === "multi_select") return [...answered, "contains"];

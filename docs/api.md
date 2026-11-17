@@ -179,7 +179,23 @@ Endpoints have a `kind`: `webhook` (signed JSON, below), `slack` (a
 Slack incoming-webhook URL — only `https://hooks.slack.com/…`; the body
 is a Slack message with the form title, the chosen answers and a link to
 the response; file answers are never linked), `zapier` / `make` (made
-through the API). All share the delivery queue and retry schedule.
+through the API), `n8n` (an n8n Webhook node's URL, signed like
+`webhook`; setup in `docs/n8n.md`). All share the delivery queue and
+retry schedule.
+
+**Events (F-53).** `webhook` and `n8n` endpoints choose their events in
+`config.events`; without a list they get `response.completed` only:
+
+| Event                    | When                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------- |
+| `response.completed`     | A response is submitted.                                                                |
+| `response.partial_saved` | Answers saved before submitting; one per response per 10 minutes, sent a minute later.  |
+| `response.abandoned`     | No activity for `config.abandonAfterMinutes` (5–1440, default 30); once per idle spell. |
+| `response.resumed`       | Activity again after an abandoned event.                                                |
+
+Unfinished-response events are only sent for forms that keep unfinished
+responses. Their payload has `submittedAt: null`, plus `occurredAt`,
+`status` and `lastQuestionId`. `eventId` is stable across retries.
 
 `POST /api/webhooks/test` — send a synthetic test payload to a
 configured endpoint (auth required, workspace-scoped).

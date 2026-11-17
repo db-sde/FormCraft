@@ -1,11 +1,27 @@
 import type { AnswerMap } from "@/domains/logic";
 
+/** What an endpoint can be sent (F-53). Without its own list an endpoint
+ * gets completed responses only. */
+export const WEBHOOK_EVENTS = [
+  "response.completed",
+  "response.partial_saved",
+  "response.abandoned",
+  "response.resumed",
+] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
 export type WebhookPayload = {
   eventId: string;
-  eventType: "response.completed";
+  eventType: WebhookEvent;
   formId: string;
   responseId: string;
-  submittedAt: string;
+  /** When it was submitted; null for an event about an unfinished one. */
+  submittedAt: string | null;
+  /** Unfinished-response events: when it happened, the response's state
+   * and the last question reached. */
+  occurredAt?: string;
+  status?: "in_progress" | "partial" | "completed";
+  lastQuestionId?: string | null;
   endingId: string | null;
   answers: AnswerMap;
   /** Computed results (scores, totals, segments), by variable name. */

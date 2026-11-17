@@ -20,13 +20,16 @@ import {
   stateAt,
   validateAnswer,
   walkForm,
+  afterReviewEdit,
   type AnswerMap,
   type RecallSource,
 } from "@/domains/logic";
 import { cn } from "cn";
 import { usePendingSaves } from "./pending-saves";
 import { RuntimeStringsContext } from "./runtime-strings";
+import { UploadNamesContext } from "./upload-names";
 import { RuntimeQuestionInput } from "./runtime-question-input";
+import { ReviewScreen } from "./review-screen";
 import {
   EndingScreen,
   FinishLater,
@@ -135,6 +138,14 @@ export function ClassicFormRuntime({
   const pendingSaves = usePendingSaves();
   const advanceWhenSavedRef = useRef(false);
   const [ending, setEnding] = useState<EndingV1 | null>(null);
+  // The review before submitting (F-60), and whether the page on screen
+  // was opened from it (its button then goes back to the review).
+  const [reviewing, setReviewing] = useState(false);
+  const [editingFromReview, setEditingFromReview] = useState(false);
+  const reviewShownRef = useRef<Set<string>>(new Set());
+  // Names of files uploaded in this visit, for the review (F-60).
+  const [uploadNames] = useState(() => new Map<string, string>());
+  const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [endingRecall, setEndingRecall] = useState<RecallSource | null>(null);
   const [completedResponseId, setCompletedResponseId] = useState<string | undefined>();
   const ranLookupsRef = useRef(new Set<string>());
@@ -249,10 +260,14 @@ export function ClassicFormRuntime({
     // The server's answer is final: take the respondent to the page of the
     // first question it rejected, with each message under its question.
     const rejected = outcome.errors ?? [];
+    if (rejected.length > 0 && reviewing) {
+      setReviewing(false);
+      setEditingFromReview(true);
+    }
     if (rejected.length > 0) {
       const target = pageOf(pages, rejected[0].questionId);
       setErrors(Object.fromEntries(rejected.map((e) => [e.questionId, e.message])));
-      if (target >= 0 && target !== pageIndex) {
+      if (target >= 0 && (target !== pageIndex || reviewing)) {
         setPageStack((stack) => stack.filter((i) => i < target));
         setPageIndex(target);
       } else {
@@ -306,7 +321,32 @@ export function ClassicFormRuntime({
         onStepEvent?.("question_answered", id);
       }
     }
+    if (editingFromReview) {
+      // Changed from the review: run the logic again over every answer;
+      // back to the review, or to the page of the first question the new
+      // path still needs (F-60).
+      const after = afterReviewEdit(
+        compiled,
+        answers,
+        new Set([...reviewShownRef.current, ...shown]),
+        engineOptions,
+      );
+      if (after.kind === "review") {
+        openReview(after.path);
+        return;
+      }
+      const target = pageOf(pages, after.questionId);
+      if (target >= 0 && target !== pageIndex) {
+        setPageStack(pagesBefore(target));
+        setPageIndex(target);
+        return;
+      }
+    }
     if (isLastPage) {
+      if (compiled.schema.meta.reviewStep) {
+        openReview(walk.visitedQuestionIds);
+        return;
+      }
       void finish(answers, walk.endingId);
       return;
     }
@@ -318,6 +358,32 @@ export function ClassicFormRuntime({
       shownOnPage(pages[nextIndex], onPath)[0] ?? pages[nextIndex].ids[0],
       historyFor(stack),
     );
+  }
+
+  /** The pages on the path before `target`: what Back walks through. */
+  function pagesBefore(target: number): number[] {
+    return pages
+      .map((_, i) => i)
+      .filter((i) => i < target && shownOnPage(pages[i], onPath).length > 0);
+  }
+
+  function openReview(path: string[]) {
+    reviewShownRef.current = new Set(path);
+    setEditingFromReview(false);
+    setFormError(null);
+    setReviewing(true);
+  }
+
+  function editFromReview(questionId: string) {
+    if (submitting) return;
+    const target = pageOf(pages, questionId);
+    if (target < 0) return;
+    setReviewing(false);
+    setEditingFromReview(true);
+    setPageStack(pagesBefore(target));
+    setPageIndex(target);
+    // Once the page is drawn, to the question itself.
+    setTimeout(() => focusQuestion(questionId), 0);
   }
 
   function goBack() {
@@ -375,6 +441,9 @@ export function ClassicFormRuntime({
   useEffect(() => {
     if (ending) endingHeadingRef.current?.focus({ preventScroll: true });
   }, [ending]);
+  useEffect(() => {
+    if (reviewing) reviewHeadingRef.current?.focus({ preventScroll: true });
+  }, [reviewing]);
 
   const theme = compiled.schema.theme;
 
@@ -421,112 +490,148 @@ export function ClassicFormRuntime({
 
   return (
     <RuntimeStringsContext.Provider value={t}>
-      <Stage
-        ref={stageRef}
-        theme={theme}
-        mode={mode}
-        progress={
-          contentPages.length > 1 && compiled.schema.theme.showProgress !== false
-            ? position / contentPages.length
-            : undefined
-        }
-        banner={
-          notice && pageStack.length === 0 ? (
-            <NoticeBanner>{notice}</NoticeBanner>
-          ) : welcomeBack && pageStack.length === 0 ? (
-            <WelcomeBackBanner text={t.welcomeBack} />
-          ) : undefined
-        }
-        className={cn("fc-classic min-h-[420px]", className)}
-        contentClassName="gap-8 py-6"
-      >
-        {/* Spam trap: see FormRuntime. */}
-        <input
-          type="text"
-          name="zq7_hp"
-          tabIndex={-1}
-          autoComplete="off"
-          aria-hidden="true"
-          data-lpignore="true"
-          data-1p-ignore="true"
-          data-bwignore="true"
-          data-form-type="other"
-          className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
-        />
-        {heading && (
-          <header className="flex flex-col gap-2">
-            <h1 ref={pageHeadingRef} tabIndex={-1} className={PAGE_TITLE}>
-              {heading}
-            </h1>
-            {page.description && <p className={stageDescClass}>{page.description}</p>}
-          </header>
-        )}
-        {shown.map((id, i) => {
-          const question = byId.get(id);
-          if (!question) return null;
-          return (
-            <ClassicItem
-              key={id}
-              question={question}
-              headingRef={!heading && i === 0 ? pageHeadingRef : undefined}
-              label={recall(question.label, id) ?? ""}
-              description={recall(question.description, id)}
-              input={
-                <RuntimeQuestionInput
-                  question={withDisplayOrder(question, seed, answers)}
-                  value={answers[id]}
-                  onChange={(value) => setAnswer(id, value)}
-                  getResponseId={getResponseId}
-                  invalid={!!errors[id]}
-                  autoFocus={false}
-                  idPrefix={`fc-${id}`}
-                />
-              }
-              error={errors[id]}
+      <UploadNamesContext.Provider value={uploadNames}>
+        <Stage
+          ref={stageRef}
+          theme={theme}
+          mode={mode}
+          progress={
+            contentPages.length > 1 && compiled.schema.theme.showProgress !== false
+              ? position / contentPages.length
+              : undefined
+          }
+          progressLabel={pageProgressText(
+            position,
+            contentPages.length,
+            compiled.schema.theme.progressLabel ?? "none",
+          )}
+          banner={
+            notice && pageStack.length === 0 ? (
+              <NoticeBanner>{notice}</NoticeBanner>
+            ) : welcomeBack && pageStack.length === 0 ? (
+              <WelcomeBackBanner text={t.welcomeBack} />
+            ) : undefined
+          }
+          className={cn("fc-classic min-h-[420px]", className)}
+          contentClassName="gap-8 py-6"
+        >
+          {/* Spam trap: see FormRuntime. */}
+          <input
+            type="text"
+            name="zq7_hp"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+            className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
+          />
+          {reviewing ? (
+            <ReviewScreen
+              ref={reviewHeadingRef}
+              compiled={compiled}
+              path={walk.visitedQuestionIds}
+              answers={answers}
+              onEdit={editFromReview}
+              onBack={() => setReviewing(false)}
+              onSubmit={() => void finish(answers, walk.endingId)}
+              submitting={submitting}
+              error={formError}
+              recall={(text) => text}
             />
-          );
-        })}
+          ) : (
+            <>
+              {heading && (
+                <header className="flex flex-col gap-2">
+                  <h1 ref={pageHeadingRef} tabIndex={-1} className={PAGE_TITLE}>
+                    {heading}
+                  </h1>
+                  {page.description && (
+                    <p className={stageDescClass}>{page.description}</p>
+                  )}
+                </header>
+              )}
+              {shown.map((id, i) => {
+                const question = byId.get(id);
+                if (!question) return null;
+                return (
+                  <ClassicItem
+                    key={id}
+                    question={question}
+                    headingRef={!heading && i === 0 ? pageHeadingRef : undefined}
+                    label={recall(question.label, id) ?? ""}
+                    description={recall(question.description, id)}
+                    input={
+                      <RuntimeQuestionInput
+                        question={withDisplayOrder(question, seed, answers)}
+                        value={answers[id]}
+                        onChange={(value) => setAnswer(id, value)}
+                        getResponseId={getResponseId}
+                        invalid={!!errors[id]}
+                        autoFocus={false}
+                        idPrefix={`fc-${id}`}
+                      />
+                    }
+                    error={errors[id]}
+                  />
+                );
+              })}
 
-        {formError && <StageError>{formError}</StageError>}
-        <div className="flex flex-wrap items-center gap-3">
-          {pageStack.length > 0 && (
-            <button
-              type="button"
-              onClick={goBack}
-              disabled={submitting || thinking}
-              className="fc-back h-(--st-btn-h) rounded-(--st-br) border-[1.5px] border-(--st-line) px-5 font-semibold disabled:opacity-50"
-            >
-              {t.back}
-            </button>
+              {formError && <StageError>{formError}</StageError>}
+              <div className="flex flex-wrap items-center gap-3">
+                {pageStack.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    disabled={submitting || thinking}
+                    className="fc-back h-(--st-btn-h) rounded-(--st-br) border-[1.5px] border-(--st-line) px-5 font-semibold disabled:opacity-50"
+                  >
+                    {t.back}
+                  </button>
+                )}
+                <StageButton
+                  onClick={goNext}
+                  disabled={submitting || thinking}
+                  aria-busy={submitting || thinking || undefined}
+                  className="px-[26px] in-data-[mode=phone]:flex-1 max-md:in-data-[mode=auto]:flex-1"
+                >
+                  {(submitting || thinking) && (
+                    <span className="size-[15px] animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  )}
+                  {submitting
+                    ? "Submitting…"
+                    : thinking
+                      ? t.thinking
+                      : editingFromReview
+                        ? t.backToReview
+                        : isLastPage
+                          ? compiled.schema.meta.reviewStep
+                            ? t.reviewAnswers
+                            : t.submit
+                          : t.next}
+                </StageButton>
+                {contentPages.length > 1 && (
+                  <span className="text-[13px] text-(--st-muted)">
+                    Page {position + 1} of {contentPages.length}
+                  </span>
+                )}
+              </div>
+              {savesProgress && (
+                <p className="text-xs text-(--st-muted)">{t.savedAsYouGo}</p>
+              )}
+              {onFinishLater && anyAnswered && (
+                <FinishLater
+                  key={pageIndex}
+                  create={onFinishLater}
+                  label={t.finishLater}
+                />
+              )}
+            </>
           )}
-          <StageButton
-            onClick={goNext}
-            disabled={submitting || thinking}
-            aria-busy={submitting || thinking || undefined}
-            className="px-[26px] in-data-[mode=phone]:flex-1 max-md:in-data-[mode=auto]:flex-1"
-          >
-            {(submitting || thinking) && (
-              <span className="size-[15px] animate-spin rounded-full border-2 border-current border-t-transparent" />
-            )}
-            {submitting
-              ? "Submitting…"
-              : thinking
-                ? t.thinking
-                : isLastPage
-                  ? t.submit
-                  : t.next}
-          </StageButton>
-          {contentPages.length > 1 && (
-            <span className="text-[13px] text-(--st-muted)">
-              Page {position + 1} of {contentPages.length}
-            </span>
-          )}
-        </div>
-        {savesProgress && <p className="text-xs text-(--st-muted)">{t.savedAsYouGo}</p>}
-        {onFinishLater && anyAnswered && (
-          <FinishLater key={pageIndex} create={onFinishLater} label={t.finishLater} />
-        )}
-      </Stage>
+        </Stage>
+      </UploadNamesContext.Provider>
     </RuntimeStringsContext.Provider>
   );
 }
@@ -605,4 +710,24 @@ function ClassicItem({
       {error && <StageError>{error}</StageError>}
     </section>
   );
+}
+
+/** The classic layout counts pages, along the way the logic goes (F-51). */
+function pageProgressText(
+  position: number,
+  pageCount: number,
+  label: "none" | "percent" | "count" | "remaining",
+): string | null {
+  if (pageCount <= 1) return null;
+  const left = pageCount - position - 1;
+  switch (label) {
+    case "percent":
+      return `${Math.round((position / pageCount) * 100)}% complete`;
+    case "count":
+      return `Page ${position + 1} of ${pageCount}`;
+    case "remaining":
+      return left === 0 ? "Last page" : `${left} page${left === 1 ? "" : "s"} left`;
+    default:
+      return null;
+  }
 }

@@ -166,3 +166,24 @@ export function fetchRazorpayPayment(
 export function paymentSettled(p: Pick<RazorpayPayment, "status">): boolean {
   return p.status === "captured" || p.status === "refunded";
 }
+
+/** An order's payments (reconciliation, foundations §5). */
+export function fetchRazorpayOrderPayments(
+  secrets: Pick<RazorpaySecrets, "keyId" | "keySecret">,
+  orderId: string,
+  fetchImpl: typeof fetch = fetch,
+) {
+  if (!/^order_[A-Za-z0-9]{6,40}$/.test(orderId)) {
+    return Promise.resolve({
+      ok: false as const,
+      status: 400,
+      message: "Not an order id.",
+    });
+  }
+  return call<{ items: RazorpayPayment[] }>(
+    secrets,
+    `/v1/orders/${orderId}/payments`,
+    {},
+    fetchImpl,
+  );
+}

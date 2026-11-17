@@ -59,6 +59,8 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/[id]/uploads/[questionId]": "api-contract.spec.ts",
   "/api/responses/events": "api-contract.spec.ts",
   "/api/responses/view": "views-and-exit-save.spec.ts",
+  "/api/places": "features-49-68.spec.ts",
+  "/api/cron/payments": "api-contract.spec.ts",
   "/api/[...unknown]": "qa-run4.spec.ts",
   "/api/uploads/[uploadId]": "qa-run4.spec.ts",
   "/api/responses/[id]/claim": "qa-run5.spec.ts",

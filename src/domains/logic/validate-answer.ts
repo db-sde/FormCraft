@@ -15,6 +15,20 @@ import {
   timeFits,
 } from "./datetime";
 import { visibleText } from "./text";
+import {
+  entryName,
+  fieldAsQuestion,
+  fieldVisible,
+  groupEntries,
+  groupHasAnswer,
+  isBlankEntry,
+} from "@/domains/forms/repeat-group";
+import {
+  consentParts,
+  consentProblem,
+  dateRangeProblem,
+  rangeParts,
+} from "@/domains/forms/range-consent";
 
 /** Prefix for a free-text "Other" choice on single/multi-select, e.g.
  * `"other:Purple"`. Shared with formatAnswerValue and the runtime input
@@ -81,6 +95,14 @@ export function hasAnswer(question: QuestionV1, value: unknown): boolean {
   if (question.type === "products") {
     return typeof value === "object" && Object.keys(value).length > 0;
   }
+  if (question.type === "date_range") {
+    const parts = rangeParts(value);
+    return typeof parts?.start === "string" || typeof parts?.end === "string";
+  }
+  if (question.type === "consent") {
+    return consentParts(value)?.acknowledged === true;
+  }
+  if (question.type === "repeat_group") return groupHasAnswer(value);
   if (question.type === "matrix") {
     return (
       typeof value === "object" &&
@@ -355,6 +377,11 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
   if (question.type === "address") {
     return validateAddress(question.settings, value, question.required);
   }
+  // Required means the box is ticked; the optional opt-in never is.
+  if (question.type === "consent") {
+    const problem = consentProblem(question, value);
+    return problem ? fail(problem) : OK;
+  }
 
   if (!hasAnswer(question, value)) {
     return question.required ? fail("This question requires an answer.") : OK;
@@ -516,5 +543,56 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
 
     case "matrix":
       return validateMatrix(question, value);
+
+    case "date_range": {
+      const problem = dateRangeProblem(question, value, (iso) => displayDate(iso));
+      return problem ? fail(problem) : OK;
+    }
+
+    case "repeat_group":
+      return validateRepeatGroup(question, value);
   }
+}
+
+/** Each entry's showing fields checked as the questions they stand in
+ * for; a message names the entry and field ("Guest 2: Email: …"). */
+function validateRepeatGroup(
+  question: Extract<QuestionV1, { type: "repeat_group" }>,
+  value: unknown,
+): AnswerValidation {
+  if (!Array.isArray(value)) return fail("Add at least one entry.");
+  const entries = groupEntries(value);
+  if (entries.length !== value.length) return fail("Add at least one entry.");
+  const { fields, minEntries, maxEntries } = question.settings;
+  if (new Set(entries.map((e) => e.id)).size !== entries.length) {
+    return fail("Add at least one entry.");
+  }
+  const kept = entries.filter((e) => !isBlankEntry(e));
+  const word = question.settings.entryLabel?.trim().toLowerCase() || "entry";
+  const plural = (n: number) =>
+    `${n} ${
+      n === 1 ? word : /[^aeiou]y$/.test(word) ? `${word.slice(0, -1)}ies` : `${word}s`
+    }`;
+  if (kept.length < Math.max(minEntries, question.required ? 1 : 0)) {
+    return fail(`Add at least ${plural(Math.max(minEntries, 1))}.`);
+  }
+  if (kept.length > maxEntries) return fail(`Add at most ${plural(maxEntries)}.`);
+  for (const [index, entry] of entries.entries()) {
+    if (isBlankEntry(entry)) continue;
+    // Only this group's fields may be stored.
+    if (Object.keys(entry.values).some((k) => !fields.some((f) => f.id === k))) {
+      return fail(`${entryName(question, index)}: check this entry's answers.`);
+    }
+    for (const field of fields) {
+      if (!fieldVisible(field, entry.values, fields)) continue;
+      const check = validateAnswer(
+        fieldAsQuestion(question, field, entry.id),
+        entry.values[field.id],
+      );
+      if (!check.ok) {
+        return fail(`${entryName(question, index)}: ${field.label}: ${check.message}`);
+      }
+    }
+  }
+  return OK;
 }

@@ -180,7 +180,7 @@ export default async function IntegrationsPage({
     supabase
       .from("forms")
       .select(
-        "ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, payment_config, confidential",
+        "ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, payment_config, confidential, save_partial_responses",
       )
       .eq("id", formId)
       .single(),
@@ -247,7 +247,8 @@ export default async function IntegrationsPage({
         : null,
     };
   });
-  const endpoints = allEndpoints.filter((e) => e.kind === "webhook");
+  // Webhooks and n8n (F-49): the same signed requests.
+  const endpoints = allEndpoints.filter((e) => e.kind === "webhook" || e.kind === "n8n");
   const slackEndpoints = allEndpoints.filter((e) => e.kind === "slack");
   const schema = draft ? parseFormSchema(draft.schema) : null;
   let n = 0;
@@ -296,12 +297,13 @@ export default async function IntegrationsPage({
         icon={<Webhook />}
         tint="choice"
         title="Webhooks"
-        description="Send every completed response to your own server as a signed JSON request. A failed delivery never loses a response; it's always kept here too."
+        description="Send responses to your own server, or to an n8n workflow, as signed JSON requests. Completed ones by default; unfinished ones if you choose. A failed delivery never loses a response; it's always kept here too."
       >
         <WebhooksPanel
           formId={formId}
           initialEndpoints={endpoints}
           initialDeliveries={deliveriesByEndpoint}
+          keepsUnfinished={!!tracking?.save_partial_responses}
         />
       </Section>
 

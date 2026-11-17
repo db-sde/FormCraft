@@ -266,6 +266,7 @@ test("cron routes require the shared secret", async ({ request }) => {
     "/api/cron/sheets/dispatch",
     "/api/cron/digests",
     "/api/cron/connectors",
+    "/api/cron/payments",
   ]) {
     expect((await request.get(path)).status(), path).toBe(401);
     const authed = await request.get(path, {

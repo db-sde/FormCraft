@@ -1,3 +1,11 @@
+import { normalizeDateRange } from "@/domains/forms/range-consent";
+import {
+  fieldAsQuestion,
+  fieldVisible,
+  groupEntries,
+  isBlankEntry,
+} from "@/domains/forms/repeat-group";
+import { normalizeConsent } from "@/domains/forms/consent-record";
 import { validVariantTag } from "@/domains/forms/variant-tests";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
@@ -264,6 +272,41 @@ export function normalizeAnswer(question: QuestionV1, value: unknown): unknown {
       ? normalizePhone(value, question.settings.defaultCountry)
       : value;
   }
+  // A group: each entry's fields cleaned as the questions they stand in
+  // for; blank entries and fields an entry's own logic hides dropped
+  // (F-56).
+  if (question.type === "repeat_group") {
+    if (!Array.isArray(value)) return value;
+    const entries = groupEntries(value);
+    if (entries.length !== value.length) return value;
+    const { fields } = question.settings;
+    return entries
+      .filter((entry) => !isBlankEntry(entry))
+      .map((entry) => ({
+        id: entry.id,
+        values: Object.fromEntries(
+          Object.entries(entry.values)
+            .filter(([fieldId]) => {
+              const field = fields.find((f) => f.id === fieldId);
+              // Unknown fields are left for validation to refuse.
+              return !field || fieldVisible(field, entry.values, fields);
+            })
+            .map(([fieldId, v]) => {
+              const field = fields.find((f) => f.id === fieldId);
+              return [
+                fieldId,
+                field
+                  ? normalizeAnswer(fieldAsQuestion(question, field, entry.id), v)
+                  : v,
+              ];
+            }),
+        ),
+      }));
+  }
+  // The length is the server's own count, never the browser's (F-58).
+  if (question.type === "date_range") return normalizeDateRange(question, value);
+  // Which notice and when come from the server (F-62).
+  if (question.type === "consent") return normalizeConsent(question, value);
   if (question.type !== "contact_info") return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const record = value as Record<string, unknown>;

@@ -2289,6 +2289,14 @@ What changed, and why where it isn't obvious:
   "Start from scratch" on the templates page keeps the short starter.
   The opinion scale stays 0–10 (Typeform's default).
 
+## 2026-11-13 — QA run 8: builder labels, opinion scale confirmed
+
+- **Builder labels (FC5-05):** every builder setting's label and hint are
+  now tied to its field, so "Max length" (placeholder 10,000) can be found
+  by its name, by screen readers and test tools alike.
+- **Opinion scale stays 0–10**, confirmed by the product owner: it's the
+  NPS scale and Typeform's default. Creators can set 1–5 per question.
+
 ## 2026-11-13 — CI: database types regenerated, never hand-edited
 
 - **Why CI was red:** `database.types.ts` had been edited by hand (null
@@ -2305,12 +2313,180 @@ What changed, and why where it isn't obvious:
   generator marks NOT NULL json columns that way, which broke ~90 call
   sites for no gain (the database refuses a NULL there anyway).
 
-## 2026-11-13 — QA run 8: builder labels, opinion scale confirmed
+## 2026-11-13 — Table permissions stated in full (migration 61)
 
-- **Builder labels (FC5-05):** every builder setting's label and hint are
-  now tied to its field, so "Max length" (placeholder 10,000) can be found
-  by its name, by screen readers and test tools alike.
-- **Opinion scale stays 0–10**, confirmed by the product owner: it's the
-  NPS scale and Typeform's default. Creators can set 1–5 per question.
+- **Found by CI's first real run:** four permission tests passed locally
+  and failed on GitHub. A database built fresh from the migrations gave
+  `anon` and `authenticated` ALL privileges on every table; the local one
+  gave them nothing by default. The migrations only ever added grants and
+  assumed the strict default, which depends on the Supabase CLI version
+  and project settings.
+- **Effect where the default is open:** column-level limits don't hold
+  (a lookup's encrypted header, a webhook's secret, an SSO provider id),
+  and row-level security is the only guard on every table.
+- **Migration 61** takes everything from the two public roles, then
+  grants back exactly what the local database had (generated from it, not
+  retyped): 47 table grants, 7 column grants, 24 function grants. Default
+  privileges are revoked too, so a new table starts closed everywhere.
+  Leftover TRUNCATE / REFERENCES / TRIGGER / MAINTAIN go as well.
+- **Checked:** applied to the local database and to a second one built
+  from scratch; their permissions are then identical, entry for entry,
+  and who can call each function is unchanged. All integration tests pass
+  on both.
+- **Production is not changed by this commit.** Its permissions must be
+  checked, then the migration applied, by someone with owner access.
+
+## 2026-11-15 — Features 49–68: the 13 "Build Now" items
+
+Built: 49, 50, 51, 52, 53, 54, 56, 58, 60, 61, 62, 63, 65. Not started (Build
+Later, as decided): 55, 57, 59, 64, 66, 67, 68.
+
+- **F-54 hidden-field logic already existed** (conditions, scores and the
+  preview's simulated values). The gap found: a payment worked out from a
+  score could be moved by a value in the form's link. A payment's amount
+  now reads hidden fields at their defaults only; link values never set a
+  price or open anything (passwords, limits and access don't read them).
+- **F-51 progress:** the bar already existed. New: optional words beside it
+  (percentage, "Question 3 of 8", "5 questions left"), counted along the
+  path the logic predicts from the answers so far, so a skipped branch
+  doesn't leave it stuck. It's an estimate: a later answer can lengthen
+  the path. Never over 100%. Classic layouts count pages.
+- **F-63 auto-advance:** on by default as before; a form-level switch, and
+  a per-question override. Only single-choice types ever move on by
+  themselves; never the last step, never an invalid answer.
+- **F-58 date range:** answer `{ start, end, days }`, plain calendar days
+  (no time zone), `days` recounted by the server. Counted as days (both
+  ends) or nights. Limits: earliest/latest date, shortest/longest,
+  blocked weekdays and dates. Exports: three columns. Rules can use the
+  start, the end or the length.
+- **F-62 consent page:** a notice with light formatting (never HTML), a
+  box to tick (required when the question is) and an optional opt-in that
+  is never required. The server stamps the notice's version (a hash of
+  its exact wording, plus the creator's own version name) and the time it
+  saved the answer, which for a submitted response is the submit time.
+  It's a record of what was shown and ticked, not legal proof.
+- **F-60 review:** off unless switched on. Lists the answers on the path
+  taken, under the form's page-break sections, each with Edit. After an
+  edit the logic runs again over every answer: back to the review if the
+  new path is complete, else to the first question it still needs.
+  Questions marked sensitive show as dots. Files and signatures show as
+  "File uploaded" / "Signed" (only their names are on the server).
+- **F-56 repeatable groups:** a group of up to 10 fields of the simple
+  types (text, email, phone, URL, number, date, dropdown, yes/no), asked
+  once per entry, 0–50 entries. Files and signatures can't go in a group
+  (they're answers of their own, uploaded per question). A field may show
+  only when a field above it in the same entry says so; each entry's logic
+  is its own. Blank entries are dropped. Exports: one column per field,
+  entries as lines in order. Form-level rules can test "answered" only.
+- **F-61 custom templates:** a snapshot of a form's schema (questions,
+  logic, design, languages, variants) and nothing else. Responses,
+  integrations, webhooks, lookups, payment settings and keys live in their
+  own tables and are never copied. A form made from one gets fresh ids
+  throughout (every reference rewritten). "Only me" or "workspace";
+  editors and up save them; the creator or an admin changes or deletes
+  one. Migration 62.
+- **F-52 phone builder:** below 1024px the three columns are three tabs
+  (Questions, Edit, Settings); choosing anything opens it for editing.
+  Reordering by touch uses the always-visible move buttons. The "use a
+  bigger screen" page is gone. Native apps stay out of scope (#19).
+- **F-53 partial-response webhooks:** per endpoint, opt-in events:
+  answers saved (one per response per 10 minutes, sent a minute after the
+  first save with the latest answers), abandoned (once per idle spell,
+  idle time 5–1440 minutes, 30 by default), resumed (after an abandoned
+  event), completed (the default, as before). Only for forms that keep
+  unfinished responses, only for webhook and n8n endpoints, only
+  responses idle since the endpoint existed and within the last week.
+  Stable event ids; the queue's unique key now includes a dedupe key.
+  The recovery sweep only counts completed deliveries. Migration 63.
+- **F-49 n8n:** an n8n Webhook node's production URL, signed like any
+  webhook, with every F-53 event available, plus a sample workflow
+  (`public/n8n/`) that checks the signature. A published n8n community
+  node is a separate, later milestone.
+- **F-50 Google Drive:** the narrowest scope (drive.file): FormCraft only
+  sees folders and files it made. Files go to a folder made for the form
+  (found again by a hidden tag) or one it made for another form,
+  optionally a folder per response. Each file is tagged with its upload
+  id, so a retry never uploads it twice; resumable uploads (no 5 MB cap).
+  **Retention:** deleting a response in FormCraft doesn't delete its
+  copies in Drive; they belong to the Drive's owner. Needs the Google
+  OAuth client with the Drive API enabled. Migration 64.
+- **F-65 address suggestions:** Google Places (New), called from the
+  server so the key never reaches a browser; only for a live form whose
+  address question has it on; 60 searches per visitor per 10 minutes and
+  3,000 per form a day; session tokens; only address parts requested.
+  Countries can be limited. Any failure falls back to typing. Attribution
+  reads "Suggestions from Google Maps": to be checked against Google's
+  attribution rules before launch. Needs `GOOGLE_PLACES_API_KEY`.
+- **Migrations:** 62–64 are these features. Migration 61 (table
+  permissions, from the security work) is held back, uncommitted; if it
+  ships after these, it's renumbered to follow them.
+
+## 2026-11-17 — Features 49–68: the remaining acceptance gaps
+
+- **F-61 templates:** search, a category filter, rename (name and
+  category, by the creator) and duplicate (a private copy for whoever
+  copies it, editors and up). Categories are set when saving.
+- **F-60 review:** files uploaded in this visit are listed by name; after
+  a refresh the browser no longer knows the name and it says "File
+  uploaded" (the name is on the server, but the review never asks for
+  it, to keep the page from calling the server for it).
+- **F-52 phone builder:** reordering by dragging the grip works with a
+  finger or pen (pointer events; mouse drag is unchanged), alongside the
+  move buttons. The builder saves as soon as the connection comes back,
+  as well as on its 5-second retry.
+- **F-65 cost:** every address lookup (suggestions and the chosen
+  address) counts towards the workspace's monthly "Address lookups",
+  shown under Plan & usage. Budget, for the operator's Google account:
+  Places (New) Autocomplete is billed per session (suggestions + the
+  details call) at Google's current price list; the caps (60 per visitor
+  per 10 minutes, 3,000 per form a day) bound a form at about 3,000
+  lookups a day. Set a budget alert and a daily quota on the key in
+  Google Cloud too.
+- **F-50 Drive budget:** the Drive API has no per-call charge; Google's
+  default quota (about 12,000 requests a minute per project) is far above
+  what one file at a time needs. Each file costs 2 calls to upload plus
+  1–3 lookups.
+- **F-49 n8n:** setup guide in `docs/n8n.md`.
+- **Still unverified, needs credentials or an instance:** n8n (a live
+  instance), Google Drive and Google Places (real Google accounts). All
+  three pass against faithful fakes of their APIs.
+
+## 2026-11-17 — The five operational foundations (migration 65)
+
+1. **Common ids.** `user_id`, `workspace_id` and `form_id` were already
+   consistent. New: a **request id** per request, set by the proxy (Vercel's
+   own `x-vercel-id` when there, else a UUID; whatever a caller sends is
+   replaced) and returned as `X-Request-Id`. It's on error log lines and
+   Sentry tags, audit entries (`audit_logs.request_id`) and analytics
+   events (`requestId`). **No `subscription_id`:** there's no subscription
+   to identify. A plan is `workspaces.plan_id`, set by the operator; a
+   subscriptions table belongs with a billing checkout, which isn't
+   approved scope (CLAUDE.md rule 9). When it's built, its id joins this
+   list.
+2. **Event contract.** Two lists, each defined once: form-level product
+   events (`ANALYTICS_EVENT_TYPES`: views, starts, submissions,
+   publication, integration connected, exports) and account-level events
+   (`ACCOUNT_EVENTS` in `src/lib/analytics/account-events.ts`: signup,
+   activation, payment succeeded / refunded, AI used, captcha failed).
+   Activation = a workspace's first form going live. AI use is recorded
+   where credits are spent, so every AI feature is covered. Audit actions,
+   response-timeline kinds and webhook events stay their own typed lists
+   (different audiences); `docs/api.md` documents the webhook ones.
+3. **Central permissions.** Already in the database (row-level security,
+   `has_permission`, plan changes only by the service role). Fixed: AI
+   credits were checked then spent in two steps; `spend_usage` now does
+   both in one statement, so requests at once can't overspend.
+4. **Auditable actions.** Audit entries now have `reason`, `outcome`
+   (succeeded / failed / denied) and `request_id`. Newly audited: deleting
+   a response (including refused and failed attempts) and refunds
+   (recorded from the provider). `npm run plan:set` now requires `--by`
+   and `--reason`. Suspensions and approvals aren't features yet, so
+   there's nothing to audit.
+5. **Reconciliation.** Payment processing was already idempotent. New: a
+   15-minute job (`/api/cron/payments`, on the database scheduler; daily
+   on Vercel) asks Stripe / Razorpay about payments pending for 15 minutes
+   to 3 days, each at most once an hour, and applies the answer through
+   the same idempotent path as the webhook. Recovery steps for payments,
+   deliveries, usage counts and plans: `docs/runbook.md`.
 
 <!-- Add new decisions above this line, newest first. -->

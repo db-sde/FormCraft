@@ -503,6 +503,8 @@ export function AppShell({
                 </button>
               </Dialog.Close>
             </div>
+            {/* Starting a form from a phone (F-52). */}
+            {canEdit && <NewFormButton className="mb-1.5" />}
             {nav.map((item) => {
               const active = isActive(item.match);
               const Icon = item.icon;

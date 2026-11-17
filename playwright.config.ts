@@ -31,6 +31,12 @@ export const FAKE_EMAIL_PORT = 4604;
 process.env.RESEND_BASE_URL = `http://127.0.0.1:${FAKE_EMAIL_PORT}`;
 process.env.RESEND_API_KEY ||= "re_e2e_fake_key";
 
+// Google Places (F-65): a stand-in features-49-68.spec.ts serves. Always
+// overridden, so a test never reaches (or bills) the real API.
+export const FAKE_PLACES_PORT = 4605;
+process.env.PLACES_API_BASE = `http://127.0.0.1:${FAKE_PLACES_PORT}`;
+process.env.GOOGLE_PLACES_API_KEY = "e2e-places-key";
+
 // Razorpay (master spec Phase 7): its API and its Checkout script are
 // stand-ins that phase7.spec.ts serves — never the real ones in a test.
 export const FAKE_RAZORPAY_PORT = 4603;

@@ -218,6 +218,18 @@ const AddressSettings = z
   .object({
     fields: z.array(z.enum(ADDRESS_FIELDS)).min(1).max(ADDRESS_FIELDS.length),
     requiredFields: z.array(z.enum(ADDRESS_FIELDS)).default([]),
+    /** Address suggestions as they type (F-65), from Google Places,
+     * through FormCraft's server (the key never reaches the browser).
+     * Typing the address by hand always works. Countries: ISO 3166-1
+     * alpha-2 codes to limit suggestions to (up to 15). */
+    autocomplete: z
+      .object({
+        countries: z
+          .array(z.string().regex(/^[A-Z]{2}$/))
+          .max(15)
+          .optional(),
+      })
+      .optional(),
   })
   .refine(
     (v) => v.requiredFields.every((f) => v.fields.includes(f)),
@@ -306,6 +318,123 @@ const BookingSettings = z.object({
   emailQuestionId: stableId.optional(),
 });
 
+/** Date range (F-58): one start and one end date, both inclusive. The
+ * answer is `{ start, end, days }` (YYYY-MM-DD); `days` is the length,
+ * worked out again by the server, counted as days (start and end both
+ * count) or nights (end − start). Plain calendar days: no time zone. */
+const DateRangeSettings = z
+  .object({
+    minDate: isoDay.optional(),
+    maxDate: isoDay.optional(),
+    /** Shortest and longest range, in the unit below. */
+    minDays: z.number().int().min(0).max(3660).optional(),
+    maxDays: z.number().int().min(1).max(3660).optional(),
+    count: z.enum(["days", "nights"]).default("days"),
+    /** Days of the week neither date may fall on (0 = Sunday). */
+    disabledWeekdays: z.array(z.number().int().min(0).max(6)).max(6).optional(),
+    /** Single days neither date may fall on (holidays, closures). */
+    disabledDates: z.array(isoDay).max(200).optional(),
+    startLabel: optionalSafeText(60),
+    endLabel: optionalSafeText(60),
+  })
+  .refine(
+    (v) => !v.minDate || !v.maxDate || v.minDate <= v.maxDate,
+    "the earliest date can't be after the latest",
+  )
+  .refine(
+    (v) => v.minDays === undefined || v.maxDays === undefined || v.minDays <= v.maxDays,
+    "the shortest range can't be longer than the longest",
+  );
+
+/** The question types a repeatable group's fields can be (F-56): the
+ * ones that are a single typed or chosen value. Files, signatures and
+ * other multi-part answers aren't offered inside a group. */
+export const GROUP_FIELD_TYPES = [
+  "short_text",
+  "long_text",
+  "email",
+  "phone",
+  "url",
+  "number",
+  "date",
+  "dropdown",
+  "yes_no",
+] as const;
+
+export const GroupFieldV1 = z
+  .object({
+    id: stableId,
+    type: z.enum(GROUP_FIELD_TYPES),
+    label: safeText(300),
+    required: z.boolean().default(false),
+    placeholder: optionalSafeText(200),
+    /** A dropdown's choices. */
+    options: z.array(OptionV1).max(50).optional(),
+    /** Shown only when another field of the same entry says so, so each
+     * entry's logic is its own. */
+    showIf: z
+      .object({
+        fieldId: stableId,
+        op: z.enum(["equals", "not_equals", "is_filled", "is_empty"]),
+        value: z.union([z.string().max(500), z.boolean(), z.number()]).optional(),
+      })
+      .optional(),
+  })
+  .refine(
+    (f) => f.type !== "dropdown" || (f.options?.length ?? 0) > 0,
+    "a dropdown field needs at least one option",
+  );
+export type GroupFieldV1 = z.infer<typeof GroupFieldV1>;
+
+/** Repeatable field group (F-56): the same few fields asked once per
+ * entry (each guest, each child, each job), as many times as the
+ * respondent adds, within limits. The answer is a list, in the order
+ * entered: `[{ id, values: { fieldId: value } }]`; entry ids are made by
+ * the browser so a removed entry can't be confused with the next. */
+const RepeatGroupSettings = z
+  .object({
+    fields: z.array(GroupFieldV1).min(1).max(10),
+    minEntries: z.number().int().min(0).max(50).default(1),
+    maxEntries: z.number().int().min(1).max(50).default(10),
+    /** What one entry is called ("Guest" → "Guest 1", "Guest 2"). */
+    entryLabel: optionalSafeText(60),
+    addLabel: optionalSafeText(60),
+  })
+  .refine(
+    (v) => v.minEntries <= v.maxEntries,
+    "the fewest entries can't be more than the most",
+  )
+  .refine(
+    (v) => new Set(v.fields.map((f) => f.id)).size === v.fields.length,
+    "two fields share an id",
+  )
+  .refine(
+    (v) =>
+      v.fields.every(
+        (f, i) =>
+          !f.showIf || v.fields.slice(0, i).some((g) => g.id === f.showIf!.fieldId),
+      ),
+    "a field can only depend on a field above it",
+  );
+
+/** A disclosure and consent page (F-62): a notice to read, a box that
+ * must be ticked to go on (when required), and an optional opt-in that
+ * never is. The answer the browser sends is `{ acknowledged, optIn? }`;
+ * the server adds which notice it was (`version`, a hash of the
+ * published wording) and when (`acceptedAt`). That is a record of what
+ * was shown and ticked, not proof that any law was complied with. */
+const ConsentSettings = z.object({
+  /** The notice. Plain text with light formatting: paragraphs, **bold**,
+   * *italic*, "- " lists, "## " headings and [links](https://…). */
+  content: safeText(20000),
+  acknowledgeLabel: safeText(300),
+  /** An optional extra opt-in (marketing emails, say). Never required. */
+  optInLabel: optionalSafeText(300),
+  /** The creator's own name for this version ("Privacy notice v3"),
+   * kept with each answer next to the hash. */
+  versionLabel: optionalSafeText(80),
+});
+
 const StatementSettings = z.object({
   buttonLabel: optionalSafeText(100),
   ...screenImage,
@@ -323,6 +452,12 @@ const baseQuestionFields = {
   visibleIf: Condition.optional(),
   /** Conditional and cross-field checks, run when leaving the question. */
   validations: z.array(QuestionValidationV1).max(10).optional(),
+  /** Shown as dots on the review screen (F-60): an ID number, say, that
+   * someone looking over the respondent's shoulder shouldn't read. */
+  sensitive: z.boolean().optional(),
+  /** Moves on as soon as it's answered (F-63). Unset: the form's own
+   * setting. Only single-choice questions ever move on by themselves. */
+  autoAdvance: z.boolean().optional(),
   /** Multiplies the option scores this question adds (default 1). */
   weight: z.number().finite().min(0).max(100).optional(),
   /** "Ask once per person" (phase 23): skipped for a visitor who already
@@ -457,6 +592,21 @@ export const QuestionV1 = z.discriminatedUnion("type", [
     type: z.literal("booking"),
     settings: BookingSettings,
   }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("date_range"),
+    settings: DateRangeSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("consent"),
+    settings: ConsentSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
+    type: z.literal("repeat_group"),
+    settings: RepeatGroupSettings,
+  }),
 ]);
 export type QuestionV1 = z.infer<typeof QuestionV1>;
 
@@ -515,6 +665,10 @@ export const ThemeV1 = z.object({
   /** The bar across the top showing how far through the form they are;
    * shown unless switched off (QA FC5-18). */
   showProgress: z.boolean().optional(),
+  /** Words beside the bar (F-51): a percentage, "Question 3 of 8" or
+   * "5 questions left", counted along the way the logic sends them.
+   * None when unset. */
+  progressLabel: z.enum(["none", "percent", "count", "remaining"]).optional(),
   logoUrl: webUrl.optional(),
   backgroundImageUrl: webUrl.optional(),
   preset: z.string().max(50).optional(),
@@ -634,6 +788,12 @@ export const FormSchemaV1 = z.object({
     /** One question per screen (the default), or classic pages of several
      * questions split by page breaks (F-01). The logic is the same. */
     layout: z.enum(["conversational", "classic"]).optional(),
+    /** A review of every answer before submitting, each with Edit
+     * (F-60). Off unless switched on. */
+    reviewStep: z.boolean().optional(),
+    /** Choosing an answer on a single-choice question moves on by itself
+     * (F-63); on unless switched off. A question can say otherwise. */
+    autoAdvance: z.boolean().optional(),
     /** Where people go after any ending without its own redirect (P2.9). */
     defaultRedirect: z
       .object({

@@ -4,6 +4,8 @@ import {
   CONTACT_FIELD_LABELS,
 } from "@/domains/forms/schema/question-types";
 import { formatDateTime } from "@/domains/logic/datetime";
+import { formatConsent, formatDateRange } from "@/domains/forms/range-consent";
+import { entryName, fieldAsQuestion, groupEntries } from "@/domains/forms/repeat-group";
 import {
   describeOrder,
   formatMoney,
@@ -71,6 +73,30 @@ export function formatAnswerValue(
 
     case "datetime":
       return typeof value === "string" ? formatDateTime(value) : String(value);
+
+    case "date_range":
+      return formatDateRange(question, value);
+
+    case "consent":
+      return formatConsent(value);
+
+    // One line per entry, in the order entered (F-56).
+    case "repeat_group":
+      return groupEntries(value)
+        .map((entry, i) => {
+          const parts = question.settings.fields
+            .map((field) => {
+              const shown = formatAnswerValue(
+                fieldAsQuestion(question, field, entry.id),
+                entry.values[field.id],
+                context,
+              );
+              return shown ? `${field.label}: ${shown}` : "";
+            })
+            .filter(Boolean);
+          return `${entryName(question, i)}: ${parts.join("; ")}`;
+        })
+        .join("\n");
 
     case "single_select": {
       if (typeof value === "string" && value.startsWith("other:")) return value.slice(6);
@@ -171,6 +197,35 @@ export function questionColumnLabels(question: QuestionV1): string[] {
       `${questionColumnLabel(question)} (Total ${question.settings.currency})`,
     ];
   }
+  // A group: one column per field, each entry a line in it (F-56), so
+  // the entries line up across the columns.
+  if (question.type === "repeat_group") {
+    return question.settings.fields.map(
+      (field) => `${questionColumnLabel(question)} (${field.label.trim() || field.id})`,
+    );
+  }
+  // A range's dates and length in their own columns (F-58), so a
+  // spreadsheet can sort and sum them.
+  if (question.type === "date_range") {
+    const unit = question.settings.count === "nights" ? "Nights" : "Days";
+    return [
+      `${questionColumnLabel(question)} (Start)`,
+      `${questionColumnLabel(question)} (End)`,
+      `${questionColumnLabel(question)} (${unit})`,
+    ];
+  }
+  // Consent evidence (F-62): what was ticked, which notice, and when.
+  if (question.type === "consent") {
+    const columns = [`${questionColumnLabel(question)} (Accepted)`];
+    if (question.settings.optInLabel) {
+      columns.push(`${questionColumnLabel(question)} (Opt-in)`);
+    }
+    columns.push(
+      `${questionColumnLabel(question)} (Notice version)`,
+      `${questionColumnLabel(question)} (Accepted at)`,
+    );
+    return columns;
+  }
   return [questionColumnLabel(question)];
 }
 
@@ -219,6 +274,44 @@ export function answerCells(
       ),
       order.lines.length ? formatMoney(order.total, order.currency) : "",
     ];
+  }
+  if (columnsFrom.type === "repeat_group") {
+    const entries = groupEntries(value);
+    const answered = question.type === "repeat_group" ? question : columnsFrom;
+    return columnsFrom.settings.fields.map((field) => {
+      const asked = answered.settings.fields.find((f) => f.id === field.id) ?? field;
+      return entries
+        .map((entry) =>
+          formatAnswerValue(
+            fieldAsQuestion(answered, asked, entry.id),
+            entry.values[field.id],
+            context,
+          ),
+        )
+        .join("\n");
+    });
+  }
+  if (columnsFrom.type === "date_range") {
+    const parts = contactRecord(value);
+    const day = (v: unknown) => (typeof v === "string" ? v : "");
+    return [
+      day(parts.start),
+      day(parts.end),
+      typeof parts.days === "number" ? String(parts.days) : "",
+    ];
+  }
+  if (columnsFrom.type === "consent") {
+    const parts = contactRecord(value);
+    const yesNo = (v: unknown) => (typeof v === "boolean" ? (v ? "Yes" : "No") : "");
+    const cells = [yesNo(parts.acknowledged)];
+    if (columnsFrom.settings.optInLabel) cells.push(yesNo(parts.optIn));
+    cells.push(
+      [parts.versionLabel, parts.version]
+        .filter((v): v is string => typeof v === "string" && v !== "")
+        .join(" · "),
+      typeof parts.acceptedAt === "string" ? parts.acceptedAt : "",
+    );
+    return cells;
   }
   return [formatAnswerValue(question, value, context)];
 }

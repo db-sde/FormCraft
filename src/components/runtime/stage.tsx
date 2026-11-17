@@ -16,6 +16,7 @@ export function Stage({
   theme,
   mode = "auto",
   progress,
+  progressLabel,
   banner,
   madeWith = false,
   className,
@@ -27,6 +28,8 @@ export function Stage({
   mode?: StageMode;
   /** 0–1; omit to hide the bar. */
   progress?: number;
+  /** Words beside the bar ("40% complete", F-51); none when unset. */
+  progressLabel?: string | null;
   /** A pill at the top centre, e.g. "Welcome back". */
   banner?: React.ReactNode;
   /** The "Made with FormCraft" badge at the bottom (endings). */
@@ -67,6 +70,7 @@ export function Stage({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress * 100)}
+          aria-valuetext={progressLabel ?? undefined}
           className="fc-progress relative h-(--st-bar) shrink-0 bg-(--st-line)"
         >
           <div
@@ -74,6 +78,15 @@ export function Stage({
             style={{ width: `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%` }}
           />
         </div>
+      )}
+      {progress !== undefined && progressLabel && (
+        <p
+          data-fc="progress-label"
+          aria-hidden
+          className="fc-progress-label absolute top-[calc(var(--st-bar)+8px)] right-(--st-pad-x) z-[1] text-xs font-medium text-(--st-muted) tabular-nums"
+        >
+          {progressLabel}
+        </p>
       )}
       {theme.logoUrl && (
         // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL

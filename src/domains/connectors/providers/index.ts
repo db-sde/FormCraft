@@ -1,5 +1,6 @@
 import type { LinkProvider } from "../links";
 import { airtable } from "./airtable";
+import { googleDrive } from "./google-drive";
 import { mailchimp } from "./mailchimp";
 import { notion } from "./notion";
 import { pipedrive } from "./pipedrive";
@@ -16,4 +17,5 @@ export const ADAPTERS: Record<LinkProvider, ProviderAdapter> = {
   mailchimp,
   zoho_crm: zoho,
   pipedrive,
+  google_drive: googleDrive,
 };

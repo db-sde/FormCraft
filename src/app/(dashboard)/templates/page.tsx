@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, FilePlus, LayoutTemplate, Plus } from "lucide-react";
-import { listTemplates } from "@/domains/templates";
+import { listTemplates, listWorkspaceTemplates } from "@/domains/templates";
+import { canAdmin, canEdit } from "@/domains/workspaces";
+import { WorkspaceTemplates } from "@/components/dashboard/workspace-template-card";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import {
   createBlankFormAction,
@@ -18,8 +20,11 @@ import { aiConfigured } from "@/domains/ai/config";
 export const metadata: Metadata = { title: "Templates" };
 
 export default async function TemplatesPage() {
-  const { supabase } = await getCurrentWorkspace();
-  const templates = await listTemplates(supabase);
+  const { supabase, user, workspace } = await getCurrentWorkspace();
+  const [templates, own] = await Promise.all([
+    listTemplates(supabase),
+    listWorkspaceTemplates(supabase, workspace.id, user.id),
+  ]);
   const categories = [...new Set(templates.map((tpl) => tpl.category))];
 
   return (
@@ -79,6 +84,27 @@ export default async function TemplatesPage() {
           </button>
         </form>
       </div>
+
+      {own.length > 0 && (
+        <section
+          className="mt-3 flex flex-col gap-3.5"
+          aria-label="Your workspace's templates"
+        >
+          <div className="flex items-baseline gap-2.5">
+            <h2 className="font-heading text-[26px] leading-[1.1] font-bold tracking-[-0.02em]">
+              Your workspace&apos;s templates
+            </h2>
+            <span className="text-muted-foreground text-[13px]">
+              {own.length} template{own.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <WorkspaceTemplates
+            templates={own}
+            canEdit={canEdit(workspace.role)}
+            canAdmin={canAdmin(workspace.role)}
+          />
+        </section>
+      )}
 
       <GenerateFormCard enabled={aiConfigured()} />
       <ImportFormCard />

@@ -54,6 +54,7 @@ export const ADMIN_CLIENT_ALLOWED: Record<string, string> = {
   "src/app/api/cron/connectors/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/digests/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/domains/route.ts": "scheduled worker: no user, CRON_SECRET",
+  "src/app/api/cron/payments/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/health/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/retention/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/sheets/dispatch/route.ts": "scheduled worker: no user, CRON_SECRET",
@@ -94,6 +95,8 @@ export const ADMIN_CLIENT_ALLOWED: Record<string, string> = {
     "anonymous respondent: authorised by the response id or token, not a session",
   "src/app/api/responses/unlock/route.ts":
     "anonymous respondent: authorised by the response id or token, not a session",
+  "src/app/api/places/route.ts":
+    "anonymous respondent: reads a live form's published schema and the shared rate-limit table (F-65)",
   "src/app/api/responses/view/route.ts":
     "anonymous respondent: authorised by the response id or token, not a session",
   "src/app/api/scim/v2/shared.ts": "API key / SCIM token requests: no Supabase session",

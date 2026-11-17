@@ -12,6 +12,10 @@ const LABEL: Record<string, string> = {
   "form.password_removed": "Removed a form password",
   "form.captcha_changed": "Changed a form's spam check",
   "form.kiosk_changed": "Changed a form's kiosk mode",
+  "response.deleted": "Deleted a response",
+  "payment.refunded": "Recorded a refund",
+  "template.created": "Saved a template",
+  "template.deleted": "Deleted a template",
   "block.created": "Created a question block",
   "block.version_published": "Published a block version",
   "block.restored": "Restored a block version",
@@ -90,9 +94,22 @@ export function AuditLog({
                     (r.metadata.apiKeyId ? "API key" : "FormCraft")}
                 </b>{" "}
                 {(LABEL[r.action] ?? r.action).toLowerCase()}
+                {r.outcome !== "succeeded" && (
+                  <span className="ml-1.5 rounded-sm bg-[var(--chip-changes-bg)] px-1.5 py-px text-[11.5px] font-semibold">
+                    {r.outcome}
+                  </span>
+                )}
+                {r.reason && (
+                  <span className="block text-[12.5px]">Reason: {r.reason}</span>
+                )}
                 {details(r) && (
                   <span className="text-muted-foreground block truncate text-[12.5px]">
                     {details(r)}
+                  </span>
+                )}
+                {r.requestId && (
+                  <span className="text-muted-foreground block truncate font-mono text-[11px]">
+                    request {r.requestId}
                   </span>
                 )}
               </span>

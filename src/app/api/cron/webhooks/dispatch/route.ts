@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   dispatchDueDeliveries,
+  enqueueAbandonedEvents,
   recoverMissingWebhookDeliveries,
 } from "@/domains/webhooks";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,8 +31,10 @@ async function run(request: NextRequest) {
   const admin = createAdminClient();
   // Create anything a failed post-submit callback missed, then send.
   const { recovered } = await recoverMissingWebhookDeliveries(admin);
+  // Unfinished responses gone quiet, for endpoints that asked (F-53).
+  const { queued: abandoned } = await enqueueAbandonedEvents(admin);
   const result = await dispatchDueDeliveries(admin);
-  return NextResponse.json({ ...result, recovered });
+  return NextResponse.json({ ...result, recovered, abandoned });
 }
 
 // GET for Vercel Cron (vercel.json), POST for other schedulers.

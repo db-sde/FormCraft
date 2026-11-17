@@ -3,8 +3,8 @@ import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { createConfirmedUser, createPublishedForm, deleteUser } from "./helpers";
 
 /** Like the builder's starter form: a welcome screen and one question.
- * Published directly — on phones the builder shows its "bigger screen"
- * state, and publishing through it is covered by publish-and-respond. */
+ * Published directly: publishing through the builder is covered by
+ * publish-and-respond (and on a phone by features-49-68, F-52). */
 const schema: FormSchemaV1 = {
   schemaVersion: 1,
   meta: { title: "Resume me" },

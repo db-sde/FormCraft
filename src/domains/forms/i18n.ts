@@ -49,6 +49,15 @@ export type UiStrings = {
   thinking: string;
   skippedKnown: string;
   answerAgain: string;
+  /** The review before submitting (F-60). */
+  reviewAnswers: string;
+  reviewTitle: string;
+  reviewIntro: string;
+  edit: string;
+  notAnswered: string;
+  backToReview: string;
+  fileUploaded: string;
+  signed: string;
 };
 
 const EN: UiStrings = {
@@ -72,10 +81,23 @@ const EN: UiStrings = {
   thinking: "One moment…",
   skippedKnown: "We skipped what you've answered before.",
   answerAgain: "Answer again",
+  reviewAnswers: "Review answers",
+  reviewTitle: "Check your answers",
+  reviewIntro: "Nothing is sent until you submit. Change anything with Edit.",
+  edit: "Edit",
+  notAnswered: "Not answered",
+  backToReview: "Back to review",
+  fileUploaded: "File uploaded",
+  signed: "Signed",
 };
 
 const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
   es: {
+    reviewAnswers: "Revisar respuestas",
+    reviewTitle: "Revisa tus respuestas",
+    edit: "Editar",
+    notAnswered: "Sin respuesta",
+    backToReview: "Volver a la revisión",
     next: "Siguiente",
     ok: "Aceptar",
     submit: "Enviar",
@@ -93,6 +115,11 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Idioma",
   },
   fr: {
+    reviewAnswers: "Vérifier mes réponses",
+    reviewTitle: "Vérifiez vos réponses",
+    edit: "Modifier",
+    notAnswered: "Sans réponse",
+    backToReview: "Retour à la vérification",
     next: "Suivant",
     ok: "OK",
     submit: "Envoyer",
@@ -111,6 +138,11 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Langue",
   },
   de: {
+    reviewAnswers: "Antworten prüfen",
+    reviewTitle: "Prüfe deine Antworten",
+    edit: "Bearbeiten",
+    notAnswered: "Nicht beantwortet",
+    backToReview: "Zurück zur Übersicht",
     next: "Weiter",
     ok: "OK",
     submit: "Absenden",

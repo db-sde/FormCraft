@@ -1,6 +1,7 @@
+import { trackAccountEvent } from "@/lib/analytics/account-events";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { withinLimit, type Entitlements } from "./entitlements";
+import type { Entitlements } from "./entitlements";
 
 type Client = SupabaseClient<Database>;
 
@@ -20,6 +21,9 @@ export type Usage = {
   periodStart: string;
   completedResponses: number;
   aiCredits: number;
+  /** Google address lookups this month (F-65): billed to the operator's
+   * Google account, shown so the cost can be watched. */
+  placesLookups: number;
   members: number;
   storageMb: number;
 };
@@ -54,6 +58,7 @@ export async function getUsage(
     periodStart,
     completedResponses: value("completed_responses"),
     aiCredits: value("ai_credits"),
+    placesLookups: value("places_lookups"),
     members: members.count ?? 0,
     storageMb: Math.round((storage / 1_048_576) * 10) / 10,
   };
@@ -74,28 +79,32 @@ async function storageBytes(supabase: Client, workspaceId: string): Promise<numb
   }
 }
 
-/** One AI credit, if the plan has one left this month (service role). */
+/** No limit, for the database function (its argument is nullable). */
+const SQL_NULL_LIMIT = null as unknown as number;
+
+/** One AI credit, if the plan has one left this month (service role).
+ * The check and the spend are one database statement (spend_usage), so
+ * two requests at once can't both take the last credit (foundations §3).
+ * Each spend is an "ai_used" event (foundations §2). */
 export async function spendAiCredit(
   admin: Client,
   workspaceId: string,
   entitlements: Entitlements,
 ): Promise<boolean> {
-  const { data } = await admin
-    .from("usage_counters")
-    .select("value")
-    .eq("workspace_id", workspaceId)
-    .eq("metric", "ai_credits")
-    .eq("period_start", currentPeriodStart())
-    .maybeSingle();
-  if (!withinLimit(entitlements, "ai_credits_per_month", Number(data?.value ?? 0))) {
-    return false;
-  }
-  const { error } = await admin.rpc("increment_usage", {
+  const { data, error } = await admin.rpc("spend_usage", {
     p_workspace_id: workspaceId,
     p_metric: "ai_credits",
+    p_limit: entitlements.ai_credits_per_month ?? SQL_NULL_LIMIT,
     p_amount: 1,
   });
   if (error) throw error;
+  if (data === null) return false;
+  void trackAccountEvent({
+    event: "ai_used",
+    distinctId: workspaceId,
+    workspaceId,
+    properties: { creditsUsedThisMonth: Number(data) },
+  });
   return true;
 }
 

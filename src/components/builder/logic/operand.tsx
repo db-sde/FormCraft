@@ -87,6 +87,29 @@ export function OperandSelect({
                   </SelectItem>
                 ));
               }
+              if (q.type === "date_range") {
+                const unit = q.settings.count === "nights" ? "Nights" : "Days";
+                return (
+                  [
+                    ["start", "Start date"],
+                    ["end", "End date"],
+                    ["days", unit],
+                  ] as const
+                ).map(([f, part]) => (
+                  <SelectItem key={`${q.id}:${f}`} value={`a:${q.id}:${f}`}>
+                    {name} · {part}
+                  </SelectItem>
+                ));
+              }
+              if (q.type === "consent") {
+                const parts: [string, string][] = [["acknowledged", "Accepted"]];
+                if (q.settings.optInLabel) parts.push(["optIn", "Opt-in"]);
+                return parts.map(([f, part]) => (
+                  <SelectItem key={`${q.id}:${f}`} value={`a:${q.id}:${f}`}>
+                    {name} · {part}
+                  </SelectItem>
+                ));
+              }
               if (q.type === "matrix") {
                 return q.settings.rows.map((r) => (
                   <SelectItem key={`${q.id}:${r.id}`} value={`a:${q.id}:${r.id}`}>

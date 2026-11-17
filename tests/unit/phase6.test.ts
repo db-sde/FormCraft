@@ -173,8 +173,9 @@ describe("mapping (spec §5.3)", () => {
 
 describe("the app catalog", () => {
   it("covers every app the database accepts, each with settings", () => {
+    // The latest migration to set the list (Google Drive joined in 64).
     const sql = readFileSync(
-      "supabase/migrations/00000000000051_connector_links.sql",
+      "supabase/migrations/00000000000064_google_drive_links.sql",
       "utf8",
     );
     for (const p of LINK_PROVIDERS) {

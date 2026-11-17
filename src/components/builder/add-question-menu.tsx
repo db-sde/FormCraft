@@ -1,5 +1,6 @@
 "use client";
 
+import { useMediaQuery } from "@/lib/use-media-query";
 import { useRef, useState } from "react";
 import { Library, Plus, Search } from "lucide-react";
 import { ADD_GROUPS, ADD_KIND_META, TypeTile, type AddKind } from "./question-meta";
@@ -30,6 +31,7 @@ export function AddQuestionMenu({
   canAddWelcome: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const narrow = useMediaQuery("(max-width: 1023px)");
   const [query, setQuery] = useState("");
   const [blocks, setBlocks] = useState<
     { id: string; name: string; currentVersion: number }[] | null
@@ -97,10 +99,13 @@ export function AddQuestionMenu({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        side="right"
+        // Beside the list on a desktop; below the button on a phone, where
+        // there's no room beside it (F-52).
+        side={narrow ? "bottom" : "right"}
         align="start"
-        sideOffset={18}
-        className="shadow-lift flex w-[560px] max-w-[calc(100vw-32px)] flex-col gap-2 rounded-lg p-3.5"
+        sideOffset={narrow ? 6 : 18}
+        collisionPadding={8}
+        className="shadow-lift flex max-h-[var(--radix-popover-content-available-height)] w-[560px] max-w-[calc(100vw-16px)] flex-col gap-2 overflow-y-auto rounded-lg p-3.5"
         onCloseAutoFocus={(e) => {
           if (pickedRef.current) e.preventDefault();
         }}
@@ -153,7 +158,7 @@ export function AddQuestionMenu({
             No question type matches “{query.trim()}”.
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-x-3.5 gap-y-1">
+          <div className="grid grid-cols-2 gap-x-3.5 gap-y-1 max-sm:grid-cols-1">
             {groups.map((group) => (
               <div key={group.name} className="mb-1.5 flex flex-col gap-0.5">
                 <span className="text-muted-foreground px-2 py-1 text-[11px] font-bold tracking-[0.1em] uppercase">

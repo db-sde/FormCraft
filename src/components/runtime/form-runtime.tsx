@@ -4,8 +4,10 @@ import { questionsLeftOut, seededShuffle } from "@/domains/logic/random";
 import { availableOptionIds } from "@/domains/forms/options";
 import { endingRedirect } from "@/domains/forms/redirect";
 import { showsMadeWith } from "@/domains/forms/branding";
+import { autoAdvances } from "@/domains/forms/auto-advance";
 import { uiStrings } from "@/domains/forms/i18n";
 import { RuntimeStringsContext } from "./runtime-strings";
+import { UploadNamesContext } from "./upload-names";
 import { contactFromAnswers, schedulerEmbedUrl } from "@/domains/forms/scheduler";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
@@ -22,11 +24,15 @@ import {
   validateContactField,
   walkForm,
   hasAnswer,
+  formProgress,
+  progressText,
+  afterReviewEdit,
   OTHER_PREFIX,
   type AnswerMap,
   type RecallSource,
 } from "@/domains/logic";
 import { RuntimeQuestionInput } from "./runtime-question-input";
+import { ReviewScreen } from "./review-screen";
 import {
   Stage,
   StageActions,
@@ -56,16 +62,6 @@ export type CompleteOutcome =
     }
   | { ok: false; message: string; errors?: { questionId: string; message: string }[] };
 
-/** Choosing one of these is a complete answer on its own, so the form
- * moves on by itself (as Typeform does) instead of making the
- * respondent also press OK. */
-const AUTO_ADVANCE_TYPES = new Set<QuestionV1["type"]>([
-  "single_select",
-  "yes_no",
-  "rating",
-  "opinion_scale",
-  "dropdown",
-]);
 const AUTO_ADVANCE_DELAY_MS = 350;
 
 /**
@@ -307,6 +303,14 @@ export function FormRuntime({
   // up again), and a counter that resumes the step once one returns.
   const ranLookupsRef = useRef(new Set<string>());
   const [resumeAfterLookup, setResumeAfterLookup] = useState(0);
+  // The review before submitting (F-60): the path it lists and where the
+  // form ends; and whether the question on screen was opened from it.
+  const [review, setReview] = useState<{ path: string[]; endingId: string } | null>(null);
+  const [editingFromReview, setEditingFromReview] = useState(false);
+  const reviewShownRef = useRef<Set<string>>(new Set());
+  // Names of files uploaded in this visit, for the review (F-60).
+  const [uploadNames] = useState(() => new Map<string, string>());
+  const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
   // Which way the last step moved, for the slide direction.
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -408,7 +412,12 @@ export function FormRuntime({
     // rejected, with its message — instead of a vague banner on the
     // last screen about something they answered pages ago.
     const firstError = outcome.errors?.[0];
-    if (firstError && firstError.questionId !== currentId) {
+    // From the review: back to the question, then back to the review.
+    if (review && firstError) {
+      setReview(null);
+      setEditingFromReview(true);
+    }
+    if (firstError && (firstError.questionId !== currentId || review)) {
       const index = history.indexOf(firstError.questionId);
       if (index >= 0) setHistory((h) => h.slice(0, index));
       setCurrentId(firstError.questionId);
@@ -420,7 +429,7 @@ export function FormRuntime({
   }
 
   function goNext(currentAnswers: AnswerMap = answers) {
-    if (!question || submitting || thinkingRef.current) return;
+    if (!question || submitting || thinkingRef.current || review) return;
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     if (pendingSaves > 0) {
       advanceWhenSavedRef.current = true;
@@ -519,7 +528,31 @@ export function FormRuntime({
     }
     const next = stepFrom(question.id, currentAnswers);
     if (next.type === "ending") {
-      void finish(currentAnswers, next.endingId);
+      if (compiled.schema.meta.reviewStep) {
+        openReview([...history, question.id], next.endingId);
+      } else {
+        void finish(currentAnswers, next.endingId);
+      }
+    } else if (editingFromReview) {
+      // Changed from the review: run the logic again over every answer.
+      // Back to the review if the new path is all answered, else to the
+      // first question it still needs (F-60).
+      const after = afterReviewEdit(
+        compiled,
+        currentAnswers,
+        new Set([...reviewShownRef.current, question.id]),
+        engineOptions,
+      );
+      if (after.kind === "review") {
+        openReview(after.path, after.endingId);
+      } else {
+        setError(null);
+        setDirection("forward");
+        setHistory(after.history);
+        setCurrentId(after.questionId);
+        landOn(after.questionId, "forward");
+        onAnswerChange?.(currentAnswers, after.questionId, after.history);
+      }
     } else {
       setError(null);
       setDirection("forward");
@@ -540,6 +573,32 @@ export function FormRuntime({
       landOn(moved.id, "forward");
       onAnswerChange?.(moved.answers, moved.id, moved.history);
     }
+  }
+
+  /** Shows the review (F-60), with the last question on the path as the
+   * one "Back" returns to. */
+  function openReview(path: string[], endingId: string) {
+    setError(null);
+    setEditingFromReview(false);
+    reviewShownRef.current = new Set(path);
+    const last = path.at(-1) ?? currentId;
+    setHistory(path.slice(0, -1));
+    setCurrentId(last);
+    setReview({ path, endingId });
+    setDirection("forward");
+  }
+
+  function editFromReview(questionId: string) {
+    if (!review || submitting) return;
+    const at = review.path.indexOf(questionId);
+    if (at < 0) return;
+    setReview(null);
+    setEditingFromReview(true);
+    setError(null);
+    setDirection("back");
+    setHistory(review.path.slice(0, at));
+    setCurrentId(questionId);
+    landOn(questionId, "forward");
   }
 
   /** "Answer again": forget the filled-in answers and ask from the first
@@ -576,7 +635,7 @@ export function FormRuntime({
     const willEnd = stepFrom(question.id, next).type === "ending";
     // Never auto-submit: the last step always waits for an explicit
     // click on Submit, so a stray tap can't end the form early.
-    if (AUTO_ADVANCE_TYPES.has(question.type) && !isTypingOther && !willEnd) {
+    if (autoAdvances(question, compiled.schema.meta) && !isTypingOther && !willEnd) {
       advanceTimerRef.current = setTimeout(() => goNext(next), AUTO_ADVANCE_DELAY_MS);
     }
   }
@@ -622,14 +681,19 @@ export function FormRuntime({
   // out and Tab starts again from the top of the page. Land on the new
   // question's heading instead (Tab then moves into its options).
   useEffect(() => {
-    const step = ending ? `ending:${ending.id}` : currentId;
+    const step = ending ? `ending:${ending.id}` : review ? "review" : currentId;
     if (focusedStepRef.current === step) return;
     focusedStepRef.current = step;
-    const heading = ending ? endingHeadingRef.current : questionHeadingRef.current;
+    const heading = ending
+      ? endingHeadingRef.current
+      : review
+        ? reviewHeadingRef.current
+        : questionHeadingRef.current;
     const active = document.activeElement;
     const focusIsLost = !active || active === document.body;
-    if (heading && (ending || focusIsLost)) heading.focus({ preventScroll: true });
-  }, [currentId, ending]);
+    if (heading && (ending || review || focusIsLost))
+      heading.focus({ preventScroll: true });
+  }, [currentId, ending, review]);
 
   // Latest goNext for the document-level listener below, which is
   // registered once rather than on every render.
@@ -719,7 +783,6 @@ export function FormRuntime({
     const type = compiled.schema.questions.find((q) => q.id === id)?.type;
     return type !== "welcome_screen" && type !== "page_break" && !leftOut.has(id);
   });
-  const total = numbered.length || 1;
 
   if (ending) {
     return (
@@ -761,219 +824,271 @@ export function FormRuntime({
   const number = numbered.includes(question.id)
     ? history.filter((id) => numbered.includes(id)).length + 1
     : 0;
-  const autoAdvances = AUTO_ADVANCE_TYPES.has(question.type);
+  const movesOnByItself = autoAdvances(question, compiled.schema.meta);
   const primaryLabel = entry
     ? recall(question.settings.buttonLabel) ||
       (isLastStep ? t.submit : question.type === "statement" ? t.continue : t.start)
     : isLastStep
-      ? t.submit
+      ? compiled.schema.meta.reviewStep
+        ? t.reviewAnswers
+        : t.submit
       : t.ok;
   const enterHint = question.type === "long_text" ? t.newLine : t.pressEnter;
   // Lead capture fills the bar a detail at a time.
   const contactShare = contactFields ? (contactStep + 1) / contactFields.length : 1;
-  const progress =
+  // Counted along the way the logic sends them (F-51), not every
+  // question in the form.
+  const estimate = formProgress(
+    compiled,
+    {
+      currentId: question.id,
+      answers,
+      history,
+      counted: new Set(numbered),
+      // Lead capture: the details already given count towards it.
+      currentShare: contactFields ? contactShare - 1 / contactFields.length : 0,
+    },
+    engineOptions,
+  );
+  const progress = question.type === "welcome_screen" ? 0 : estimate.share;
+  const progressLabel =
     question.type === "welcome_screen"
-      ? 0
-      : Math.min(1, (number - 1 + contactShare) / total);
+      ? null
+      : progressText(estimate, compiled.schema.theme.progressLabel ?? "none");
   const welcome = question.type === "welcome_screen";
 
   return (
     <RuntimeStringsContext.Provider value={t}>
-      <Stage
-        ref={containerRef}
-        theme={theme}
-        mode={mode}
-        progress={compiled.schema.theme.showProgress === false ? undefined : progress}
-        banner={
-          notice && history.length === 0 ? (
-            <NoticeBanner>{notice}</NoticeBanner>
-          ) : welcomeBack && history.length === 0 ? (
-            <WelcomeBackBanner text={t.welcomeBack} />
-          ) : undefined
-        }
-        className={cn("min-h-[420px]", className)}
-      >
-        {/* Spam trap: invisible to people and skipped by keyboard and screen
+      <UploadNamesContext.Provider value={uploadNames}>
+        <Stage
+          ref={containerRef}
+          theme={theme}
+          mode={mode}
+          progress={compiled.schema.theme.showProgress === false ? undefined : progress}
+          progressLabel={progressLabel}
+          banner={
+            notice && history.length === 0 ? (
+              <NoticeBanner>{notice}</NoticeBanner>
+            ) : welcomeBack && history.length === 0 ? (
+              <WelcomeBackBanner text={t.welcomeBack} />
+            ) : undefined
+          }
+          className={cn("min-h-[420px]", className)}
+        >
+          {/* Spam trap: invisible to people and skipped by keyboard and screen
           readers; bots that fill every field reveal themselves. The name
           is deliberately meaningless — browsers and password managers
           autofill fields called "website", "url" and the like, which once
           flagged a real person's submission. Autofill hints are switched
           off for the managers that honour them. A filled trap only flags
           the response; it is never discarded. */}
-        <input
-          type="text"
-          name="zq7_hp"
-          tabIndex={-1}
-          autoComplete="off"
-          aria-hidden="true"
-          data-lpignore="true"
-          data-1p-ignore="true"
-          data-bwignore="true"
-          data-form-type="other"
-          className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
-        />
-        <div
-          key={contactFields ? `${question.id}:${contactStep}` : question.id}
-          className={cn(
-            "fc-question flex flex-col gap-(--st-gap)",
-            direction === "back" ? "fc-step-in-back" : "fc-step-in",
-          )}
-        >
-          {entry ? (
+          <input
+            type="text"
+            name="zq7_hp"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+            className="pointer-events-none absolute -left-[9999px] size-px opacity-0"
+          />
+          {review ? (
             <div
-              className={cn(
-                "flex flex-col gap-4",
-                welcome &&
-                  "in-data-[mode=desktop]:items-center in-data-[mode=desktop]:text-center md:in-data-[mode=auto]:items-center md:in-data-[mode=auto]:text-center",
-              )}
+              key="review"
+              className="fc-question fc-step-in flex flex-col gap-(--st-gap)"
             >
-              {question.settings.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
-                <img
-                  src={question.settings.imageUrl}
-                  alt={question.settings.imageAlt ?? ""}
-                  className="max-h-64 w-full rounded-(--st-tile-br) object-contain"
-                />
-              )}
-              <h2
-                ref={questionHeadingRef}
-                tabIndex={-1}
-                className={cn(stageTitleClass, "outline-none focus-visible:shadow-none")}
-              >
-                {recall(question.label)}
-              </h2>
-              {question.description && (
-                <p className={cn(stageDescClass, "max-w-[460px]")}>
-                  {recall(question.description)}
-                </p>
-              )}
-              {error && <StageError>{error}</StageError>}
-              <div className="mt-2 flex items-center gap-3 in-data-[mode=phone]:w-full max-md:in-data-[mode=auto]:w-full">
-                <StageButton
-                  onClick={() => goNext()}
-                  disabled={submitting}
-                  className="px-[26px] in-data-[mode=phone]:flex-1 max-md:in-data-[mode=auto]:flex-1"
-                >
-                  {submitting && (
-                    <span className="size-[15px] animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  )}
-                  {submitting ? "Submitting…" : primaryLabel}
-                </StageButton>
-                {!submitting && (
-                  <span className="text-[12.5px] text-(--st-muted) in-data-[mode=phone]:hidden max-md:in-data-[mode=auto]:hidden [@media(hover:none)]:hidden">
-                    {enterHint}
-                  </span>
-                )}
-              </div>
+              <ReviewScreen
+                ref={reviewHeadingRef}
+                compiled={compiled}
+                path={review.path}
+                answers={answers}
+                onEdit={editFromReview}
+                onBack={() => {
+                  setReview(null);
+                  setDirection("back");
+                }}
+                onSubmit={() => void finish(answers, review.endingId)}
+                submitting={submitting}
+                error={error}
+                recall={recall}
+              />
             </div>
           ) : (
-            <>
-              {number > 0 && <StageNumber n={number} />}
-              <div className="flex flex-col gap-2">
-                <h2
-                  ref={questionHeadingRef}
-                  tabIndex={-1}
+            <div
+              key={contactFields ? `${question.id}:${contactStep}` : question.id}
+              className={cn(
+                "fc-question flex flex-col gap-(--st-gap)",
+                direction === "back" ? "fc-step-in-back" : "fc-step-in",
+              )}
+            >
+              {entry ? (
+                <div
                   className={cn(
-                    stageLabelClass,
-                    "fc-question-label outline-none focus-visible:shadow-none",
+                    "flex flex-col gap-4",
+                    welcome &&
+                      "in-data-[mode=desktop]:items-center in-data-[mode=desktop]:text-center md:in-data-[mode=auto]:items-center md:in-data-[mode=auto]:text-center",
                   )}
                 >
-                  {recall(question.label)}
-                  {question.required && question.type !== "contact_info" && (
-                    <>
-                      <span aria-hidden className="text-(--st-primary)">
-                        {" "}
-                        *
-                      </span>
-                      <span className="sr-only"> (required)</span>
-                    </>
+                  {question.settings.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+                    <img
+                      src={question.settings.imageUrl}
+                      alt={question.settings.imageAlt ?? ""}
+                      className="max-h-64 w-full rounded-(--st-tile-br) object-contain"
+                    />
                   )}
-                </h2>
-                {question.description && (
-                  <p className={cn(stageDescClass, "fc-question-description")}>
-                    {recall(question.description)}
-                  </p>
-                )}
-              </div>
-
-              <RuntimeQuestionInput
-                key={question.id}
-                contactField={
-                  contactFields && contactFields.length > 1
-                    ? contactFields[contactStep]
-                    : undefined
-                }
-                question={withDisplayOrder(question, seed, answers)}
-                value={answers[question.id]}
-                onChange={setAnswer}
-                getResponseId={getResponseId}
-                invalid={!!error}
-              />
-
-              {followUp?.questionId === question.id && (
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    htmlFor="fc-follow-up"
-                    className="text-(length:--st-tile) font-semibold text-(--st-text)"
+                  <h2
+                    ref={questionHeadingRef}
+                    tabIndex={-1}
+                    className={cn(
+                      stageTitleClass,
+                      "outline-none focus-visible:shadow-none",
+                    )}
                   >
-                    <span className="block text-xs font-normal text-(--st-muted)">
-                      {t.followUp}
-                    </span>
-                    {followUp.prompt}
-                  </label>
-                  <textarea
-                    id="fc-follow-up"
-                    autoFocus
-                    rows={2}
-                    maxLength={5000}
-                    value={followUp.reply}
-                    onChange={(e) =>
-                      setFollowUp((f) => (f ? { ...f, reply: e.target.value } : f))
-                    }
-                    className="field-sizing-content w-full min-w-0 resize-none rounded-none border-0 border-b-2 border-(--st-line) bg-transparent py-2 text-(length:--st-input) leading-[1.45] text-(--st-text) outline-none focus:border-(--st-primary) focus-visible:shadow-none"
-                  />
-                  <p className="text-xs text-(--st-muted)">{t.followUpHint}</p>
+                    {recall(question.label)}
+                  </h2>
+                  {question.description && (
+                    <p className={cn(stageDescClass, "max-w-[460px]")}>
+                      {recall(question.description)}
+                    </p>
+                  )}
+                  {error && <StageError>{error}</StageError>}
+                  <div className="mt-2 flex items-center gap-3 in-data-[mode=phone]:w-full max-md:in-data-[mode=auto]:w-full">
+                    <StageButton
+                      onClick={() => goNext()}
+                      disabled={submitting}
+                      className="px-[26px] in-data-[mode=phone]:flex-1 max-md:in-data-[mode=auto]:flex-1"
+                    >
+                      {submitting && (
+                        <span className="size-[15px] animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      )}
+                      {submitting ? "Submitting…" : primaryLabel}
+                    </StageButton>
+                    {!submitting && (
+                      <span className="text-[12.5px] text-(--st-muted) in-data-[mode=phone]:hidden max-md:in-data-[mode=auto]:hidden [@media(hover:none)]:hidden">
+                        {enterHint}
+                      </span>
+                    )}
+                  </div>
                 </div>
+              ) : (
+                <>
+                  {number > 0 && <StageNumber n={number} />}
+                  <div className="flex flex-col gap-2">
+                    <h2
+                      ref={questionHeadingRef}
+                      tabIndex={-1}
+                      className={cn(
+                        stageLabelClass,
+                        "fc-question-label outline-none focus-visible:shadow-none",
+                      )}
+                    >
+                      {recall(question.label)}
+                      {question.required && question.type !== "contact_info" && (
+                        <>
+                          <span aria-hidden className="text-(--st-primary)">
+                            {" "}
+                            *
+                          </span>
+                          <span className="sr-only"> (required)</span>
+                        </>
+                      )}
+                    </h2>
+                    {question.description && (
+                      <p className={cn(stageDescClass, "fc-question-description")}>
+                        {recall(question.description)}
+                      </p>
+                    )}
+                  </div>
+
+                  <RuntimeQuestionInput
+                    key={question.id}
+                    contactField={
+                      contactFields && contactFields.length > 1
+                        ? contactFields[contactStep]
+                        : undefined
+                    }
+                    question={withDisplayOrder(question, seed, answers)}
+                    value={answers[question.id]}
+                    onChange={setAnswer}
+                    getResponseId={getResponseId}
+                    invalid={!!error}
+                  />
+
+                  {followUp?.questionId === question.id && (
+                    <div className="flex flex-col gap-1.5">
+                      <label
+                        htmlFor="fc-follow-up"
+                        className="text-(length:--st-tile) font-semibold text-(--st-text)"
+                      >
+                        <span className="block text-xs font-normal text-(--st-muted)">
+                          {t.followUp}
+                        </span>
+                        {followUp.prompt}
+                      </label>
+                      <textarea
+                        id="fc-follow-up"
+                        autoFocus
+                        rows={2}
+                        maxLength={5000}
+                        value={followUp.reply}
+                        onChange={(e) =>
+                          setFollowUp((f) => (f ? { ...f, reply: e.target.value } : f))
+                        }
+                        className="field-sizing-content w-full min-w-0 resize-none rounded-none border-0 border-b-2 border-(--st-line) bg-transparent py-2 text-(length:--st-input) leading-[1.45] text-(--st-text) outline-none focus:border-(--st-primary) focus-visible:shadow-none"
+                      />
+                      <p className="text-xs text-(--st-muted)">{t.followUpHint}</p>
+                    </div>
+                  )}
+
+                  {error && <StageError>{error}</StageError>}
+
+                  <StageActions
+                    backLabel={t.back}
+                    showBack={
+                      contactStep > 0 || history.some((id) => !autoFilled.has(id))
+                    }
+                    onBack={goBack}
+                    onNext={() => goNext()}
+                    label={primaryLabel}
+                    submitting={submitting || thinking}
+                    busyLabel={thinking ? t.thinking : undefined}
+                    showCheck={!isLastStep && !movesOnByItself}
+                    enterHint={enterHint}
+                  />
+                </>
               )}
 
-              {error && <StageError>{error}</StageError>}
-
-              <StageActions
-                backLabel={t.back}
-                showBack={contactStep > 0 || history.some((id) => !autoFilled.has(id))}
-                onBack={goBack}
-                onNext={() => goNext()}
-                label={primaryLabel}
-                submitting={submitting || thinking}
-                busyLabel={thinking ? t.thinking : undefined}
-                showCheck={!isLastStep && !autoAdvances}
-                enterHint={enterHint}
-              />
-            </>
+              {autoFilled.size > 0 && !entry && (
+                <p className="text-xs text-(--st-muted)">
+                  {t.skippedKnown}{" "}
+                  <button
+                    type="button"
+                    onClick={answerKnownAgain}
+                    className="underline underline-offset-2"
+                  >
+                    {t.answerAgain}
+                  </button>
+                </p>
+              )}
+              {savesProgress && currentIndex >= 0 && !entry && (
+                <p className="text-xs text-(--st-muted)">
+                  {question.type === "contact_info" ? t.detailsSaved : t.savedAsYouGo}
+                </p>
+              )}
+              {onFinishLater && !entry && history.length > 0 && (
+                <FinishLater
+                  key={question.id}
+                  create={onFinishLater}
+                  label={t.finishLater}
+                />
+              )}
+            </div>
           )}
-
-          {autoFilled.size > 0 && !entry && (
-            <p className="text-xs text-(--st-muted)">
-              {t.skippedKnown}{" "}
-              <button
-                type="button"
-                onClick={answerKnownAgain}
-                className="underline underline-offset-2"
-              >
-                {t.answerAgain}
-              </button>
-            </p>
-          )}
-          {savesProgress && currentIndex >= 0 && !entry && (
-            <p className="text-xs text-(--st-muted)">
-              {question.type === "contact_info" ? t.detailsSaved : t.savedAsYouGo}
-            </p>
-          )}
-          {onFinishLater && !entry && history.length > 0 && (
-            <FinishLater key={question.id} create={onFinishLater} label={t.finishLater} />
-          )}
-        </div>
-      </Stage>
+        </Stage>
+      </UploadNamesContext.Provider>
     </RuntimeStringsContext.Provider>
   );
 }

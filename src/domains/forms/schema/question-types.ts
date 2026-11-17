@@ -28,6 +28,10 @@ export const QUESTION_TYPES = [
   "products",
   // Master spec Phase 5 (2026-11-02).
   "booking",
+  // Features 49–68 (2026-11-14).
+  "date_range",
+  "consent",
+  "repeat_group",
 ] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];

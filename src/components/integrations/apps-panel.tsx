@@ -445,14 +445,17 @@ function LinkEditor({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold">Fields</span>
+        {/* Apps with nothing to map (Google Drive copies files, F-50). */}
+        <span className="text-sm font-semibold" hidden={app.fieldsNeed.length === 0}>
+          Fields
+        </span>
         {fields.status === "error" && (
           <p className="text-destructive text-sm">{fields.message}</p>
         )}
         {fields.status === "loading" && (
           <p className="text-muted-foreground text-sm">Loading fields…</p>
         )}
-        {fields.status === "ready" && (
+        {fields.status === "ready" && app.fieldsNeed.length > 0 && (
           <MappingEditor
             fields={fieldList}
             sources={sources}
@@ -623,8 +626,10 @@ function AppCard({
       {link && !editing && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <span>
-            {link.enabled ? "On" : "Off"} · {link.mapping.length} field
-            {link.mapping.length === 1 ? "" : "s"} mapped
+            {link.enabled ? "On" : "Off"} ·{" "}
+            {app.fieldsNeed.length === 0
+              ? `copies each response's ${app.noun}s`
+              : `${link.mapping.length} field${link.mapping.length === 1 ? "" : "s"} mapped`}
             {link.condition ? " · only when its condition matches" : ""}
           </span>
           {canManage && connected && (

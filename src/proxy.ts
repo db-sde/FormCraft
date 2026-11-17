@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
+import { NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { supabaseEnv } from "@/lib/supabase/env";
 import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
@@ -211,7 +212,19 @@ async function customDomain(request: NextRequest, host: string) {
   );
 }
 
-export async function proxy(request: NextRequest) {
+/** Every request gets an id (foundations §1): set here for the server
+ * code behind it, and returned to the caller. */
+export async function proxy(incoming: NextRequest) {
+  const requestId = newRequestId(incoming.headers);
+  const headers = new Headers(incoming.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
+  const request = new NextRequest(incoming, { headers });
+  const response = await route(request);
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  return response;
+}
+
+async function route(request: NextRequest) {
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
   if (!isAppHost(host)) return customDomain(request, host);
 

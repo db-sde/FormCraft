@@ -4,3 +4,4 @@ export * from "./payload";
 export * from "./url-safety";
 export * from "./queries";
 export * from "./slack";
+export * from "./partial";

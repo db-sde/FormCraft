@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { LocalTime } from "@/components/local-time";
 import { DeliveryRow } from "./delivery-row";
+import { WebhookEventsEditor } from "./webhook-events-editor";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,11 +43,16 @@ export function WebhooksPanel({
   formId,
   initialEndpoints,
   initialDeliveries,
+  keepsUnfinished = false,
 }: {
   formId: string;
   initialEndpoints: WebhookEndpoint[];
   initialDeliveries: Record<string, DeliveryLogEntry[]>;
+  /** Whether the form keeps unfinished responses (F-53's privacy switch). */
+  keepsUnfinished?: boolean;
 }) {
+  // A plain webhook, or an n8n workflow's Webhook node (F-49).
+  const [kind, setKind] = useState<"webhook" | "n8n">("webhook");
   const [endpoints, setEndpoints] = useState(initialEndpoints);
   const [deliveries] = useState(initialDeliveries);
   const [url, setUrl] = useState("");
@@ -62,7 +68,7 @@ export function WebhooksPanel({
 
   function handleAdd() {
     startAdding(async () => {
-      const result = await createWebhookEndpointAction(formId, url.trim());
+      const result = await createWebhookEndpointAction(formId, url.trim(), kind);
       if (result.ok) {
         setUrl("");
         setEndpoints((eps) => [
@@ -73,13 +79,15 @@ export function WebhooksPanel({
             url: result.url,
             enabled: true,
             createdAt: result.createdAt,
-            kind: "webhook",
+            kind,
             questionIds: [],
+            events: ["response.completed"],
+            abandonAfterMinutes: 30,
           },
         ]);
         setSecretCopied(false);
         setRevealedSecret({ endpointId: result.id, secret: result.signingSecret });
-        toast.success("Webhook added.", {
+        toast.success(kind === "n8n" ? "n8n workflow connected." : "Webhook added.", {
           description: "Save the signing secret below.",
         });
       } else {
@@ -164,6 +172,45 @@ export function WebhooksPanel({
 
   return (
     <div className="flex flex-col gap-3.5">
+      <div
+        role="radiogroup"
+        aria-label="Send to"
+        className="border-input bg-background flex gap-0.5 self-start rounded-[7px] border-[1.5px] p-[2px]"
+      >
+        {(
+          [
+            ["webhook", "Your server"],
+            ["n8n", "n8n workflow"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={kind === value}
+            onClick={() => setKind(value)}
+            className={
+              kind === value
+                ? "bg-secondary text-secondary-foreground rounded-[5px] px-2.5 py-[3px] text-[12.5px] font-semibold"
+                : "hover:bg-hover-wash rounded-[5px] px-2.5 py-[3px] text-[12.5px] font-semibold"
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {kind === "n8n" && (
+        <p className="text-muted-foreground text-[13px] leading-[1.5]">
+          In n8n, add a <b>Webhook</b> trigger (POST), copy its <b>Production URL</b> and
+          paste it below. Then check each request&apos;s signature with the secret we show
+          you. Our{" "}
+          <a href="/n8n/formcraft-sample-workflow.json" download className="underline">
+            sample workflow
+          </a>{" "}
+          does it for you: import it, paste the secret into its second step, and switch
+          the workflow on.
+        </p>
+      )}
       <form
         className="border-ink bg-card flex gap-2.5 rounded-lg border-[1.5px] p-3.5"
         onSubmit={(e) => {
@@ -174,8 +221,12 @@ export function WebhooksPanel({
         <Input
           type="url"
           inputMode="url"
-          aria-label="Webhook URL"
-          placeholder="https://example.com/webhook"
+          aria-label={kind === "n8n" ? "n8n Webhook URL" : "Webhook URL"}
+          placeholder={
+            kind === "n8n"
+              ? "https://your-n8n.example.com/webhook/…"
+              : "https://example.com/webhook"
+          }
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           className="font-mono text-[13.5px]"
@@ -245,6 +296,11 @@ export function WebhooksPanel({
               className="border-ink bg-card shadow-card rounded-lg border-[1.5px]"
             >
               <div className="border-border flex flex-wrap items-center gap-3 border-b-[1.5px] px-3.5 py-3">
+                {endpoint.kind === "n8n" && (
+                  <span className="rounded-full bg-[#ffe9e3] px-2 py-0.5 text-[11.5px] font-bold text-[#a2361b]">
+                    n8n
+                  </span>
+                )}
                 <span
                   className="min-w-0 flex-1 truncate font-mono text-[13.5px]"
                   title={endpoint.url}
@@ -292,6 +348,20 @@ export function WebhooksPanel({
                   <Trash2 className="size-4" />
                 </Button>
               </div>
+              <WebhookEventsEditor
+                formId={formId}
+                endpointId={endpoint.id}
+                events={endpoint.events}
+                abandonAfterMinutes={endpoint.abandonAfterMinutes}
+                keepsUnfinished={keepsUnfinished}
+                onSaved={(events, abandonAfterMinutes) =>
+                  setEndpoints((eps) =>
+                    eps.map((e) =>
+                      e.id === endpoint.id ? { ...e, events, abandonAfterMinutes } : e,
+                    ),
+                  )
+                }
+              />
               <div className="flex flex-col gap-0.5 px-3.5 pt-2.5 pb-3">
                 <span className="text-muted-foreground pb-1 text-[11px] font-bold tracking-[0.08em] uppercase">
                   Last 5 deliveries
@@ -307,11 +377,16 @@ export function WebhooksPanel({
                       <DeliveryRow
                         key={delivery.id}
                         when={<LocalTime iso={delivery.createdAt} variant="day" />}
-                        detail={
+                        detail={[
+                          delivery.eventType !== "response.completed"
+                            ? delivery.eventType.replace("response.", "")
+                            : "",
                           delivery.attemptCount > 1
                             ? `attempt ${delivery.attemptCount}`
-                            : ""
-                        }
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                         error={
                           delivery.status !== "succeeded" ? delivery.lastError : null
                         }

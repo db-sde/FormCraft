@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { recordAnalyticsEvent, type AnalyticsEventType } from "@/domains/analytics";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { captureServerEvent } from "./posthog-server";
+import { currentRequestId } from "@/lib/http/request-id";
 
 /**
  * Records a product event (our analytics_events table + PostHog) after
@@ -19,6 +20,7 @@ export function trackEvent(params: {
   metadata?: Record<string, string | number | boolean | null>;
 }) {
   after(async () => {
+    const requestId = await currentRequestId();
     try {
       await recordAnalyticsEvent(createAdminClient(), {
         formId: params.formId,
@@ -32,7 +34,7 @@ export function trackEvent(params: {
     await captureServerEvent({
       distinctId: params.actorId ?? params.sessionId ?? params.formId,
       event: params.eventType,
-      properties: { formId: params.formId, ...params.metadata },
+      properties: { formId: params.formId, requestId, ...params.metadata },
     });
   });
 }

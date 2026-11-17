@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { currentRequestId } from "@/lib/http/request-id";
 
 /**
  * Reports an error that was handled on purpose — a background step after
@@ -16,27 +17,33 @@ export function reportError(
   },
 ): void {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(
-    JSON.stringify({
-      level: "error",
-      operation: context.operation,
-      outcome: "failed",
-      responseId: context.responseId,
-      formId: context.formId,
-      workspaceId: context.workspaceId,
-      message: message.slice(0, 500),
-    }),
-  );
-  try {
-    Sentry.captureException(error, {
-      tags: {
+  // With the request it happened in (foundations §1), so the line, the
+  // Sentry event and the X-Request-Id the caller saw can be matched.
+  void currentRequestId().then((requestId) => {
+    console.error(
+      JSON.stringify({
+        level: "error",
         operation: context.operation,
-        ...(context.responseId ? { responseId: context.responseId } : {}),
-        ...(context.formId ? { formId: context.formId } : {}),
-        ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
-      },
-    });
-  } catch {
-    // Reporting must never throw.
-  }
+        outcome: "failed",
+        requestId,
+        responseId: context.responseId,
+        formId: context.formId,
+        workspaceId: context.workspaceId,
+        message: message.slice(0, 500),
+      }),
+    );
+    try {
+      Sentry.captureException(error, {
+        tags: {
+          operation: context.operation,
+          ...(requestId ? { requestId } : {}),
+          ...(context.responseId ? { responseId: context.responseId } : {}),
+          ...(context.formId ? { formId: context.formId } : {}),
+          ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
+        },
+      });
+    } catch {
+      // Reporting must never throw.
+    }
+  });
 }

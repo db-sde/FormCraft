@@ -7,7 +7,7 @@ import { QUESTION_TYPE_META, TypeTile } from "./question-meta";
 import { cn } from "cn";
 
 const ROW_ACTION =
-  "fc-focus grid size-6 place-items-center rounded-xs hover:bg-hover-wash-strong disabled:opacity-30";
+  "fc-focus grid size-6 place-items-center rounded-xs hover:bg-hover-wash-strong disabled:opacity-30 max-lg:size-8";
 
 /** The builder's question list (Part 4): numbered rows with type tiles;
  * the selected row is ink with its actions. Drag a row by its grip, or
@@ -62,6 +62,7 @@ export function QuestionList({
         return (
           <li
             key={question.id}
+            data-row-index={index}
             onDragOver={(e) => {
               if (dragIndex === null || index < firstMovable) return;
               e.preventDefault();
@@ -98,16 +99,53 @@ export function QuestionList({
                 setDragIndex(null);
                 setOverIndex(null);
               }}
+              // Touch and pen (F-52): HTML drag and drop doesn't work on
+              // phones, so the grip follows the finger itself.
+              onPointerDown={(e) => {
+                if (pinned || e.pointerType === "mouse") return;
+                e.preventDefault();
+                try {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                } catch {
+                  // A synthetic or already-released pointer: moves still
+                  // reach the grip while the finger is on it.
+                }
+                setDragIndex(index);
+                setOverIndex(index);
+              }}
+              onPointerMove={(e) => {
+                if (dragIndex === null || e.pointerType === "mouse") return;
+                const row = document
+                  .elementFromPoint(e.clientX, e.clientY)
+                  ?.closest<HTMLElement>("[data-row-index]");
+                const at = row ? Number(row.dataset.rowIndex) : NaN;
+                if (Number.isInteger(at) && at >= firstMovable && at !== overIndex) {
+                  setOverIndex(at);
+                }
+              }}
+              onPointerUp={(e) => {
+                if (dragIndex === null || e.pointerType === "mouse") return;
+                if (overIndex !== null && overIndex !== dragIndex) {
+                  onReorder(dragIndex, overIndex);
+                }
+                setDragIndex(null);
+                setOverIndex(null);
+              }}
+              onPointerCancel={() => {
+                setDragIndex(null);
+                setOverIndex(null);
+              }}
+              data-drag-handle
               aria-hidden
               className={cn(
                 // Above the row button's full-row click area (its ::after),
                 // or a drag on the grip grabs the button instead (QA FC4-06).
-                "relative z-10 w-3 shrink-0",
+                "relative z-10 w-3 shrink-0 touch-none max-lg:grid max-lg:w-6 max-lg:place-items-center [@media(hover:none)]:opacity-100",
                 pinned
                   ? "invisible"
                   : selected
                     ? "cursor-grab text-[#9a8c7a]"
-                    : "text-subtle-foreground cursor-grab opacity-0 group-hover:opacity-100",
+                    : "text-subtle-foreground cursor-grab opacity-0 group-hover:opacity-100 max-lg:opacity-100",
               )}
             >
               <GripVertical className="h-4 w-3" />
@@ -148,7 +186,9 @@ export function QuestionList({
               className={cn(
                 "relative flex shrink-0 gap-px",
                 !selected &&
-                  "max-w-0 overflow-hidden opacity-0 group-focus-within:max-w-28 group-focus-within:opacity-100 group-hover:max-w-28 group-hover:opacity-100",
+                  // Phones and touch screens have no hover: always shown there,
+                  // the way to reorder without dragging (F-52).
+                  "max-w-0 overflow-hidden opacity-0 group-focus-within:max-w-28 group-focus-within:opacity-100 group-hover:max-w-28 group-hover:opacity-100 max-lg:max-w-28 max-lg:opacity-100 [@media(hover:none)]:max-w-28 [@media(hover:none)]:opacity-100",
               )}
             >
               {!pinned && (

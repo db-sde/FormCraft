@@ -3,10 +3,13 @@
  * checkout, plans are assigned here, with the service role — the only
  * way plan_id and entitlement_overrides can change (see migration 25).
  *
- *   npm run plan:set -- <workspace id or slug> <plan id> ['{"members": 5}']
+ *   npm run plan:set -- <workspace id or slug> <plan id> ['{"members": 5}'] \
+ *     --by you@formcraft.example --reason "Annual deal, ticket 123"
  *
  * The optional JSON replaces the workspace's overrides (per-workspace
  * exceptions on top of the plan); omit it to keep the current ones.
+ * --by and --reason are required (foundations §4): the audit entry says
+ * who changed it and why, and whether it worked.
  */
 import { config } from "dotenv";
 config({ path: ".env.local", quiet: true });
@@ -14,11 +17,24 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database, Json } from "../src/lib/supabase/database.types";
 import { resolveEntitlements } from "../src/domains/billing/entitlements";
 
+/** `--by x` / `--reason "y"` out of the arguments; the rest in order. */
+function parseArgs(argv: string[]) {
+  const flags: Record<string, string> = {};
+  const rest: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === "--by" || argv[i] === "--reason")
+      flags[argv[i].slice(2)] = argv[++i] ?? "";
+    else rest.push(argv[i]);
+  }
+  return { rest, by: flags.by?.trim() ?? "", reason: flags.reason?.trim() ?? "" };
+}
+
 async function main() {
-  const [target, planId, overridesJson] = process.argv.slice(2);
-  if (!target || !planId) {
+  const { rest, by, reason } = parseArgs(process.argv.slice(2));
+  const [target, planId, overridesJson] = rest;
+  if (!target || !planId || !by || !reason) {
     console.error(
-      "Usage: npm run plan:set -- <workspace id or slug> <plan id> [overrides JSON]",
+      'Usage: npm run plan:set -- <workspace id or slug> <plan id> [overrides JSON] --by <your email> --reason "<why>"',
     );
     process.exit(1);
   }
@@ -65,7 +81,14 @@ async function main() {
     workspace_id: workspace.id,
     actor_id: null,
     action: "plan.changed",
-    metadata: { plan: plan.id, by: "admin script" },
+    metadata: {
+      plan: plan.id,
+      by: by.slice(0, 200),
+      via: "plan:set script",
+      overridesChanged: overridesJson !== undefined,
+    },
+    reason: reason.slice(0, 500),
+    outcome: "succeeded",
   });
   console.log(`${workspace.name} (${workspace.id}) is now on ${plan.name}.`);
   console.log(resolveEntitlements(plan.entitlements, workspace.entitlement_overrides));

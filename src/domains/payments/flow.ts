@@ -1,3 +1,5 @@
+import { audit } from "@/domains/audit/log";
+import { trackAccountEvent } from "@/lib/analytics/account-events";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
@@ -79,7 +81,7 @@ async function loadPayable(
   const { data: response } = await admin
     .from("responses")
     .select(
-      "id, form_id, form_version_id, hidden_fields, random_seed, completed_at, status, spam_suspected, forms!inner(workspace_id, title, payment_config)",
+      "id, form_id, form_version_id, random_seed, completed_at, status, spam_suspected, forms!inner(workspace_id, title, payment_config)",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -105,16 +107,15 @@ async function loadPayable(
     admin.from("payments").select("status").eq("response_id", responseId).maybeSingle(),
   ]);
   if (!version) return null;
-  const hidden = Object.fromEntries(
-    Object.entries((response.hidden_fields ?? {}) as Record<string, unknown>).filter(
-      (e): e is [string, string] => typeof e[1] === "string",
-    ),
-  );
+  // The amount never reads values from the form's link (F-54): anyone
+  // can edit a URL, so a hidden field that feeds a price would let them
+  // set it. Hidden fields count at their defaults here, whatever was
+  // sent; the answers and the creator's rules decide the rest.
   const walk = walkForm(
     compileFormSchema(parseFormSchema(version.schema)),
     Object.fromEntries((answerRows ?? []).map((a) => [a.question_id, a.value])),
     {
-      hidden,
+      hidden: {},
       seed: response.random_seed ?? undefined,
       now: response.completed_at ? new Date(response.completed_at) : undefined,
     },
@@ -470,6 +471,17 @@ export async function confirmAttemptPaid(
       .eq("provider_ref", providerRef)
       .single();
     if (attempt && outcome === "paid") {
+      // Foundations §2: one definition of a payment, sent once (only the
+      // first "paid" gets here; repeats of the same event are "already").
+      void trackAccountEvent({
+        event: "payment_succeeded",
+        distinctId: attempt.response_id,
+        properties: {
+          provider: attempt.provider,
+          currency: attempt.currency,
+          amount: attempt.amount,
+        },
+      });
       // Receipts wait for payment; confidential forms (F-30) issue none.
       const { data: form } = await admin
         .from("payment_attempts")
@@ -542,7 +554,7 @@ export async function recordRefund(
 ): Promise<"updated" | "ignored"> {
   const { data: attempt } = await admin
     .from("payment_attempts")
-    .select("response_id, amount, currency, status")
+    .select("response_id, form_id, amount, currency, status, forms(workspace_id)")
     .eq("provider", provider)
     .eq("provider_payment_id", providerPaymentId)
     .maybeSingle();
@@ -583,6 +595,31 @@ export async function recordRefund(
           ? `Refunded in full (${money(total)})`
           : `Partly refunded: ${money(total)} of ${money(payment.amount)}`,
     },
+  });
+  // A refund is made in the provider's dashboard; FormCraft records it
+  // (foundations §4): who is the provider, why is "refunded there".
+  const workspaceId = (attempt.forms as { workspace_id: string } | null)?.workspace_id;
+  if (workspaceId) {
+    await audit(admin, {
+      workspaceId,
+      actorId: null,
+      action: "payment.refunded",
+      target: { type: "response", id: attempt.response_id },
+      metadata: {
+        provider,
+        formId: attempt.form_id,
+        refundedTotal: total,
+        currency: attempt.currency,
+        full: total >= payment.amount,
+      },
+      reason: `Refunded in ${provider === "stripe" ? "Stripe" : "Razorpay"}`,
+    });
+  }
+  void trackAccountEvent({
+    event: "payment_refunded",
+    distinctId: attempt.response_id,
+    workspaceId: workspaceId ?? null,
+    properties: { provider, currency: attempt.currency, amount: total },
   });
   return "updated";
 }

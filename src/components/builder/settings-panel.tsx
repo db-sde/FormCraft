@@ -1,7 +1,11 @@
 "use client";
 
+import { AUTO_ADVANCE_TYPES } from "@/domains/forms/auto-advance";
+import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OptionsEditor } from "./options-editor";
+import { ConsentSettingsPanel, DateRangeSettingsPanel } from "./range-consent-settings";
+import { RepeatGroupSettingsPanel } from "./repeat-group-settings";
 import { ImageUploadField } from "./image-upload-field";
 import { ADDABLE_QUESTION_TYPES, QUESTION_TYPE_META, TypeTile } from "./question-meta";
 import {
@@ -75,12 +79,15 @@ export function SettingsPanel({
   earlierChoices = [],
   aiAvailable = false,
   layout = "conversational",
+  formAutoAdvance,
   allQuestions = [],
 }: {
   /** Every question, for settings that point at others (booking). */
   allQuestions?: { id: string; label: string; type: string }[];
   /** The form's layout (F-01): page breaks only matter in "classic". */
   layout?: "conversational" | "classic";
+  /** The form's own auto-advance setting, for "Form default" (F-63). */
+  formAutoAdvance?: boolean;
   /** The server has an AI key (AI features are hidden otherwise). */
   aiAvailable?: boolean;
   /** Earlier choice questions this one could take its options from. */
@@ -168,6 +175,49 @@ export function SettingsPanel({
       )}
 
       <PrefillSetting question={question} onChange={onChange} />
+
+      {!NON_ANSWERABLE_TYPES.has(question.type) && question.type !== "consent" && (
+        <SwitchRow
+          label="Sensitive answer"
+          hint="Shown as dots on the review before submitting, for things like ID numbers."
+          checked={!!question.sensitive}
+          onCheckedChange={(on) => onChange({ ...question, sensitive: on || undefined })}
+        />
+      )}
+
+      {AUTO_ADVANCE_TYPES.has(question.type) && layout !== "classic" && (
+        <PanelField
+          label="After choosing"
+          hint="Moving on by itself saves a click. Checkboxes and typed answers always wait for OK."
+        >
+          <Select
+            value={
+              question.autoAdvance === undefined
+                ? "form"
+                : question.autoAdvance
+                  ? "advance"
+                  : "wait"
+            }
+            onValueChange={(value) =>
+              onChange({
+                ...question,
+                autoAdvance: value === "form" ? undefined : value === "advance",
+              })
+            }
+          >
+            <SelectTrigger className="h-[38px] w-full" aria-label="After choosing">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="form">
+                Form default ({formAutoAdvance === false ? "wait for OK" : "move on"})
+              </SelectItem>
+              <SelectItem value="advance">Move on</SelectItem>
+              <SelectItem value="wait">Wait for OK</SelectItem>
+            </SelectContent>
+          </Select>
+        </PanelField>
+      )}
 
       {question.type === "page_break" && (
         <PanelNote>
@@ -701,6 +751,18 @@ export function SettingsPanel({
             />
           </PanelField>
         </>
+      )}
+
+      {question.type === "date_range" && (
+        <DateRangeSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "repeat_group" && (
+        <RepeatGroupSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "consent" && (
+        <ConsentSettingsPanel question={question} onChange={onChange} />
       )}
 
       {question.type === "rating" && (

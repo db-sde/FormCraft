@@ -50,6 +50,19 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
     extraParams: { access_type: "offline", prompt: "consent" },
     clientAuth: "body",
   },
+  // F-50: drive.file only (the files and folders FormCraft makes), the
+  // same Google app as Calendar and Sheets.
+  google_drive: {
+    provider: "google_drive",
+    label: "Google Drive",
+    envPrefix: "GOOGLE_OAUTH",
+    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    scopes: ["https://www.googleapis.com/auth/drive.file", "email"],
+    pkce: true,
+    extraParams: { access_type: "offline", prompt: "consent" },
+    clientAuth: "body",
+  },
   airtable: {
     provider: "airtable",
     label: "Airtable",

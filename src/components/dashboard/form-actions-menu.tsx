@@ -19,6 +19,7 @@ import {
   TextCursorInput,
   Trash2,
   FolderInput,
+  LayoutTemplate,
   UsersRound,
 } from "lucide-react";
 import {
@@ -31,6 +32,7 @@ import {
   deleteFormAction,
   formLeadCountAction,
   moveFormToFolderAction,
+  saveFormAsTemplateAction,
 } from "@/app/(dashboard)/actions";
 import type { FormListItem } from "@/domains/forms";
 import { Input } from "@/components/ui/input";
@@ -94,6 +96,11 @@ export function FormActionsMenu({
   // Leads go with the form, so the delete dialog says how many.
   const [leadCount, setLeadCount] = useState<number | null>(null);
   const [renaming, setRenaming] = useState(false);
+  // "Save as template" (F-61).
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState(form.title);
+  const [templateShared, setTemplateShared] = useState(true);
+  const [templateCategory, setTemplateCategory] = useState("");
   const [newTitle, setNewTitle] = useState(form.title);
   const [pending, startTransition] = useTransition();
 
@@ -167,6 +174,27 @@ export function FormActionsMenu({
           duration: 8000,
           action: { label: "Retry", onClick: duplicate },
         });
+      }
+    });
+  }
+
+  function saveTemplate() {
+    startTransition(async () => {
+      const result = await saveFormAsTemplateAction(form.id, {
+        title: templateName,
+        category: templateCategory,
+        visibility: templateShared ? "workspace" : "private",
+      });
+      if (result.ok) {
+        setSavingTemplate(false);
+        toast.success("Saved as a template.", {
+          description: templateShared
+            ? "Everyone in the workspace can start a form from it."
+            : "Only you can see it.",
+          action: { label: "View", onClick: () => router.push("/templates") },
+        });
+      } else {
+        toast.error(result.message, { duration: 8000 });
       }
     });
   }
@@ -254,6 +282,15 @@ export function FormActionsMenu({
               <DropdownMenuItem onSelect={duplicate}>
                 <Copy /> Duplicate
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setTemplateName(form.title);
+                  setTemplateShared(true);
+                  setSavingTemplate(true);
+                }}
+              >
+                <LayoutTemplate /> Save as template
+              </DropdownMenuItem>
               {folders.length > 0 && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
@@ -306,6 +343,83 @@ export function FormActionsMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={savingTemplate} onOpenChange={setSavingTemplate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as template</DialogTitle>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveTemplate();
+            }}
+          >
+            <p className="text-muted-foreground text-sm">
+              Copies the questions, logic and design. Never the responses, integrations,
+              payment settings or keys. Later changes to this form don&apos;t change the
+              template.
+            </p>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold">
+              Template name
+              <Input
+                value={templateName}
+                maxLength={120}
+                onChange={(e) => setTemplateName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-semibold">
+              Category
+              <Input
+                value={templateCategory}
+                maxLength={40}
+                placeholder="Custom"
+                onChange={(e) => setTemplateCategory(e.target.value)}
+              />
+            </label>
+            <fieldset className="flex flex-col gap-2 text-sm">
+              <legend className="mb-1 font-semibold">Who can use it</legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="template-visibility"
+                  checked={templateShared}
+                  onChange={() => setTemplateShared(true)}
+                />
+                Everyone in this workspace
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="template-visibility"
+                  checked={!templateShared}
+                  onChange={() => setTemplateShared(false)}
+                />
+                Only me
+              </label>
+            </fieldset>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSavingTemplate(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={pending || !templateName.trim()}
+                data-loading={pending || undefined}
+              >
+                {pending && <ButtonSpinner />}
+                {pending ? "Saving…" : "Save template"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogContent>

@@ -30,6 +30,7 @@ export const LINK_PROVIDERS = [
   "mailchimp",
   "zoho_crm",
   "pipedrive",
+  "google_drive",
 ] as const;
 export type LinkProvider = (typeof LINK_PROVIDERS)[number];
 

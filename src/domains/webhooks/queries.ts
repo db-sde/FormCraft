@@ -5,6 +5,8 @@ import type { AnswerMap } from "@/domains/logic";
 import {
   buildWebhookPayload,
   serializeWebhookPayload,
+  WEBHOOK_EVENTS,
+  type WebhookEvent,
   type WebhookPayload,
 } from "./payload";
 import { signatureHeaders } from "./signing";
@@ -16,7 +18,7 @@ import { parseFormSchema } from "@/domains/forms/schema";
 
 type Client = SupabaseClient<Database>;
 
-export type EndpointKind = "webhook" | "slack" | "zapier" | "make" | "hubspot";
+export type EndpointKind = "webhook" | "slack" | "zapier" | "make" | "hubspot" | "n8n";
 
 export type WebhookEndpoint = {
   id: string;
@@ -27,7 +29,26 @@ export type WebhookEndpoint = {
   kind: EndpointKind;
   /** Slack: the questions included in the message (empty = first ten). */
   questionIds: string[];
+  /** What it's sent (F-53): completed responses unless it chose more. */
+  events: WebhookEvent[];
+  /** Minutes without activity before "abandoned" (F-53). */
+  abandonAfterMinutes: number;
 };
+
+export const DEFAULT_ABANDON_MINUTES = 30;
+
+export function endpointEvents(config: unknown): WebhookEvent[] {
+  const list = (config as { events?: unknown } | null)?.events;
+  if (!Array.isArray(list)) return ["response.completed"];
+  return WEBHOOK_EVENTS.filter((e) => list.includes(e));
+}
+
+export function abandonMinutes(config: unknown): number {
+  const n = Number(
+    (config as { abandonAfterMinutes?: unknown } | null)?.abandonAfterMinutes,
+  );
+  return Number.isInteger(n) ? Math.min(1440, Math.max(5, n)) : DEFAULT_ABANDON_MINUTES;
+}
 
 export async function listWebhookEndpoints(
   supabase: Client,
@@ -50,6 +71,8 @@ export async function listWebhookEndpoints(
     questionIds: Array.isArray((row.config as { questionIds?: unknown })?.questionIds)
       ? (row.config as { questionIds: string[] }).questionIds
       : [],
+    events: endpointEvents(row.config),
+    abandonAfterMinutes: abandonMinutes(row.config),
   }));
 }
 
@@ -213,13 +236,18 @@ export async function enqueueWebhookDeliveries(
 
   let endpointsQuery = admin
     .from("webhook_endpoints")
-    .select("id")
+    .select("id, config")
     .eq("form_id", response.formId)
     .eq("enabled", true);
   if (onlyEndpointIds) endpointsQuery = endpointsQuery.in("id", onlyEndpointIds);
-  const { data: endpoints, error: endpointsError } = await endpointsQuery;
+  const { data: allEndpoints, error: endpointsError } = await endpointsQuery;
   if (endpointsError) throw endpointsError;
-  if (!endpoints || endpoints.length === 0) return 0;
+  // Only those that asked for completed responses (all, unless they
+  // chose their own events, F-53).
+  const endpoints = (allEndpoints ?? []).filter((e) =>
+    endpointEvents(e.config).includes("response.completed"),
+  );
+  if (endpoints.length === 0) return 0;
 
   const rows = endpoints.map((endpoint) => {
     const payload = buildWebhookPayload({
@@ -245,7 +273,7 @@ export async function enqueueWebhookDeliveries(
   const { data: inserted, error: insertError } = await admin
     .from("webhook_deliveries")
     .upsert(rows, {
-      onConflict: "endpoint_id,response_id,event_type",
+      onConflict: "endpoint_id,response_id,event_type,dedupe_key",
       ignoreDuplicates: true,
     })
     .select("id");

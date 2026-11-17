@@ -35,10 +35,20 @@ export function ThemeSettingsPanel({
   customFonts = true,
   layout = "conversational",
   onLayoutChange,
+  autoAdvance,
+  onAutoAdvanceChange,
+  reviewStep,
+  onReviewStepChange,
 }: {
   /** One question per screen, or classic pages (F-01). */
   layout?: "conversational" | "classic";
   onLayoutChange?: (layout: "conversational" | "classic") => void;
+  /** The form's auto-advance (F-63): on unless false. */
+  autoAdvance?: boolean;
+  onAutoAdvanceChange?: (on: boolean) => void;
+  /** A review of the answers before submitting (F-60). */
+  reviewStep?: boolean;
+  onReviewStepChange?: (on: boolean) => void;
   /** The plan includes paid and uploaded fonts (P2.22). */
   customFonts?: boolean;
   theme: ThemeV1;
@@ -206,6 +216,34 @@ export function ThemeSettingsPanel({
         ]}
         onChange={(value) => set({ showProgress: value === "off" ? false : undefined })}
       />
+      {theme.showProgress !== false && (
+        <PanelField
+          label="Progress text"
+          hint="Counted along the way your logic sends each person. Classic layouts count pages."
+        >
+          <Select
+            value={theme.progressLabel ?? "none"}
+            onValueChange={(value) =>
+              set({
+                progressLabel:
+                  value === "none"
+                    ? undefined
+                    : (value as "percent" | "count" | "remaining"),
+              })
+            }
+          >
+            <SelectTrigger className="h-[38px] w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None, just the bar</SelectItem>
+              <SelectItem value="percent">Percentage (40% complete)</SelectItem>
+              <SelectItem value="count">Count (Question 3 of 8)</SelectItem>
+              <SelectItem value="remaining">Remaining (5 questions left)</SelectItem>
+            </SelectContent>
+          </Select>
+        </PanelField>
+      )}
 
       <SectionHead>Images</SectionHead>
       <ImageUploadField
@@ -247,6 +285,32 @@ export function ThemeSettingsPanel({
               ? "Several questions per page. Add page breaks (Add question → Page break) to split it into pages. Logic, scores and validation work the same."
               : "Each question on its own screen. Page breaks are ignored."}
           </PanelNote>
+          {onReviewStepChange && (
+            <div className="col-span-full">
+              <Segmented
+                label="Before submitting"
+                value={reviewStep ? "review" : "submit"}
+                options={[
+                  { value: "submit", label: "Submit straight away" },
+                  { value: "review", label: "Review answers" },
+                ]}
+                onChange={(value) => onReviewStepChange(value === "review")}
+              />
+            </div>
+          )}
+          {layout !== "classic" && onAutoAdvanceChange && (
+            <div className="col-span-full">
+              <Segmented
+                label="After a single choice"
+                value={autoAdvance === false ? "wait" : "advance"}
+                options={[
+                  { value: "advance", label: "Move on" },
+                  { value: "wait", label: "Wait for OK" },
+                ]}
+                onChange={(value) => onAutoAdvanceChange(value === "advance")}
+              />
+            </div>
+          )}
         </>
       )}
       <SectionHead>Custom CSS</SectionHead>

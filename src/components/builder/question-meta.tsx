@@ -18,6 +18,9 @@ import {
   Paperclip,
   PenLine,
   CalendarCheck,
+  CalendarRange,
+  CopyPlus,
+  ShieldCheck,
   ShoppingCart,
   Phone,
   Quote,
@@ -234,6 +237,27 @@ export const QUESTION_TYPE_META: Record<QuestionType, TypeMeta> = {
     tint: "Other",
     description: "Pick a free time from your calendar",
   },
+  date_range: {
+    label: "Date range",
+    icon: CalendarRange,
+    group: "answer",
+    tint: "Other",
+    description: "A start and an end date",
+  },
+  repeat_group: {
+    label: "Repeating group",
+    icon: CopyPlus,
+    group: "answer",
+    tint: "Text",
+    description: "The same fields, once per person or item",
+  },
+  consent: {
+    label: "Consent",
+    icon: ShieldCheck,
+    group: "answer",
+    tint: "Screens",
+    description: "A notice to read and accept",
+  },
 };
 
 /** What the Add question menu can add: every type, plus "Picture
@@ -257,7 +281,7 @@ export const ADDABLE_QUESTION_TYPES: QuestionType[] = QUESTION_TYPES.filter(
 
 /** The Add question menu's columns (Part 4). */
 export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
-  { name: "Screens", types: ["welcome_screen", "statement", "page_break"] },
+  { name: "Screens", types: ["welcome_screen", "statement", "page_break", "consent"] },
   {
     name: "Text",
     types: [
@@ -269,6 +293,7 @@ export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
       "number",
       "contact_info",
       "address",
+      "repeat_group",
     ],
   },
   {
@@ -289,6 +314,7 @@ export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
       "rating",
       "opinion_scale",
       "date",
+      "date_range",
       "time",
       "datetime",
       "file_upload",

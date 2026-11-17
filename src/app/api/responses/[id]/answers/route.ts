@@ -1,6 +1,7 @@
+import { enqueuePartialSaveEvents } from "@/domains/webhooks";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   saveResponseAnswers,
   FormClosedError,
@@ -67,6 +68,9 @@ export async function PATCH(
       parsed.data.lastQuestionId,
       parsed.data.answers,
     );
+    // Partial-response webhooks (F-53): queued after the reply, never
+    // holding it up or failing it.
+    after(() => enqueuePartialSaveEvents(admin, id));
     return NextResponse.json({ status: result.status, revision: result.revision });
   } catch (error) {
     if (error instanceof ResponseNotFoundError) {

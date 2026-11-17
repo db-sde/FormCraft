@@ -1,3 +1,4 @@
+import { currentRequestId } from "@/lib/http/request-id";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
@@ -20,6 +21,10 @@ export type AuditAction =
   | "form.password_removed"
   | "form.captcha_changed"
   | "form.kiosk_changed"
+  | "response.deleted"
+  | "payment.refunded"
+  | "template.created"
+  | "template.deleted"
   | "block.created"
   | "block.version_published"
   | "block.restored"
@@ -63,10 +68,19 @@ export type AuditEntry = {
   action: AuditAction;
   target?: { type: string; id: string };
   metadata?: Record<string, string | number | boolean | null>;
+  /** Why it was done, in the person's own words (a plan override, a
+   * privacy erasure). Never answers or secrets. */
+  reason?: string | null;
+  /** How it went: refused and failed attempts are worth recording too. */
+  outcome?: "succeeded" | "failed" | "denied";
+  /** The request that did it; the current one when left out. */
+  requestId?: string | null;
 };
 
 export async function audit(admin: Client, entry: AuditEntry): Promise<void> {
   try {
+    const requestId =
+      entry.requestId === undefined ? await currentRequestId() : entry.requestId;
     await admin.from("audit_logs").insert({
       workspace_id: entry.workspaceId,
       actor_id: entry.actorId,
@@ -74,6 +88,9 @@ export async function audit(admin: Client, entry: AuditEntry): Promise<void> {
       target_type: entry.target?.type ?? null,
       target_id: entry.target?.id ?? null,
       metadata: (entry.metadata ?? {}) as Json,
+      reason: entry.reason?.trim().slice(0, 500) || null,
+      outcome: entry.outcome ?? "succeeded",
+      request_id: requestId,
     });
   } catch {
     // An audit write must never break the action it records.
@@ -88,6 +105,9 @@ export type AuditRecord = {
   targetType: string | null;
   targetId: string | null;
   metadata: Record<string, unknown>;
+  reason: string | null;
+  outcome: string;
+  requestId: string | null;
   createdAt: string;
 };
 
@@ -100,7 +120,7 @@ export async function listAuditLog(
   let query = supabase
     .from("audit_logs")
     .select(
-      "id, action, target_type, target_id, metadata, created_at, profiles(full_name, email)",
+      "id, action, target_type, target_id, metadata, reason, outcome, request_id, created_at, profiles(full_name, email)",
     )
     .eq("workspace_id", workspaceId)
     .order("id", { ascending: false })
@@ -118,6 +138,9 @@ export async function listAuditLog(
       targetType: row.target_type,
       targetId: row.target_id,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      reason: row.reason,
+      outcome: row.outcome,
+      requestId: row.request_id,
       createdAt: row.created_at,
     };
   });
