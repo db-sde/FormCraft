@@ -1437,17 +1437,21 @@ export function FormBuilder({
                   onDuplicate={handleDuplicate}
                   onDelete={requestDeleteQuestion}
                 />
-                <AddQuestionMenu
-                  onAdd={handleAdd}
-                  library={{
-                    load: listBlocksAction,
-                    onPick: (id) => void handleAddBlock(id),
-                  }}
-                  canAddWelcome={
-                    !schema.questions.some((q) => q.type === "welcome_screen")
-                  }
-                  canAddPageBreak={schema.meta.layout === "classic"}
-                />
+                {/* On a phone it stays in sight at the bottom of the list,
+                    however long the list is (QA FC11-06, run 12). */}
+                <div className="max-lg:bg-card max-lg:sticky max-lg:bottom-0 max-lg:z-10 max-lg:pb-1">
+                  <AddQuestionMenu
+                    onAdd={handleAdd}
+                    library={{
+                      load: listBlocksAction,
+                      onPick: (id) => void handleAddBlock(id),
+                    }}
+                    canAddWelcome={
+                      !schema.questions.some((q) => q.type === "welcome_screen")
+                    }
+                    canAddPageBreak={schema.meta.layout === "classic"}
+                  />
+                </div>
               </div>
 
               {!hasLeadCapture(schema.questions) && (

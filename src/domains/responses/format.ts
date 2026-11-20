@@ -400,7 +400,12 @@ export function previewAnswerValue(
     return [
       parts.acknowledged ? "Accepted" : "Not accepted",
       typeof parts.versionLabel === "string" ? parts.versionLabel : null,
-      typeof parts.acceptedAt === "string" ? parts.acceptedAt.slice(0, 10) : null,
+      // Date and time, as stored (UTC), so the cell can be read on its own
+      // (QA FC12-01).
+      typeof parts.acceptedAt === "string" &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(parts.acceptedAt)
+        ? `${parts.acceptedAt.slice(0, 16).replace("T", " ")} UTC`
+        : null,
     ]
       .filter(Boolean)
       .join(" · ");

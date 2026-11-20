@@ -2519,4 +2519,25 @@ Later, as decided): 55, 57, 59, 64, 66, 67, 68.
   settings; partial-response webhooks (FC11-03) depend on the database
   scheduler, whose stored secret doesn't match the one the site checks.
 
+## 2026-11-20 — QA run 11, follow-up (run 12)
+
+- **Double tap (FC11-05).** The Add question menu takes one pick per
+  opening; a double tap's second tap, landing while the menu closes,
+  is ignored.
+- **Phone builder (FC11-06).** Add question sticks to the bottom of the
+  questions list below desktop width, so it's in sight without
+  scrolling. Preview is full-screen below desktop width, with a one-row
+  toolbar (icons, labels kept for screen readers).
+- **Consent cell (FC12-01).** Shows the time as well as the date, in UTC
+  as stored (the cell is plain text built on the server).
+- **Address cell (FC11-02).** Left as one line on purpose: a table cell
+  is a line; the parts are in the response view and the export.
+- **Partial webhooks (FC11-03).** No code change. Partial-saved events
+  go out a minute after a save, abandoned after the idle time, resumed
+  after an abandoned one: all of it is sent by the database scheduler.
+  On production every scheduler call is refused (its stored secret
+  doesn't match the site's), so these only go out when a completion
+  sends what's waiting. The fix is setting one new secret in both
+  places.
+
 <!-- Add new decisions above this line, newest first. -->

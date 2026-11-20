@@ -31,6 +31,19 @@ const schema = {
   logic: [],
 } as unknown as FormSchemaV1;
 
+/** Long enough that the list runs past the bottom of a short window. */
+const longSchema = {
+  ...schema,
+  questions: Array.from({ length: 8 }, (_, i) => ({
+    id: `q${i + 1}`,
+    type: "short_text",
+    order: i,
+    label: `Question ${i + 1}`,
+    required: false,
+    settings: {},
+  })),
+} as unknown as FormSchemaV1;
+
 test.describe("QA run 11: the builder in a narrow, short window", () => {
   test.use({ viewport: { width: 427, height: 300 } });
   let user: Awaited<ReturnType<typeof createConfirmedUser>>;
@@ -44,7 +57,7 @@ test.describe("QA run 11: the builder in a narrow, short window", () => {
   test("FC11-05/06: Add question clear of the tab bar; every tap on a type adds one; undoing a setting needs no publish", async ({
     page,
   }, testInfo) => {
-    const { formId } = await createPublishedForm(user, schema);
+    const { formId } = await createPublishedForm(user, longSchema);
     const count = async () => {
       const { data } = await adminClient()
         .from("form_versions")
@@ -60,10 +73,11 @@ test.describe("QA run 11: the builder in a narrow, short window", () => {
     await expect(tabs).toBeVisible();
 
     // The page is no taller than the window, so the pinned tab bar never
-    // sits over the list's last control.
+    // sits over the list's last control; and with a list longer than the
+    // window, Add question is in sight without scrolling (run 12).
     await tabs.getByRole("button", { name: "Questions" }).click();
     const add = page.getByRole("button", { name: "Add question" });
-    await add.scrollIntoViewIfNeeded();
+    await expect(add).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath("questions.png") });
     const [addBox, tabBox] = [await add.boundingBox(), await tabs.boundingBox()];
     expect(addBox!.y + addBox!.height).toBeLessThanOrEqual(tabBox!.y + 2);
@@ -80,9 +94,19 @@ test.describe("QA run 11: the builder in a narrow, short window", () => {
       await tile.click();
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await waitForSaved(page);
-      await expect.poll(count).toBe(2 + i);
+      await expect.poll(count).toBe(9 + i);
       await page.screenshot({ path: testInfo.outputPath(`added-${i}.png`) });
     }
+
+    // A double tap on a type adds it once (run 12).
+    await tabs.getByRole("button", { name: "Questions" }).click();
+    await add.click();
+    const email = page.locator(`button[data-type]`, { hasText: "Email" }).first();
+    await email.scrollIntoViewIfNeeded();
+    await email.dblclick();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await waitForSaved(page);
+    await expect.poll(count).toBe(12);
 
     // Publish, then a setting turned on and back off: nothing to publish.
     await page.getByRole("button", { name: /^Publish changes$/ }).click();

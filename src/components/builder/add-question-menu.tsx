@@ -75,6 +75,9 @@ export function AddQuestionMenu({
     .sort((a, b) => a.score - b.score)[0]?.type;
 
   function pick(type: AddKind) {
+    // One add per opening: a double tap's second tap lands on the same
+    // tile while the menu is still closing (QA FC11-05, run 12).
+    if (pickedRef.current) return;
     pickedRef.current = true;
     onAdd(type);
     setOpen(false);
@@ -210,6 +213,7 @@ export function AddQuestionMenu({
                   type="button"
                   data-type="block"
                   onClick={() => {
+                    if (pickedRef.current) return;
                     pickedRef.current = true;
                     library.onPick(block.id);
                     setOpen(false);

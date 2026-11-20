@@ -13,6 +13,7 @@ import {
   formatAnswerValue,
   questionColumnLabels,
   answerCells,
+  previewAnswerValue,
 } from "@/domains/responses/format";
 import { consentVersion } from "@/domains/forms/consent-record";
 import { addressFromComponents } from "@/domains/places";
@@ -546,5 +547,22 @@ describe("Google Places address parts (F-65)", () => {
       postalCode: "SW1A 2AA",
       country: "United Kingdom",
     });
+  });
+});
+
+describe("consent in the responses table (QA FC11-10, FC12-01)", () => {
+  it("shows the outcome, the notice and when, to the minute", () => {
+    const value = {
+      acknowledged: true,
+      version: "abc123",
+      versionLabel: "Privacy v3",
+      acceptedAt: "2026-11-20T10:13:42.000Z",
+    };
+    expect(previewAnswerValue(consent(), value)).toBe(
+      "Accepted · Privacy v3 · 2026-11-20 10:13 UTC",
+    );
+    expect(previewAnswerValue(consent(), { ...value, acceptedAt: "soon" })).toBe(
+      "Accepted · Privacy v3",
+    );
   });
 });

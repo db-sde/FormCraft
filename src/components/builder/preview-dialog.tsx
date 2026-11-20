@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { EyeOff, FlaskConical, Monitor, Smartphone, Workflow, X } from "lucide-react";
+import {
+  EyeOff,
+  FlaskConical,
+  Monitor,
+  RotateCcw,
+  Smartphone,
+  Workflow,
+  X,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LogicTrace } from "./logic/logic-trace";
 import { newSeed } from "@/domains/logic/random";
@@ -94,18 +102,19 @@ export function PreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        // On a phone the preview takes the whole screen: inside a framed box
-        // there was no room left to answer anything (QA FC11-06).
-        className="flex h-[min(780px,calc(100dvh-56px))] w-[min(1180px,calc(100vw-56px))] max-w-none flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:w-screen max-sm:rounded-none max-sm:border-0 sm:max-w-none"
+        // Below desktop width the preview takes the whole screen, with its
+        // controls on one short row: inside a framed box there was little
+        // room left to answer anything (QA FC11-06).
+        className="flex h-[min(780px,calc(100dvh-56px))] w-[min(1180px,calc(100vw-56px))] max-w-none flex-col gap-0 overflow-hidden p-0 max-lg:h-dvh max-lg:w-screen max-lg:rounded-none max-lg:border-0 sm:max-w-none"
       >
-        <div className="border-ink flex flex-wrap items-center gap-3.5 border-b-[1.5px] px-4 py-3 max-sm:gap-2 max-sm:px-2.5 max-sm:py-2">
-          <DialogTitle className="font-heading text-[17px] font-bold">
+        <div className="border-ink flex flex-wrap items-center gap-3.5 border-b-[1.5px] px-4 py-3 max-lg:flex-nowrap max-lg:gap-2 max-lg:px-2.5 max-lg:py-1.5">
+          <DialogTitle className="font-heading shrink-0 text-[17px] font-bold">
             Preview
           </DialogTitle>
-          <DialogDescription className="border-warning bg-accent flex items-center gap-1.5 rounded-full border-[1.5px] px-2.5 py-1 text-[12.5px] font-semibold text-[var(--chip-draft-fg)]">
-            <FlaskConical className="size-[13px]" />
-            <span className="max-sm:hidden">Preview mode: answers aren&apos;t saved</span>
-            <span className="sm:hidden">Answers aren&apos;t saved</span>
+          <DialogDescription className="border-warning bg-accent flex min-w-0 items-center gap-1.5 rounded-full border-[1.5px] px-2.5 py-1 text-[12.5px] font-semibold text-[var(--chip-draft-fg)]">
+            <FlaskConical className="size-[13px] shrink-0" />
+            <span className="max-lg:hidden">Preview mode: answers aren&apos;t saved</span>
+            <span className="truncate lg:hidden">Not saved</span>
           </DialogDescription>
           <span className="flex-1" />
           <div
@@ -126,35 +135,39 @@ export function PreviewDialog({
                 aria-checked={device === id}
                 onClick={() => setDevice(id)}
                 className={cn(
-                  "fc-focus flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-[13.5px] font-semibold",
+                  "fc-focus flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-[13.5px] font-semibold max-lg:px-2",
                   device === id
                     ? "bg-secondary text-secondary-foreground"
                     : "hover:bg-hover-wash",
                 )}
               >
                 <Icon className="size-3.5" />
-                {label}
+                <span className="max-lg:sr-only">{label}</span>
               </button>
             ))}
           </div>
           <Button
             variant="outline"
             size="sm"
-            className="border-border h-[34px]"
+            className="border-border h-[34px] max-lg:w-[34px] max-lg:px-0"
             onClick={restart}
             disabled={!result.ok}
           >
-            Restart
+            <RotateCcw className="lg:hidden" />
+            <span className="max-lg:sr-only">Restart</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             aria-pressed={showLogic}
-            className={cn("border-border h-[34px]", showLogic && "bg-accent")}
+            className={cn(
+              "border-border h-[34px] max-lg:w-[34px] max-lg:px-0",
+              showLogic && "bg-accent",
+            )}
             onClick={() => setShowLogic((v) => !v)}
             disabled={!result.ok}
           >
-            <Workflow /> Logic
+            <Workflow /> <span className="max-lg:sr-only">Logic</span>
           </Button>
           <Button
             variant="outline"
@@ -168,7 +181,7 @@ export function PreviewDialog({
         </div>
 
         <div className="relative flex min-h-0 flex-1">
-          <div className="bg-board grid min-h-0 flex-1 place-items-center p-5 max-sm:p-0">
+          <div className="bg-board grid min-h-0 flex-1 place-items-center p-5 max-lg:p-2 max-sm:p-0">
             {!result.ok ? (
               <div className="flex max-w-[420px] flex-col items-center gap-2.5 text-center">
                 <span className="border-ink shadow-card grid size-[52px] -rotate-6 place-items-center rounded-[12px] border-[1.5px] bg-[var(--alert-error-bg)]">
@@ -223,7 +236,7 @@ export function PreviewDialog({
           {showLogic && result.ok && (
             // A phone has no room beside the form: the trace sits over its
             // lower half instead of squeezing it to nothing.
-            <aside className="border-ink bg-card w-[340px] shrink-0 overflow-y-auto border-l-[1.5px] p-4 max-sm:absolute max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[55%] max-sm:w-full max-sm:border-t-[1.5px] max-sm:border-l-0">
+            <aside className="border-ink bg-card w-[340px] shrink-0 overflow-y-auto border-l-[1.5px] p-4 max-lg:absolute max-lg:inset-x-0 max-lg:bottom-0 max-lg:max-h-[55%] max-lg:w-full max-lg:border-t-[1.5px] max-lg:border-l-0">
               {(result.compiled.schema.hiddenFields ?? []).length > 0 && (
                 <div className="mb-4 flex flex-col gap-1.5">
                   <span className="text-muted-foreground text-[11px] font-bold tracking-[0.1em] uppercase">
