@@ -1,3 +1,4 @@
+import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
@@ -57,7 +58,7 @@ export function contactProperties(
     const value =
       field && raw && typeof raw === "object"
         ? (raw as Record<string, unknown>)[field]
-        : question.type === "file_upload" || question.type === "signature"
+        : UPLOAD_ANSWER_TYPES.has(question.type)
           ? undefined // uploads are private; never sent out
           : raw;
     if (value === undefined || value === null || value === "") continue;

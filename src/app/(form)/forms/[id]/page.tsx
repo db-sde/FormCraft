@@ -1,3 +1,4 @@
+import { emailCodesAvailable } from "@/domains/verification/email-code";
 import { placesConfigured } from "@/domains/places";
 import type { Metadata } from "next";
 import { cache } from "react";
@@ -94,6 +95,7 @@ export default async function FormBuilderPage({
         onRename={renameFormAction}
         aiEnabled={aiConfigured()}
         placesAvailable={placesConfigured()}
+        emailCodesAvailable={emailCodesAvailable()}
         brandingRemovable={entitlements.remove_branding}
         customFonts={entitlements.custom_fonts}
         multilingual={entitlements.multilingual}

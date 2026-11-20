@@ -16,7 +16,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { ImageUploadField } from "./image-upload-field";
-import { PANEL_INPUT, PanelField, PanelNote, SectionHead, SwitchRow } from "./panel-ui";
+import {
+  PANEL_INPUT,
+  PanelField,
+  PanelNote,
+  SectionHead,
+  Segmented,
+  SwitchRow,
+} from "./panel-ui";
 import { useOrdersCharged } from "@/components/order-payment";
 
 type Change = (next: QuestionV1) => void;
@@ -56,6 +63,66 @@ export function SignatureSettingsPanel({
       <PanelNote>
         A simple electronic signature: the image and when it was signed are saved with the
         response. It isn&apos;t a certified or identity-verified signature.
+      </PanelNote>
+    </>
+  );
+}
+
+// --- video or audio answer (roadmap #21) ------------------------------------
+
+export function MediaSettingsPanel({
+  question,
+  onChange,
+}: {
+  question: Extract<QuestionV1, { type: "media" }>;
+  onChange: Change;
+}) {
+  const s = question.settings;
+  const set = (patch: Record<string, unknown>) =>
+    onChange({ ...question, settings: { ...s, ...patch } } as QuestionV1);
+  return (
+    <>
+      <SectionHead>Recording</SectionHead>
+      <div className="col-span-full">
+        <Segmented
+          label="Record"
+          value={s.kind}
+          options={[
+            { value: "audio", label: "Audio" },
+            { value: "video", label: "Video" },
+          ]}
+          onChange={(kind) => set({ kind })}
+        />
+      </div>
+      <PanelField label="Longest recording (seconds)" hint="5 to 300 seconds.">
+        <Input
+          className={PANEL_INPUT}
+          type="number"
+          min={5}
+          max={300}
+          value={s.maxSeconds}
+          onChange={(e) => {
+            const n = Math.round(Number(e.target.value));
+            if (Number.isFinite(n)) set({ maxSeconds: Math.min(300, Math.max(5, n)) });
+          }}
+        />
+      </PanelField>
+      <PanelField
+        label="What they agree to"
+        hint="Shown with a box to tick before the camera or microphone is asked for."
+      >
+        <Textarea
+          className="min-h-[56px] text-[13.5px]"
+          maxLength={300}
+          value={s.consentText ?? ""}
+          placeholder="I agree to this recording being sent with my answers."
+          onChange={(e) => set({ consentText: e.target.value || undefined })}
+        />
+      </PanelField>
+      <PanelNote>
+        Recordings are kept with the response, seen only by teammates who can see
+        responses, and deleted with it (and by your retention setting). They aren&apos;t
+        transcribed or sent to integrations.
       </PanelNote>
     </>
   );

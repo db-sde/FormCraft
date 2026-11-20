@@ -26,8 +26,14 @@ export function buildEmbedSnippet(options: {
   formUrl: string;
   formId: string;
   title: string;
+  /** A link theme's id (F-66). */
+  theme?: string;
 }): string {
   const id = JSON.stringify(options.formId);
+  const themeParam =
+    options.theme && /^[a-z0-9][a-z0-9-]{0,39}$/.test(options.theme)
+      ? `&theme=${options.theme}`
+      : "";
   const selector = JSON.stringify(`iframe[data-formcraft="${options.formId}"]`);
   const script =
     `window.addEventListener("message",function(e){var d=e.data;` +
@@ -37,7 +43,7 @@ export function buildEmbedSnippet(options: {
     `document.querySelectorAll(${selector}).forEach(function(f){` +
     `if(f.contentWindow===e.source)f.style.height=h+"px"})});`;
   return [
-    `<iframe src="${escapeAttribute(options.formUrl)}?embed=1" data-formcraft="${escapeAttribute(options.formId)}" width="100%" height="600" style="border:0;border-radius:12px;width:100%" title="${escapeAttribute(options.title)}"></iframe>`,
+    `<iframe src="${escapeAttribute(options.formUrl)}?embed=1${themeParam}" data-formcraft="${escapeAttribute(options.formId)}" allow="microphone; camera" width="100%" height="600" style="border:0;border-radius:12px;width:100%" title="${escapeAttribute(options.title)}"></iframe>`,
     `<script>${script}</script>`,
   ].join("\n");
 }
@@ -93,7 +99,7 @@ export function buildPopupSnippet(options: {
     `var x=document.createElement("button");x.type="button";x.setAttribute("aria-label","Close");x.textContent="\\u00d7";` +
     `x.setAttribute("style","position:absolute;top:8px;right:10px;z-index:1;width:36px;height:36px;border:0;border-radius:999px;background:rgba(0,0,0,.06);font:24px/1 system-ui,sans-serif;cursor:pointer;");` +
     `x.addEventListener("click",close);` +
-    `var f=document.createElement("iframe");f.src=c.url;f.title=c.title;f.setAttribute("style","width:100%;height:100%;border:0;");` +
+    `var f=document.createElement("iframe");f.src=c.url;f.title=c.title;f.setAttribute("allow","microphone; camera");f.setAttribute("style","width:100%;height:100%;border:0;");` +
     `box.appendChild(x);box.appendChild(f);overlay.appendChild(box);root.appendChild(overlay);document.addEventListener("keydown",onKey);x.focus();}` +
     `btn.addEventListener("click",open);` +
     `var s=document.currentScript;if(c.mode==="button"&&s&&s.parentNode){s.parentNode.insertBefore(host,s);}else{document.body.appendChild(host);}` +

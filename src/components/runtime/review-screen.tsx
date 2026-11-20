@@ -30,6 +30,12 @@ function shownAnswer(
     return { text: name ?? strings.fileUploaded, empty: false };
   }
   if (question.type === "signature") return { text: strings.signed, empty: false };
+  if (question.type === "media") {
+    return {
+      text: question.settings.kind === "video" ? "Video recorded" : "Audio recorded",
+      empty: false,
+    };
+  }
   if (question.type === "consent") {
     const v = value as { acknowledged?: boolean; optIn?: boolean };
     const bits = [

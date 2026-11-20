@@ -1,3 +1,4 @@
+import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { Metadata } from "next";
 import { Bell, CircleAlert, CircleCheck, Sheet, ShieldX, Webhook } from "lucide-react";
 import { listWebhookEndpoints, listDeliveries } from "@/domains/webhooks";
@@ -433,8 +434,7 @@ export default async function IntegrationsPage({
             }
             if (
               q.type === "statement" ||
-              q.type === "file_upload" ||
-              q.type === "signature" ||
+              UPLOAD_ANSWER_TYPES.has(q.type) ||
               q.type === "matrix"
             )
               return [];

@@ -40,6 +40,7 @@ const DEFAULT_LABEL: Record<QuestionType, string> = {
   ranking: "Rank these in order",
   matrix: "How would you rate each?",
   signature: "Sign here",
+  media: "Tell us in your own words",
   products: "What would you like to order?",
   booking: "Pick a time",
   date_range: "When will you be staying?",
@@ -118,6 +119,12 @@ function defaultSettings(type: QuestionType): QuestionV1["settings"] {
       };
     case "signature":
       return { consentText: "By signing, I confirm the information above is correct." };
+    case "media":
+      return {
+        kind: "audio",
+        maxSeconds: 60,
+        consentText: "I agree to this recording being sent with my answers.",
+      };
     case "booking":
       return {};
     case "date_range":
@@ -390,6 +397,7 @@ export function availableOperators(type: QuestionType): LogicOperator[] {
     type === "contact_info" ||
     type === "file_upload" ||
     type === "signature" ||
+    type === "media" ||
     type === "products" ||
     type === "booking" ||
     type === "address" ||

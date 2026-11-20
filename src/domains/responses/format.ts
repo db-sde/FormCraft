@@ -1,3 +1,4 @@
+import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import {
   ADDRESS_FIELD_LABELS,
@@ -143,6 +144,13 @@ export function formatAnswerValue(
 
     case "signature":
       return typeof value === "string" && value ? "Signed" : "";
+
+    case "media":
+      return typeof value === "string" && value
+        ? question.settings.kind === "video"
+          ? "Video recorded"
+          : "Audio recorded"
+        : "";
 
     case "booking":
       return formatBookingAnswer(value);
@@ -347,7 +355,7 @@ export function formatBookingAnswer(value: unknown): string {
  * layout existing spreadsheets depend on. */
 export function exportColumnLabels(question: QuestionV1): string[] {
   const labels = questionColumnLabels(question);
-  return question.type === "file_upload" || question.type === "signature"
+  return UPLOAD_ANSWER_TYPES.has(question.type)
     ? [...labels, `${questionColumnLabel(question)} (link)`]
     : labels;
 }
@@ -359,8 +367,7 @@ export function exportAnswerCells(
   context: { uploadNames?: ReadonlyMap<string, string>; appUrl?: string } = {},
 ): string[] {
   const cells = answerCells(columnsFrom, question, value, context);
-  if (columnsFrom.type !== "file_upload" && columnsFrom.type !== "signature")
-    return cells;
+  if (!UPLOAD_ANSWER_TYPES.has(columnsFrom.type)) return cells;
   const link =
     typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value)
       ? `${context.appUrl ?? ""}/api/uploads/${value}`

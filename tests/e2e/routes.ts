@@ -53,6 +53,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/[id]/answers": "api-contract.spec.ts, autosave-race.spec.ts",
   "/api/responses/[id]/resume-link": "resume-link.spec.ts",
   "/api/responses/[id]/follow-up": "ai.spec.ts, api-contract.spec.ts",
+  "/api/responses/[id]/email-code": "roadmap-v3.spec.ts",
   "/api/responses/[id]/lookup": "data-lookups.spec.ts, api-contract.spec.ts",
   "/api/responses/[id]/complete":
     "api-contract.spec.ts, duplicate-submit.spec.ts, submission-integrity.spec.ts",

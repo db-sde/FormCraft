@@ -26,6 +26,8 @@ export type Usage = {
   placesLookups: number;
   members: number;
   storageMb: number;
+  /** Of which video and audio answers (roadmap #21). */
+  recordingsMb: number;
 };
 
 export function currentPeriodStart(now = new Date()): string {
@@ -60,22 +62,31 @@ export async function getUsage(
     aiCredits: value("ai_credits"),
     placesLookups: value("places_lookups"),
     members: members.count ?? 0,
-    storageMb: Math.round((storage / 1_048_576) * 10) / 10,
+    storageMb: Math.round((storage.total / 1_048_576) * 10) / 10,
+    recordingsMb: Math.round((storage.recordings / 1_048_576) * 10) / 10,
   };
 }
 
-async function storageBytes(supabase: Client, workspaceId: string): Promise<number> {
+async function storageBytes(
+  supabase: Client,
+  workspaceId: string,
+): Promise<{ total: number; recordings: number }> {
   let total = 0;
+  let recordings = 0;
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
       .from("uploads")
-      .select("size_bytes, responses!inner(forms!inner(workspace_id))")
+      .select("size_bytes, mime_type, responses!inner(forms!inner(workspace_id))")
       .eq("responses.forms.workspace_id", workspaceId)
       .neq("status", "deleted")
       .range(from, from + 999);
     if (error) throw error;
-    for (const row of data ?? []) total += Number(row.size_bytes ?? 0);
-    if ((data?.length ?? 0) < 1000) return total;
+    for (const row of data ?? []) {
+      const size = Number(row.size_bytes ?? 0);
+      total += size;
+      if (/^(audio|video)\//.test(row.mime_type)) recordings += size;
+    }
+    if ((data?.length ?? 0) < 1000) return { total, recordings };
   }
 }
 

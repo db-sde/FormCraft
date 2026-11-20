@@ -209,6 +209,7 @@ export function FormBuilder({
   openPreviewOnLoad = false,
   aiEnabled = false,
   placesAvailable = false,
+  emailCodesAvailable = false,
   onProposeRule,
   onReviewForm,
   brandingRemovable = true,
@@ -241,6 +242,8 @@ export function FormBuilder({
   aiEnabled?: boolean;
   /** Address suggestions need a Google Places key on the server. */
   placesAvailable?: boolean;
+  /** Email codes can be sent (roadmap #8). */
+  emailCodesAvailable?: boolean;
   onProposeRule?: (
     formId: string,
     instruction: string,
@@ -1169,7 +1172,7 @@ export function FormBuilder({
     : -1;
 
   return (
-    <BuilderCapabilitiesContext.Provider value={{ placesAvailable }}>
+    <BuilderCapabilitiesContext.Provider value={{ placesAvailable, emailCodesAvailable }}>
       {/* The 600px floor is for desktops only: on a short phone screen (or
           a zoomed-in window) it made the page taller than the screen, so the
           pinned tab bar sat over the Add question button (QA FC11-06). */}
@@ -1818,6 +1821,15 @@ export function FormBuilder({
                     workspaceId={workspaceId}
                     formId={formId}
                     onChange={updateTheme}
+                    linkThemes={{
+                      variants: schema.themeVariants ?? [],
+                      formUrl: publicFormUrl(liveSlug),
+                      onChange: (themeVariants) =>
+                        setSchema((s) => ({
+                          ...s,
+                          themeVariants: themeVariants.length ? themeVariants : undefined,
+                        })),
+                    }}
                     customFonts={customFonts}
                     layout={schema.meta.layout ?? "conversational"}
                     onLayoutChange={(layout) =>

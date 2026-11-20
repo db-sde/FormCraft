@@ -53,6 +53,25 @@ const SIGNATURES: {
       b[10] === 0x42 &&
       b[11] === 0x50,
   },
+  // Recordings (roadmap #21): what browsers' MediaRecorder produces.
+  // WebM (Matroska's EBML header) and MP4 hold video or audio alike; the
+  // question says which it is (mediaMimeType).
+  {
+    mimeType: "video/webm",
+    extension: "webm",
+    check: (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3,
+  },
+  {
+    mimeType: "audio/ogg",
+    extension: "ogg",
+    check: (b) => b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53,
+  },
+  {
+    mimeType: "video/mp4",
+    extension: "mp4",
+    // "ftyp" at byte 4.
+    check: (b) => b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70,
+  },
   {
     mimeType: "application/pdf",
     extension: "pdf",
@@ -68,6 +87,25 @@ export function sniffContentType(bytes: Uint8Array): SniffedType | null {
       return { mimeType: sig.mimeType, extension: sig.extension };
     }
   }
+  return null;
+}
+
+/** A recording's stored type: the container the bytes are, as the kind
+ * of answer the question asks for (an audio-only WebM is still WebM).
+ * Null when the bytes aren't a recording container. */
+export function mediaMimeType(
+  sniffed: SniffedType | null,
+  kind: "audio" | "video",
+): SniffedType | null {
+  if (!sniffed) return null;
+  if (sniffed.extension === "webm")
+    return { mimeType: `${kind}/webm`, extension: "webm" };
+  if (sniffed.extension === "mp4") {
+    return kind === "audio"
+      ? { mimeType: "audio/mp4", extension: "m4a" }
+      : { mimeType: "video/mp4", extension: "mp4" };
+  }
+  if (sniffed.extension === "ogg" && kind === "audio") return sniffed;
   return null;
 }
 

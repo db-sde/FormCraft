@@ -11,10 +11,9 @@ const nextConfig: NextConfig = {
           // Browsers must use the declared content type, never guess.
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          {
-            key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
-          },
+          // Permissions-Policy is set per request in src/proxy.ts: forms
+          // may use the camera and microphone (video and audio answers,
+          // roadmap #21), nothing else may.
         ],
       },
       {

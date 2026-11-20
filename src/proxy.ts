@@ -213,16 +213,32 @@ async function customDomain(request: NextRequest, host: string) {
   if (payment) {
     const url = request.nextUrl.clone();
     url.pathname = `/f/${payment[1]}/payment`;
-    return withCsp(NextResponse.rewrite(url, { request: { headers } }), policy);
+    return asFormPage(
+      withCsp(NextResponse.rewrite(url, { request: { headers } }), policy),
+    );
   }
   if (!slug) return notConnected();
   const url = request.nextUrl.clone();
   url.pathname = `/f/${slug}`;
   const visitor = ensureVisitor(request, headers);
-  return withCsp(
-    withVisitor(NextResponse.rewrite(url, { request: { headers } }), request, visitor),
-    policy,
+  return asFormPage(
+    withCsp(
+      withVisitor(NextResponse.rewrite(url, { request: { headers } }), request, visitor),
+      policy,
+    ),
   );
+}
+
+/** No page may use the camera, microphone or location… */
+const PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), browsing-topics=()";
+/** …except a form, for its own video and audio answers (roadmap #21):
+ * this site only, and an embedding page must allow it on its iframe too. */
+const FORM_PERMISSIONS_POLICY =
+  "camera=(self), microphone=(self), geolocation=(), browsing-topics=()";
+
+function asFormPage(response: NextResponse): NextResponse {
+  response.headers.set("Permissions-Policy", FORM_PERMISSIONS_POLICY);
+  return response;
 }
 
 /** Every request gets an id (foundations §1): set here for the server
@@ -234,6 +250,9 @@ export async function proxy(incoming: NextRequest) {
   const request = new NextRequest(incoming, { headers });
   const response = await route(request);
   response.headers.set(REQUEST_ID_HEADER, requestId);
+  if (!response.headers.has("Permissions-Policy")) {
+    response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+  }
   return response;
 }
 
@@ -256,9 +275,11 @@ async function route(request: NextRequest) {
     headers.set("x-nonce", nonce);
     headers.set("Content-Security-Policy", policy);
     const visitor = ensureVisitor(request, headers);
-    return withCsp(
-      withVisitor(NextResponse.next({ request: { headers } }), request, visitor),
-      policy,
+    return asFormPage(
+      withCsp(
+        withVisitor(NextResponse.next({ request: { headers } }), request, visitor),
+        policy,
+      ),
     );
   }
   const { nonce, policy } = pageCsp(request, false);

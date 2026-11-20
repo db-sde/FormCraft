@@ -188,6 +188,22 @@ layout? }[]` (at most 3) — in-form A/B variants. `order` lists every
   `emailQuestionId?`. The answer is `{ start, timeZone? }`; the server
   holds the slot before completing and confirms it after. One per form.
 
+### Roadmap v3.1 additions (2026-11-20, still schemaVersion 1)
+
+- `themeVariants?: { id, name, theme }[]` (at most 10, ids unique and
+  `^[a-z0-9][a-z0-9-]{0,39}$`) — link themes (#66). `?theme=<id>` on the
+  form's link (or `data-theme` on an SDK embed) shows that look; anything
+  else shows `theme`. A variant's theme is a full theme without
+  `customCss` (the form's own custom CSS always applies). Stripped from
+  what the respondent's browser receives.
+- `media` question (#21) — settings `{ kind: "audio" | "video",
+maxSeconds: 5–300 (60), consentText? }`. The answer is the id of the
+  recording the browser uploaded (like `file_upload`); the server checks
+  it's an upload of that response and question.
+- `email` question `settings.verify?: boolean` (#8) — the address must be
+  confirmed with an emailed code before the form can be submitted.
+  Ignored while the site has no email service.
+
 ## Validation pipeline (matches `ARCHITECTURE.md`)
 
 1. **Transport decode** — `JSON.parse` with a size cap and NUL/invalid-

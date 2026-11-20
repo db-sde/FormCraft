@@ -240,6 +240,11 @@ function eventEntry(event: TimelineSources["events"][number]): TimelineEntry {
       return { ...base, title: str(d.reason) ?? "Payment" };
     case "commented":
       return { ...base, title: "Comment added" };
+    case "answer_edited":
+      return {
+        ...base,
+        title: `Answer corrected${str(d.question) ? `: ${str(d.question)}` : ""}`,
+      };
     default:
       return { ...base, title: event.kind };
   }

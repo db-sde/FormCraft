@@ -184,6 +184,10 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
                 title={form.title}
                 popupEmbeds={entitlements.popup_embeds}
                 color={published?.theme.primaryColor ?? draft?.schema.theme.primaryColor}
+                themes={(published?.themeVariants ?? []).map(({ id, name }) => ({
+                  id,
+                  name,
+                }))}
               />
               <EmbedOriginsForm
                 formId={form.id}

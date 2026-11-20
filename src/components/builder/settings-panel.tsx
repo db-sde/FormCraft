@@ -1,5 +1,6 @@
 "use client";
 
+import { useBuilderCapabilities } from "./builder-capabilities";
 import { AUTO_ADVANCE_TYPES } from "@/domains/forms/auto-advance";
 import { isNpsQuestion } from "@/domains/responses/nps";
 import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
@@ -52,6 +53,7 @@ import { BookingSettingsPanel } from "./booking-settings";
 import {
   ProductsSettingsPanel,
   SignatureSettingsPanel,
+  MediaSettingsPanel,
 } from "./signature-products-settings";
 import { DEFAULT_LONG_TEXT_MAX } from "@/domains/logic/validate-answer";
 
@@ -104,6 +106,7 @@ export function SettingsPanel({
   invalid?: boolean;
 }) {
   const bad = invalid ? "border-destructive" : "";
+  const capabilities = useBuilderCapabilities();
 
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-4">
@@ -140,6 +143,29 @@ export function SettingsPanel({
             onCheckedChange={(required) => onChange({ ...question, required })}
           />
         )}
+
+      {question.type === "email" && (
+        <>
+          <SwitchRow
+            label="Confirm with a code"
+            hint="We email a 6-digit code to the address; the form can't be submitted until it's entered."
+            checked={!!question.settings.verify}
+            disabled={!capabilities.emailCodesAvailable && !question.settings.verify}
+            onCheckedChange={(verify) =>
+              onChange({
+                ...question,
+                settings: { ...question.settings, verify: verify || undefined },
+              })
+            }
+          />
+          {!capabilities.emailCodesAvailable && (
+            <PanelNote>
+              Email isn&apos;t set up on this site yet, so no code is asked for until it
+              is.
+            </PanelNote>
+          )}
+        </>
+      )}
 
       {(PROFILE_QUESTION_TYPES as readonly string[]).includes(question.type) && (
         <>
@@ -254,6 +280,10 @@ export function SettingsPanel({
 
       {question.type === "signature" && (
         <SignatureSettingsPanel question={question} onChange={onChange} />
+      )}
+
+      {question.type === "media" && (
+        <MediaSettingsPanel question={question} onChange={onChange} />
       )}
 
       {question.type === "products" && (

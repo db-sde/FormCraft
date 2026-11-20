@@ -80,6 +80,8 @@ export function buildSdkSnippet(options: {
   trigger?: EmbedTrigger;
   label?: string;
   color?: string;
+  /** A link theme's id (F-66). */
+  theme?: string;
 }): string {
   const attrs = [
     `data-formcraft="${escapeAttribute(options.slug)}"`,
@@ -93,6 +95,9 @@ export function buildSdkSnippet(options: {
   }
   if (options.color && /^#[0-9a-fA-F]{6}$/.test(options.color)) {
     attrs.push(`data-color="${options.color}"`);
+  }
+  if (options.theme && /^[a-z0-9][a-z0-9-]{0,39}$/.test(options.theme)) {
+    attrs.push(`data-theme="${options.theme}"`);
   }
   return [
     `<div ${attrs.join(" ")}></div>`,
@@ -108,6 +113,10 @@ export const EMBED_SDK_SOURCE = String.raw`(function () {
   var origin = script ? new URL(script.src).origin : "";
   var SLUG = /^[a-z0-9][a-z0-9-]{0,80}$/;
   var COLOR = /^#[0-9a-fA-F]{6}$/;
+  var THEME = /^[a-z0-9][a-z0-9-]{0,39}$/;
+  // A link theme per form (data-theme, F-66); only a well-formed id is
+  // passed on, and the form decides whether it's one of its own.
+  var themes = {};
   var pageview = Math.random().toString(36).slice(2) + Date.now().toString(36);
   var sent = {};
   var open = null;
@@ -125,9 +134,10 @@ export const EMBED_SDK_SOURCE = String.raw`(function () {
 
   function frame(slug, title) {
     var f = document.createElement("iframe");
-    f.src = origin + "/f/" + slug + "?embed=1";
+    f.src = origin + "/f/" + slug + "?embed=1" + (themes[slug] ? "&theme=" + themes[slug] : "");
     f.title = title || "Form";
-    f.setAttribute("allow", "clipboard-write");
+    // Video and audio answers (roadmap #21) record inside the frame.
+    f.setAttribute("allow", "clipboard-write; microphone; camera");
     f.setAttribute("data-formcraft-frame", slug);
     return f;
   }
@@ -257,6 +267,8 @@ export const EMBED_SDK_SOURCE = String.raw`(function () {
     var slug = el.getAttribute("data-formcraft") || "";
     if (!SLUG.test(slug)) return;
     el.setAttribute("data-formcraft-mounted", "1");
+    var theme = el.getAttribute("data-theme") || "";
+    if (THEME.test(theme)) themes[slug] = theme;
     var mode = el.getAttribute("data-mode") || "inline";
     var label = (el.getAttribute("data-label") || "Open form").slice(0, 40);
     var color = el.getAttribute("data-color");

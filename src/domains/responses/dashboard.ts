@@ -1,3 +1,4 @@
+import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
@@ -419,7 +420,7 @@ export async function listResponses(
       const value = answers?.get(ref.id);
       preview[ref.id] = previewAnswerValue(own, value, { uploadNames });
       if (
-        (own.type === "file_upload" || own.type === "signature") &&
+        UPLOAD_ANSWER_TYPES.has(own.type) &&
         typeof value === "string" &&
         /^[0-9a-f-]{36}$/i.test(value)
       ) {

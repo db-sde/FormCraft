@@ -2540,4 +2540,50 @@ Later, as decided): 55, 57, 59, 64, 66, 67, 68.
   sends what's waiting. The fix is setting one new secret in both
   places.
 
+## 2026-11-20 — Roadmap v3.1: the four newly approved Build Now features
+
+The owner's 20 November roadmap moved #8, #21, #55 and #66 to Build Now
+(#8 at the end). Built here; Section J's integration audit is separate.
+
+- **#66 Link themes.** Saved on the form (`themeVariants`, at most 10),
+  picked by `?theme=<id>` or the embed's `data-theme`. The id format is
+  checked twice (URL and schema); unknown ids get the main look. A link
+  never carries colours or CSS, and the form's own custom CSS applies to
+  every look. The list never reaches the browser. Light and dark are two
+  saved looks; following the visitor's system setting automatically was
+  not built (it would need both looks in the browser).
+- **#55 Correcting submitted answers.** A new permission, "Correct
+  submitted answers": owners and admins have it, others only when given
+  (the database's `has_permission` refuses it by default). Corrections go
+  through one database function callable only by the server, which
+  re-checks that the response is submitted, not confidential, the
+  question is an ordinary type, and the value changed; it keeps the old
+  value, the new one, who, when and the required reason
+  (`answer_revisions`), and adds a timeline entry. Correctable: text,
+  email, phone, link, number, choices, yes/no, date, time, rating and
+  scales. Not correctable: signatures, orders, consent, uploads,
+  recordings, bookings (evidence), and date-time, address, contact,
+  matrix, ranking, groups and date ranges (need an editor of their own).
+  Integrations aren't sent the change; replaying stays deliberate.
+- **#21 Video and audio answers.** A `media` question records in the
+  browser (MediaRecorder) after a consent tick; the camera or microphone
+  is asked for only on Record and turned off on Stop. It stops itself at
+  the limit (5–300 s), plays back, and recording again replaces the
+  upload. The server can't trust a recording's length, so it caps the size
+  from it (256 kbit/s audio, 4 Mbit/s video, plus a little) and checks the
+  container from the bytes (WebM, Ogg, MP4). Stored, scanned and deleted
+  like other uploads; teammates play it through half-hour signed links.
+  Settings → Plan shows how much storage recordings take. Pages could not
+  use the camera or microphone at all before (Permissions-Policy); form
+  pages, and only they, now allow them for this site, and embed code
+  allows them in its iframe. No transcoding or transcription.
+- **#8 Email codes.** An email question's "Confirm with a code": a
+  6-digit code (keyed hash stored), 10 minutes, 5 tries counted in the
+  database before checking, a new code after 30 s and at most 5 per
+  question, plus 20 an hour per IP and 8 per address. The answer stays
+  empty in the browser until confirmed, and submitting checks the answer
+  is the confirmed address. Without an email service the switch is
+  ignored (and the builder says so), so nobody is stuck. SMS codes wait
+  for an SMS provider (#41, Build Later).
+
 <!-- Add new decisions above this line, newest first. -->

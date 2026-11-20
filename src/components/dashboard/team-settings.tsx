@@ -312,6 +312,7 @@ const PERMISSION_ROWS: [string, string][] = [
   ["export_responses", "Export responses"],
   ["publish", "Publish forms"],
   ["manage_integrations", "Manage integrations"],
+  ["edit_responses", "Correct submitted answers"],
 ];
 
 /** What one editor or viewer may do (P3.15), beyond their role's defaults. */
@@ -324,7 +325,9 @@ function PermissionsEditor({
   disabled: boolean;
   onSave: (overrides: Record<string, boolean>) => void;
 }) {
-  const defaults = (p: string) => member.role === "editor" || p === "view_responses";
+  // Correcting answers is never on by default (roadmap #55).
+  const defaults = (p: string) =>
+    p !== "edit_responses" && (member.role === "editor" || p === "view_responses");
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(

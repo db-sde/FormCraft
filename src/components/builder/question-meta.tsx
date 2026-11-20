@@ -1,4 +1,5 @@
 import {
+  Mic,
   AlignLeft,
   AtSign,
   Calendar,
@@ -223,6 +224,13 @@ export const QUESTION_TYPE_META: Record<QuestionType, TypeMeta> = {
     tint: "Other",
     description: "Draw or type a signature",
   },
+  media: {
+    label: "Video or audio",
+    icon: Mic,
+    group: "answer",
+    tint: "Other",
+    description: "Record an answer in the browser",
+  },
   products: {
     label: "Products",
     icon: ShoppingCart,
@@ -318,6 +326,7 @@ export const ADD_GROUPS: { name: string; types: AddKind[] }[] = [
       "time",
       "datetime",
       "file_upload",
+      "media",
       "signature",
       "products",
       "booking",

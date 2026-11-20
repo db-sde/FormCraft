@@ -32,6 +32,8 @@ export const QUESTION_TYPES = [
   "date_range",
   "consent",
   "repeat_group",
+  // Roadmap #21 (2026-11-20).
+  "media",
 ] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];
@@ -102,3 +104,12 @@ export const LOGIC_OPERATORS = [
 ] as const;
 
 export type LogicOperator = (typeof LOGIC_OPERATORS)[number];
+
+/** Types whose answer is the id of an upload of the response: a file, a
+ * drawn signature, or a recorded video or audio answer (roadmap #21).
+ * Their answers are private: never sent to integrations or recalled. */
+export const UPLOAD_ANSWER_TYPES = new Set<QuestionType>([
+  "file_upload",
+  "signature",
+  "media",
+]);

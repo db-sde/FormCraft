@@ -124,6 +124,9 @@ export function previewFromSchema(raw: unknown): FormPreview {
     case "signature":
       chips = ["Sign here"];
       break;
+    case "media":
+      chips = [settings.kind === "video" ? "Record video" : "Record audio"];
+      break;
     case "products":
       chips = ((settings.items as { label?: string }[] | undefined) ?? [])
         .map((i) => i.label ?? "")

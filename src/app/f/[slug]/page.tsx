@@ -12,6 +12,11 @@ import { CUSTOM_DOMAIN_HEADER } from "@/lib/http/custom-domain";
 import { resolveResumeToken, RESUME_PARAM } from "@/domains/responses/resume";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { themeForPlan } from "@/domains/themes/fonts";
+import { themeForLink } from "@/domains/themes/variants";
+import {
+  emailCodesAvailable,
+  withoutEmailVerification,
+} from "@/domains/verification/email-code";
 import { formLanguages, LANGUAGES, pickLanguage } from "@/domains/forms/i18n";
 import {
   assignArm,
@@ -54,6 +59,8 @@ export default async function PublicFormPage({
   searchParams: Promise<{
     embed?: string;
     lang?: string;
+    /** A link theme the creator saved (F-66). */
+    theme?: string;
     kiosk?: string;
     [RESUME_PARAM]?: string;
   }>;
@@ -139,7 +146,7 @@ export default async function PublicFormPage({
   }
   const schema = publicForm.compiled.schema;
   const theme = themeForPlan(
-    schema.theme,
+    themeForLink(schema, query.theme),
     entitlements.custom_fonts,
     process.env.NEXT_PUBLIC_SUPABASE_URL,
   );
@@ -232,7 +239,15 @@ export default async function PublicFormPage({
     formVersionId: publicForm.formVersionId,
     // Without correct answers and points the browser doesn't need (QA
     // FC4-02); the server scores from the stored form.
-    compiled: { ...compiled, schema: respondentSchema(compiled.schema) },
+    compiled: {
+      ...compiled,
+      // No codes without an email service: the form asks for none (#8).
+      schema: respondentSchema(
+        emailCodesAvailable()
+          ? compiled.schema
+          : withoutEmailVerification(compiled.schema),
+      ),
+    },
     savesProgress: publicForm.savePartialResponses,
     resumeLinks: publicForm.resumeLinksEnabled && publicForm.savePartialResponses,
     // A valid resume link may write to its response from this browser.

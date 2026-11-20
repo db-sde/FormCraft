@@ -15,6 +15,7 @@ export const PERMISSIONS = [
   "export_responses",
   "publish",
   "manage_integrations",
+  "edit_responses",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -23,6 +24,7 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   export_responses: "Export responses",
   publish: "Publish forms",
   manage_integrations: "Manage integrations",
+  edit_responses: "Correct submitted answers",
 };
 
 export type PermissionOverrides = Partial<Record<Permission, boolean>>;
@@ -35,6 +37,8 @@ export function effectivePermissions(
     PERMISSIONS.map((p) => {
       if (role === "owner" || role === "admin") return [p, true];
       if (typeof overrides[p] === "boolean") return [p, overrides[p]];
+      // Correcting answers is given, never assumed (roadmap #55).
+      if (p === "edit_responses") return [p, false];
       return [p, role === "editor" ? true : p === "view_responses"];
     }),
   ) as Record<Permission, boolean>;

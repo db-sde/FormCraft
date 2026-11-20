@@ -22,8 +22,11 @@ export function respondentSchema(schema: FormSchemaV1): FormSchemaV1 {
   );
   const keepPoints = scoresUsedMidForm(schema);
 
+  // The link themes stay on the server: the page has already picked one.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { themeVariants, ...rest } = schema;
   return {
-    ...schema,
+    ...rest,
     questions: schema.questions.map((question) =>
       stripQuestion(question, !adaptive.has(question.id), !keepPoints),
     ),

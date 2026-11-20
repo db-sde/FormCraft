@@ -21,6 +21,10 @@ import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { logResponseEvent } from "@/domains/responses/timeline";
 import "@/domains/connectors/registry";
 import { dispatchConnectorJobs, replayJob } from "@/domains/connectors/framework";
+import { audit } from "@/domains/audit/log";
+import { correctAnswer } from "@/domains/responses/corrections";
+import { getResponseDetail } from "@/domains/responses/dashboard";
+import { currentRequestId } from "@/lib/http/request-id";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -167,6 +171,71 @@ export async function replayAttemptAction(
   } catch {
     // Still queued: the scheduled sweep sends it.
   }
+  refresh(formId, responseId);
+  return { ok: true };
+}
+
+/**
+ * Corrects one submitted answer (roadmap #55): needs "Correct submitted
+ * answers" on top of seeing responses; the question comes from the
+ * version the response was served, never from the browser.
+ */
+export async function correctAnswerAction(
+  formId: string,
+  responseId: string,
+  questionId: string,
+  value: unknown,
+  reason: string,
+): Promise<Result> {
+  const auth = await authorize(formId, responseId);
+  if (!auth) return { ok: false, message: NOT_ALLOWED };
+  if (!(await hasPermission(auth.supabase, auth.workspace.id, "edit_responses"))) {
+    await audit(createAdminClient(), {
+      workspaceId: auth.workspace.id,
+      actorId: auth.user.id,
+      action: "response.answer_corrected",
+      target: { type: "response", id: responseId },
+      metadata: { questionId: questionId.slice(0, 80) },
+      outcome: "denied",
+    });
+    return { ok: false, message: "You don't have permission to correct answers." };
+  }
+  const admin = createAdminClient();
+  const limit = await hitRateLimit(
+    admin,
+    `correct-answer:${auth.user.id}`,
+    60,
+    60 * 60 * 1000,
+  );
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      message: "Too many corrections in a short time. Try again later.",
+    };
+  }
+  const detail = await getResponseDetail(auth.supabase, responseId);
+  const question = detail?.answers.find((a) => a.questionId === questionId)?.question;
+  if (!detail || detail.formId !== formId || !question) {
+    return { ok: false, message: "That question isn't part of this response." };
+  }
+  const result = await correctAnswer(admin, {
+    responseId,
+    question,
+    value,
+    reason,
+    actorId: auth.user.id,
+    requestId: await currentRequestId(),
+  });
+  await audit(admin, {
+    workspaceId: auth.workspace.id,
+    actorId: auth.user.id,
+    action: "response.answer_corrected",
+    target: { type: "response", id: responseId },
+    metadata: { questionId: question.id, formId },
+    reason,
+    outcome: result.ok ? "succeeded" : "failed",
+  });
+  if (!result.ok) return result;
   refresh(formId, responseId);
   return { ok: true };
 }

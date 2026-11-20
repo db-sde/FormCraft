@@ -1,5 +1,7 @@
 "use client";
 
+import { EmailVerifyInput } from "./email-verify-input";
+import { MediaInput } from "./media-input";
 import { ConsentInput, DateRangeInput } from "./range-consent-inputs";
 import { RepeatGroupInput } from "./repeat-group-input";
 import { useUploadNames } from "./upload-names";
@@ -284,6 +286,18 @@ export function RuntimeQuestionInput({
         );
 
       case "email":
+        if (question.settings.verify) {
+          return (
+            <EmailVerifyInput
+              question={question}
+              value={value}
+              onChange={onChange}
+              getResponseId={getResponseId}
+              autoFocus={focus}
+              className={UNDERLINE}
+            />
+          );
+        }
         return (
           <input
             autoFocus={focus}
@@ -418,6 +432,16 @@ export function RuntimeQuestionInput({
           />
         );
 
+      case "media":
+        return (
+          <MediaInput
+            question={question}
+            value={value}
+            onChange={onChange}
+            getResponseId={getResponseId}
+            idPrefix={ids}
+          />
+        );
       case "signature":
         return (
           <SignatureInput

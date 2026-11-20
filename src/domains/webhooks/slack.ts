@@ -48,7 +48,9 @@ export function buildSlackMessage(input: {
           ? "File uploaded (open the response to see it)"
           : q.type === "signature"
             ? "Signed (open the response to see it)"
-            : formatAnswerValue(q, raw);
+            : q.type === "media"
+              ? "Recorded (open the response to play it)"
+              : formatAnswerValue(q, raw);
     const short = value.length > MAX_VALUE ? `${value.slice(0, MAX_VALUE - 1)}…` : value;
     return `*${escape(q.label.trim() || "Untitled")}*\n${escape(short)}`;
   });

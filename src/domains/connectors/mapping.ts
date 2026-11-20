@@ -43,7 +43,7 @@ export type MappingContext = Pick<
   path?: { id: string }[];
 };
 
-const PRIVATE = new Set(["file_upload", "signature"]);
+const PRIVATE = new Set(["file_upload", "signature", "media"]);
 const NUMERIC = new Set(["number", "rating", "opinion_scale"]);
 
 function answerValue(q: QuestionV1, raw: unknown): MappingValue {

@@ -101,6 +101,58 @@ export type Database = {
           },
         ];
       };
+      answer_revisions: {
+        Row: {
+          created_at: string;
+          edited_by: string | null;
+          id: number;
+          new_value: Json | null;
+          previous_value: Json | null;
+          question_id: string;
+          reason: string;
+          request_id: string | null;
+          response_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          edited_by?: string | null;
+          id?: never;
+          new_value?: Json | null;
+          previous_value?: Json | null;
+          question_id: string;
+          reason: string;
+          request_id?: string | null;
+          response_id: string;
+        };
+        Update: {
+          created_at?: string;
+          edited_by?: string | null;
+          id?: never;
+          new_value?: Json | null;
+          previous_value?: Json | null;
+          question_id?: string;
+          reason?: string;
+          request_id?: string | null;
+          response_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "answer_revisions_edited_by_fkey";
+            columns: ["edited_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "answer_revisions_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       answers: {
         Row: {
           id: string;
@@ -867,6 +919,57 @@ export type Database = {
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      email_verifications: {
+        Row: {
+          attempts: number;
+          code_hash: string;
+          created_at: string;
+          email: string;
+          expires_at: string;
+          id: string;
+          last_sent_at: string;
+          question_id: string;
+          response_id: string;
+          sends: number;
+          verified_at: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          attempts?: number;
+          code_hash: string;
+          created_at?: string;
+          email: string;
+          expires_at: string;
+          id?: string;
+          last_sent_at?: string;
+          question_id: string;
+          response_id: string;
+          sends?: number;
+          verified_at?: string | null;
+        };
+        Update: {
+          attempts?: number;
+          code_hash?: string;
+          created_at?: string;
+          email?: string;
+          expires_at?: string;
+          id?: string;
+          last_sent_at?: string;
+          question_id?: string;
+          response_id?: string;
+          sends?: number;
+          verified_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "email_verifications_response_id_fkey";
+            columns: ["response_id"];
+            isOneToOne: false;
+            referencedRelation: "responses";
             referencedColumns: ["id"];
           },
         ];
@@ -3288,6 +3391,17 @@ export type Database = {
           user_id: string;
         }[];
       };
+      correct_submitted_answer: {
+        Args: {
+          p_actor: string;
+          p_question_id: string;
+          p_reason: string;
+          p_request_id?: string;
+          p_response_id: string;
+          p_value: Json;
+        };
+        Returns: number;
+      };
       create_form_with_draft: {
         Args: {
           p_created_by?: string;
@@ -3317,6 +3431,16 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      email_verification_attempt: {
+        Args: { p_question_id: string; p_response_id: string };
+        Returns: {
+          attempts: number;
+          code_hash: string;
+          email: string;
+          expires_at: string;
+          verified_at: string;
+        }[];
       };
       experiment_stats: {
         Args: { target_experiment_id: string };

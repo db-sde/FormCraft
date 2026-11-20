@@ -52,6 +52,7 @@ describe("usage", () => {
       placesLookups: 0,
       members: 1,
       storageMb: 10,
+      recordingsMb: 0,
     };
     const e = resolveEntitlements({ responses_per_month: 1000, storage_mb: 10 }, {});
     expect(usageWarnings(usage, e).map((w) => w.metric)).toEqual(["responses"]);

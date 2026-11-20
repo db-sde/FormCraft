@@ -1,3 +1,4 @@
+import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { Value } from "@/domains/forms/schema/logic-model";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { formatAnswerValue } from "@/domains/responses/format";
@@ -93,8 +94,7 @@ export function recallTokens(schema: FormSchemaV1): { token: string; label: stri
           q.type !== "welcome_screen" &&
           q.type !== "statement" &&
           q.type !== "page_break" &&
-          q.type !== "file_upload" &&
-          q.type !== "signature",
+          !UPLOAD_ANSWER_TYPES.has(q.type),
       )
       .map((q) => ({
         token: `{{answer:${q.id}}}`,

@@ -1,3 +1,9 @@
+import {
+  emailCodesAvailable,
+  needsVerification,
+  verifiedEmails,
+} from "@/domains/verification/email-code";
+import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import { normalizeDateRange } from "@/domains/forms/range-consent";
 import {
   fieldAsQuestion,
@@ -555,9 +561,7 @@ export async function completeResponse(
   // A file answer is an upload id; it must be a real upload of *this*
   // response for *this* question, not any string the client sent.
   const fileQuestions = pathQuestions.filter(
-    (q) =>
-      (q.type === "file_upload" || q.type === "signature") &&
-      hasAnswer(q, knownAnswers[q.id]),
+    (q) => UPLOAD_ANSWER_TYPES.has(q.type) && hasAnswer(q, knownAnswers[q.id]),
   );
   if (fileQuestions.length > 0) {
     const { data: uploads, error: uploadsError } = await admin
@@ -578,6 +582,27 @@ export async function completeResponse(
         errors.push({
           questionId: q.id,
           message: "That file isn't available — upload it again.",
+        });
+      }
+    }
+  }
+
+  // Email verification (roadmap #8): an address that asks for a code
+  // must be the one this response verified. Skipped when codes can't be
+  // sent at all, so nobody is stuck on a form that can't verify.
+  const toVerify = emailCodesAvailable()
+    ? pathQuestions.filter(
+        (q) => needsVerification(q) && hasAnswer(q, knownAnswers[q.id]),
+      )
+    : [];
+  if (toVerify.length > 0) {
+    const verified = await verifiedEmails(admin, responseId);
+    for (const q of toVerify) {
+      const given = String(knownAnswers[q.id]).trim().toLowerCase();
+      if (verified.get(q.id) !== given && !errors.some((e) => e.questionId === q.id)) {
+        errors.push({
+          questionId: q.id,
+          message: "Confirm this email with the code we sent to it.",
         });
       }
     }

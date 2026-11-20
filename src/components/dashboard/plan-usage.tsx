@@ -129,6 +129,14 @@ export function PlanUsage({
             limit={e.storage_mb}
             unit=" MB"
           />
+          {usage.recordingsMb > 0 && (
+            <Meter
+              label="Of which video and audio answers"
+              used={usage.recordingsMb}
+              limit={null}
+              unit=" MB"
+            />
+          )}
         </ul>
         <p className="text-muted-foreground text-[12.5px]">
           Going over a response limit never loses a submission: every response is still

@@ -77,7 +77,11 @@ const LongTextSettings = z.object({
   aiFollowUp: z.boolean().optional(),
 });
 
-const EmailSettings = z.object({});
+const EmailSettings = z.object({
+  /** The respondent confirms the address with a code emailed to it
+   * before the form can be submitted (roadmap #8). */
+  verify: z.boolean().optional(),
+});
 const PhoneSettings = z.object({ defaultCountry: z.string().length(2).optional() });
 const UrlSettings = z.object({});
 
@@ -281,6 +285,18 @@ const SignatureSettings = z.object({
   allowTyped: z.boolean().optional(),
   /** Shown above the pad ("By signing, I agree to the terms above"). */
   consentText: optionalSafeText(500),
+});
+
+/** A video or audio answer recorded in the browser (roadmap #21). The
+ * answer is the id of the recording the browser uploaded, like a file
+ * question's. The recording's length is capped by `maxSeconds` in the
+ * browser and by a size worked out from it on the server. */
+export const MEDIA_KINDS = ["audio", "video"] as const;
+export const MediaSettings = z.object({
+  kind: z.enum(MEDIA_KINDS).default("audio"),
+  maxSeconds: z.number().int().min(5).max(300).default(60),
+  /** What they agree to before the camera or microphone turns on. */
+  consentText: optionalSafeText(300),
 });
 
 /** A currency's ISO 4217 code; one per form (product owner, 2026-10-30). */
@@ -599,6 +615,11 @@ export const QuestionV1 = z.discriminatedUnion("type", [
   }),
   z.object({
     ...baseQuestionFields,
+    type: z.literal("media"),
+    settings: MediaSettings,
+  }),
+  z.object({
+    ...baseQuestionFields,
     type: z.literal("products"),
     settings: ProductsSettings,
   }),
@@ -699,6 +720,21 @@ export const ThemeV1 = z.object({
     .optional(),
 });
 export type ThemeV1 = z.infer<typeof ThemeV1>;
+
+/** What a link may name with ?theme=: lower-case letters, digits and
+ * dashes, nothing else (F-66). */
+export const THEME_VARIANT_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+/** A look the creator saved for links to choose (F-66): `?theme=<id>`
+ * on the form's link or `data-theme` on an embed. The form's own custom
+ * CSS still applies; a link can only pick one of these, never bring its
+ * own styling. */
+export const ThemeVariantV1 = z.object({
+  id: z.string().regex(THEME_VARIANT_ID),
+  name: safeText(60),
+  theme: ThemeV1.omit({ customCss: true }),
+});
+export type ThemeVariantV1 = z.infer<typeof ThemeVariantV1>;
 
 // --- logic -----------------------------------------------------------------
 
@@ -835,6 +871,14 @@ export const FormSchemaV1 = z.object({
   translations: z.partialRecord(languageCode, TranslationV1).optional(),
   /** In-form A/B variants (F-29). */
   variants: z.array(VariantV1).max(3).optional(),
+  /** Saved looks a link can pick with ?theme= (F-66). */
+  themeVariants: z
+    .array(ThemeVariantV1)
+    .max(10)
+    .refine((list) => new Set(list.map((v) => v.id)).size === list.length, {
+      message: "Two link themes have the same name in the link.",
+    })
+    .optional(),
 });
 export type FormSchemaV1 = z.infer<typeof FormSchemaV1>;
 

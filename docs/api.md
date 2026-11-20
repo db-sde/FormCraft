@@ -143,6 +143,22 @@ trap?, captchaToken? }`
   that was asked (`404` otherwise). Editable until the response is
   submitted.
 
+`POST /api/responses/:id/email-code` (roadmap #8)
+
+- `{ questionId, email }` → `{ sent: true }`: emails a 6-digit code for
+  an email question with `verify` on, in the version the response was
+  served. A new code after 30 s (`429` with `retryAfterSeconds` before),
+  at most 5 per question of a response; 20 an hour per IP and 8 per
+  address. `503 not_configured` without an email service.
+- `PUT` `{ questionId, code }` → `{ verified: true, email }`. A code lasts
+  10 minutes and allows 5 tries; `400 wrong_code` says how many are left.
+  Submitting checks the answer is the verified address.
+- Only the browser that started the response may call either.
+
+`POST /api/responses/:id/uploads/:questionId` also takes recordings for
+`media` questions (#21): WebM, Ogg or MP4, checked from the bytes, up to
+a size worked out from the question's time limit.
+
 `POST /api/responses/:id/lookup` (logic phase 24)
 
 - `{ questionId, answers }` → `{ values }`: runs the form's data lookups

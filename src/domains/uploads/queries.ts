@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
-import { sniffContentType, matchesAcceptedTypes } from "./sniff";
+import { sniffContentType, matchesAcceptedTypes, mediaMimeType } from "./sniff";
 
 type Client = SupabaseClient<Database>;
 
@@ -67,7 +67,20 @@ export type PreparedUpload = {
   questionId: string;
   maxBytes: number;
   acceptedMimeTypes: string[];
+  /** A recorded answer (roadmap #21): the kind the question asks for. */
+  mediaKind?: "audio" | "video";
 };
+
+/**
+ * The most a recording of this length may weigh: generous bit rates
+ * (256 kbit/s audio, 4 Mbit/s video) plus a little for the container.
+ * The browser stops recording at the question's limit; this is the
+ * server's own cap, since a recording's length can't be trusted.
+ */
+export function mediaMaxBytes(kind: "audio" | "video", maxSeconds: number): number {
+  const perSecond = kind === "video" ? 512 * 1024 : 32 * 1024;
+  return Math.min(maxSeconds * perSecond + 512 * 1024, HARD_MAX_BYTES);
+}
 
 /**
  * Everything that can be decided before reading a single byte of the
@@ -100,7 +113,12 @@ export async function prepareUpload(
   const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
 
   const question = compiled.schema.questions.find((q) => q.id === questionId);
-  if (!question || (question.type !== "file_upload" && question.type !== "signature"))
+  if (
+    !question ||
+    (question.type !== "file_upload" &&
+      question.type !== "signature" &&
+      question.type !== "media")
+  )
     throw new QuestionNotFoundError();
 
   // A signature (F-10) is a small PNG the browser drew; nothing else.
@@ -110,6 +128,17 @@ export async function prepareUpload(
       questionId,
       maxBytes: SIGNATURE_MAX_BYTES,
       acceptedMimeTypes: ["image/png"],
+    };
+  }
+
+  // A recording: its size follows from its length.
+  if (question.type === "media") {
+    return {
+      responseId,
+      questionId,
+      maxBytes: mediaMaxBytes(question.settings.kind, question.settings.maxSeconds),
+      acceptedMimeTypes: [`${question.settings.kind}/*`],
+      mediaKind: question.settings.kind,
     };
   }
 
@@ -158,7 +187,9 @@ export async function recordUpload(
     throw new FileTooLargeError(Math.floor(context.maxBytes / (1024 * 1024)));
   }
 
-  const sniffed = sniffContentType(file.bytes);
+  const sniffed = context.mediaKind
+    ? mediaMimeType(sniffContentType(file.bytes), context.mediaKind)
+    : sniffContentType(file.bytes);
   if (!sniffed || !matchesAcceptedTypes(sniffed.mimeType, context.acceptedMimeTypes)) {
     throw new UnsupportedFileTypeError();
   }

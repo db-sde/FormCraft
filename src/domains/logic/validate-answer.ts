@@ -516,6 +516,9 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
     case "signature":
       return typeof value === "string" ? OK : fail("Sign before continuing.");
 
+    case "media":
+      return typeof value === "string" ? OK : fail("Record your answer to go on.");
+
     case "booking": {
       const start = (value as { start?: unknown } | null)?.start;
       return typeof value === "object" &&

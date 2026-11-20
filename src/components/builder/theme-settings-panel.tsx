@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Check, Contrast } from "lucide-react";
-import type { ThemeV1 } from "@/domains/forms/schema/v1";
+import type { ThemeV1, ThemeVariantV1 } from "@/domains/forms/schema/v1";
 import { THEME_PRESETS, contrastRatio } from "@/domains/themes";
 import { THEME_FONT_STACK } from "@/components/theme-styles";
 import { FONT_LABEL, isPaidFont } from "@/domains/themes/fonts";
@@ -12,6 +12,7 @@ import { ColorField } from "./color-field";
 import { ImageUploadField } from "./image-upload-field";
 import { PanelField, PanelNote, SectionHead, Segmented } from "./panel-ui";
 import { CustomCssEditor } from "./custom-css-editor";
+import { LinkThemes } from "./link-themes";
 import {
   Select,
   SelectContent,
@@ -39,7 +40,14 @@ export function ThemeSettingsPanel({
   onAutoAdvanceChange,
   reviewStep,
   onReviewStepChange,
+  linkThemes,
 }: {
+  /** Saved looks a link can pick with ?theme= (F-66). */
+  linkThemes?: {
+    variants: ThemeVariantV1[];
+    formUrl: string;
+    onChange: (variants: ThemeVariantV1[]) => void;
+  };
   /** One question per screen, or classic pages (F-01). */
   layout?: "conversational" | "classic";
   onLayoutChange?: (layout: "conversational" | "classic") => void;
@@ -313,6 +321,7 @@ export function ThemeSettingsPanel({
           )}
         </>
       )}
+      {linkThemes && <LinkThemes theme={theme} {...linkThemes} />}
       <SectionHead>Custom CSS</SectionHead>
       <CustomCssEditor
         value={theme.customCss}

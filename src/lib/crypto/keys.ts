@@ -23,7 +23,8 @@ export type SigningPurpose =
   | "sheets-pkce"
   | "form-unlock"
   | "response-write"
-  | "visitor";
+  | "visitor"
+  | "email-code";
 
 function appSecret(value = process.env.APP_SECRET): string {
   if (!value) throw new Error("APP_SECRET is not set");

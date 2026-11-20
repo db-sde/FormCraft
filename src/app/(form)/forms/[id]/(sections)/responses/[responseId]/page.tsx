@@ -35,6 +35,10 @@ import {
 import { loadResponseContext } from "@/domains/responses/context";
 import { assignableMembers, listComments } from "@/domains/responses/records";
 import { hasPermission } from "@/domains/workspaces/permissions";
+import { isCorrectable, listRevisions } from "@/domains/responses/corrections";
+import { formatAnswerValue } from "@/domains/responses/format";
+import { CorrectAnswer } from "@/components/responses/correct-answer";
+import { verifiedEmails } from "@/domains/verification/email-code";
 import {
   RecordControls,
   ResponseComments,
@@ -127,27 +131,49 @@ export default async function ResponseDetailPage({
   const insight = insights.get(responseId) ?? null;
   const followUps = new Map((followUpRows ?? []).map((f) => [f.question_id, f]));
   const adjacent = await getAdjacentResponseIds(supabase, formId, detail);
-  const [{ data: record }, comments, members, timeline, canReplay, order] =
-    await Promise.all([
-      supabase
-        .from("responses")
-        .select("review_status, assignee_id")
-        .eq("id", responseId)
-        .single(),
-      listComments(supabase, responseId),
-      assignableMembers(supabase, workspace.id),
-      getResponseTimeline(supabase, {
-        id: responseId,
-        startedAt: detail.startedAt,
-        lastActiveAt: detail.lastActiveAt,
-        completedAt: detail.completedAt,
-        status: detail.status,
-      }),
-      viewOnly
-        ? Promise.resolve(false)
-        : hasPermission(supabase, workspace.id, "manage_integrations"),
-      getOrder(supabase, responseId),
+  const [
+    { data: record },
+    comments,
+    members,
+    timeline,
+    canReplay,
+    order,
+    revisions,
+    mayCorrect,
+    verified,
+  ] = await Promise.all([
+    supabase
+      .from("responses")
+      .select("review_status, assignee_id")
+      .eq("id", responseId)
+      .single(),
+    listComments(supabase, responseId),
+    assignableMembers(supabase, workspace.id),
+    getResponseTimeline(supabase, {
+      id: responseId,
+      startedAt: detail.startedAt,
+      lastActiveAt: detail.lastActiveAt,
+      completedAt: detail.completedAt,
+      status: detail.status,
+    }),
+    viewOnly
+      ? Promise.resolve(false)
+      : hasPermission(supabase, workspace.id, "manage_integrations"),
+    getOrder(supabase, responseId),
+    listRevisions(supabase, responseId),
+    viewOnly || !completed
+      ? Promise.resolve(false)
+      : hasPermission(supabase, workspace.id, "edit_responses"),
+    verifiedEmails(supabase, responseId),
+  ]);
+  // Corrections to submitted answers (roadmap #55), by question.
+  const revisionsByQuestion = new Map<string, typeof revisions>();
+  for (const r of revisions) {
+    revisionsByQuestion.set(r.questionId, [
+      ...(revisionsByQuestion.get(r.questionId) ?? []),
+      r,
     ]);
+  }
 
   // Show the respondent's original file name, not the internal upload
   // reference the answer value stores.
@@ -157,21 +183,54 @@ export default async function ResponseDetailPage({
   >();
   // Signatures (F-10): the drawn image and when it was signed.
   const signatures = new Map<string, { url: string | null; signedAt: string }>();
+  // Video and audio answers (roadmap #21).
+  const recordings = new Map<
+    string,
+    {
+      url: string | null;
+      kind: "audio" | "video";
+      mimeType: string;
+      size: number | null;
+      recordedAt: string;
+    }
+  >();
   const fileQuestionIds = detail.answers
     .filter(
       (a) =>
-        (a.question.type === "file_upload" || a.question.type === "signature") &&
+        (a.question.type === "file_upload" ||
+          a.question.type === "signature" ||
+          a.question.type === "media") &&
         a.formatted,
     )
     .map((a) => a.questionId);
   if (fileQuestionIds.length > 0) {
     const { data: rows } = await supabase
       .from("uploads")
-      .select("id, question_id, storage_path, original_filename, size_bytes, created_at")
+      .select(
+        "id, question_id, storage_path, original_filename, size_bytes, created_at, mime_type",
+      )
       .eq("response_id", responseId)
       .in("question_id", fileQuestionIds);
     for (const row of rows ?? []) {
       const answer = detail.answers.find((a) => a.questionId === row.question_id);
+      if (answer?.question.type === "media") {
+        if (answer.value !== row.id) continue;
+        // Roadmap #21: played here through a link that lasts half an
+        // hour; only people who can see this response get one.
+        recordings.set(row.question_id, {
+          url: await getUploadSignedUrl(
+            supabase,
+            row.storage_path,
+            1800,
+            row.original_filename || true,
+          ),
+          kind: answer.question.settings.kind,
+          mimeType: row.mime_type,
+          size: row.size_bytes,
+          recordedAt: row.created_at,
+        });
+        continue;
+      }
       if (answer?.question.type === "signature") {
         if (answer.value !== row.id) continue;
         signatures.set(row.question_id, {
@@ -493,11 +552,13 @@ export default async function ResponseDetailPage({
         {detail.answers.map((answer, index) => {
           const upload = uploads.get(answer.questionId);
           const signature = signatures.get(answer.questionId);
+          const recording = recordings.get(answer.questionId);
           const wide =
             answer.question.type === "long_text" ||
             answer.question.type === "contact_info" ||
             answer.question.type === "file_upload" ||
             answer.question.type === "signature" ||
+            answer.question.type === "media" ||
             answer.formatted.length > 60;
           const contact =
             answer.question.type === "contact_info" ? contactRecord(answer.value) : null;
@@ -509,11 +570,57 @@ export default async function ResponseDetailPage({
                 wide && "md:col-span-2",
               )}
             >
-              <h2 className="text-muted-foreground flex gap-2 text-[13px] font-normal">
+              <h2 className="text-muted-foreground flex items-start gap-2 text-[13px] font-normal">
                 <b className="text-foreground">{index + 1}</b>
                 <span className="min-w-0">{answer.label}</span>
+                {answer.question.type === "email" &&
+                  typeof answer.value === "string" &&
+                  verified.get(answer.questionId) ===
+                    answer.value.trim().toLowerCase() && (
+                    <span className="rounded-full bg-[var(--chip-live-bg)] px-2 py-0.5 text-[11.5px] font-semibold text-[var(--chip-live-fg)]">
+                      Confirmed by code
+                    </span>
+                  )}
+                {mayCorrect && isCorrectable(answer.question) && (
+                  <CorrectAnswer
+                    formId={formId}
+                    responseId={responseId}
+                    question={answer.question}
+                    label={answer.label}
+                    value={answer.value}
+                  />
+                )}
               </h2>
-              {signature ? (
+              {recording ? (
+                <figure className="flex flex-col gap-1.5">
+                  {recording.url ? (
+                    recording.kind === "video" ? (
+                      <video
+                        controls
+                        preload="metadata"
+                        playsInline
+                        className="border-border aspect-video w-full max-w-[560px] rounded-[8px] border bg-black"
+                      >
+                        <source src={recording.url} type={recording.mimeType} />
+                      </video>
+                    ) : (
+                      <audio controls preload="metadata" className="w-full max-w-[460px]">
+                        <source src={recording.url} type={recording.mimeType} />
+                      </audio>
+                    )
+                  ) : (
+                    <p className="text-subtle-foreground text-sm italic">
+                      Recording unavailable
+                    </p>
+                  )}
+                  <figcaption className="text-muted-foreground text-xs">
+                    Recorded <LocalTime iso={recording.recordedAt} />
+                    {recording.size
+                      ? ` · ${(recording.size / (1024 * 1024)).toFixed(1)} MB`
+                      : ""}
+                  </figcaption>
+                </figure>
+              ) : signature ? (
                 <figure className="flex flex-col gap-1.5">
                   {signature.url ? (
                     // eslint-disable-next-line @next/next/no-img-element -- short-lived signed storage URL
@@ -594,6 +701,38 @@ export default async function ResponseDetailPage({
                 <p className="text-subtle-foreground text-[17px] leading-[1.45] font-semibold italic">
                   {completed ? "Skipped" : "Not answered yet"}
                 </p>
+              )}
+              {revisionsByQuestion.get(answer.questionId) && (
+                <details className="border-border mt-1 border-t pt-2 text-[13px]">
+                  <summary className="text-muted-foreground cursor-pointer">
+                    Corrected{" "}
+                    {revisionsByQuestion.get(answer.questionId)!.length === 1
+                      ? "once"
+                      : `${revisionsByQuestion.get(answer.questionId)!.length} times`}{" "}
+                    · history
+                  </summary>
+                  <ol className="mt-1.5 flex flex-col gap-1.5">
+                    <li>
+                      <span className="text-muted-foreground">
+                        Respondent&apos;s answer:{" "}
+                      </span>
+                      {formatAnswerValue(
+                        answer.question,
+                        revisionsByQuestion.get(answer.questionId)![0].previousValue,
+                      ) || <i>none</i>}
+                    </li>
+                    {revisionsByQuestion.get(answer.questionId)!.map((r) => (
+                      <li key={r.id}>
+                        <span className="text-muted-foreground">
+                          <LocalTime iso={r.editedAt} /> · {r.editedBy ?? "A teammate"}
+                          :{" "}
+                        </span>
+                        {formatAnswerValue(answer.question, r.newValue) || <i>cleared</i>}
+                        <span className="text-muted-foreground"> · “{r.reason}”</span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
               )}
               {followUps.get(answer.questionId) && (
                 <div className="border-border mt-1 border-t pt-2.5">

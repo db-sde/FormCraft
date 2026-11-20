@@ -257,10 +257,13 @@ export function ShareEmbed({
   title,
   popupEmbeds = false,
   color = "#1f1f1f",
+  themes = [],
 }: {
   slug: string;
   formId: string;
   title: string;
+  /** The form's link themes (F-66), to embed in one of them. */
+  themes?: { id: string; name: string }[];
   /** The plan includes popup / slide-in / side-tab / button embeds. */
   popupEmbeds?: boolean;
   /** The form's button colour, for the launcher. */
@@ -269,6 +272,7 @@ export function ShareEmbed({
   const [mode, setMode] = useState<EmbedMode | EmbedSdkMode>("standard");
   const [label, setLabel] = useState("Open form");
   const [trigger, setTrigger] = useState<EmbedTrigger>({ kind: "click" });
+  const [theme, setTheme] = useState("");
   const [copied, copy] = useCopy();
   const url = publicFormUrl(slug);
   const origin = (() => {
@@ -280,10 +284,10 @@ export function ShareEmbed({
   })();
   const code =
     mode === "standard"
-      ? buildEmbedSnippet({ formUrl: url, formId, title })
+      ? buildEmbedSnippet({ formUrl: url, formId, title, theme })
       : mode === "full"
-        ? `<iframe src="${url}?embed=1" title="${title.replace(/"/g, "&quot;")}" style="position:fixed;inset:0;width:100%;height:100%;border:0"></iframe>`
-        : buildSdkSnippet({ origin, slug, mode, trigger, label, color });
+        ? `<iframe src="${url}?embed=1${theme ? `&theme=${theme}` : ""}" title="${title.replace(/"/g, "&quot;")}" allow="microphone; camera" style="position:fixed;inset:0;width:100%;height:100%;border:0"></iframe>`
+        : buildSdkSnippet({ origin, slug, mode, trigger, label, color, theme });
   const sdkModes: EmbedSdkMode[] = popupEmbeds
     ? ["popup", "slide-in", "side-tab", "full-page", "button"]
     : [];
@@ -320,6 +324,23 @@ export function ShareEmbed({
         <p className="text-muted-foreground text-xs">
           Popup, slide-in, side tab and button embeds are part of paid plans.
         </p>
+      )}
+      {themes.length > 0 && (
+        <label className="flex items-center gap-2 text-[13px] font-semibold">
+          Theme
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            className="border-input bg-field h-8 rounded-sm border-[1.5px] px-2 text-[13px] font-normal"
+          >
+            <option value="">The form&apos;s own</option>
+            {themes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
       {launcher && (
         <label className="flex items-center gap-2 text-[13px] font-semibold">

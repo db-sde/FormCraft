@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { sniffContentType, matchesAcceptedTypes } from "@/domains/uploads/sniff";
+import {
+  sniffContentType,
+  matchesAcceptedTypes,
+  mediaMimeType,
+} from "@/domains/uploads/sniff";
+import { mediaMaxBytes } from "@/domains/uploads/queries";
 
 function bytesOf(...values: number[]): Uint8Array {
   const arr = new Uint8Array(16);
@@ -48,5 +53,36 @@ describe("matchesAcceptedTypes", () => {
     expect(matchesAcceptedTypes("image/png", ["image/*"])).toBe(true);
     expect(matchesAcceptedTypes("image/jpeg", ["image/*"])).toBe(true);
     expect(matchesAcceptedTypes("application/pdf", ["image/*"])).toBe(false);
+  });
+});
+
+describe("recordings (roadmap #21)", () => {
+  const bytes = (head: number[]) => new Uint8Array([...head, ...new Array(16).fill(0)]);
+  const webm = bytes([0x1a, 0x45, 0xdf, 0xa3]);
+  const ogg = bytes([0x4f, 0x67, 0x67, 0x53]);
+  const mp4 = bytes([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]);
+
+  it("knows the containers browsers record into", () => {
+    expect(sniffContentType(webm)?.extension).toBe("webm");
+    expect(sniffContentType(ogg)?.mimeType).toBe("audio/ogg");
+    expect(sniffContentType(mp4)?.extension).toBe("mp4");
+  });
+
+  it("stores them as the kind the question asks for, and nothing else", () => {
+    expect(mediaMimeType(sniffContentType(webm), "audio")?.mimeType).toBe("audio/webm");
+    expect(mediaMimeType(sniffContentType(webm), "video")?.mimeType).toBe("video/webm");
+    expect(mediaMimeType(sniffContentType(mp4), "audio")).toEqual({
+      mimeType: "audio/mp4",
+      extension: "m4a",
+    });
+    expect(mediaMimeType(sniffContentType(ogg), "video")).toBeNull();
+    const png = bytes([0x89, 0x50, 0x4e, 0x47]);
+    expect(mediaMimeType(sniffContentType(png), "video")).toBeNull();
+  });
+
+  it("caps the size from the time limit, never above the hard ceiling", () => {
+    expect(mediaMaxBytes("audio", 60)).toBe(60 * 32 * 1024 + 512 * 1024);
+    expect(mediaMaxBytes("video", 60)).toBe(60 * 512 * 1024 + 512 * 1024);
+    expect(mediaMaxBytes("video", 300)).toBe(100 * 1024 * 1024);
   });
 });
