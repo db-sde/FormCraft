@@ -17,6 +17,7 @@ import {
 } from "@/domains/forms/prefill";
 import { profileKeyFromLabel } from "@/domains/responses/profile";
 import { Input } from "@/components/ui/input";
+import { useBuilderCapabilities } from "./builder-capabilities";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -177,6 +178,7 @@ export function AddressSettingsPanel({
   onChange: Change;
 }) {
   const { fields, requiredFields } = question.settings;
+  const { placesAvailable } = useBuilderCapabilities();
   function update(nextFields: AddressField[], nextRequired: AddressField[]) {
     const ordered = ADDRESS_FIELDS.filter((f) => nextFields.includes(f));
     const required = ordered.filter((f) => nextRequired.includes(f));
@@ -251,6 +253,9 @@ export function AddressSettingsPanel({
           Suggest addresses as they type
           <Switch
             aria-label="Suggest addresses as they type"
+            // Not set up: can't be turned on (QA FC11-01); one already on
+            // can still be turned off.
+            disabled={!placesAvailable && !question.settings.autocomplete}
             checked={!!question.settings.autocomplete}
             onCheckedChange={(on) =>
               onChange({
@@ -263,8 +268,16 @@ export function AddressSettingsPanel({
         <p className="text-muted-foreground text-[12.5px]">
           From Google Maps, picked from a list and filled into the parts above. People can
           always type the address instead, and do whenever suggestions aren&apos;t
-          available. Needs Google address suggestions set up for this site.
+          available.
         </p>
+        {!placesAvailable && (
+          <p className="rounded-sm bg-[var(--chip-changes-bg)] px-2.5 py-1.5 text-[12.5px]">
+            Address suggestions aren&apos;t set up on this site yet.
+            {question.settings.autocomplete
+              ? " Until then this form shows no suggestions; turn it off or ask whoever runs FormCraft to turn them on."
+              : ""}
+          </p>
+        )}
         {question.settings.autocomplete && (
           <label className="flex flex-col gap-1 text-[13px] font-semibold">
             Only these countries

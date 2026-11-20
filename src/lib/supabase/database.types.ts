@@ -3435,6 +3435,13 @@ export type Database = {
         }[];
       };
       response_is_confidential: { Args: { p_form_id: string }; Returns: boolean };
+      response_question_reach: {
+        Args: { since?: string; target_form_id: string };
+        Returns: {
+          question_id: string;
+          reached: number;
+        }[];
+      };
       response_reach: {
         Args: { since?: string; target_form_id: string };
         Returns: {

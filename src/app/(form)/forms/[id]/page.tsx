@@ -1,3 +1,4 @@
+import { placesConfigured } from "@/domains/places";
 import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
@@ -86,11 +87,13 @@ export default async function FormBuilderPage({
           publishedVersionNumber: publishInfo?.publishedVersionNumber ?? null,
           hasUnpublishedChanges: publishInfo?.hasUnpublishedChanges ?? false,
         }}
+        publishedSchema={publishInfo?.publishedSchema ?? null}
         onSave={saveDraftAction}
         onPublish={publishAction}
         onUnpublish={unpublishAction}
         onRename={renameFormAction}
         aiEnabled={aiConfigured()}
+        placesAvailable={placesConfigured()}
         brandingRemovable={entitlements.remove_branding}
         customFonts={entitlements.custom_fonts}
         multilingual={entitlements.multilingual}

@@ -391,3 +391,15 @@ function locate(
   if (section === "logic") return { where: "Logic" };
   return { where: "Form" };
 }
+
+/** Whether two stored schemas say the same thing. Compared through
+ * parseFormSchema, so storage details (jsonb key order, defaults filled
+ * in vs. left out) don't count as a change. Anything unparseable counts
+ * as different. */
+export function sameFormSchema(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(parseFormSchema(a)) === JSON.stringify(parseFormSchema(b));
+  } catch {
+    return false;
+  }
+}

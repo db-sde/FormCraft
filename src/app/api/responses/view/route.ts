@@ -9,6 +9,10 @@ import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isLikelyBot } from "@/lib/http/bots";
 import { VISITOR_COOKIE, VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
+import {
+  isSignedVisitor,
+  VISITOR_SIG_COOKIE,
+} from "@/domains/experiments/visitor-signature";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
 const ViewBody = z.object({
@@ -42,7 +46,10 @@ export async function POST(request: NextRequest) {
   // one budget per form, whatever address they come from (a caller can
   // change address on every request).
   const visitorCookie = request.cookies.get(VISITOR_COOKIE)?.value;
-  const anonymous = !visitorCookie || !VISITOR_ID_PATTERN.test(visitorCookie);
+  const anonymous =
+    !visitorCookie ||
+    !VISITOR_ID_PATTERN.test(visitorCookie) ||
+    !isSignedVisitor(visitorCookie, request.cookies.get(VISITOR_SIG_COOKIE)?.value);
   for (const [key, limit, windowMs] of [
     [`view-burst:${ip}:${formId}`, 20, 60 * 1000],
     [`view:${ip}:${formId}`, 120, 10 * 60 * 1000],

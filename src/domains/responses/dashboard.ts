@@ -3,7 +3,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
-  formatAnswerValue,
+  previewAnswerValue,
+  answerDetailValue,
   questionColumnLabel,
   questionColumnLabels,
   exportColumnLabels,
@@ -416,7 +417,7 @@ export async function listResponses(
     for (const ref of previewQuestions) {
       const own = schema?.questions.find((q) => q.id === ref.id) ?? ref;
       const value = answers?.get(ref.id);
-      preview[ref.id] = formatAnswerValue(own, value, { uploadNames });
+      preview[ref.id] = previewAnswerValue(own, value, { uploadNames });
       if (
         (own.type === "file_upload" || own.type === "signature") &&
         typeof value === "string" &&
@@ -596,7 +597,7 @@ export async function getResponseDetail(
     .map((q) => ({
       questionId: q.id,
       label: questionColumnLabel(q),
-      formatted: formatAnswerValue(q, answersByQuestion.get(q.id)),
+      formatted: answerDetailValue(q, answersByQuestion.get(q.id)),
       value: answersByQuestion.get(q.id),
       question: q,
     }));
@@ -997,24 +998,31 @@ export type Reach = {
 /**
  * How far respondents got, question by question (QA EN-03): the drop-off
  * chart in Summary. A response that didn't finish stopped on the question
- * it was last on; everyone who started reached each question except
- * those who stopped earlier. Counts follow the form's current order, so a
- * question that logic skips for some people still counts them as having
- * passed it. Aggregated in the database (response_reach), scoped by RLS.
+ * it was last on. A response reached a question when it answered it, was
+ * shown it or stopped on it, so a question that logic skipped for some
+ * people doesn't count them (QA FC11-08). Aggregated in the database
+ * (response_reach, response_question_reach), scoped by RLS.
  */
 export async function getReach(
   supabase: Client,
   formId: string,
   since?: Date,
 ): Promise<Reach> {
-  const [{ data, error }, latest] = await Promise.all([
-    supabase.rpc("response_reach", {
-      target_form_id: formId,
-      since: since?.toISOString(),
-    }),
-    getLatestSchema(supabase, formId),
-  ]);
+  const [{ data, error }, { data: reachRows, error: reachError }, latest] =
+    await Promise.all([
+      supabase.rpc("response_reach", {
+        target_form_id: formId,
+        since: since?.toISOString(),
+      }),
+      supabase.rpc("response_question_reach", {
+        target_form_id: formId,
+        since: since?.toISOString(),
+      }),
+      getLatestSchema(supabase, formId),
+    ]);
   if (error) throw error;
+  if (reachError) throw reachError;
+  const reachedBy = new Map((reachRows ?? []).map((r) => [r.question_id, r.reached]));
 
   const questions = (latest?.questions ?? []).filter((q) => q.type !== "welcome_screen");
   const known = new Set(questions.map((q) => q.id));
@@ -1038,18 +1046,12 @@ export async function getReach(
     }
   }
 
-  let remaining = starts - beforeFirst;
-  const steps = questions.map((q) => {
-    const stopped = stoppedAt.get(q.id) ?? 0;
-    const step = {
-      questionId: q.id,
-      label: questionColumnLabel(q),
-      reached: remaining,
-      stopped,
-    };
-    remaining -= stopped;
-    return step;
-  });
+  const steps = questions.map((q) => ({
+    questionId: q.id,
+    label: questionColumnLabel(q),
+    reached: reachedBy.get(q.id) ?? 0,
+    stopped: stoppedAt.get(q.id) ?? 0,
+  }));
   return { starts, completed, beforeFirst, steps };
 }
 

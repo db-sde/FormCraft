@@ -169,6 +169,10 @@ const OpinionScaleSettings = z
     max: z.number().int().default(10),
     leftLabel: optionalSafeText(100),
     rightLabel: optionalSafeText(100),
+    /** Report this 0–10 scale as a Net Promoter Score (QA FC11-13).
+     * Unset: only when the question asks how likely they are to
+     * recommend (the standard NPS wording). */
+    nps: z.boolean().optional(),
   })
   .refine((v) => v.min < v.max, "min must be less than max");
 
@@ -423,7 +427,18 @@ const RepeatGroupSettings = z
  * the server adds which notice it was (`version`, a hash of the
  * published wording) and when (`acceptedAt`). That is a record of what
  * was shown and ticked, not proof that any law was complied with. */
+/** What a consent page's notice is (QA FC11-09), kept with each answer. */
+export const CONSENT_KINDS = [
+  "privacy",
+  "terms",
+  "data_sharing",
+  "marketing",
+  "medical",
+  "other",
+] as const;
+
 const ConsentSettings = z.object({
+  kind: z.enum(CONSENT_KINDS).optional(),
   /** The notice. Plain text with light formatting: paragraphs, **bold**,
    * *italic*, "- " lists, "## " headings and [links](https://…). */
   content: safeText(20000),

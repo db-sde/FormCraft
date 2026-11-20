@@ -371,28 +371,24 @@ export function WebhooksPanel({
                     No deliveries yet. The next completed response will show up here.
                   </span>
                 ) : (
-                  log
-                    .slice(0, 5)
-                    .map((delivery) => (
-                      <DeliveryRow
-                        key={delivery.id}
-                        when={<LocalTime iso={delivery.createdAt} variant="day" />}
-                        detail={[
-                          delivery.eventType !== "response.completed"
-                            ? delivery.eventType.replace("response.", "")
-                            : "",
-                          delivery.attemptCount > 1
-                            ? `attempt ${delivery.attemptCount}`
-                            : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                        error={
-                          delivery.status !== "succeeded" ? delivery.lastError : null
-                        }
-                        status={delivery.status}
-                      />
-                    ))
+                  log.slice(0, 5).map((delivery) => (
+                    <DeliveryRow
+                      key={delivery.id}
+                      when={<LocalTime iso={delivery.createdAt} variant="day" />}
+                      detail={[
+                        // Every delivery names its event, completed too
+                        // (QA FC11-04).
+                        delivery.eventType.replace("response.", ""),
+                        delivery.attemptCount > 1
+                          ? `attempt ${delivery.attemptCount}`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      error={delivery.status !== "succeeded" ? delivery.lastError : null}
+                      status={delivery.status}
+                    />
+                  ))
                 )}
               </div>
             </div>

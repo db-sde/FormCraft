@@ -13,6 +13,10 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VISITOR_COOKIE, VISITOR_ID_PATTERN } from "@/domains/experiments/visitor";
+import {
+  isSignedVisitor,
+  VISITOR_SIG_COOKIE,
+} from "@/domains/experiments/visitor-signature";
 import { writeSecretCookie } from "@/domains/responses/write-secret";
 import { apiError, getClientIp, readJsonBody } from "../shared";
 
@@ -73,7 +77,12 @@ export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
   const formId = parsed.data.formId;
   const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
-  const hasVisitor = !!visitor && VISITOR_ID_PATTERN.test(visitor);
+  // Only a visitor id FormCraft issued counts (QA FC11-12): a made-up
+  // cookie on each request is no visitor at all.
+  const hasVisitor =
+    !!visitor &&
+    VISITOR_ID_PATTERN.test(visitor) &&
+    isSignedVisitor(visitor, request.cookies.get(VISITOR_SIG_COOKIE)?.value);
   const isKiosk =
     !!parsed.data.kiosk &&
     !!(
@@ -86,6 +95,9 @@ export async function POST(request: NextRequest) {
   const limits: [string, number, number][] = [
     [`start-burst:${ip}:${formId}`, 20, 60 * 1000],
     [`start:${ip}:${formId}`, 120, 10 * 60 * 1000],
+    // Everyone together, whatever their address or cookie: a busy form
+    // still gets a start a second; the browser retries when turned away.
+    [`start-form:${formId}`, 60, 60 * 1000],
   ];
   if (!hasVisitor) limits.push([`start-anon:${formId}`, 20, 60 * 1000]);
   else if (!isKiosk)

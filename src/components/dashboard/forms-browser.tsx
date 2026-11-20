@@ -78,7 +78,7 @@ function FormCard({
   onDuplicating,
 }: {
   form: FormListItem;
-  onDuplicating?: (pending: boolean) => void;
+  onDuplicating?: (pending: boolean, copyId?: string) => void;
 }) {
   const status = statusOf(form);
   return (
@@ -215,7 +215,13 @@ export function FormsBrowser({
   const [sort, setSort] = useState<Sort>("edited");
   const [storedView, storeView] = useStoredValue(VIEW_KEY, "grid");
   const view: View = storedView === "list" ? "list" : "grid";
-  const [duplicating, setDuplicating] = useState<string | null>(null);
+  // The form being copied, and the copy's id once it exists: the
+  // placeholder stays until the refreshed list has the copy, so it never
+  // vanishes with nothing in its place (QA FC11-14).
+  const [duplicating, setDuplicating] = useState<{
+    sourceId: string;
+    copyId?: string;
+  } | null>(null);
   const [folder, setFolder] = useState<FolderFilter>("all");
   const [mine, setMine] = useState(false);
 
@@ -285,9 +291,10 @@ export function FormsBrowser({
     return [...filtered].sort(by[sort]);
   }, [searched, filter, sort]);
 
-  const duplicatingForm = duplicating
-    ? forms.find((f) => f.id === duplicating)
-    : undefined;
+  const duplicatingForm =
+    duplicating && !forms.some((f) => f.id === duplicating.copyId)
+      ? forms.find((f) => f.id === duplicating.sourceId)
+      : undefined;
 
   return (
     <CanEditContext.Provider value={canEdit}>
@@ -473,9 +480,15 @@ export function FormsBrowser({
                     <FormCard
                       key={form.id}
                       form={form}
-                      onDuplicating={(pending) =>
-                        setDuplicating(pending ? form.id : null)
-                      }
+                      onDuplicating={(pending, copyId) => {
+                        if (pending) setDuplicating({ sourceId: form.id });
+                        else if (!copyId) setDuplicating(null);
+                        else {
+                          setDuplicating({ sourceId: form.id, copyId });
+                          // In case the refresh never comes back.
+                          setTimeout(() => setDuplicating(null), 15_000);
+                        }
+                      }}
                     />
                   ))}
                   {duplicatingForm && <DuplicatingCard title={duplicatingForm.title} />}

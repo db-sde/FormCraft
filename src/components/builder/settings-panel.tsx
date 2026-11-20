@@ -1,6 +1,7 @@
 "use client";
 
 import { AUTO_ADVANCE_TYPES } from "@/domains/forms/auto-advance";
+import { isNpsQuestion } from "@/domains/responses/nps";
 import { NON_ANSWERABLE_TYPES } from "@/domains/forms/schema/question-types";
 import type { QuestionV1 } from "@/domains/forms/schema/v1";
 import { OptionsEditor } from "./options-editor";
@@ -788,6 +789,16 @@ export function SettingsPanel({
       {question.type === "opinion_scale" && (
         <>
           <SectionHead>Scale</SectionHead>
+          {question.settings.min === 0 && question.settings.max === 10 && (
+            <SwitchRow
+              label="Report as NPS"
+              hint="Summary shows a Net Promoter Score: 9–10 promoters, 0–6 detractors. On by default when the question asks how likely they are to recommend."
+              checked={isNpsQuestion(question)}
+              onCheckedChange={(nps) =>
+                onChange({ ...question, settings: { ...question.settings, nps } })
+              }
+            />
+          )}
           <PanelField label="Min" half>
             <Input
               className={cn(PANEL_INPUT, bad)}

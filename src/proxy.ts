@@ -1,4 +1,9 @@
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
+import {
+  isSignedVisitor,
+  VISITOR_SIG_COOKIE,
+  visitorSignature,
+} from "@/domains/experiments/visitor-signature";
 import { NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { supabaseEnv } from "@/lib/supabase/env";
@@ -46,8 +51,14 @@ function apiResponse(response: NextResponse): NextResponse {
  * this request too so the first render can use it. Returns the new id
  * to set on the response, or null when there already is one. */
 function ensureVisitor(request: NextRequest, headers: Headers): string | null {
-  if (VISITOR_ID_PATTERN.test(request.cookies.get(VISITOR_COOKIE)?.value ?? ""))
-    return null;
+  const existing = request.cookies.get(VISITOR_COOKIE)?.value ?? "";
+  if (VISITOR_ID_PATTERN.test(existing)) {
+    // Signed already, or signed now (an id from before signatures, kept so
+    // the visitor keeps their A/B arm): see visitor-signature.ts.
+    return isSignedVisitor(existing, request.cookies.get(VISITOR_SIG_COOKIE)?.value)
+      ? null
+      : existing;
+  }
   const id = crypto.randomUUID();
   const cookie = headers.get("cookie");
   headers.set("cookie", `${cookie ? `${cookie}; ` : ""}${VISITOR_COOKIE}=${id}`);
@@ -61,14 +72,16 @@ function withVisitor(
 ): NextResponse {
   if (!id) return response;
   const secure = request.nextUrl.protocol === "https:";
-  response.cookies.set(VISITOR_COOKIE, id, {
+  const options = {
     httpOnly: true,
     path: "/",
     maxAge: VISITOR_MAX_AGE_SECONDS,
     // Embeds load the form in a third-party iframe.
-    sameSite: secure ? "none" : "lax",
+    sameSite: secure ? ("none" as const) : ("lax" as const),
     secure,
-  });
+  };
+  response.cookies.set(VISITOR_COOKIE, id, options);
+  response.cookies.set(VISITOR_SIG_COOKIE, visitorSignature(id), options);
   return response;
 }
 

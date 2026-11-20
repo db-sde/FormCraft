@@ -314,6 +314,27 @@ test.describe("QA run 6", () => {
     expect(guesses.slice(20).every((s) => s === 429)).toBe(true);
   });
 
+  test("FC11-12: a made-up visitor cookie on every request doesn't escape the start limit", async ({
+    request,
+  }) => {
+    // QA run 11: a new address and a new made-up fc_vid on each call got
+    // 25 starts through. Only a visitor id the server signed counts now.
+    const { formId } = await createPublishedForm(user, form);
+    const statuses: number[] = [];
+    for (let i = 0; i < 24; i += 1) {
+      const res = await request.post("/api/responses/start", {
+        data: { formId },
+        headers: {
+          "x-forwarded-for": `203.0.113.${i + 1}`,
+          cookie: `fc_vid=${crypto.randomUUID()}; fc_vsig=${"x".repeat(32)}`,
+        },
+      });
+      statuses.push(res.status());
+    }
+    expect(statuses.filter((s) => s === 200)).toHaveLength(20);
+    expect(statuses.slice(20).every((s) => s === 429)).toBe(true);
+  });
+
   test("FC5-05: an over-long answer is named, not refused whole", async ({ request }) => {
     const { formId } = await createPublishedForm(user, form);
     const responseId = await start(request, formId);

@@ -3,6 +3,8 @@
 import type { RuleProposal } from "@/domains/ai/rule-draft";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { BuilderCapabilitiesContext } from "./builder-capabilities";
+import { SaveTemplateDialog } from "@/components/dashboard/save-template-dialog";
 import {
   ArrowLeft,
   Check,
@@ -25,6 +27,7 @@ import {
   ListOrdered,
   PencilLine,
   SlidersHorizontal,
+  LayoutTemplate,
 } from "lucide-react";
 import type {
   FormSchemaV1,
@@ -33,6 +36,7 @@ import type {
   ThemeV1,
 } from "@/domains/forms/schema/v1";
 import type { QuestionType } from "@/domains/forms/schema/question-types";
+import { sameFormSchema } from "@/domains/forms/schema/validate";
 import {
   createQuestion,
   insertQuestion,
@@ -196,6 +200,7 @@ export function FormBuilder({
   initialRevision,
   initialSchema,
   initialPublishInfo,
+  publishedSchema,
   onSave,
   onPublish,
   onUnpublish,
@@ -203,6 +208,7 @@ export function FormBuilder({
   addLeadCaptureOnOpen = false,
   openPreviewOnLoad = false,
   aiEnabled = false,
+  placesAvailable = false,
   onProposeRule,
   onReviewForm,
   brandingRemovable = true,
@@ -233,6 +239,8 @@ export function FormBuilder({
   customFonts?: boolean;
   /** AI is configured on the server ("Describe a rule"). */
   aiEnabled?: boolean;
+  /** Address suggestions need a Google Places key on the server. */
+  placesAvailable?: boolean;
   onProposeRule?: (
     formId: string,
     instruction: string,
@@ -258,6 +266,8 @@ export function FormBuilder({
   initialRevision: number;
   initialSchema: FormSchemaV1;
   initialPublishInfo: PublishInfo;
+  /** What respondents see now (null before the first publish). */
+  publishedSchema?: unknown;
   onSave: (
     draftVersionId: string,
     expectedRevision: number,
@@ -342,6 +352,9 @@ export function FormBuilder({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
   const [publishInfo, setPublishInfo] = useState(initialPublishInfo);
+  // The live version, so an edit undone (a setting turned on and back
+  // off) doesn't leave "Publish changes" asking for a publish (QA FC11-06).
+  const publishedSchemaRef = useRef<unknown>(publishedSchema ?? null);
   const [publishing, setPublishing] = useState(false);
   // Publish waits for the editor to be ready: a click before the page
   // has hydrated did nothing at all (QA FC4-24).
@@ -364,6 +377,7 @@ export function FormBuilder({
   // On a phone (below 1024px) the three columns are three tabs (F-52):
   // the list, the item being edited, and its settings. Choosing anything
   // opens it for editing.
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [mobilePane, setMobilePane] = useState<"questions" | "edit" | "settings">(
     "questions",
   );
@@ -559,7 +573,17 @@ export function FormBuilder({
       revisionRef.current = result.revision;
       savedSchemaRef.current = schemaToSave;
       setSaveState("saved");
-      setPublishInfo((p) => (p.isPublished ? { ...p, hasUnpublishedChanges: true } : p));
+      setPublishInfo((p) =>
+        p.isPublished
+          ? {
+              ...p,
+              hasUnpublishedChanges: !sameFormSchema(
+                publishedSchemaRef.current,
+                schemaToSave,
+              ),
+            }
+          : p,
+      );
     } else if (result.code === "stale") {
       staleRef.current = true;
       setSaveState("stale");
@@ -977,6 +1001,7 @@ export function FormBuilder({
     setPublishing(false);
 
     if (result.ok) {
+      publishedSchemaRef.current = savedSchemaRef.current;
       setPublishInfo({
         isPublished: true,
         publishedAt: new Date().toISOString(),
@@ -1144,812 +1169,836 @@ export function FormBuilder({
     : -1;
 
   return (
-    <div className="bg-background flex h-dvh min-h-[600px] flex-col">
-      <header className="border-ink bg-card relative z-20 grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-b-[1.5px] px-4 max-xl:gap-2.5 max-lg:h-auto max-lg:grid-cols-1 max-lg:gap-y-2 max-lg:px-2.5 max-lg:py-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                href="/dashboard"
-                aria-label="Back to forms"
-                className="fc-focus border-border hover:bg-hover-wash grid size-9 shrink-0 place-items-center rounded-sm border-[1.5px]"
-              >
-                <ArrowLeft className="size-[18px]" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>Back to forms</TooltipContent>
-          </Tooltip>
-          <FormTitleInput
-            // Remounts when the name changes from outside the field (it
-            // follows the welcome screen's title until renamed here).
-            key={formName}
-            title={formName}
-            onRename={async (title) => {
-              if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
-              const result = await onRename(formId, title);
-              if (result.ok) {
-                if (result.slug) setLiveSlug(result.slug);
-                const welcome = schema.questions.find((q) => q.type === "welcome_screen");
-                // Only a welcome title still showing the placeholder, or the
-                // name of the form this was copied from, takes the new name;
-                // otherwise it's its own text.
-                const welcomeFollows =
-                  !!welcome && welcomeTakesNewName(welcome.label, formName);
-                if (welcome && welcomeFollows) {
-                  setSchema((s) => ({
-                    ...s,
-                    questions: s.questions.map((q) =>
-                      q.id === welcome.id ? { ...q, label: result.title } : q,
-                    ),
-                  }));
+    <BuilderCapabilitiesContext.Provider value={{ placesAvailable }}>
+      {/* The 600px floor is for desktops only: on a short phone screen (or
+          a zoomed-in window) it made the page taller than the screen, so the
+          pinned tab bar sat over the Add question button (QA FC11-06). */}
+      <div className="bg-background flex h-dvh flex-col lg:min-h-[600px]">
+        <header className="border-ink bg-card relative z-20 grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-b-[1.5px] px-4 max-xl:gap-2.5 max-lg:h-auto max-lg:grid-cols-1 max-lg:gap-y-2 max-lg:px-2.5 max-lg:py-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="/dashboard"
+                  aria-label="Back to forms"
+                  className="fc-focus border-border hover:bg-hover-wash grid size-9 shrink-0 place-items-center rounded-sm border-[1.5px]"
+                >
+                  <ArrowLeft className="size-[18px]" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Back to forms</TooltipContent>
+            </Tooltip>
+            <FormTitleInput
+              // Remounts when the name changes from outside the field (it
+              // follows the welcome screen's title until renamed here).
+              key={formName}
+              title={formName}
+              onRename={async (title) => {
+                if (renameTimerRef.current) clearTimeout(renameTimerRef.current);
+                const result = await onRename(formId, title);
+                if (result.ok) {
+                  if (result.slug) setLiveSlug(result.slug);
+                  const welcome = schema.questions.find(
+                    (q) => q.type === "welcome_screen",
+                  );
+                  // Only a welcome title still showing the placeholder, or the
+                  // name of the form this was copied from, takes the new name;
+                  // otherwise it's its own text.
+                  const welcomeFollows =
+                    !!welcome && welcomeTakesNewName(welcome.label, formName);
+                  if (welcome && welcomeFollows) {
+                    setSchema((s) => ({
+                      ...s,
+                      questions: s.questions.map((q) =>
+                        q.id === welcome.id ? { ...q, label: result.title } : q,
+                      ),
+                    }));
+                  }
+                  // Named in the top bar: the welcome title no longer names it.
+                  nameLinkedRef.current = false;
+                  setFormName(result.title);
                 }
-                // Named in the top bar: the welcome title no longer names it.
-                nameLinkedRef.current = false;
-                setFormName(result.title);
+                return result;
+              }}
+              onTitleChange={(title) =>
+                setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
               }
-              return result;
-            }}
-            onTitleChange={(title) =>
-              setSchema((s) => ({ ...s, meta: { ...s.meta, title } }))
-            }
-          />
-          <span className="flex shrink-0 items-center">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-7"
-              aria-label="Undo last change"
-              title="Undo (Ctrl+Z)"
-              disabled={undoCount === 0}
-              onClick={() => travel("undo")}
-            >
-              <Undo2 className="size-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-7"
-              aria-label="Redo last change"
-              title="Redo (Ctrl+Shift+Z)"
-              disabled={redoCount === 0}
-              onClick={() => travel("redo")}
-            >
-              <Redo2 className="size-4" />
-            </Button>
-          </span>
-          <SaveStatus
-            state={saveState}
-            problem={saveProblem?.message}
-            onProblemClick={showProblem}
-          />
-          {saveState === "stale" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-7 shrink-0 px-3 text-[12.5px]"
-              onClick={() => window.location.reload()}
-            >
-              Reload
-            </Button>
-          )}
-        </div>
-
-        <div className="max-lg:order-last max-lg:col-span-full max-lg:flex max-lg:justify-center">
-          <FormTabs formId={formId} active="build" />
-        </div>
-
-        <div className="flex min-w-0 items-center justify-end gap-2 max-lg:justify-start">
-          {isLive && (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    tabIndex={0}
-                    className="fc-focus flex h-9 items-center rounded-sm px-1.5"
-                  >
-                    <span
-                      className={cn(
-                        "size-2.5 rounded-full",
-                        hasChanges
-                          ? "bg-[var(--chip-changes-dot)] shadow-[0_0_0_3px_var(--chip-changes-bg)]"
-                          : "bg-[var(--chip-live-dot)] shadow-[0_0_0_3px_var(--chip-live-bg)]",
-                      )}
-                    />
-                    <span className="sr-only">
-                      {hasChanges ? "Unpublished changes" : "Live"}
-                    </span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[230px]">
-                  {hasChanges
-                    ? "Unpublished changes. Respondents still see the last published version."
-                    : "Live. Respondents see the latest version."}
-                </TooltipContent>
-              </Tooltip>
-              <SharePopover
-                formId={formId}
-                slug={liveSlug}
-                title={currentTitle}
-                description={schema.meta.description}
-                primaryColor={schema.theme.primaryColor}
-              />
-            </>
-          )}
-          {onProposeEdit && (
-            <Button
-              variant="outline"
-              className="h-9 px-3 max-lg:hidden"
-              onClick={() =>
-                aiEnabled
-                  ? setAiEditOpen(true)
-                  : toast.info(notSetUpMessage("Editing with AI"))
-              }
-            >
-              <Sparkles /> <span className="max-xl:sr-only">Edit with AI</span>
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            className="h-9 px-3"
-            onClick={() => {
-              setPreviewOpen(true);
-              track("form_previewed");
-            }}
-          >
-            <Eye /> <span className="max-xl:sr-only">Preview</span>
-          </Button>
-          <Button
-            data-loading={publishing || undefined}
-            variant={isLive && !hasChanges && !publishing ? "outline" : "default"}
-            className={cn(
-              "h-9 px-4 whitespace-nowrap",
-              isLive && !hasChanges && !publishing && "border-input shadow-none",
-              publishing && "bg-accent shadow-none",
-            )}
-            disabled={!ready || publishing || upToDate}
-            onClick={handlePublish}
-          >
-            {publishing && <ButtonSpinner />}
-            {upToDate && <Check />}
-            {publishLabel}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            />
+            <span className="flex shrink-0 items-center">
               <Button
                 size="icon"
-                variant="outline"
-                className="border-border data-[state=open]:bg-hover-wash size-9"
-                aria-label="More publishing options"
+                variant="ghost"
+                className="size-7"
+                aria-label="Undo last change"
+                title="Undo (Ctrl+Z)"
+                disabled={undoCount === 0}
+                onClick={() => travel("undo")}
               >
-                <Ellipsis />
+                <Undo2 className="size-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[220px]">
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={!isLive || publishing}
-                onSelect={() => setConfirmUnpublish(true)}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                aria-label="Redo last change"
+                title="Redo (Ctrl+Shift+Z)"
+                disabled={redoCount === 0}
+                onClick={() => travel("redo")}
               >
-                <EyeOff /> Unpublish
-              </DropdownMenuItem>
-              <p className="text-muted-foreground px-2.5 pt-1 pb-1.5 text-xs leading-[1.4]">
-                The link stops working until you publish again. Responses are kept.
-              </p>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
+                <Redo2 className="size-4" />
+              </Button>
+            </span>
+            <SaveStatus
+              state={saveState}
+              problem={saveProblem?.message}
+              onProblemClick={showProblem}
+            />
+            {saveState === "stale" && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-7 shrink-0 px-3 text-[12.5px]"
+                onClick={() => window.location.reload()}
+              >
+                Reload
+              </Button>
+            )}
+          </div>
 
-      {aiEnabled && onProposeEdit && (
-        <AiEditDialog
-          open={aiEditOpen}
-          onOpenChange={setAiEditOpen}
-          propose={(instruction) => onProposeEdit(formId, instruction, schema)}
-          onApply={applyAiEdit}
-        />
-      )}
-      <PreviewDialog
-        brandingRemovable={brandingRemovable}
-        schema={{
-          ...schema,
-          theme: themeForPlan(
-            schema.theme,
-            customFonts,
-            process.env.NEXT_PUBLIC_SUPABASE_URL,
-          ),
-        }}
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        onShowProblem={(target) => {
-          if (target.questionId)
-            setSelection({ kind: "question", id: target.questionId });
-          else if (target.endingId) setSelection({ kind: "ending", id: target.endingId });
-        }}
-      />
+          <div className="max-lg:order-last max-lg:col-span-full max-lg:flex max-lg:justify-center">
+            <FormTabs formId={formId} active="build" />
+          </div>
 
-      <div
-        className={cn(
-          "grid min-h-0 flex-1 max-lg:flex max-lg:flex-col max-lg:pb-[calc(56px+env(safe-area-inset-bottom))]",
-          selection.kind === "logic" || selection.kind === "languages"
-            ? "grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-[248px_minmax(0,1fr)]"
-            : "grid-cols-[280px_minmax(0,1fr)_300px] max-xl:grid-cols-[248px_minmax(0,1fr)_300px]",
+          <div className="flex min-w-0 items-center justify-end gap-2 max-lg:justify-start">
+            {isLive && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      tabIndex={0}
+                      className="fc-focus flex h-9 items-center rounded-sm px-1.5"
+                    >
+                      <span
+                        className={cn(
+                          "size-2.5 rounded-full",
+                          hasChanges
+                            ? "bg-[var(--chip-changes-dot)] shadow-[0_0_0_3px_var(--chip-changes-bg)]"
+                            : "bg-[var(--chip-live-dot)] shadow-[0_0_0_3px_var(--chip-live-bg)]",
+                        )}
+                      />
+                      <span className="sr-only">
+                        {hasChanges ? "Unpublished changes" : "Live"}
+                      </span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[230px]">
+                    {hasChanges
+                      ? "Unpublished changes. Respondents still see the last published version."
+                      : "Live. Respondents see the latest version."}
+                  </TooltipContent>
+                </Tooltip>
+                <SharePopover
+                  formId={formId}
+                  slug={liveSlug}
+                  title={currentTitle}
+                  description={schema.meta.description}
+                  primaryColor={schema.theme.primaryColor}
+                />
+              </>
+            )}
+            {onProposeEdit && (
+              <Button
+                variant="outline"
+                className="h-9 px-3 max-lg:hidden"
+                onClick={() =>
+                  aiEnabled
+                    ? setAiEditOpen(true)
+                    : toast.info(notSetUpMessage("Editing with AI"))
+                }
+              >
+                <Sparkles /> <span className="max-xl:sr-only">Edit with AI</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="h-9 px-3"
+              onClick={() => {
+                setPreviewOpen(true);
+                track("form_previewed");
+              }}
+            >
+              <Eye /> <span className="max-xl:sr-only">Preview</span>
+            </Button>
+            <Button
+              data-loading={publishing || undefined}
+              variant={isLive && !hasChanges && !publishing ? "outline" : "default"}
+              className={cn(
+                "h-9 px-4 whitespace-nowrap",
+                isLive && !hasChanges && !publishing && "border-input shadow-none",
+                publishing && "bg-accent shadow-none",
+              )}
+              disabled={!ready || publishing || upToDate}
+              onClick={handlePublish}
+            >
+              {publishing && <ButtonSpinner />}
+              {upToDate && <Check />}
+              {publishLabel}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="border-border data-[state=open]:bg-hover-wash size-9"
+                  aria-label="More publishing options"
+                >
+                  <Ellipsis />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[220px]">
+                {/* QA FC11-11: from the form itself, not only the dashboard. */}
+                <DropdownMenuItem onSelect={() => setSavingTemplate(true)}>
+                  <LayoutTemplate /> Save as template
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!isLive || publishing}
+                  onSelect={() => setConfirmUnpublish(true)}
+                >
+                  <EyeOff /> Unpublish
+                </DropdownMenuItem>
+                <p className="text-muted-foreground px-2.5 pt-1 pb-1.5 text-xs leading-[1.4]">
+                  The link stops working until you publish again. Responses are kept.
+                </p>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+
+        {aiEnabled && onProposeEdit && (
+          <AiEditDialog
+            open={aiEditOpen}
+            onOpenChange={setAiEditOpen}
+            propose={(instruction) => onProposeEdit(formId, instruction, schema)}
+            onApply={applyAiEdit}
+          />
         )}
-      >
-        <aside
+        <PreviewDialog
+          brandingRemovable={brandingRemovable}
+          schema={{
+            ...schema,
+            theme: themeForPlan(
+              schema.theme,
+              customFonts,
+              process.env.NEXT_PUBLIC_SUPABASE_URL,
+            ),
+          }}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          onShowProblem={(target) => {
+            if (target.questionId)
+              setSelection({ kind: "question", id: target.questionId });
+            else if (target.endingId)
+              setSelection({ kind: "ending", id: target.endingId });
+          }}
+        />
+
+        <div
           className={cn(
-            "border-ink bg-card flex min-h-0 flex-col border-r-[1.5px] max-lg:flex-1 max-lg:border-r-0",
-            mobilePane !== "questions" && "max-lg:hidden",
+            "grid min-h-0 flex-1 max-lg:flex max-lg:flex-col max-lg:pb-[calc(56px+env(safe-area-inset-bottom))]",
+            selection.kind === "logic" || selection.kind === "languages"
+              ? "grid-cols-[280px_minmax(0,1fr)] max-xl:grid-cols-[248px_minmax(0,1fr)]"
+              : "grid-cols-[280px_minmax(0,1fr)_300px] max-xl:grid-cols-[248px_minmax(0,1fr)_300px]",
           )}
         >
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-2.5 pt-3.5 pb-2.5">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center justify-between px-2 pb-1.5">
-                <span className="text-muted-foreground text-[11.5px] font-bold tracking-[0.1em] uppercase">
-                  Questions · {stepCount}
-                </span>
-                <span className="text-muted-foreground text-[11.5px]">
-                  Drag to reorder
-                </span>
-              </div>
-              <QuestionList
-                questions={schema.questions}
-                selectedId={selection.kind === "question" ? selection.id : null}
-                invalidId={saveState === "invalid" ? saveProblem?.questionId : null}
-                onSelect={(id) => setSelection({ kind: "question", id })}
-                onMove={handleMove}
-                onReorder={handleReorder}
-                onDuplicate={handleDuplicate}
-                onDelete={requestDeleteQuestion}
-              />
-              <AddQuestionMenu
-                onAdd={handleAdd}
-                library={{
-                  load: listBlocksAction,
-                  onPick: (id) => void handleAddBlock(id),
-                }}
-                canAddWelcome={!schema.questions.some((q) => q.type === "welcome_screen")}
-                canAddPageBreak={schema.meta.layout === "classic"}
-              />
-            </div>
-
-            {!hasLeadCapture(schema.questions) && (
-              <div className="border-input bg-background flex flex-col gap-1.5 rounded-sm border-[1.5px] border-dashed p-3">
-                <p className="flex items-center gap-1.5 text-[13.5px] font-bold">
-                  <Contact className="size-4" />
-                  Capture leads
-                </p>
-                <p className="text-muted-foreground text-xs leading-[1.45]">
-                  Ask for name, email and phone before your last question. Details are
-                  saved the moment they&apos;re entered, even if the person never submits.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-1 self-start"
-                  onClick={handleAddLeadCapture}
-                >
-                  <Plus /> Add lead capture
-                </Button>
-              </div>
+          <aside
+            className={cn(
+              "border-ink bg-card flex min-h-0 flex-col border-r-[1.5px] max-lg:flex-1 max-lg:border-r-0",
+              mobilePane !== "questions" && "max-lg:hidden",
             )}
-
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center justify-between px-2 pb-1.5">
-                <span className="text-muted-foreground text-[11.5px] font-bold tracking-[0.1em] uppercase">
-                  Endings
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddEnding}
-                  aria-label="Add ending"
-                  title="Add ending"
-                  className="fc-focus border-ink bg-card hover:bg-hover-wash grid size-6 place-items-center rounded-[5px] border-[1.5px]"
-                >
-                  <Plus className="size-[13px]" />
-                </button>
+          >
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-2.5 pt-3.5 pb-2.5">
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between px-2 pb-1.5">
+                  <span className="text-muted-foreground text-[11.5px] font-bold tracking-[0.1em] uppercase">
+                    Questions · {stepCount}
+                  </span>
+                  <span className="text-muted-foreground text-[11.5px]">
+                    Drag to reorder
+                  </span>
+                </div>
+                <QuestionList
+                  questions={schema.questions}
+                  selectedId={selection.kind === "question" ? selection.id : null}
+                  invalidId={saveState === "invalid" ? saveProblem?.questionId : null}
+                  onSelect={(id) => setSelection({ kind: "question", id })}
+                  onMove={handleMove}
+                  onReorder={handleReorder}
+                  onDuplicate={handleDuplicate}
+                  onDelete={requestDeleteQuestion}
+                />
+                <AddQuestionMenu
+                  onAdd={handleAdd}
+                  library={{
+                    load: listBlocksAction,
+                    onPick: (id) => void handleAddBlock(id),
+                  }}
+                  canAddWelcome={
+                    !schema.questions.some((q) => q.type === "welcome_screen")
+                  }
+                  canAddPageBreak={schema.meta.layout === "classic"}
+                />
               </div>
-              <ol className="flex flex-col gap-0.5" aria-label="Endings">
-                {schema.endings.map((ending) => {
-                  const on = selection.kind === "ending" && selection.id === ending.id;
-                  const label = ending.title || "Untitled ending";
+
+              {!hasLeadCapture(schema.questions) && (
+                <div className="border-input bg-background flex flex-col gap-1.5 rounded-sm border-[1.5px] border-dashed p-3">
+                  <p className="flex items-center gap-1.5 text-[13.5px] font-bold">
+                    <Contact className="size-4" />
+                    Capture leads
+                  </p>
+                  <p className="text-muted-foreground text-xs leading-[1.45]">
+                    Ask for name, email and phone before your last question. Details are
+                    saved the moment they&apos;re entered, even if the person never
+                    submits.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1 self-start"
+                    onClick={handleAddLeadCapture}
+                  >
+                    <Plus /> Add lead capture
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between px-2 pb-1.5">
+                  <span className="text-muted-foreground text-[11.5px] font-bold tracking-[0.1em] uppercase">
+                    Endings
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddEnding}
+                    aria-label="Add ending"
+                    title="Add ending"
+                    className="fc-focus border-ink bg-card hover:bg-hover-wash grid size-6 place-items-center rounded-[5px] border-[1.5px]"
+                  >
+                    <Plus className="size-[13px]" />
+                  </button>
+                </div>
+                <ol className="flex flex-col gap-0.5" aria-label="Endings">
+                  {schema.endings.map((ending) => {
+                    const on = selection.kind === "ending" && selection.id === ending.id;
+                    const label = ending.title || "Untitled ending";
+                    return (
+                      <li
+                        key={ending.id}
+                        className={cn(
+                          "group relative flex h-10 items-center gap-2 rounded-sm pr-1.5 pl-2.5",
+                          on
+                            ? "bg-secondary text-secondary-foreground"
+                            : "hover:bg-hover-wash",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelection({ kind: "ending", id: ending.id })}
+                          aria-current={on || undefined}
+                          className="focus-visible:after:shadow-focus flex min-w-0 flex-1 items-center gap-2 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-sm"
+                        >
+                          <span
+                            aria-hidden
+                            className="border-ink grid size-6 shrink-0 place-items-center rounded-[6px] border-[1.5px] bg-[var(--qt-screens-bg)] text-[var(--qt-screens-fg)]"
+                          >
+                            <Flag className="size-[13px]" />
+                          </span>
+                          <span
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-[13.5px]",
+                              on ? "font-bold" : "font-medium",
+                            )}
+                          >
+                            {label}
+                          </span>
+                          {ending.isDefault && (
+                            <span
+                              className={cn(
+                                "rounded-full border-[1.5px] px-[7px] py-px text-[10.5px] font-bold",
+                                on
+                                  ? "border-[#6f6254] text-[#e2d5c0]"
+                                  : "border-input text-muted-foreground",
+                              )}
+                            >
+                              default
+                            </span>
+                          )}
+                        </button>
+                        {canDeleteEnding(schema.endings, ending.id) && (
+                          <button
+                            type="button"
+                            onClick={() => requestDeleteEnding(ending.id)}
+                            aria-label={`Delete ending "${label}"`}
+                            className={cn(
+                              "fc-focus hover:bg-hover-wash-strong relative grid size-6 place-items-center rounded-xs",
+                              !on &&
+                                "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+                            )}
+                          >
+                            <X className="size-[13px]" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+
+              <div className="border-border flex flex-col gap-0.5 border-t-[1.5px] pt-2.5">
+                {[
+                  {
+                    kind: "theme" as const,
+                    label: "Design",
+                    icon: <Palette className="size-[13px]" />,
+                    tint: "scale",
+                    meta: null,
+                  },
+                  {
+                    kind: "languages" as const,
+                    label: "Languages",
+                    icon: <Languages className="size-[13px]" />,
+                    tint: "choice",
+                    meta: schema.languages?.others.length
+                      ? `${schema.languages.others.length + 1} languages`
+                      : null,
+                  },
+                  {
+                    kind: "logic" as const,
+                    label: "Logic",
+                    icon: <Split className="size-[13px]" />,
+                    tint: "other",
+                    meta:
+                      ruleCount > 0
+                        ? `${ruleCount} rule${ruleCount === 1 ? "" : "s"}`
+                        : null,
+                  },
+                ].map((row) => {
+                  const on = selection.kind === row.kind;
                   return (
-                    <li
-                      key={ending.id}
+                    <button
+                      key={row.kind}
+                      type="button"
+                      aria-current={on || undefined}
+                      onClick={() => setSelection({ kind: row.kind })}
                       className={cn(
-                        "group relative flex h-10 items-center gap-2 rounded-sm pr-1.5 pl-2.5",
+                        "fc-focus flex h-[42px] items-center gap-2.5 rounded-sm px-2.5 text-left text-sm font-semibold",
                         on
                           ? "bg-secondary text-secondary-foreground"
                           : "hover:bg-hover-wash",
                       )}
                     >
-                      <button
-                        type="button"
-                        onClick={() => setSelection({ kind: "ending", id: ending.id })}
-                        aria-current={on || undefined}
-                        className="focus-visible:after:shadow-focus flex min-w-0 flex-1 items-center gap-2 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-sm"
+                      <span
+                        aria-hidden
+                        className="border-ink grid size-6 shrink-0 place-items-center rounded-[6px] border-[1.5px]"
+                        style={{
+                          background: `var(--qt-${row.tint}-bg)`,
+                          color: `var(--qt-${row.tint}-fg)`,
+                        }}
                       >
-                        <span
-                          aria-hidden
-                          className="border-ink grid size-6 shrink-0 place-items-center rounded-[6px] border-[1.5px] bg-[var(--qt-screens-bg)] text-[var(--qt-screens-fg)]"
-                        >
-                          <Flag className="size-[13px]" />
-                        </span>
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 truncate text-[13.5px]",
-                            on ? "font-bold" : "font-medium",
-                          )}
-                        >
-                          {label}
-                        </span>
-                        {ending.isDefault && (
-                          <span
-                            className={cn(
-                              "rounded-full border-[1.5px] px-[7px] py-px text-[10.5px] font-bold",
-                              on
-                                ? "border-[#6f6254] text-[#e2d5c0]"
-                                : "border-input text-muted-foreground",
-                            )}
-                          >
-                            default
-                          </span>
-                        )}
-                      </button>
-                      {canDeleteEnding(schema.endings, ending.id) && (
-                        <button
-                          type="button"
-                          onClick={() => requestDeleteEnding(ending.id)}
-                          aria-label={`Delete ending "${label}"`}
-                          className={cn(
-                            "fc-focus hover:bg-hover-wash-strong relative grid size-6 place-items-center rounded-xs",
-                            !on &&
-                              "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
-                          )}
-                        >
-                          <X className="size-[13px]" />
-                        </button>
+                        {row.icon}
+                      </span>
+                      <span className="flex-1">{row.label}</span>
+                      {row.meta && (
+                        <span className="text-xs font-medium opacity-75">{row.meta}</span>
                       )}
-                    </li>
+                      {!row.meta && <ChevronRight className="size-4 opacity-40" />}
+                    </button>
                   );
                 })}
-              </ol>
-            </div>
-
-            <div className="border-border flex flex-col gap-0.5 border-t-[1.5px] pt-2.5">
-              {[
-                {
-                  kind: "theme" as const,
-                  label: "Design",
-                  icon: <Palette className="size-[13px]" />,
-                  tint: "scale",
-                  meta: null,
-                },
-                {
-                  kind: "languages" as const,
-                  label: "Languages",
-                  icon: <Languages className="size-[13px]" />,
-                  tint: "choice",
-                  meta: schema.languages?.others.length
-                    ? `${schema.languages.others.length + 1} languages`
-                    : null,
-                },
-                {
-                  kind: "logic" as const,
-                  label: "Logic",
-                  icon: <Split className="size-[13px]" />,
-                  tint: "other",
-                  meta:
-                    ruleCount > 0
-                      ? `${ruleCount} rule${ruleCount === 1 ? "" : "s"}`
-                      : null,
-                },
-              ].map((row) => {
-                const on = selection.kind === row.kind;
-                return (
-                  <button
-                    key={row.kind}
-                    type="button"
-                    aria-current={on || undefined}
-                    onClick={() => setSelection({ kind: row.kind })}
-                    className={cn(
-                      "fc-focus flex h-[42px] items-center gap-2.5 rounded-sm px-2.5 text-left text-sm font-semibold",
-                      on
-                        ? "bg-secondary text-secondary-foreground"
-                        : "hover:bg-hover-wash",
-                    )}
-                  >
-                    <span
-                      aria-hidden
-                      className="border-ink grid size-6 shrink-0 place-items-center rounded-[6px] border-[1.5px]"
-                      style={{
-                        background: `var(--qt-${row.tint}-bg)`,
-                        color: `var(--qt-${row.tint}-fg)`,
-                      }}
-                    >
-                      {row.icon}
-                    </span>
-                    <span className="flex-1">{row.label}</span>
-                    {row.meta && (
-                      <span className="text-xs font-medium opacity-75">{row.meta}</span>
-                    )}
-                    {!row.meta && <ChevronRight className="size-4 opacity-40" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </aside>
-
-        <main
-          className={cn(
-            "bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px] max-lg:flex-1",
-            mobilePane !== "edit" && "max-lg:hidden",
-          )}
-        >
-          {importReport && onDismissImportReport && (
-            <ImportReportNotice
-              report={importReport}
-              onDismiss={() => onDismissImportReport(formId)}
-            />
-          )}
-          {selection.kind === "languages" ? (
-            <TranslationsEditor
-              schema={schema}
-              onChange={updateLogic}
-              allowed={multilingual}
-            />
-          ) : selection.kind === "logic" ? (
-            <LogicEditor
-              schema={schema}
-              onChange={updateLogic}
-              onSelectQuestion={(id) => setSelection({ kind: "question", id })}
-              ai={
-                onProposeRule
-                  ? {
-                      enabled: aiEnabled,
-                      propose: (instruction) =>
-                        onProposeRule(formId, instruction, schema),
-                      review: onReviewForm
-                        ? () => onReviewForm(formId, schema)
-                        : undefined,
-                    }
-                  : undefined
-              }
-            />
-          ) : (
-            <BuilderCanvas
-              brandingRemovable={brandingRemovable}
-              theme={themeForPlan(
-                schema.theme,
-                customFonts,
-                process.env.NEXT_PUBLIC_SUPABASE_URL,
-              )}
-              item={
-                selectedQuestion
-                  ? {
-                      kind: "question",
-                      question: selectedQuestion,
-                      number: numbers.get(selectedQuestion.id) ?? 0,
-                      total: stepCount,
-                      isLast: selectedIndex === schema.questions.length - 1,
-                    }
-                  : selectedEnding
-                    ? { kind: "ending", ending: selectedEnding }
-                    : { kind: "theme" }
-              }
-              onChangeQuestion={updateQuestionChecked}
-              onChangeEnding={updateEnding}
-              focusLabelId={focusLabelId}
-              onLabelFocused={clearFocusLabel}
-            />
-          )}
-        </main>
-
-        {selection.kind !== "logic" && selection.kind !== "languages" && (
-          <aside
-            className={cn(
-              "border-ink bg-card min-h-0 overflow-y-auto border-l-[1.5px] max-lg:flex-1 max-lg:border-l-0",
-              mobilePane !== "settings" && "max-lg:hidden",
-            )}
-          >
-            <div className="flex flex-col gap-[18px] px-[18px] pt-[18px] pb-10">
-              {selectedQuestion && (
-                <PanelHeader
-                  tile={<TypeTile type={selectedQuestion.type} size={34} />}
-                  title={questionTypeLabel(selectedQuestion)}
-                  subtitle={
-                    selectedQuestion.type === "welcome_screen"
-                      ? "Always shown first"
-                      : `Question ${numbers.get(selectedQuestion.id)} of ${stepCount}`
-                  }
-                />
-              )}
-              {selectedEnding && (
-                <PanelHeader
-                  tile={panelTile(<Flag className="size-[17px]" />, "screens")}
-                  title={selectedEnding.isDefault ? "Default ending" : "Ending"}
-                  subtitle={
-                    selectedEnding.isDefault
-                      ? "Shown when no rule picks another ending"
-                      : "Reached through logic rules"
-                  }
-                />
-              )}
-              {selection.kind === "theme" && (
-                <PanelHeader
-                  tile={panelTile(<Palette className="size-[17px]" />, "scale")}
-                  title="Design"
-                  subtitle="Applies to the whole form"
-                />
-              )}
-              {selectedProblem && <NotSavedAlert>{selectedProblem}</NotSavedAlert>}
-              {selectedQuestion?.block && (
-                <BlockNotice
-                  question={selectedQuestion}
-                  status={blockStatus.get(selectedQuestion.block.id)}
-                  schema={schema}
-                  onSchema={setSchema}
-                />
-              )}
-              {selectedQuestion && (
-                <fieldset
-                  disabled={!!selectedQuestion.block}
-                  className="contents"
-                  aria-label={selectedQuestion.block ? "Locked by its block" : undefined}
-                >
-                  <SettingsPanel
-                    workspaceId={workspaceId}
-                    formId={formId}
-                    layout={schema.meta.layout ?? "conversational"}
-                    formAutoAdvance={schema.meta.autoAdvance}
-                    allQuestions={numberedQuestions(schema).map(
-                      ({ question: q, number }) => ({
-                        id: q.id,
-                        type: q.type,
-                        label: `${number} · ${q.label.trim() || "Untitled"}`,
-                      }),
-                    )}
-                    question={selectedQuestion}
-                    invalid={!!selectedProblem}
-                    aiAvailable={aiEnabled}
-                    onChange={updateQuestion}
-                    onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
-                    earlierChoices={numberedQuestions(schema)
-                      .filter(
-                        ({ question: q }) =>
-                          CHOICE_TYPES.has(q.type) && q.order < selectedQuestion.order,
-                      )
-                      .map(({ question: q, number }) => ({
-                        id: q.id,
-                        number,
-                        label: q.label.trim() || "Untitled",
-                      }))}
-                  />
-                </fieldset>
-              )}
-              {selectedQuestion &&
-                !selectedQuestion.block &&
-                selectedQuestion.type !== "welcome_screen" && (
-                  <button
-                    type="button"
-                    onClick={() => setSavingBlockFrom(selectedQuestion.id)}
-                    className="fc-focus text-muted-foreground hover:text-foreground flex items-center gap-1.5 self-start text-[13px] font-semibold underline underline-offset-2"
-                  >
-                    Save to block library
-                  </button>
-                )}
-              {savingBlockFrom && (
-                <SaveBlockDialog
-                  schema={schema}
-                  initialIds={[savingBlockFrom]}
-                  onClose={() => setSavingBlockFrom(null)}
-                  onSaved={(next) => {
-                    setSchema(next);
-                    setSavingBlockFrom(null);
-                  }}
-                />
-              )}
-              {selectedQuestion && (
-                <QuestionLogicPanel
-                  schema={schema}
-                  question={selectedQuestion}
-                  onChange={updateQuestion}
-                  onSchemaChange={updateLogic}
-                />
-              )}
-              {selectedEnding && (
-                <EndingSettingsPanel
-                  key={selectedEnding.id}
-                  ending={selectedEnding}
-                  onChange={updateEnding}
-                  meta={schema.meta}
-                  onMetaChange={(meta) => setSchema((s) => ({ ...s, meta }))}
-                  brandingRemovable={brandingRemovable}
-                />
-              )}
-              {selection.kind === "theme" && (
-                <ThemeSettingsPanel
-                  theme={schema.theme}
-                  workspaceId={workspaceId}
-                  formId={formId}
-                  onChange={updateTheme}
-                  customFonts={customFonts}
-                  layout={schema.meta.layout ?? "conversational"}
-                  onLayoutChange={(layout) =>
-                    setSchema((s) => ({
-                      ...s,
-                      meta: {
-                        ...s.meta,
-                        layout: layout === "conversational" ? undefined : layout,
-                      },
-                    }))
-                  }
-                  reviewStep={schema.meta.reviewStep}
-                  onReviewStepChange={(on) =>
-                    setSchema((s) => ({
-                      ...s,
-                      meta: { ...s.meta, reviewStep: on || undefined },
-                    }))
-                  }
-                  autoAdvance={schema.meta.autoAdvance}
-                  onAutoAdvanceChange={(on) =>
-                    setSchema((s) => ({
-                      ...s,
-                      meta: { ...s.meta, autoAdvance: on ? undefined : false },
-                    }))
-                  }
-                />
-              )}
+              </div>
             </div>
           </aside>
-        )}
-      </div>
 
-      {/* Phones: the columns as tabs (F-52). */}
-      <nav
-        aria-label="Builder"
-        className="border-ink bg-card fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t-[1.5px] pb-[env(safe-area-inset-bottom)] lg:hidden"
-      >
-        {(
-          [
-            ["questions", "Questions", ListOrdered],
-            ["edit", "Edit", PencilLine],
-            ["settings", "Settings", SlidersHorizontal],
-          ] as const
-        ).map(([pane, label, Icon]) => {
-          const unavailable =
-            pane === "settings" &&
-            (selection.kind === "logic" || selection.kind === "languages");
-          return (
-            <button
-              key={pane}
-              type="button"
-              aria-current={mobilePane === pane ? "page" : undefined}
-              disabled={unavailable}
-              onClick={() => setMobilePane(pane)}
+          <main
+            className={cn(
+              "bg-board relative min-h-0 min-w-0 overflow-auto bg-[radial-gradient(var(--board-dot)_1px,transparent_1px)] bg-size-[18px_18px] max-lg:flex-1",
+              mobilePane !== "edit" && "max-lg:hidden",
+            )}
+          >
+            {importReport && onDismissImportReport && (
+              <ImportReportNotice
+                report={importReport}
+                onDismiss={() => onDismissImportReport(formId)}
+              />
+            )}
+            {selection.kind === "languages" ? (
+              <TranslationsEditor
+                schema={schema}
+                onChange={updateLogic}
+                allowed={multilingual}
+              />
+            ) : selection.kind === "logic" ? (
+              <LogicEditor
+                schema={schema}
+                onChange={updateLogic}
+                onSelectQuestion={(id) => setSelection({ kind: "question", id })}
+                ai={
+                  onProposeRule
+                    ? {
+                        enabled: aiEnabled,
+                        propose: (instruction) =>
+                          onProposeRule(formId, instruction, schema),
+                        review: onReviewForm
+                          ? () => onReviewForm(formId, schema)
+                          : undefined,
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              <BuilderCanvas
+                brandingRemovable={brandingRemovable}
+                theme={themeForPlan(
+                  schema.theme,
+                  customFonts,
+                  process.env.NEXT_PUBLIC_SUPABASE_URL,
+                )}
+                item={
+                  selectedQuestion
+                    ? {
+                        kind: "question",
+                        question: selectedQuestion,
+                        number: numbers.get(selectedQuestion.id) ?? 0,
+                        total: stepCount,
+                        isLast: selectedIndex === schema.questions.length - 1,
+                      }
+                    : selectedEnding
+                      ? { kind: "ending", ending: selectedEnding }
+                      : { kind: "theme" }
+                }
+                onChangeQuestion={updateQuestionChecked}
+                onChangeEnding={updateEnding}
+                focusLabelId={focusLabelId}
+                onLabelFocused={clearFocusLabel}
+              />
+            )}
+          </main>
+
+          {selection.kind !== "logic" && selection.kind !== "languages" && (
+            <aside
               className={cn(
-                "fc-focus flex h-14 flex-col items-center justify-center gap-0.5 text-[12px] font-semibold disabled:opacity-40",
-                mobilePane === pane ? "text-foreground" : "text-muted-foreground",
+                "border-ink bg-card min-h-0 overflow-y-auto border-l-[1.5px] max-lg:flex-1 max-lg:border-l-0",
+                mobilePane !== "settings" && "max-lg:hidden",
               )}
             >
-              <Icon className="size-5" />
-              {label}
-            </button>
-          );
-        })}
-      </nav>
+              <div className="flex flex-col gap-[18px] px-[18px] pt-[18px] pb-10">
+                {selectedQuestion && (
+                  <PanelHeader
+                    tile={<TypeTile type={selectedQuestion.type} size={34} />}
+                    title={questionTypeLabel(selectedQuestion)}
+                    subtitle={
+                      selectedQuestion.type === "welcome_screen"
+                        ? "Always shown first"
+                        : `Question ${numbers.get(selectedQuestion.id)} of ${stepCount}`
+                    }
+                  />
+                )}
+                {selectedEnding && (
+                  <PanelHeader
+                    tile={panelTile(<Flag className="size-[17px]" />, "screens")}
+                    title={selectedEnding.isDefault ? "Default ending" : "Ending"}
+                    subtitle={
+                      selectedEnding.isDefault
+                        ? "Shown when no rule picks another ending"
+                        : "Reached through logic rules"
+                    }
+                  />
+                )}
+                {selection.kind === "theme" && (
+                  <PanelHeader
+                    tile={panelTile(<Palette className="size-[17px]" />, "scale")}
+                    title="Design"
+                    subtitle="Applies to the whole form"
+                  />
+                )}
+                {selectedProblem && <NotSavedAlert>{selectedProblem}</NotSavedAlert>}
+                {selectedQuestion?.block && (
+                  <BlockNotice
+                    question={selectedQuestion}
+                    status={blockStatus.get(selectedQuestion.block.id)}
+                    schema={schema}
+                    onSchema={setSchema}
+                  />
+                )}
+                {selectedQuestion && (
+                  <fieldset
+                    disabled={!!selectedQuestion.block}
+                    className="contents"
+                    aria-label={
+                      selectedQuestion.block ? "Locked by its block" : undefined
+                    }
+                  >
+                    <SettingsPanel
+                      workspaceId={workspaceId}
+                      formId={formId}
+                      layout={schema.meta.layout ?? "conversational"}
+                      formAutoAdvance={schema.meta.autoAdvance}
+                      allQuestions={numberedQuestions(schema).map(
+                        ({ question: q, number }) => ({
+                          id: q.id,
+                          type: q.type,
+                          label: `${number} · ${q.label.trim() || "Untitled"}`,
+                        }),
+                      )}
+                      question={selectedQuestion}
+                      invalid={!!selectedProblem}
+                      aiAvailable={aiEnabled}
+                      onChange={updateQuestion}
+                      onChangeType={(to) => requestTypeChange(selectedQuestion, to)}
+                      earlierChoices={numberedQuestions(schema)
+                        .filter(
+                          ({ question: q }) =>
+                            CHOICE_TYPES.has(q.type) && q.order < selectedQuestion.order,
+                        )
+                        .map(({ question: q, number }) => ({
+                          id: q.id,
+                          number,
+                          label: q.label.trim() || "Untitled",
+                        }))}
+                    />
+                  </fieldset>
+                )}
+                {selectedQuestion &&
+                  !selectedQuestion.block &&
+                  selectedQuestion.type !== "welcome_screen" && (
+                    <button
+                      type="button"
+                      onClick={() => setSavingBlockFrom(selectedQuestion.id)}
+                      className="fc-focus text-muted-foreground hover:text-foreground flex items-center gap-1.5 self-start text-[13px] font-semibold underline underline-offset-2"
+                    >
+                      Save to block library
+                    </button>
+                  )}
+                {savingBlockFrom && (
+                  <SaveBlockDialog
+                    schema={schema}
+                    initialIds={[savingBlockFrom]}
+                    onClose={() => setSavingBlockFrom(null)}
+                    onSaved={(next) => {
+                      setSchema(next);
+                      setSavingBlockFrom(null);
+                    }}
+                  />
+                )}
+                {selectedQuestion && (
+                  <QuestionLogicPanel
+                    schema={schema}
+                    question={selectedQuestion}
+                    onChange={updateQuestion}
+                    onSchemaChange={updateLogic}
+                  />
+                )}
+                {selectedEnding && (
+                  <EndingSettingsPanel
+                    key={selectedEnding.id}
+                    ending={selectedEnding}
+                    onChange={updateEnding}
+                    meta={schema.meta}
+                    onMetaChange={(meta) => setSchema((s) => ({ ...s, meta }))}
+                    brandingRemovable={brandingRemovable}
+                  />
+                )}
+                {selection.kind === "theme" && (
+                  <ThemeSettingsPanel
+                    theme={schema.theme}
+                    workspaceId={workspaceId}
+                    formId={formId}
+                    onChange={updateTheme}
+                    customFonts={customFonts}
+                    layout={schema.meta.layout ?? "conversational"}
+                    onLayoutChange={(layout) =>
+                      setSchema((s) => ({
+                        ...s,
+                        meta: {
+                          ...s.meta,
+                          layout: layout === "conversational" ? undefined : layout,
+                        },
+                      }))
+                    }
+                    reviewStep={schema.meta.reviewStep}
+                    onReviewStepChange={(on) =>
+                      setSchema((s) => ({
+                        ...s,
+                        meta: { ...s.meta, reviewStep: on || undefined },
+                      }))
+                    }
+                    autoAdvance={schema.meta.autoAdvance}
+                    onAutoAdvanceChange={(on) =>
+                      setSchema((s) => ({
+                        ...s,
+                        meta: { ...s.meta, autoAdvance: on ? undefined : false },
+                      }))
+                    }
+                  />
+                )}
+              </div>
+            </aside>
+          )}
+        </div>
 
-      <AlertDialog open={confirmUnpublish} onOpenChange={setConfirmUnpublish}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogMedia>
-              <EyeOff />
-            </AlertDialogMedia>
-            <AlertDialogTitle>Unpublish this form?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Its public link and any embeds stop working straight away. Your form and its
-              responses are kept, and you can publish it again whenever you like.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep it live</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleUnpublish()}>
-              Unpublish
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* Phones: the columns as tabs (F-52). */}
+        <nav
+          aria-label="Builder"
+          className="border-ink bg-card fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t-[1.5px] pb-[env(safe-area-inset-bottom)] lg:hidden"
+        >
+          {(
+            [
+              ["questions", "Questions", ListOrdered],
+              ["edit", "Edit", PencilLine],
+              ["settings", "Settings", SlidersHorizontal],
+            ] as const
+          ).map(([pane, label, Icon]) => {
+            const unavailable =
+              pane === "settings" &&
+              (selection.kind === "logic" || selection.kind === "languages");
+            return (
+              <button
+                key={pane}
+                type="button"
+                aria-current={mobilePane === pane ? "page" : undefined}
+                disabled={unavailable}
+                onClick={() => setMobilePane(pane)}
+                className={cn(
+                  "fc-focus flex h-14 flex-col items-center justify-center gap-0.5 text-[12px] font-semibold disabled:opacity-40",
+                  mobilePane === pane ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                <Icon className="size-5" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
 
-      <AlertDialog
-        open={pendingTypeChange !== null}
-        onOpenChange={(open) => !open && setPendingTypeChange(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Change to{" "}
-              {pendingTypeChange && QUESTION_TYPE_META[pendingTypeChange.to].label}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingTypeChange?.lossy &&
-                "This question's settings (options, limits, validation) will reset. "}
-              {pendingTypeChange &&
-                pendingTypeChange.brokenRuleIds.length > 0 &&
-                `${pendingTypeChange.brokenRuleIds.length} logic rule${pendingTypeChange.brokenRuleIds.length === 1 ? "" : "s"} based on its answer will be removed. `}
-              Responses you&apos;ve already collected keep their answers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pendingTypeChange) {
-                  applyTypeChange(pendingTypeChange.question, pendingTypeChange.to);
-                }
-                setPendingTypeChange(null);
-              }}
-            >
-              Change type
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <SaveTemplateDialog
+          formId={formId}
+          formTitle={currentTitle}
+          open={savingTemplate}
+          onOpenChange={setSavingTemplate}
+        />
 
-      <AlertDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => !open && setPendingDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogMedia>
-              <GitBranch />
-            </AlertDialogMedia>
-            <AlertDialogTitle>
-              {pendingDelete?.kind === "ending"
-                ? `Delete the ending “${pendingDelete.label || "Untitled ending"}”?`
-                : `Delete “${pendingDelete?.label || "Untitled question"}”?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingDelete && deleteSummary(pendingDelete)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {pendingDelete && (
-            <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
-              {allRules(schema)
-                .map((rule, i) => ({ rule, n: i + 1 }))
-                .filter(({ rule }) => pendingDelete.ruleIds.includes(rule.id))
-                .map(({ rule, n }) => (
+        <AlertDialog open={confirmUnpublish} onOpenChange={setConfirmUnpublish}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogMedia>
+                <EyeOff />
+              </AlertDialogMedia>
+              <AlertDialogTitle>Unpublish this form?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Its public link and any embeds stop working straight away. Your form and
+                its responses are kept, and you can publish it again whenever you like.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep it live</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void handleUnpublish()}>
+                Unpublish
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={pendingTypeChange !== null}
+          onOpenChange={(open) => !open && setPendingTypeChange(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Change to{" "}
+                {pendingTypeChange && QUESTION_TYPE_META[pendingTypeChange.to].label}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingTypeChange?.lossy &&
+                  "This question's settings (options, limits, validation) will reset. "}
+                {pendingTypeChange &&
+                  pendingTypeChange.brokenRuleIds.length > 0 &&
+                  `${pendingTypeChange.brokenRuleIds.length} logic rule${pendingTypeChange.brokenRuleIds.length === 1 ? "" : "s"} based on its answer will be removed. `}
+                Responses you&apos;ve already collected keep their answers.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (pendingTypeChange) {
+                    applyTypeChange(pendingTypeChange.question, pendingTypeChange.to);
+                  }
+                  setPendingTypeChange(null);
+                }}
+              >
+                Change type
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={pendingDelete !== null}
+          onOpenChange={(open) => !open && setPendingDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogMedia>
+                <GitBranch />
+              </AlertDialogMedia>
+              <AlertDialogTitle>
+                {pendingDelete?.kind === "ending"
+                  ? `Delete the ending “${pendingDelete.label || "Untitled ending"}”?`
+                  : `Delete “${pendingDelete?.label || "Untitled question"}”?`}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingDelete && deleteSummary(pendingDelete)}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {pendingDelete && (
+              <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+                {allRules(schema)
+                  .map((rule, i) => ({ rule, n: i + 1 }))
+                  .filter(({ rule }) => pendingDelete.ruleIds.includes(rule.id))
+                  .map(({ rule, n }) => (
+                    <li
+                      key={rule.id}
+                      className="bg-background flex items-center gap-2 rounded-sm px-2.5 py-[7px] text-[13px]"
+                    >
+                      <b className="bg-secondary text-primary grid size-5 shrink-0 place-items-center rounded-full text-[11px]">
+                        {n}
+                      </b>
+                      <span className="min-w-0">{describeRule(rule, schema)}</span>
+                    </li>
+                  ))}
+                {pendingDelete.questionIds.map((qid) => (
                   <li
-                    key={rule.id}
+                    key={qid}
                     className="bg-background flex items-center gap-2 rounded-sm px-2.5 py-[7px] text-[13px]"
                   >
-                    <b className="bg-secondary text-primary grid size-5 shrink-0 place-items-center rounded-full text-[11px]">
-                      {n}
-                    </b>
-                    <span className="min-w-0">{describeRule(rule, schema)}</span>
+                    <span className="min-w-0">
+                      {questionName(schema, qid)}: its show condition or check uses this,
+                      so that part goes too.
+                    </span>
                   </li>
                 ))}
-              {pendingDelete.questionIds.map((qid) => (
-                <li
-                  key={qid}
-                  className="bg-background flex items-center gap-2 rounded-sm px-2.5 py-[7px] text-[13px]"
-                >
-                  <span className="min-w-0">
-                    {questionName(schema, qid)}: its show condition or check uses this, so
-                    that part goes too.
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmPendingDelete}>
-              <Trash2 /> Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+              </ul>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={confirmPendingDelete}>
+                <Trash2 /> Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </BuilderCapabilitiesContext.Provider>
   );
 }

@@ -1,6 +1,14 @@
 "use client";
 
-import type { QuestionV1 } from "@/domains/forms/schema/v1";
+import { CONSENT_KINDS, type QuestionV1 } from "@/domains/forms/schema/v1";
+import { CONSENT_KIND_LABELS } from "@/domains/forms/range-consent";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -188,6 +196,31 @@ export function ConsentSettingsPanel({
   return (
     <>
       <SectionHead>Notice</SectionHead>
+      <PanelField
+        label="Kind of notice"
+        hint="Kept with each answer, next to the version."
+      >
+        <Select
+          value={s.kind ?? "none"}
+          onValueChange={(v) =>
+            set({
+              kind: v === "none" ? undefined : (v as (typeof CONSENT_KINDS)[number]),
+            })
+          }
+        >
+          <SelectTrigger className="h-[38px] w-full" aria-label="Kind of notice">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Not set</SelectItem>
+            {CONSENT_KINDS.map((k) => (
+              <SelectItem key={k} value={k}>
+                {CONSENT_KIND_LABELS[k]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </PanelField>
       <PanelField
         label="Notice text"
         hint="Paragraphs, **bold**, *italic*, lines starting with - for a list, ## for a heading, and [link text](https://…)."

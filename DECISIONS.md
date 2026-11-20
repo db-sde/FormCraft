@@ -2489,4 +2489,34 @@ Later, as decided): 55, 57, 59, 64, 66, 67, 68.
    the same idempotent path as the webhook. Recovery steps for payments,
    deliveries, usage counts and plans: `docs/runbook.md`.
 
+## 2026-11-20 — QA run 11
+
+- **Start limit (FC11-12).** The visitor cookie (`fc_vid`) is now signed
+  (`fc_vsig`, HMAC with the "visitor" signing key). A made-up cookie no
+  longer counts as a known visitor, so it can't buy the looser limit; a
+  real one without a signature is re-signed, not replaced. A per-form cap
+  (60 starts a minute, everyone together) sits on top, since addresses
+  can be rotated too.
+- **Drop-off (FC11-08, migration 66).** `response_question_reach` counts
+  a response as reaching a question only if it answered it, was shown it
+  (a `question_viewed` event) or stopped on it. A question that logic
+  skipped no longer shows everyone reaching it.
+- **NPS (FC11-13).** An opinion scale 0–10 reports as NPS when the
+  creator says so ("Report as NPS"); unset, the old guess (the question
+  mentions "recommend") still applies, so existing forms don't change.
+- **Consent kind (FC11-09).** Optional; stored with each answer next to
+  the version, shown in the export and the response view.
+- **Publish state (FC11-06).** The builder compares each saved draft with
+  the live version the same way the server does (`sameFormSchema`), so
+  undoing an edit clears "Publish changes".
+- **Touch add menu (FC11-05).** On a touch screen the Add question menu
+  doesn't focus its search box: the on-screen keyboard it raised made the
+  menu jump under the first tap, which then closed it.
+- **Duplicate (FC11-14).** The copy goes in the original's folder, and
+  the "Duplicating…" card stays until the refreshed list has the copy.
+- **Not code:** address suggestions (FC11-01) need a Places key and Drive
+  export (FC11-07) needs Google OAuth credentials in the hosting
+  settings; partial-response webhooks (FC11-03) depend on the database
+  scheduler, whose stored secret doesn't match the one the site checks.
+
 <!-- Add new decisions above this line, newest first. -->

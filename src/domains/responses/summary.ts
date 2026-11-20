@@ -4,6 +4,7 @@ import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
 import type { Value } from "@/domains/forms/schema/logic-model";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
+import { isNpsQuestion } from "./nps";
 import { hasAnswer } from "@/domains/logic/validate-answer";
 import { walkForm } from "@/domains/logic/walk";
 import { formatValue, RECALL_PATTERN } from "@/domains/logic/recall";
@@ -279,7 +280,9 @@ function summarizeQuestion(
       for (let value = min; value <= max; value += 1) {
         counts.push({ value, count: numbers.filter((n) => n === value).length });
       }
-      const isNps = min === 0 && max === 10;
+      // NPS only for a 0–10 scale that is one: the creator said so, or it
+      // asks the NPS question (QA FC11-13).
+      const isNps = isNpsQuestion(question);
       return {
         ...base,
         kind: "scale",

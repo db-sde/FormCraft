@@ -78,6 +78,7 @@ async function respond(
     const { error: answersError } = await admin.from("answers").insert(rows);
     if (answersError) throw answersError;
   }
+  return data.id;
 }
 
 beforeAll(async () => {
@@ -122,7 +123,18 @@ beforeAll(async () => {
     q3: "ada@example.com",
   });
   await respond("completed", "q3", { q1: "Grace", q2: "100% happy_face" });
-  await respond("completed", "q3", { q1: "Alan" });
+  // Alan was shown the optional feedback question and left it blank
+  // (the browser records the view), so he reached it all the same.
+  const alan = await respond("completed", "q3", { q1: "Alan" });
+  await admin.from("analytics_events").insert({
+    form_id: formId,
+    event_type: "question_viewed",
+    session_id: alan,
+    metadata: { questionId: "q2" },
+  });
+  // Bea's path skipped the feedback question (logic): never shown, never
+  // answered, so she didn't reach it (QA FC11-08).
+  await respond("completed", "q3", { q1: "Bea", q3: "bea@mail.test" });
   // Unfinished: one stopped at the feedback question, one still on the first.
   await respond("partial", "q2", { q1: "Linus" });
   await respond("in_progress", "q1", {});
@@ -161,12 +173,13 @@ describe("searching responses", () => {
 describe("how far respondents got", () => {
   it("counts, per question, everyone who reached it and who stopped there", async () => {
     const reach = await getReach(admin, formId);
-    expect(reach.starts).toBe(5);
-    expect(reach.completed).toBe(3);
+    expect(reach.starts).toBe(6);
+    expect(reach.completed).toBe(4);
     expect(reach.steps.map((s) => [s.questionId, s.reached, s.stopped])).toEqual([
-      ["q1", 5, 1],
+      ["q1", 6, 1],
+      // Not Bea: logic skipped it for her.
       ["q2", 4, 1],
-      ["q3", 3, 0],
+      ["q3", 4, 0],
     ]);
   });
 });

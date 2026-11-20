@@ -4,7 +4,11 @@ import {
   CONTACT_FIELD_LABELS,
 } from "@/domains/forms/schema/question-types";
 import { formatDateTime } from "@/domains/logic/datetime";
-import { formatConsent, formatDateRange } from "@/domains/forms/range-consent";
+import {
+  CONSENT_KIND_LABELS,
+  formatConsent,
+  formatDateRange,
+} from "@/domains/forms/range-consent";
 import { entryName, fieldAsQuestion, groupEntries } from "@/domains/forms/repeat-group";
 import {
   describeOrder,
@@ -306,7 +310,11 @@ export function answerCells(
     const cells = [yesNo(parts.acknowledged)];
     if (columnsFrom.settings.optInLabel) cells.push(yesNo(parts.optIn));
     cells.push(
-      [parts.versionLabel, parts.version]
+      [
+        typeof parts.kind === "string" ? CONSENT_KIND_LABELS[parts.kind] : undefined,
+        parts.versionLabel,
+        parts.version,
+      ]
         .filter((v): v is string => typeof v === "string" && v !== "")
         .join(" · "),
       typeof parts.acceptedAt === "string" ? parts.acceptedAt : "",
@@ -358,4 +366,81 @@ export function exportAnswerCells(
       ? `${context.appUrl ?? ""}/api/uploads/${value}`
       : "";
   return [...cells, link];
+}
+
+/**
+ * A short form of an answer for one table cell (QA FC11-10): a group's
+ * count and first values, a consent's outcome and notice. The full
+ * answer is in the response itself (answerDetailValue) and the cell's
+ * tooltip. Everything else is formatAnswerValue.
+ */
+export function previewAnswerValue(
+  question: QuestionV1,
+  value: unknown,
+  context: { uploadNames?: ReadonlyMap<string, string> } = {},
+): string {
+  if (question.type === "repeat_group") {
+    const entries = groupEntries(value);
+    if (entries.length === 0) return "";
+    const word = question.settings.entryLabel?.trim().toLowerCase() || "entry";
+    const first = question.settings.fields[0];
+    const names = entries
+      .map((e) =>
+        first
+          ? formatAnswerValue(fieldAsQuestion(question, first, e.id), e.values[first.id])
+          : "",
+      )
+      .filter(Boolean);
+    const count = `${entries.length} ${entries.length === 1 ? word : /[^aeiou]y$/.test(word) ? `${word.slice(0, -1)}ies` : `${word}s`}`;
+    return names.length ? `${count}: ${names.join(", ")}` : count;
+  }
+  if (question.type === "consent") {
+    const parts = contactRecord(value);
+    if (typeof parts.acknowledged !== "boolean") return "";
+    return [
+      parts.acknowledged ? "Accepted" : "Not accepted",
+      typeof parts.versionLabel === "string" ? parts.versionLabel : null,
+      typeof parts.acceptedAt === "string" ? parts.acceptedAt.slice(0, 10) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  return formatAnswerValue(question, value, context);
+}
+
+/**
+ * An answer in full, for the response page (QA FC11-02 / FC11-10): an
+ * address as one labelled line per part (it is stored part by part, and
+ * exported in a column each), a consent record with every detail.
+ */
+export function answerDetailValue(
+  question: QuestionV1,
+  value: unknown,
+  context: { uploadNames?: ReadonlyMap<string, string> } = {},
+): string {
+  if (question.type === "address") {
+    const record = contactRecord(value);
+    return question.settings.fields
+      .filter((field) => typeof record[field] === "string" && record[field] !== "")
+      .map((field) => `${ADDRESS_FIELD_LABELS[field]}: ${record[field] as string}`)
+      .join("\n");
+  }
+  if (question.type === "consent") {
+    const parts = contactRecord(value);
+    if (typeof parts.acknowledged !== "boolean") return "";
+    const lines = [parts.acknowledged ? "Accepted" : "Not accepted"];
+    if (question.settings.optInLabel) {
+      lines.push(
+        `Opt-in (${question.settings.optInLabel}): ${parts.optIn ? "yes" : "no"}`,
+      );
+    }
+    if (typeof parts.kind === "string")
+      lines.push(`Kind: ${CONSENT_KIND_LABELS[parts.kind] ?? parts.kind}`);
+    if (typeof parts.versionLabel === "string")
+      lines.push(`Version: ${parts.versionLabel}`);
+    if (typeof parts.version === "string") lines.push(`Wording code: ${parts.version}`);
+    if (typeof parts.acceptedAt === "string") lines.push(`Recorded: ${parts.acceptedAt}`);
+    return lines.join("\n");
+  }
+  return formatAnswerValue(question, value, context);
 }

@@ -32,6 +32,12 @@ export function AddQuestionMenu({
 }) {
   const [open, setOpen] = useState(false);
   const narrow = useMediaQuery("(max-width: 1023px)");
+  // On a touch screen, focusing the search box raises the on-screen
+  // keyboard; the first tap on a type then only put it away, the menu
+  // jumped as the screen resized, and the tap landed outside it, closing
+  // the menu with nothing added (QA FC11-05). There the list is tapped,
+  // not typed into, so nothing is focused until they tap the search box.
+  const touch = useMediaQuery("(pointer: coarse)");
   const [query, setQuery] = useState("");
   const [blocks, setBlocks] = useState<
     { id: string; name: string; currentVersion: number }[] | null
@@ -106,6 +112,9 @@ export function AddQuestionMenu({
         sideOffset={narrow ? 6 : 18}
         collisionPadding={8}
         className="shadow-lift flex max-h-[var(--radix-popover-content-available-height)] w-[560px] max-w-[calc(100vw-16px)] flex-col gap-2 overflow-y-auto rounded-lg p-3.5"
+        onOpenAutoFocus={(e) => {
+          if (touch) e.preventDefault();
+        }}
         onCloseAutoFocus={(e) => {
           if (pickedRef.current) e.preventDefault();
         }}
@@ -134,7 +143,7 @@ export function AddQuestionMenu({
         <label className="border-input focus-within:border-ink flex h-9 items-center gap-2 rounded-sm border-[1.5px] px-2.5">
           <Search className="text-muted-foreground size-4 shrink-0" aria-hidden />
           <input
-            autoFocus
+            autoFocus={!touch}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {

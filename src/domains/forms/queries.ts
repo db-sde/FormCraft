@@ -4,6 +4,7 @@ import { customAlphabet, nanoid } from "nanoid";
 import { slugify } from "@/domains/workspaces";
 import {
   parseFormSchema,
+  sameFormSchema,
   validateForPublish,
   validateSemantics,
 } from "./schema/validate";
@@ -418,6 +419,9 @@ export type PublishInfo = {
   publishedVersionNumber: number | null;
   /** The draft has edits respondents can't see until the next publish. */
   hasUnpublishedChanges: boolean;
+  /** What respondents see now, for the builder to tell whether an edit
+   * undone brings the draft back to it. */
+  publishedSchema: Json | null;
 };
 
 export async function getPublishInfo(
@@ -448,18 +452,9 @@ export async function getPublishInfo(
     hasUnpublishedChanges:
       published !== undefined &&
       draft !== undefined &&
-      !sameSchema(published.schema, draft.schema),
+      !sameFormSchema(published.schema, draft.schema),
+    publishedSchema: published?.schema ?? null,
   };
-}
-
-/** Compares through parseFormSchema so storage details (jsonb key
- * order, defaults filled in vs. omitted) can't register as a change. */
-function sameSchema(a: Json, b: Json): boolean {
-  try {
-    return JSON.stringify(parseFormSchema(a)) === JSON.stringify(parseFormSchema(b));
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -645,6 +640,21 @@ export async function duplicateForm(
       savePartialResponses: settings.savePartialResponses,
       partialRetentionDays: settings.partialRetentionDays,
     });
+  }
+  // The copy sits next to the original, so a folder view shows it too
+  // (QA FC11-14).
+  const { data: source } = await supabase
+    .from("forms")
+    .select("folder_id")
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (copy && source?.folder_id) {
+    await supabase
+      .from("forms")
+      .update({ folder_id: source.folder_id })
+      .eq("id", copy.id)
+      .eq("workspace_id", workspaceId);
   }
   return copy;
 }

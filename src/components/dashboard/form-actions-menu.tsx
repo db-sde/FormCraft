@@ -32,7 +32,6 @@ import {
   deleteFormAction,
   formLeadCountAction,
   moveFormToFolderAction,
-  saveFormAsTemplateAction,
 } from "@/app/(dashboard)/actions";
 import type { FormListItem } from "@/domains/forms";
 import { Input } from "@/components/ui/input";
@@ -66,6 +65,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "cn";
+import { SaveTemplateDialog } from "./save-template-dialog";
 
 /**
  * The ⋯ menu on a form card or row, with its rename and delete dialogs.
@@ -85,7 +85,9 @@ export function FormActionsMenu({
 }: {
   form: FormListItem;
   vertical?: boolean;
-  onDuplicating?: (pending: boolean) => void;
+  /** Called with true when a copy starts; then false, with the copy's id
+   * when it was made. */
+  onDuplicating?: (pending: boolean, copyId?: string) => void;
   className?: string;
 }) {
   const router = useRouter();
@@ -98,9 +100,6 @@ export function FormActionsMenu({
   const [renaming, setRenaming] = useState(false);
   // "Save as template" (F-61).
   const [savingTemplate, setSavingTemplate] = useState(false);
-  const [templateName, setTemplateName] = useState(form.title);
-  const [templateShared, setTemplateShared] = useState(true);
-  const [templateCategory, setTemplateCategory] = useState("");
   const [newTitle, setNewTitle] = useState(form.title);
   const [pending, startTransition] = useTransition();
 
@@ -161,7 +160,7 @@ export function FormActionsMenu({
     onDuplicating?.(true);
     startTransition(async () => {
       const result = await duplicateFormAction(form.id);
-      onDuplicating?.(false);
+      onDuplicating?.(false, result.ok ? result.id : undefined);
       if (result.ok) {
         toast.success("Duplicated.", {
           description: `“${form.title} (copy)” is in your drafts.`,
@@ -174,27 +173,6 @@ export function FormActionsMenu({
           duration: 8000,
           action: { label: "Retry", onClick: duplicate },
         });
-      }
-    });
-  }
-
-  function saveTemplate() {
-    startTransition(async () => {
-      const result = await saveFormAsTemplateAction(form.id, {
-        title: templateName,
-        category: templateCategory,
-        visibility: templateShared ? "workspace" : "private",
-      });
-      if (result.ok) {
-        setSavingTemplate(false);
-        toast.success("Saved as a template.", {
-          description: templateShared
-            ? "Everyone in the workspace can start a form from it."
-            : "Only you can see it.",
-          action: { label: "View", onClick: () => router.push("/templates") },
-        });
-      } else {
-        toast.error(result.message, { duration: 8000 });
       }
     });
   }
@@ -282,13 +260,7 @@ export function FormActionsMenu({
               <DropdownMenuItem onSelect={duplicate}>
                 <Copy /> Duplicate
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setTemplateName(form.title);
-                  setTemplateShared(true);
-                  setSavingTemplate(true);
-                }}
-              >
+              <DropdownMenuItem onSelect={() => setSavingTemplate(true)}>
                 <LayoutTemplate /> Save as template
               </DropdownMenuItem>
               {folders.length > 0 && (
@@ -344,82 +316,12 @@ export function FormActionsMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={savingTemplate} onOpenChange={setSavingTemplate}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save as template</DialogTitle>
-          </DialogHeader>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveTemplate();
-            }}
-          >
-            <p className="text-muted-foreground text-sm">
-              Copies the questions, logic and design. Never the responses, integrations,
-              payment settings or keys. Later changes to this form don&apos;t change the
-              template.
-            </p>
-            <label className="flex flex-col gap-1.5 text-sm font-semibold">
-              Template name
-              <Input
-                value={templateName}
-                maxLength={120}
-                onChange={(e) => setTemplateName(e.target.value)}
-                autoFocus
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-semibold">
-              Category
-              <Input
-                value={templateCategory}
-                maxLength={40}
-                placeholder="Custom"
-                onChange={(e) => setTemplateCategory(e.target.value)}
-              />
-            </label>
-            <fieldset className="flex flex-col gap-2 text-sm">
-              <legend className="mb-1 font-semibold">Who can use it</legend>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="template-visibility"
-                  checked={templateShared}
-                  onChange={() => setTemplateShared(true)}
-                />
-                Everyone in this workspace
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="template-visibility"
-                  checked={!templateShared}
-                  onChange={() => setTemplateShared(false)}
-                />
-                Only me
-              </label>
-            </fieldset>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setSavingTemplate(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={pending || !templateName.trim()}
-                data-loading={pending || undefined}
-              >
-                {pending && <ButtonSpinner />}
-                {pending ? "Saving…" : "Save template"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <SaveTemplateDialog
+        formId={form.id}
+        formTitle={form.title}
+        open={savingTemplate}
+        onOpenChange={setSavingTemplate}
+      />
 
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogContent>

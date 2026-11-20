@@ -131,8 +131,19 @@ export function formatDateRange(
 
 // --- consent (F-62) ------------------------------------------------------
 
+export const CONSENT_KIND_LABELS: Record<string, string> = {
+  privacy: "Privacy notice",
+  terms: "Terms",
+  data_sharing: "Data-sharing consent",
+  marketing: "Marketing consent",
+  medical: "Medical disclosure",
+  other: "Other notice",
+};
+
 export type ConsentAnswer = {
   acknowledged: boolean;
+  /** The kind of notice (CONSENT_KINDS), when the creator chose one. */
+  kind?: string;
   optIn?: boolean;
   /** The notice's hash (consentVersion), set by the server. */
   version: string;
@@ -175,7 +186,11 @@ export function formatConsent(value: unknown): string {
   const bits = [parts.acknowledged ? "Accepted" : "Not accepted"];
   if (typeof parts.optIn === "boolean")
     bits.push(`opt-in: ${parts.optIn ? "yes" : "no"}`);
-  const version = [parts.versionLabel, parts.version && `#${parts.version}`]
+  const version = [
+    parts.kind ? CONSENT_KIND_LABELS[parts.kind] : undefined,
+    parts.versionLabel,
+    parts.version && `#${parts.version}`,
+  ]
     .filter(Boolean)
     .join(" ");
   if (version) bits.push(`notice ${version}`);

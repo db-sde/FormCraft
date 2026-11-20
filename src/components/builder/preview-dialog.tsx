@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { EyeOff, FlaskConical, Monitor, Smartphone, Workflow, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LogicTrace } from "./logic/logic-trace";
@@ -47,7 +48,10 @@ export function PreviewDialog({
   /** "Take me to it": select the item the problem belongs to. */
   onShowProblem?: (target: { questionId?: string; endingId?: string }) => void;
 }) {
-  const [device, setDevice] = useState<"desktop" | "phone">("desktop");
+  const [chosenDevice, setDevice] = useState<"desktop" | "phone">("desktop");
+  // A phone can only show the phone layout, so there is nothing to choose.
+  const narrow = useMediaQuery("(max-width: 639px)");
+  const device = narrow ? "phone" : chosenDevice;
   const [run, setRun] = useState(0);
   const [showLogic, setShowLogic] = useState(false);
   // What the respondent has answered so far, for the logic read-out.
@@ -90,21 +94,24 @@ export function PreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[min(780px,calc(100dvh-56px))] w-[min(1180px,calc(100vw-56px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+        // On a phone the preview takes the whole screen: inside a framed box
+        // there was no room left to answer anything (QA FC11-06).
+        className="flex h-[min(780px,calc(100dvh-56px))] w-[min(1180px,calc(100vw-56px))] max-w-none flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:w-screen max-sm:rounded-none max-sm:border-0 sm:max-w-none"
       >
-        <div className="border-ink flex flex-wrap items-center gap-3.5 border-b-[1.5px] px-4 py-3">
+        <div className="border-ink flex flex-wrap items-center gap-3.5 border-b-[1.5px] px-4 py-3 max-sm:gap-2 max-sm:px-2.5 max-sm:py-2">
           <DialogTitle className="font-heading text-[17px] font-bold">
             Preview
           </DialogTitle>
           <DialogDescription className="border-warning bg-accent flex items-center gap-1.5 rounded-full border-[1.5px] px-2.5 py-1 text-[12.5px] font-semibold text-[var(--chip-draft-fg)]">
             <FlaskConical className="size-[13px]" />
-            Preview mode: answers aren&apos;t saved
+            <span className="max-sm:hidden">Preview mode: answers aren&apos;t saved</span>
+            <span className="sm:hidden">Answers aren&apos;t saved</span>
           </DialogDescription>
           <span className="flex-1" />
           <div
             role="radiogroup"
             aria-label="Device"
-            className="border-ink bg-background flex gap-0.5 rounded-[8px] border-[1.5px] p-[3px]"
+            className="border-ink bg-background flex gap-0.5 rounded-[8px] border-[1.5px] p-[3px] max-sm:hidden"
           >
             {(
               [
@@ -160,8 +167,8 @@ export function PreviewDialog({
           </Button>
         </div>
 
-        <div className="flex min-h-0 flex-1">
-          <div className="bg-board grid min-h-0 flex-1 place-items-center p-5">
+        <div className="relative flex min-h-0 flex-1">
+          <div className="bg-board grid min-h-0 flex-1 place-items-center p-5 max-sm:p-0">
             {!result.ok ? (
               <div className="flex max-w-[420px] flex-col items-center gap-2.5 text-center">
                 <span className="border-ink shadow-card grid size-[52px] -rotate-6 place-items-center rounded-[12px] border-[1.5px] bg-[var(--alert-error-bg)]">
@@ -184,7 +191,7 @@ export function PreviewDialog({
                 )}
               </div>
             ) : device === "desktop" ? (
-              <div className="fc-custom-scope border-ink size-full max-w-[1100px] overflow-hidden rounded-lg border-[1.5px] bg-white">
+              <div className="fc-custom-scope border-ink size-full max-w-[1100px] overflow-hidden rounded-lg border-[1.5px] bg-white max-sm:rounded-none max-sm:border-0">
                 <FormCustomCss css={result.compiled.schema.theme.customCss} />
                 <FormRenderer
                   key={`d-${run}-${JSON.stringify(hidden)}`}
@@ -198,7 +205,7 @@ export function PreviewDialog({
                 />
               </div>
             ) : (
-              <div className="fc-custom-scope border-ink shadow-lift h-full max-h-[700px] w-[375px] max-w-full overflow-hidden rounded-[32px] border-[1.5px] bg-white">
+              <div className="fc-custom-scope border-ink shadow-lift h-full max-h-[700px] w-[375px] max-w-full overflow-hidden rounded-[32px] border-[1.5px] bg-white max-sm:max-h-none max-sm:w-full max-sm:rounded-none max-sm:border-0 max-sm:shadow-none">
                 <FormCustomCss css={result.compiled.schema.theme.customCss} />
                 <FormRenderer
                   key={`p-${run}-${JSON.stringify(hidden)}`}
@@ -214,7 +221,9 @@ export function PreviewDialog({
             )}
           </div>
           {showLogic && result.ok && (
-            <aside className="border-ink bg-card w-[340px] shrink-0 overflow-y-auto border-l-[1.5px] p-4">
+            // A phone has no room beside the form: the trace sits over its
+            // lower half instead of squeezing it to nothing.
+            <aside className="border-ink bg-card w-[340px] shrink-0 overflow-y-auto border-l-[1.5px] p-4 max-sm:absolute max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[55%] max-sm:w-full max-sm:border-t-[1.5px] max-sm:border-l-0">
               {(result.compiled.schema.hiddenFields ?? []).length > 0 && (
                 <div className="mb-4 flex flex-col gap-1.5">
                   <span className="text-muted-foreground text-[11px] font-bold tracking-[0.1em] uppercase">

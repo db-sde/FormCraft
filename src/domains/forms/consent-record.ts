@@ -27,6 +27,7 @@ export function normalizeConsent(
   if (!parts || typeof parts.acknowledged !== "boolean") return value;
   return {
     acknowledged: parts.acknowledged,
+    ...(question.settings.kind ? { kind: question.settings.kind } : {}),
     ...(question.settings.optInLabel ? { optIn: parts.optIn === true } : {}),
     version: consentVersion(question),
     ...(question.settings.versionLabel
