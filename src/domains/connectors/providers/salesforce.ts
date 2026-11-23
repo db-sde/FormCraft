@@ -5,7 +5,16 @@ import {
   type ActionResult,
   type Connection,
 } from "../framework";
-import { asBoolean, asList, asNumber, asText, loadSync, mappingProblem } from "../links";
+import {
+  asBoolean,
+  asDate,
+  asDateTime,
+  asList,
+  asNumber,
+  asText,
+  loadSync,
+  mappingProblem,
+} from "../links";
 import type { MappingValue } from "../mapping";
 import { configCall, type ProviderAdapter } from "./shared";
 
@@ -87,7 +96,9 @@ export function salesforceValue(type: string, value: MappingValue): unknown {
     case "long":
       return asNumber(value);
     case "date":
-      return String(value).slice(0, 10);
+      return asDate(value);
+    case "datetime":
+      return asDateTime(value);
     case "multipicklist":
       return asList(value).join(";");
     case "textarea":

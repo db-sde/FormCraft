@@ -178,7 +178,7 @@ test("dashboard: unpublishing asks first, and deleting a form says its leads go 
   }
 });
 
-test("builder: deletes can be undone, the publish button keeps one label, and unconfigured integrations say they're on their way", async ({
+test("builder: deletes can be undone, the publish button keeps one label, and unconfigured integrations say they aren't set up on this site yet", async ({
   page,
 }) => {
   const user = await createConfirmedUser("e2e-qa-builder");
@@ -208,18 +208,20 @@ test("builder: deletes can be undone, the publish button keeps one label, and un
     ).toBeVisible({ timeout: 15000 });
 
     // FC-03 / FC-04: settings that need server credentials are offered only
-    // with them; until then a friendly note says they're on their way. The
+    // with them; until then a note says they aren't set up on this site. The
     // suite runs with a stand-in email API (so email is on) and without
     // Google credentials (so Sheets is off, and the checklist doesn't ask
     // for it).
     await page.goto(`/forms/${formId}/integrations`);
     await expect(page.getByRole("heading", { name: "Webhooks" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Google Sheets" })).toBeVisible();
-    await expect(page.getByText("Google Sheets is almost here")).toBeVisible();
+    await expect(
+      page.getByText("Google Sheets isn't set up on this site yet"),
+    ).toBeVisible();
     for (const name of ["Email notifications", "Confirmation email"]) {
       await expect(page.getByRole("heading", { name })).toBeVisible();
       await expect(
-        page.getByText(new RegExp(`^${name} (is|are) almost here$`)),
+        page.getByText(new RegExp(`^${name} (isn't|aren't) set up on this site yet$`)),
       ).toHaveCount(process.env.RESEND_API_KEY ? 0 : 1);
     }
     await expect(page.getByText("Get your first response").first()).toBeVisible();

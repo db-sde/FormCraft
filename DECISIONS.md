@@ -3,6 +3,46 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-20 — Integration audit (roadmap v3.1 §J): honest labels and three connector fixes
+
+The owner's §J asks for every listed connection to be audited with
+evidence, broken approved ones fixed, and nothing shown as ready unless
+it is. The register is `docs/integration-audit.md`.
+
+- **"Not set up on this site yet", not "almost here".** This supersedes
+  the 2026-11-07 copy. "<Feature> is almost here… finishing touches…
+  it'll switch on as soon as it's ready" promised an imminent launch
+  that depends on the operator adding keys, which §J4 ("honest product
+  copy") rules out. `NotSetUpYet` / `notSetUpMessage()` now say the
+  feature isn't set up on this site yet and can't be used for now, with
+  no date. The section still shows (no Connect button, no settings), and
+  what still works is still named. The CAPTCHA hint and the email-invite
+  message follow suit.
+- **Zapier / Make.** FormCraft has no app in either directory, so
+  Settings → API no longer says "Connect Zapier, Make"; it says what the
+  keys are for and how to send responses there today (a Zapier "Catch
+  Hook" or Make "Custom webhook" URL in a form's Webhooks). Publishing
+  listings stays an owner decision (unmapped in the 68).
+- **Zoho CRM outside the US.** Codes and refresh tokens were always sent
+  to accounts.zoho.com, so EU/India/Australia… accounts couldn't
+  connect. The callback's `accounts-server` is now used for the exchange
+  and kept for refreshes, but only when it's one of Zoho's own accounts
+  servers (an allowlist): the client secret is sent there. The Zoho
+  client needs Multi-DC switched on (.env.example).
+- **Date-time answers to apps.** A date-and-time answer was mapped as
+  display text ("2026-11-20 14:00 (UTC+05:30)"), which Salesforce, Zoho,
+  Airtable and Notion date-time fields refuse, and date fields took the
+  first ten characters of anything. `asDateTime` / `asDate` convert to
+  ISO 8601 (UTC) and a calendar date, and a value that isn't one is a
+  mapping problem on the timeline instead of a mangled value.
+- **An expired connection flow** used to land on Settings → Account with
+  no message. The callback now returns to the page the flow started on
+  (read from the unsigned state, so only an app path is ever used) with
+  the "took too long" note, and Settings explains it as a fallback.
+- **Deferred connectors stay out.** PayPal, Microsoft 365, SMS, WhatsApp
+  Business, Zendesk/Intercom and custom SMTP appear nowhere in the UI;
+  a unit test fails if one is added as an OAuth provider or app card.
+
 ## 2026-11-03 — Hardening: system design and network security review
 
 A review of the whole app (architecture, network security, reliability)

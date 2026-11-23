@@ -1,6 +1,15 @@
 import { NotionSettings, type FieldInfo } from "../catalog";
 import { providerCall, registerAction, type ActionResult } from "../framework";
-import { asBoolean, asList, asNumber, asText, loadSync, mappingProblem } from "../links";
+import {
+  asBoolean,
+  asDate,
+  asDateTime,
+  asList,
+  asNumber,
+  asText,
+  loadSync,
+  mappingProblem,
+} from "../links";
 import type { MappingValue } from "../mapping";
 import { byName, configCall, type ProviderAdapter } from "./shared";
 
@@ -74,8 +83,12 @@ export function notionValue(
         ok: true,
         value: { multi_select: asList(value).map((n) => ({ name: optionName(n) })) },
       };
-    case "date":
-      return { ok: true, value: { date: { start: s } } };
+    case "date": {
+      const start = asDateTime(value) ?? asDate(value);
+      return start
+        ? { ok: true, value: { date: { start } } }
+        : { ok: false, error: "needs a date" };
+    }
     case "email":
       return { ok: true, value: { email: s } };
     case "phone_number":

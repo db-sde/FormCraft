@@ -5,7 +5,16 @@ import {
   type ActionResult,
   type Connection,
 } from "../framework";
-import { asBoolean, asList, asNumber, asText, loadSync, mappingProblem } from "../links";
+import {
+  asBoolean,
+  asDate,
+  asDateTime,
+  asList,
+  asNumber,
+  asText,
+  loadSync,
+  mappingProblem,
+} from "../links";
 import type { MappingValue } from "../mapping";
 import { configCall, type ProviderAdapter } from "./shared";
 
@@ -88,7 +97,12 @@ export function zohoValue(type: string, value: MappingValue): unknown {
     case "multiselectpicklist":
       return asList(value);
     case "date":
-      return String(value).slice(0, 10);
+      return asDate(value);
+    case "datetime": {
+      // Zoho wants an offset, not "Z": 2026-11-20T08:30:00+00:00.
+      const t = asDateTime(value);
+      return t ? t.replace(/\.\d{3}Z$/, "+00:00") : null;
+    }
     case "textarea":
       return asText(value, 32_000);
     default:

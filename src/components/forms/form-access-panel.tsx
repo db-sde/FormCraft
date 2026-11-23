@@ -345,7 +345,7 @@ export function FormAccessPanel({
             <span className={hintClass}>
               {captchaAvailable
                 ? "Uses Cloudflare Turnstile. If the check can't run, the submission is refused and the person can try again; their answers stay saved."
-                : "The bot check is almost here. We're putting the finishing touches on it, and it'll switch on right here when it's ready."}
+                : "The bot check isn't set up on this site yet, so it can't be turned on for now. The spam trap and rate limits still protect this form."}
             </span>
           </span>
           <Switch

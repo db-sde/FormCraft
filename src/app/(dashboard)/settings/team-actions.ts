@@ -77,7 +77,7 @@ export async function inviteMemberAction(
         ? `Invitation sent to ${parsedEmail.data}.`
         : process.env.RESEND_API_KEY
           ? "We couldn't email them just now, so share this link with them yourself."
-          : "Email invites are almost here! For now, share this link with them yourself.",
+          : "Email invites aren't set up on this site yet, so share this link with them yourself.",
     };
   } catch (error) {
     if (error instanceof TeamError) return { ok: false, message: error.message };

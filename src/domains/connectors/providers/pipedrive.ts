@@ -5,7 +5,7 @@ import {
   type ActionResult,
   type Connection,
 } from "../framework";
-import { asList, asNumber, asText, loadSync, mappingProblem } from "../links";
+import { asDate, asList, asNumber, asText, loadSync, mappingProblem } from "../links";
 import type { MappingValue } from "../mapping";
 import { configCall, type ProviderAdapter } from "./shared";
 
@@ -73,7 +73,7 @@ export function pipedriveValue(field: PersonField, value: MappingValue): unknown
     case "monetary":
       return asNumber(value);
     case "date":
-      return String(value).slice(0, 10);
+      return asDate(value);
     case "enum": {
       const label = asText(value);
       return field.options?.find((o) => o.label === label)?.id ?? null;

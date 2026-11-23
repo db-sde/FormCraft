@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   CONNECT_COOKIE,
   exchangeCode,
+  unverifiedReturnPath,
   verifyConnectState,
 } from "@/domains/connectors/oauth";
 import { saveConnection } from "@/domains/connectors/framework";
@@ -30,14 +31,24 @@ export async function GET(request: NextRequest) {
     res.cookies.delete({ name: CONNECT_COOKIE, path: "/api/connectors" });
     return res;
   };
-  if (!verified.ok) return done("/settings", { connect_error: "expired" });
+  if (!verified.ok)
+    return done(unverifiedReturnPath(request.nextUrl.searchParams.get("state")), {
+      connect_error: "expired",
+    });
   const { value } = verified;
   if (value.workspaceId !== workspace.id)
     return done(value.returnTo, { connect_error: "workspace" });
   const code = request.nextUrl.searchParams.get("code");
   if (!code) return done(value.returnTo, { connect_error: "declined" });
   try {
-    const tokens = await exchangeCode(value.provider, code, verified.nonce);
+    const tokens = await exchangeCode(
+      value.provider,
+      code,
+      verified.nonce,
+      fetch,
+      // Zoho: the account's data centre (only Zoho's own are used).
+      request.nextUrl.searchParams.get("accounts-server"),
+    );
     const admin = createAdminClient();
     const label = await accountLabel(value.provider, tokens).catch(() => null);
     await saveConnection(admin, {

@@ -72,6 +72,8 @@ const CONNECT_ERRORS: Record<string, string> = {
   forbidden: "You need permission to manage integrations to connect apps.",
   declined: "The app wasn't connected because access was declined.",
   workspace: "That connection was started in another workspace. Try again here.",
+  expired:
+    "That took too long, or was finished in another browser, so nothing was connected. Try again.",
   exchange_failed: "The app couldn't be connected. Please try again.",
 };
 
@@ -213,7 +215,8 @@ export default async function IntegrationsPage({
       supabase.from("coupons").select("*").eq("form_id", formId).order("created_at"),
     ]);
   // Business apps (Phase 6): only those set up on this server can be
-  // connected; the rest are listed as on their way.
+  // connected; the rest are named as not set up on this site yet,
+  // with no Connect button.
   const offeredApps = APPS.filter((a) => isConfigured(a.provider));
   const comingApps = APPS.filter((a) => !isConfigured(a.provider)).map((a) => a.label);
   const [links, mayManageApps, { data: appConnections }] = offeredApps.length
@@ -266,7 +269,7 @@ export default async function IntegrationsPage({
   const sheetsSyncLog = sheetsConnection
     ? await listSyncLog(supabase, sheetsConnection.id)
     : [];
-  // Features that need server setup show a friendly "almost here" note
+  // Features that need server setup show a "not set up on this site yet" note
   // instead of settings until it's done.
   const sheetsAvailable = isGoogleOAuthConfigured();
   const emailAvailable = Boolean(process.env.RESEND_API_KEY);
@@ -451,8 +454,8 @@ export default async function IntegrationsPage({
       >
         {appStates.length === 0 ? (
           <NotSetUpYet feature="Apps" plural>
-            {new Intl.ListFormat("en").format(comingApps)}{" "}
-            {comingApps.length === 1 ? "is" : "are"} on their way.
+            That&apos;s {new Intl.ListFormat("en").format(comingApps)}. Webhooks (above)
+            work now, including to an n8n workflow.
           </NotSetUpYet>
         ) : (
           <div className="flex flex-col gap-3.5">
@@ -492,7 +495,8 @@ export default async function IntegrationsPage({
             />
             {comingApps.length > 0 && (
               <p className="text-muted-foreground text-[13px]">
-                On their way: {new Intl.ListFormat("en").format(comingApps)}.
+                Not set up on this site yet (no Connect button until they are):{" "}
+                {new Intl.ListFormat("en").format(comingApps)}.
               </p>
             )}
           </div>

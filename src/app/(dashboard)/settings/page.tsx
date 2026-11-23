@@ -62,9 +62,14 @@ type Tab = (typeof TABS)[number][0];
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; before?: string; notice?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    before?: string;
+    notice?: string;
+    connect_error?: string;
+  }>;
 }) {
-  const { tab: rawTab, before, notice } = await searchParams;
+  const { tab: rawTab, before, notice, connect_error: connectError } = await searchParams;
   const tab: Tab = TABS.some(([key]) => key === rawTab) ? (rawTab as Tab) : "account";
   const { supabase, user, workspace } = await getCurrentWorkspace();
   const name = (user.user_metadata?.full_name as string | undefined) ?? "";
@@ -172,6 +177,16 @@ export default async function SettingsPage({
         ))}
       </nav>
 
+      {connectError && (
+        <p
+          role="alert"
+          className="rounded-lg border-[1.5px] border-[var(--alert-error-border)] bg-[var(--alert-error-bg)] p-3 text-sm text-[var(--alert-error-fg)]"
+        >
+          {connectError === "expired"
+            ? "That app connection took too long, or was finished in another browser, so nothing was connected. Start it again from where you began: a form's Integrations page, or Bookings for your calendar."
+            : "That app couldn't be connected. Please try again."}
+        </p>
+      )}
       {tab === "account" && notice === "two_factor_reset" && (
         <p
           role="status"

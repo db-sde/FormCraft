@@ -133,6 +133,34 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
   },
 };
 
+/**
+ * Zoho keeps each account in one data centre (US, EU, India, Australia,
+ * Japan, Canada, Saudi Arabia, UK, China) and only that centre's accounts
+ * server accepts the account's codes and refresh tokens. Zoho names it
+ * in the callback (`accounts-server`); it's used only when it's one of
+ * Zoho's own, since the client secret is sent there.
+ */
+const ZOHO_ACCOUNTS_SERVER =
+  /^https:\/\/accounts\.zoho\.(com|eu|in|com\.au|jp|ca|sa|uk|com\.cn)$/;
+
+export function zohoAccountsServer(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.pathname !== "/" || url.search || url.username || url.password) return null;
+    return ZOHO_ACCOUNTS_SERVER.test(url.origin) ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The token endpoint for this connection: Zoho's in the account's own
+ * data centre, everyone else's fixed one. */
+function tokenUrlFor(config: OAuthProviderConfig, accountsServer?: string): string {
+  const zoho = config.provider === "zoho_crm" && zohoAccountsServer(accountsServer);
+  return zoho ? `${zoho}/oauth/v2/token` : config.tokenUrl;
+}
+
 export function oauthProvider(provider: string): OAuthProviderConfig | null {
   return Object.hasOwn(OAUTH_PROVIDERS, provider) ? OAUTH_PROVIDERS[provider] : null;
 }
@@ -249,6 +277,22 @@ export function verifyConnectState(
   };
 }
 
+/**
+ * Where a flow that can't be verified (expired, another browser) should
+ * land so its "try again" note shows where it started. Unsigned, so it's
+ * only ever an app path (safeReturnPath), never another site.
+ */
+export function unverifiedReturnPath(state: string | null | undefined): string {
+  try {
+    const payload = JSON.parse(
+      Buffer.from((state ?? "").split(".")[0] ?? "", "base64url").toString("utf8"),
+    ) as Partial<Payload>;
+    return safeReturnPath(typeof payload.r === "string" ? payload.r : null);
+  } catch {
+    return safeReturnPath(null);
+  }
+}
+
 /** A PKCE verifier only the browser that started the flow can produce. */
 export function pkceFor(nonce: string, key = process.env.APP_SECRET) {
   const verifier = createHmac("sha256", signingKey("connect-pkce", key))
@@ -296,6 +340,7 @@ async function tokenRequest(
   config: OAuthProviderConfig,
   params: Record<string, string>,
   fetcher: Fetcher,
+  accountsServer?: string,
 ): Promise<Tokens> {
   const creds = credentials(config);
   if (!creds) throw new Error(`${config.provider} isn't configured`);
@@ -310,7 +355,8 @@ async function tokenRequest(
     body.set("client_id", creds.clientId);
     body.set("client_secret", creds.clientSecret);
   }
-  const res = await fetcher(config.tokenUrl, {
+  const tokenUrl = tokenUrlFor(config, accountsServer);
+  const res = await fetcher(tokenUrl, {
     method: "POST",
     headers,
     body: body.toString(),
@@ -329,6 +375,8 @@ async function tokenRequest(
   ]) {
     if (typeof data[key] === "string") extra[key] = data[key] as string;
   }
+  // Zoho: refreshes go back to the same data centre.
+  if (tokenUrl !== config.tokenUrl) extra.accounts_server = new URL(tokenUrl).origin;
   return {
     accessToken: data.access_token,
     refreshToken: typeof data.refresh_token === "string" ? data.refresh_token : undefined,
@@ -347,6 +395,8 @@ export async function exchangeCode(
   code: string,
   nonce: string,
   fetcher: Fetcher = fetch,
+  /** Zoho's `accounts-server` from the callback (see zohoAccountsServer). */
+  accountsServer?: string | null,
 ): Promise<Tokens> {
   const config = oauthProvider(provider);
   if (!config) throw new TokenError("unknown provider");
@@ -359,6 +409,7 @@ export async function exchangeCode(
       ...(config.pkce ? { code_verifier: pkceFor(nonce).verifier } : {}),
     },
     fetcher,
+    accountsServer ?? undefined,
   );
 }
 
@@ -379,6 +430,7 @@ export async function refreshIfNeeded(
     config,
     { grant_type: "refresh_token", refresh_token: tokens.refreshToken },
     fetcher,
+    tokens.extra?.accounts_server,
   );
   return {
     tokens: {

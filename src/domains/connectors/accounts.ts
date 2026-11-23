@@ -26,7 +26,9 @@ export async function accountLabel(
       return typeof me?.email === "string" ? me.email : null;
     }
     case "airtable": {
-      const me = await get("https://api.airtable.com/v0/meta/whoami");
+      const me = await get(
+        `${process.env.AIRTABLE_API_BASE ?? "https://api.airtable.com"}/v0/meta/whoami`,
+      );
       return typeof me?.email === "string" ? me.email : "Airtable account";
     }
     case "salesforce":
@@ -48,7 +50,11 @@ export async function accountLabel(
         ? new URL(tokens.extra.api_domain).host
         : "Zoho CRM";
     case "pipedrive": {
-      const me = await get("https://api.pipedrive.com/v1/users/me");
+      // OAuth tokens work on the company's own domain (api_domain).
+      const base = tokens.extra?.api_domain;
+      if (!base || !/^https:\/\/[a-z0-9-]+\.pipedrive\.com$/.test(base))
+        return "Pipedrive account";
+      const me = await get(`${base}/api/v1/users/me`);
       const data = me?.data as { email?: string; company_name?: string } | undefined;
       return data?.company_name ?? data?.email ?? "Pipedrive account";
     }

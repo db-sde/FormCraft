@@ -233,6 +233,39 @@ export function asBoolean(value: MappingValue): boolean | null {
   return null;
 }
 
+/**
+ * A moment for an app's date-time field, as ISO 8601 in UTC, or null.
+ * Reads a date-time answer as mapped ("2026-11-20 14:00 (UTC+05:30)",
+ * see formatDateTime) and ISO strings (submitted at). Apps refuse the
+ * display text, so it's converted here instead of sent as is.
+ */
+export function asDateTime(value: MappingValue): string | null {
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  const shown =
+    /^(\d{4}-\d{2}-\d{2}) (\d{1,2}):(\d{2})(?: ([AP]M))? \(UTC([+-]\d{2}:\d{2})?\)$/.exec(
+      s,
+    );
+  let hour = shown ? Number(shown[2]) % (shown[4] ? 12 : 24) : 0;
+  if (shown?.[4] === "PM") hour += 12;
+  const iso = shown
+    ? `${shown[1]}T${String(hour).padStart(2, "0")}:${shown[3]}:00${shown[5] ?? "Z"}`
+    : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)
+      ? s
+      : null;
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+/** A calendar date (YYYY-MM-DD) for an app's date field, or null when
+ * the value doesn't start with one (never a mangled slice). */
+export function asDate(value: MappingValue): string | null {
+  if (typeof value !== "string") return null;
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
+  return m ? m[1] : null;
+}
+
 /** Splits multi-choice text back into its labels: answers read as
  * "A; B" (like exports), so labels may contain commas. */
 export function asList(value: MappingValue): string[] {

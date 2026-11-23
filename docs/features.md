@@ -7,8 +7,9 @@ marked **new** arrived in November (features 49–68, QA runs 11–12 and
 roadmap v3.1: #8, #21, #55, #66).
 
 Features marked **(needs setup)** are built but stay switched off, with a
-friendly "almost here" note, until a key or account is added on the
-server. See "Needs setup to go live" at the end.
+"not set up on this site yet" note and no Connect button, until a key
+or account is added on the server. `docs/integration-audit.md` lists
+every connection with its test evidence. See "Needs setup to go live" at the end.
 
 ---
 

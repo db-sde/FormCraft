@@ -14,7 +14,7 @@ export function NotSetUpYet({
 }: {
   /** What isn't on yet, e.g. "Google Sheets". */
   feature: string;
-  /** The feature's name is plural ("Apps are almost here"). */
+  /** The feature's name is plural ("Apps aren't set up on this site yet"). */
   plural?: boolean;
   children?: React.ReactNode;
   className?: string;

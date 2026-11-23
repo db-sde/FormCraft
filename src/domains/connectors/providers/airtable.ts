@@ -1,6 +1,15 @@
 import { AirtableSettings, type FieldInfo } from "../catalog";
 import { providerCall, registerAction, type ActionResult } from "../framework";
-import { asBoolean, asList, asNumber, asText, loadSync, mappingProblem } from "../links";
+import {
+  asBoolean,
+  asDate,
+  asDateTime,
+  asList,
+  asNumber,
+  asText,
+  loadSync,
+  mappingProblem,
+} from "../links";
 import type { MappingValue } from "../mapping";
 import { byName, configCall, type ApiCtx, type ProviderAdapter } from "./shared";
 
@@ -71,8 +80,14 @@ export function airtableValue(
     }
     case "multipleSelects":
       return { ok: true, value: asList(value) };
-    case "date":
-      return { ok: true, value: String(value).slice(0, 10) };
+    case "date": {
+      const d = asDate(value);
+      return d ? { ok: true, value: d } : { ok: false, error: "needs a date" };
+    }
+    case "dateTime": {
+      const t = asDateTime(value);
+      return t ? { ok: true, value: t } : { ok: false, error: "needs a date and time" };
+    }
     default:
       return { ok: true, value: asText(value, 100_000) };
   }
