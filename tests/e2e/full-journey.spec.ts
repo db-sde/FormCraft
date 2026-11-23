@@ -125,9 +125,13 @@ test("creator builds and publishes, respondents fill it on desktop and phone, th
     expect(rows).toHaveLength(2);
 
     await page.goto(`/forms/${formId}/responses/${rows![0].id}`);
-    await expect(page.getByText("Which plan are you on?")).toBeVisible();
+    await expect(page.getByText("Which plan are you on?", { exact: true })).toBeVisible();
     const timeline = page.getByRole("region", { name: "Timeline" });
     await expect(timeline.getByText("Submitted")).toBeVisible();
+    // Each answer as it was saved (QA run 14).
+    await expect(
+      timeline.getByText("Answer saved: Which plan are you on?"),
+    ).toBeVisible();
     await page.getByLabel("Status").click();
     await page.getByRole("option", { name: "In progress" }).click();
     await expect(timeline.getByText("Status set to In progress")).toBeVisible();
@@ -178,7 +182,9 @@ test("creator builds and publishes, respondents fill it on desktop and phone, th
       await expect(viewer.getByText("2 responses", { exact: true })).toBeVisible();
       await expect(viewer.getByText("View only")).toBeVisible();
       await viewer.goto(`/forms/${formId}/responses/${rows![0].id}`);
-      await expect(viewer.getByText("Which plan are you on?")).toBeVisible();
+      await expect(
+        viewer.getByText("Which plan are you on?", { exact: true }),
+      ).toBeVisible();
       await expect(viewer.getByLabel("Add a comment")).toHaveCount(0);
       // A viewer can't reach the builder.
       await viewer.goto(`/forms/${formId}`);

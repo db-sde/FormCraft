@@ -404,20 +404,40 @@ export function previewAnswerValue(
   if (question.type === "consent") {
     const parts = contactRecord(value);
     if (typeof parts.acknowledged !== "boolean") return "";
+    // When is added by the table in the viewer's own time (consentTime).
     return [
       parts.acknowledged ? "Accepted" : "Not accepted",
       typeof parts.versionLabel === "string" ? parts.versionLabel : null,
-      // Date and time, as stored (UTC), so the cell can be read on its own
-      // (QA FC12-01).
-      typeof parts.acceptedAt === "string" &&
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(parts.acceptedAt)
-        ? `${parts.acceptedAt.slice(0, 16).replace("T", " ")} UTC`
-        : null,
     ]
       .filter(Boolean)
       .join(" · ");
   }
+  // An address on up to three lines, as it's written on an envelope
+  // (QA FC11-02): street, then town, region and postcode, then country.
+  if (question.type === "address") {
+    const r = contactRecord(value);
+    const join = (fields: string[], sep: string) =>
+      fields
+        .map((f) => r[f])
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+        .join(sep);
+    return [
+      join(["line1", "line2"], ", "),
+      join(["city", "state", "postalCode"], ", "),
+      join(["country"], ""),
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   return formatAnswerValue(question, value, context);
+}
+
+/** When a consent answer was recorded (ISO), for the table to show in
+ * the viewer's own time zone (QA run 14). */
+export function consentTime(question: QuestionV1, value: unknown): string | null {
+  if (question.type !== "consent") return null;
+  const at = contactRecord(value).acceptedAt;
+  return typeof at === "string" && !Number.isNaN(Date.parse(at)) ? at : null;
 }
 
 /**

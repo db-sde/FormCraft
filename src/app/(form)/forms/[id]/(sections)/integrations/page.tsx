@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { Metadata } from "next";
 import { Bell, CircleAlert, CircleCheck, Sheet, ShieldX, Webhook } from "lucide-react";
@@ -501,6 +502,15 @@ export default async function IntegrationsPage({
             )}
           </div>
         )}
+        {/* Google Calendar belongs to bookings (#43 is part of #27): each
+            host connects their own calendar there (QA run 14). */}
+        <p className="text-muted-foreground mt-3 text-[13px]">
+          Looking for Google Calendar? Each host connects their own calendar in{" "}
+          <Link href="/bookings" className="text-foreground underline underline-offset-2">
+            Bookings
+          </Link>
+          , for forms with a Booking question.
+        </p>
       </Section>
 
       <Section

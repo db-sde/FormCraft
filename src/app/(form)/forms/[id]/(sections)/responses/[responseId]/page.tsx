@@ -149,13 +149,17 @@ export default async function ResponseDetailPage({
       .single(),
     listComments(supabase, responseId),
     assignableMembers(supabase, workspace.id),
-    getResponseTimeline(supabase, {
-      id: responseId,
-      startedAt: detail.startedAt,
-      lastActiveAt: detail.lastActiveAt,
-      completedAt: detail.completedAt,
-      status: detail.status,
-    }),
+    getResponseTimeline(
+      supabase,
+      {
+        id: responseId,
+        startedAt: detail.startedAt,
+        lastActiveAt: detail.lastActiveAt,
+        completedAt: detail.completedAt,
+        status: detail.status,
+      },
+      new Map(detail.answers.map((a) => [a.questionId, a.label])),
+    ),
     viewOnly
       ? Promise.resolve(false)
       : hasPermission(supabase, workspace.id, "manage_integrations"),

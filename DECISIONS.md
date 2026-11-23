@@ -2626,4 +2626,24 @@ The owner's 20 November roadmap moved #8, #21, #55 and #66 to Build Now
   ignored (and the builder says so), so nobody is stuck. SMS codes wait
   for an SMS provider (#41, Build Later).
 
+## 2026-11-23 — QA run 14
+
+- **Address in the table.** Up to three lines (street; town, region and
+  postcode; country), like an envelope, instead of one joined string.
+  The response page and exports keep one labelled part each.
+- **Consent time.** Shown in the viewer's own time zone (the table adds
+  it in the browser), no longer as UTC text.
+- **Timeline.** Each answer saved while the respondent filled the form is
+  listed ("Answer saved: …"); changes after submitting are corrections,
+  listed as those. The roadmap's #31 asks for lifecycle and integration
+  events; per-answer entries are an addition QA expected.
+- **Google Calendar** stays on Bookings (each host's own calendar, #43 in
+  #27); the Integrations page now points there.
+- **Not changed, by design:** `?theme=` only picks a look the creator
+  saved under that name (#66: creator-approved, no arbitrary themes);
+  "abandoned" goes out after the endpoint's idle time (30 minutes on
+  QA 47's endpoint, at least 5), so a response finished sooner never
+  sends one, and "resumed" only follows an "abandoned"; email codes (#8)
+  are built but off until an email service is set up.
+
 <!-- Add new decisions above this line, newest first. -->

@@ -257,3 +257,35 @@ describe("receipts and status", () => {
     expect(titles).toContain("Paid ₹449.10 (Razorpay)");
   });
 });
+
+describe("timeline: answers as they were saved (QA run 14)", () => {
+  it("lists each answer saved before submitting, in order; later changes aren't", () => {
+    const entries = buildTimeline({
+      response: {
+        startedAt: "2026-11-03T10:00:00.000Z",
+        lastActiveAt: "2026-11-03T10:03:00.000Z",
+        completedAt: "2026-11-03T10:03:00.000Z",
+        status: "completed",
+      },
+      deliveries: [],
+      sheets: [],
+      payment: null,
+      events: [],
+      answersSaved: [
+        { questionId: "q2", label: "Email", savedAt: "2026-11-03T10:02:00.000Z" },
+        { questionId: "q1", label: "Name", savedAt: "2026-11-03T10:01:00.000Z" },
+        // Saved with the submit itself: before "Submitted".
+        { questionId: "q3", label: "Plan", savedAt: "2026-11-03T10:03:00.000Z" },
+        // A correction a day later: not an answer saved by the respondent.
+        { questionId: "q4", label: "Phone", savedAt: "2026-11-04T09:00:00.000Z" },
+      ],
+    });
+    expect(entries.map((e) => e.title)).toEqual([
+      "Started",
+      "Answer saved: Name",
+      "Answer saved: Email",
+      "Answer saved: Plan",
+      "Submitted",
+    ]);
+  });
+});

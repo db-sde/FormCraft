@@ -14,6 +14,7 @@ import {
   questionColumnLabels,
   answerCells,
   previewAnswerValue,
+  consentTime,
 } from "@/domains/responses/format";
 import { consentVersion } from "@/domains/forms/consent-record";
 import { addressFromComponents } from "@/domains/places";
@@ -550,19 +551,40 @@ describe("Google Places address parts (F-65)", () => {
   });
 });
 
-describe("consent in the responses table (QA FC11-10, FC12-01)", () => {
-  it("shows the outcome, the notice and when, to the minute", () => {
+describe("consent and address in the responses table (QA FC11-10, run 14)", () => {
+  it("shows the outcome and notice; the time is left to the viewer's clock", () => {
     const value = {
       acknowledged: true,
       version: "abc123",
       versionLabel: "Privacy v3",
       acceptedAt: "2026-11-20T10:13:42.000Z",
     };
-    expect(previewAnswerValue(consent(), value)).toBe(
-      "Accepted · Privacy v3 · 2026-11-20 10:13 UTC",
-    );
-    expect(previewAnswerValue(consent(), { ...value, acceptedAt: "soon" })).toBe(
-      "Accepted · Privacy v3",
-    );
+    expect(previewAnswerValue(consent(), value)).toBe("Accepted · Privacy v3");
+    expect(consentTime(consent(), value)).toBe("2026-11-20T10:13:42.000Z");
+    expect(consentTime(consent(), { ...value, acceptedAt: "soon" })).toBeNull();
+  });
+
+  it("puts an address on lines, like an envelope", () => {
+    const address = {
+      id: "addr",
+      type: "address",
+      order: 0,
+      label: "Address",
+      required: false,
+      settings: {
+        fields: ["line1", "line2", "city", "state", "postalCode", "country"],
+        requiredFields: [],
+      },
+    } as unknown as QuestionV1;
+    expect(
+      previewAnswerValue(address, {
+        line1: "1600 Amphitheatre Pkwy",
+        city: "Mountain View",
+        state: "CA",
+        postalCode: "94043",
+        country: "US",
+      }),
+    ).toBe("1600 Amphitheatre Pkwy\nMountain View, CA, 94043\nUS");
+    expect(previewAnswerValue(address, { city: "Pune" })).toBe("Pune");
   });
 });

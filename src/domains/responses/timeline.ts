@@ -73,6 +73,9 @@ export type TimelineSources = {
     createdAt: string;
     paidAt: string | null;
   } | null;
+  /** When each answer was saved while the respondent filled the form
+   * (QA run 14); later changes are corrections, shown as their own. */
+  answersSaved?: { questionId: string; label: string; savedAt: string }[];
   /** Each try to pay (F-22): a Razorpay order, a Stripe Checkout, or a
    * coupon that made it free. */
   paymentAttempts?: {
@@ -298,6 +301,17 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
       rank: 1,
     });
   }
+  for (const a of sources.answersSaved ?? []) {
+    // Changed after submitting: that's a correction, listed as one.
+    if (response.completedAt && a.savedAt > response.completedAt) continue;
+    entries.push({
+      key: `answer-${a.questionId}`,
+      at: a.savedAt,
+      title: `Answer saved: ${a.label.trim() || "Untitled question"}`,
+      outcome: "ok",
+      rank: 0.5,
+    });
+  }
   for (const d of sources.deliveries) {
     entries.push({
       key: `webhook-${d.id}`,
@@ -444,53 +458,76 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
 export async function getResponseTimeline(
   supabase: Client,
   response: TimelineSources["response"] & { id: string },
+  /** Question labels, to list each answer as it was saved. */
+  labels?: ReadonlyMap<string, string>,
 ): Promise<TimelineEntry[]> {
-  const [deliveries, sheets, payment, events, connectorJobs, bookingJobs, attempts] =
-    await Promise.all([
-      supabase
-        .from("webhook_deliveries")
-        .select(
-          "id, status, attempt_count, last_error, created_at, updated_at, webhook_endpoints(kind)",
-        )
-        .eq("response_id", response.id)
-        .order("created_at"),
-      supabase
-        .from("sheets_sync_log")
-        .select("id, status, attempt_count, last_error, created_at, updated_at")
-        .eq("response_id", response.id)
-        .order("created_at"),
-      supabase
-        .from("payments")
-        .select("status, amount, currency, created_at, paid_at")
-        .eq("response_id", response.id)
-        .maybeSingle(),
-      supabase
-        .from("response_events")
-        .select("id, kind, outcome, detail, created_at, profiles(full_name, email)")
-        .eq("response_id", response.id)
-        .order("created_at"),
-      supabase
-        .from("connector_jobs")
-        .select("id, provider, action, status, attempt_count, last_error, created_at")
-        .eq("response_id", response.id)
-        .order("created_at"),
-      supabase
-        .from("connector_jobs")
-        .select(
-          "id, provider, action, status, attempt_count, last_error, created_at, bookings!inner(response_id)",
-        )
-        .eq("bookings.response_id", response.id)
-        .order("created_at"),
-      supabase
-        .from("payment_attempts")
-        .select(
-          "id, provider, amount, currency, coupon_code, status, error, created_at, updated_at",
-        )
-        .eq("response_id", response.id)
-        .order("created_at"),
-    ]);
+  const [
+    deliveries,
+    sheets,
+    payment,
+    events,
+    connectorJobs,
+    bookingJobs,
+    attempts,
+    answerRows,
+  ] = await Promise.all([
+    supabase
+      .from("webhook_deliveries")
+      .select(
+        "id, status, attempt_count, last_error, created_at, updated_at, webhook_endpoints(kind)",
+      )
+      .eq("response_id", response.id)
+      .order("created_at"),
+    supabase
+      .from("sheets_sync_log")
+      .select("id, status, attempt_count, last_error, created_at, updated_at")
+      .eq("response_id", response.id)
+      .order("created_at"),
+    supabase
+      .from("payments")
+      .select("status, amount, currency, created_at, paid_at")
+      .eq("response_id", response.id)
+      .maybeSingle(),
+    supabase
+      .from("response_events")
+      .select("id, kind, outcome, detail, created_at, profiles(full_name, email)")
+      .eq("response_id", response.id)
+      .order("created_at"),
+    supabase
+      .from("connector_jobs")
+      .select("id, provider, action, status, attempt_count, last_error, created_at")
+      .eq("response_id", response.id)
+      .order("created_at"),
+    supabase
+      .from("connector_jobs")
+      .select(
+        "id, provider, action, status, attempt_count, last_error, created_at, bookings!inner(response_id)",
+      )
+      .eq("bookings.response_id", response.id)
+      .order("created_at"),
+    supabase
+      .from("payment_attempts")
+      .select(
+        "id, provider, amount, currency, coupon_code, status, error, created_at, updated_at",
+      )
+      .eq("response_id", response.id)
+      .order("created_at"),
+    labels
+      ? supabase
+          .from("answers")
+          .select("question_id, updated_at")
+          .eq("response_id", response.id)
+      : Promise.resolve({ data: [] as { question_id: string; updated_at: string }[] }),
+  ]);
   return buildTimeline({
     response,
+    answersSaved: (answerRows.data ?? [])
+      .filter((a) => labels?.has(a.question_id))
+      .map((a) => ({
+        questionId: a.question_id,
+        label: labels!.get(a.question_id)!,
+        savedAt: a.updated_at,
+      })),
     deliveries: (deliveries.data ?? []).map((d) => ({
       id: d.id,
       kind: (d.webhook_endpoints as { kind: string } | null)?.kind ?? "webhook",

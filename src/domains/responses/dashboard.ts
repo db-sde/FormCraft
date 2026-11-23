@@ -5,6 +5,7 @@ import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
   previewAnswerValue,
+  consentTime,
   answerDetailValue,
   questionColumnLabel,
   questionColumnLabels,
@@ -164,6 +165,9 @@ export type ResponseListItem = {
   /** Where a file or signature answer opens, keyed by question id
    * (QA FC4-17): a sign-in-protected link, as in the exports. */
   previewLinks: Record<string, string>;
+  /** A time to show in the viewer's own zone after the cell's text
+   * (when a consent was recorded). */
+  previewTimes: Record<string, string>;
   /** Score and result values for `resultColumns`, keyed by variable name
    * (completed responses only). */
   results: Record<string, string>;
@@ -415,10 +419,13 @@ export async function listResponses(
 
     const preview: Record<string, string> = {};
     const previewLinks: Record<string, string> = {};
+    const previewTimes: Record<string, string> = {};
     for (const ref of previewQuestions) {
       const own = schema?.questions.find((q) => q.id === ref.id) ?? ref;
       const value = answers?.get(ref.id);
       preview[ref.id] = previewAnswerValue(own, value, { uploadNames });
+      const at = consentTime(own, value);
+      if (at) previewTimes[ref.id] = at;
       if (
         UPLOAD_ANSWER_TYPES.has(own.type) &&
         typeof value === "string" &&
@@ -441,6 +448,7 @@ export async function listResponses(
       endingTitle,
       preview,
       previewLinks,
+      previewTimes,
       results,
       progress: { answered, total: ownAnswerable.length },
       lastQuestionLabel: lastQuestion ? questionColumnLabel(lastQuestion) : null,

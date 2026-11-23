@@ -994,7 +994,15 @@ export default async function ResponsesPage({
                               {/* A width on the content, not just the cell: the
                                   table sizes to its content, so one long word
                                   would otherwise widen the column (QA FC4-21). */}
-                              <div className="max-w-[168px] truncate">
+                              <div
+                                className={cn(
+                                  "max-w-[168px]",
+                                  // An address keeps its lines (QA FC11-02).
+                                  item.preview[col.questionId]?.includes("\n")
+                                    ? "line-clamp-3 leading-snug whitespace-pre-line"
+                                    : "truncate",
+                                )}
+                              >
                                 {item.previewLinks[col.questionId] ? (
                                   // Above the row's own link (z-10), like the
                                   // delete button: opens the file itself.
@@ -1008,6 +1016,11 @@ export default async function ResponsesPage({
                                       ? "View signature"
                                       : item.preview[col.questionId]}
                                   </a>
+                                ) : item.previewTimes[col.questionId] ? (
+                                  <>
+                                    {item.preview[col.questionId]} ·{" "}
+                                    <LocalTime iso={item.previewTimes[col.questionId]} />
+                                  </>
                                 ) : (
                                   item.preview[col.questionId] || (
                                     <span className="text-subtle-foreground">—</span>
