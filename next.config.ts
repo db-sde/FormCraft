@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Don't advertise the framework (X-Powered-By: Next.js).
   poweredByHeader: false,
+  // A second local build (the admin surface, for its browser tests) can
+  // live beside the customer one.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   async headers() {
     return [
       {

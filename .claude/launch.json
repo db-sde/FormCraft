@@ -35,6 +35,24 @@
         "node tests/e2e/fake-email-server.mjs & RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3007 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key PLACES_API_BASE=http://127.0.0.1:4605 GOOGLE_PLACES_API_KEY=e2e-places-key npm run build && RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3007 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key PLACES_API_BASE=http://127.0.0.1:4605 GOOGLE_PLACES_API_KEY=e2e-places-key npx next start -p 3007"
       ],
       "port": 3007
+    },
+    {
+      "name": "prod-3009-newkeys",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "node tests/e2e/fake-email-server.mjs & eval \"$(npx supabase status -o env 2>/dev/null | grep -E '^(PUBLISHABLE_KEY|SECRET_KEY)=')\" && export NEXT_PUBLIC_SUPABASE_ANON_KEY=\"$PUBLISHABLE_KEY\" SUPABASE_SERVICE_ROLE_KEY=\"$SECRET_KEY\"; RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3009 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key PLACES_API_BASE=http://127.0.0.1:4605 GOOGLE_PLACES_API_KEY=e2e-places-key npm run build && RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3009 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key PLACES_API_BASE=http://127.0.0.1:4605 GOOGLE_PLACES_API_KEY=e2e-places-key npx next start -p 3009"
+      ],
+      "port": 3009
+    },
+    {
+      "name": "admin-3010",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "export ADMIN_SURFACE=1 NEXT_DIST_DIR=.next-admin; RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3010 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key PLACES_API_BASE=http://127.0.0.1:4605 GOOGLE_PLACES_API_KEY=e2e-places-key npm run build && RESEND_BASE_URL=http://127.0.0.1:4604 RESEND_API_KEY=re_e2e_fake_key NEXT_PUBLIC_APP_URL=http://localhost:3010 AIRTABLE_API_BASE=http://127.0.0.1:4602 AIRTABLE_CLIENT_ID=e2e-airtable-client AIRTABLE_CLIENT_SECRET=e2e-airtable-secret RAZORPAY_API_BASE=http://127.0.0.1:4603 RAZORPAY_CHECKOUT_SCRIPT=http://127.0.0.1:4603/checkout.js STRIPE_API_BASE=http://127.0.0.1:4600 ANTHROPIC_BASE_URL=http://127.0.0.1:4601 ANTHROPIC_API_KEY=e2e-test-key PLACES_API_BASE=http://127.0.0.1:4605 GOOGLE_PLACES_API_KEY=e2e-places-key npx next start -p 3010"
+      ],
+      "port": 3010
     }
   ]
 }

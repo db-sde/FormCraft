@@ -87,3 +87,22 @@ database trigger refuses members). Use `npm run plan:set` with `--by` and
 Backups are the database host's (Supabase). Restoring is a host-level
 operation; see the security inventory (risk "Backups are unconfirmed")
 for the restore test that still needs doing.
+
+## Staff and the admin portal
+
+- **First owner** (once, from a trusted machine with the secret key): the
+  person signs up with a staff-only email, then
+  `npm run staff:bootstrap -- <email> "<Name>"`. The database refuses it
+  once any staff exist; after that people are added in the portal through
+  an approved request. Staff accounts can't belong to customer workspaces.
+- **Lost authenticator**: another owner disables the account (approved
+  request), which signs it out everywhere; re-add it after the person
+  sets up a new authenticator. There are no staff recovery codes.
+- **Audit trail damaged**: the Audit trail page (or
+  `select * from admin_verify_audit_chain()` with the secret key) names
+  the first entry that changed. Compare with the last fingerprint kept
+  outside the database and treat it as an incident.
+- **Migrations refused (network restriction)**: direct Postgres only
+  accepts the allowlisted address. Update it with
+  `npx supabase network-restrictions update --project-ref <ref>
+--db-allow-cidr <your ip>/32 --experimental`.

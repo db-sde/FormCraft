@@ -3189,6 +3189,43 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      admin_apply_staff_change: { Args: { p_request_id: string }; Returns: Json };
+      admin_audit_status: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_bootstrap_owner: {
+        Args: { p_display_name: string; p_user_id: string };
+        Returns: undefined;
+      };
+      admin_decide_change: {
+        Args: { p_approve: boolean; p_id: string; p_note: string };
+        Returns: Json;
+      };
+      admin_emergency_approve: {
+        Args: { p_id: string; p_reason: string };
+        Returns: Json;
+      };
+      admin_find_account: { Args: { p_email: string }; Returns: Json };
+      admin_list_change_requests: { Args: { p_status?: string }; Returns: Json };
+      admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_read_audit: { Args: { p_before?: number; p_limit?: number }; Returns: Json };
+      admin_request_change: {
+        Args: {
+          p_action: string;
+          p_payload: Json;
+          p_reason: string;
+          p_target_id: string;
+          p_target_type: string;
+        };
+        Returns: Json;
+      };
+      admin_verify_audit_chain: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          entries: number;
+          first_broken_id: number;
+          head_hash: string;
+        }[];
+      };
+      admin_whoami: { Args: Record<PropertyKey, never>; Returns: Json };
       analytics_rolled_count: {
         Args: { p_event_type: string; p_form_id: string; p_since: string };
         Returns: number;

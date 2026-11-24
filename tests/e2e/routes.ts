@@ -4,6 +4,19 @@
  * src/app but isn't listed here (or vice versa), so a new page can't
  * ship without at least the smoke test rendering it.
  */
+/** The Super Admin portal: served only by the admin deployment
+ * (ADMIN_SURFACE=1), so the smoke test can't render them; admin.spec.ts
+ * covers them against an admin build. */
+export const ADMIN_PAGE_ROUTES = [
+  "/admin",
+  "/admin/login",
+  "/admin/two-factor",
+  "/admin/no-access",
+  "/admin/approvals",
+  "/admin/staff",
+  "/admin/audit",
+];
+
 export const PAGE_ROUTES = [
   "/",
   "/login",

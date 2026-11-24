@@ -1,3 +1,4 @@
+import { adminSurfaceEnabled, isAdminPath } from "@/lib/admin/surface";
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
 import {
   isSignedVisitor,
@@ -257,10 +258,15 @@ export async function proxy(incoming: NextRequest) {
 }
 
 async function route(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  // The Super Admin portal (docs/super-admin-design.md §3.1): only on the
+  // admin deployment, which serves nothing else.
+  if (adminSurfaceEnabled()) return adminRoute(request, path);
+  if (isAdminPath(path)) return new NextResponse("Not found", { status: 404 });
+
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
   if (!isAppHost(host)) return customDomain(request, host);
 
-  const path = request.nextUrl.pathname;
   if (path.startsWith("/api/")) {
     // No session work here; just make sure nobody can send the
     // custom-domain header themselves.
@@ -287,6 +293,24 @@ async function route(request: NextRequest) {
     "x-nonce": nonce,
     "Content-Security-Policy": policy,
   });
+  return withCsp(response, policy);
+}
+
+/** The admin deployment: the portal, its static files and nothing else.
+ * Pages are never cached or indexed. Authorization is not decided here:
+ * every page and action asks the database (private.check_staff). */
+async function adminRoute(request: NextRequest, path: string) {
+  if (!isAdminPath(path)) {
+    if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+  const { nonce, policy } = pageCsp(request, false);
+  const response = await updateSession(request, {
+    "x-nonce": nonce,
+    "Content-Security-Policy": policy,
+  });
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return withCsp(response, policy);
 }
 

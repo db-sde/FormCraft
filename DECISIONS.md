@@ -2646,4 +2646,64 @@ The owner's 20 November roadmap moved #8, #21, #55 and #66 to Build Now
   sends one, and "resumed" only follows an "abandoned"; email codes (#8)
   are built but off until an email service is set up.
 
+## 2026-11-24 — Platform security fixes (before the admin build)
+
+From the Super Admin design review (`docs/super-admin-design.md` §2):
+
+- **Preview has its own `APP_SECRET`.** It was one entry shared with
+  production, so a preview build could sign cookies production accepts.
+  The entry now targets production only (value unchanged: it also
+  derives the key that encrypts stored integration secrets), and Preview
+  has a new random value.
+- **Database SSL enforced; direct Postgres limited to one IP.** The app
+  never connects to Postgres directly (it uses Supabase's HTTPS API), so
+  only migrations from the developer's machine need it. Change the
+  allowlist with `supabase network-restrictions update --experimental`
+  when that address changes.
+- **Production uses the new revocable Supabase keys** (publishable for
+  the browser, secret for the server) instead of the legacy JWT keys.
+  Verified locally (289 database and 164 browser tests on the new keys)
+  and on production. The legacy keys stay enabled until they're switched
+  off in the dashboard.
+- **Preview protection** was already Vercel Standard Protection.
+- **Backups:** the project has none and no PITR (Free plan). Needs the
+  Pro plan (daily backups) or PITR, then a restore drill.
+
+## 2026-11-24 — Super Admin Phase 0: staff, gate, audit chain, approvals
+
+Built from `docs/super-admin-design.md` (migration 70, `/admin`):
+
+- **Where it runs.** One codebase; the portal is served only when
+  `ADMIN_SURFACE=1` (a separate Vercel project to come). Elsewhere `/admin`
+  is a 404; the admin deployment serves nothing else (other pages redirect
+  to `/admin`, other APIs 404), never cached or indexed.
+- **The gate is in the database.** `private.check_staff()` runs first in
+  every `admin_*` function (a unit test fails otherwise): a second factor
+  in this session, always; a session that still exists (disabling signs
+  out at once) and is under 12 hours old; activity through the gate in
+  the last 30 minutes (tracked by the gate itself, because Supabase only
+  updates a session about hourly); an active staff role with the
+  permission; and a TOTP check in the last 10 minutes for high-risk calls.
+  It returns instead of raising, so a refusal's audit entry is kept.
+  Staff status is a table, not a JWT claim (claims stay stale for up to an
+  hour). Portal pages call it with the staff member's own session, never
+  the secret key.
+- **Audit trail**: `private.platform_audit_log`, written in the same
+  transaction as the action, insert-only (trigger, no grants to any API
+  role, the secret key included), each row hashed with the one before;
+  `admin_verify_audit_chain()` finds an edit. IP and browser come from the
+  Supabase session row, not from the caller. Copying the latest
+  fingerprint outside the database daily is still to do.
+- **Approvals**: high-risk changes (staff add, role change, disable so
+  far) run only from a request a different person approved (checked in
+  the database), bound to its exact payload, once, within 24 hours. With a
+  single owner there's no second person, so an owner can approve as an
+  emergency: reason required, fresh code, marked in the trail.
+- **Staff accounts** are separate from customer accounts: a trigger keeps
+  them out of workspaces, and adding a customer account as staff fails.
+  The first owner comes from `npm run staff:bootstrap` (secret key, once).
+- **Not yet**: the admin Vercel project and domain, its IP allowlist,
+  alerting owners on emergencies, the daily fingerprint copy, and Phases
+  1–5.
+
 <!-- Add new decisions above this line, newest first. -->
