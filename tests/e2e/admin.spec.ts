@@ -41,7 +41,9 @@ test.describe("Super Admin portal", () => {
   let customerForm: { formId: string; liveLink: string };
 
   test.beforeAll(async () => {
-    sql("delete from private.change_requests; delete from private.staff_members;");
+    sql(
+      "delete from private.restore_tests; delete from private.change_requests; delete from private.staff_members;",
+    );
     owner = await createConfirmedUser("e2e-staff-owner");
     newcomer = await createConfirmedUser("e2e-staff-new");
     outsider = await createConfirmedUser("e2e-staff-out");
@@ -71,7 +73,9 @@ test.describe("Super Admin portal", () => {
   });
 
   test.afterAll(async () => {
-    sql("delete from private.change_requests; delete from private.staff_members;");
+    sql(
+      "delete from private.restore_tests; delete from private.change_requests; delete from private.staff_members;",
+    );
     for (const u of [owner, newcomer, outsider, customer])
       if (u) await deleteUser(u.userId);
   });
@@ -189,5 +193,32 @@ test.describe("Super Admin portal", () => {
       visitor.getByText("Please contact billing.", { exact: false }),
     ).toBeVisible();
     await visitor.context().close();
+  });
+
+  test("usage, the form inventory and operations; a restore drill is recorded", async ({
+    page,
+  }) => {
+    await signIn(page, owner);
+    await page.getByRole("link", { name: "Usage" }).click();
+    await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
+    await expect(page.getByText(/Submissions/).first()).toBeVisible();
+    await expect(page.getByText("Feature adoption (workspaces)")).toBeVisible();
+
+    await page
+      .getByRole("navigation", { name: "Staff" })
+      .getByRole("link", { name: "Forms", exact: true })
+      .click();
+    await page.getByLabel("Search forms").fill("Customer survey");
+    await page.getByRole("button", { name: "Filter" }).click();
+    await expect(page.getByRole("cell", { name: /Customer survey/ })).toBeVisible();
+
+    await page.getByRole("link", { name: "Operations" }).click();
+    await expect(page.getByRole("heading", { name: "Open alerts" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Scheduler" })).toBeVisible();
+    await page.getByLabel("Restored into").fill("Spare project for the drill");
+    await page.getByLabel("What was checked").fill("Row counts match and a form opens");
+    await page.getByRole("button", { name: "Record drill" }).click();
+    await expect(page.getByText("Restore drill recorded.")).toBeVisible();
+    await expect(page.getByText(/worked · Spare project for the drill/)).toBeVisible();
   });
 });

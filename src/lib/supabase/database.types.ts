@@ -3215,10 +3215,25 @@ export type Database = {
         Returns: Json;
       };
       admin_find_account: { Args: { p_email: string }; Returns: Json };
+      admin_form_inventory: {
+        Args: { p_limit?: number; p_offset?: number; p_query?: string; p_state?: string };
+        Returns: Json;
+      };
       admin_list_change_requests: { Args: { p_status?: string }; Returns: Json };
       admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_ops_health: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_read_audit: { Args: { p_before?: number; p_limit?: number }; Returns: Json };
+      admin_record_restore_test: {
+        Args: {
+          p_backup_time: string;
+          p_checks: string;
+          p_evidence_url: string;
+          p_restored_to: string;
+          p_succeeded: boolean;
+        };
+        Returns: Json;
+      };
       admin_request_change: {
         Args: {
           p_action: string;
@@ -3229,10 +3244,15 @@ export type Database = {
         };
         Returns: Json;
       };
+      admin_resource_usage: {
+        Args: { p_limit?: number; p_sort?: string };
+        Returns: Json;
+      };
       admin_search_customers: {
         Args: { p_limit?: number; p_offset?: number; p_query: string };
         Returns: Json;
       };
+      admin_usage_overview: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_verify_audit_chain: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -3562,6 +3582,34 @@ export type Database = {
         }[];
       };
       mfa_satisfied: { Args: Record<PropertyKey, never>; Returns: boolean };
+      ops_alert_recipients: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          email: string;
+        }[];
+      };
+      ops_alerts_to_notify: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          first_seen_at: string;
+          id: number;
+          kind: string;
+          message: string;
+          severity: string;
+        }[];
+      };
+      ops_mark_notified: { Args: { p_ids: number[] }; Returns: undefined };
+      ops_run_checks: { Args: Record<PropertyKey, never>; Returns: number };
+      ops_set_alert: {
+        Args: {
+          p_active: boolean;
+          p_details: Json;
+          p_kind: string;
+          p_message: string;
+          p_severity: string;
+        };
+        Returns: undefined;
+      };
       payment_attempts_to_reconcile: {
         Args: { p_limit: number };
         Returns: {

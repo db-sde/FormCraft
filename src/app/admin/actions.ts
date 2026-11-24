@@ -293,6 +293,37 @@ const PlanChange = z.object({
   reason: z.string().trim().min(5).max(500),
 });
 
+const RestoreTest = z.object({
+  backupTime: z.string().max(40).nullable(),
+  restoredTo: z.string().trim().min(2).max(200),
+  checks: z.string().trim().min(5).max(2000),
+  evidenceUrl: z.string().trim().url().startsWith("https://").max(500).nullable(),
+  succeeded: z.boolean(),
+});
+
+/** Records a restore drill (ADM-077). */
+export async function recordRestoreTestAction(input: unknown): Promise<ActionResult> {
+  const parsed = RestoreTest.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Say where it was restored and what was checked (links must be https).",
+    };
+  }
+  const v = parsed.data;
+  const backupTime = v.backupTime ? new Date(v.backupTime) : null;
+  const result = await adminCall("admin_record_restore_test", {
+    p_backup_time:
+      backupTime && !Number.isNaN(backupTime.getTime()) ? backupTime.toISOString() : null,
+    p_restored_to: v.restoredTo,
+    p_checks: v.checks,
+    p_evidence_url: v.evidenceUrl,
+    p_succeeded: v.succeeded,
+  });
+  revalidatePath("/admin/operations");
+  return explain(result, "Couldn't record it.");
+}
+
 /** Asks for a change to a plan's entitlements (every workspace on it). */
 export async function requestPlanChangeAction(input: unknown): Promise<ActionResult> {
   const parsed = PlanChange.safeParse(input);

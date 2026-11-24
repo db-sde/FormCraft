@@ -101,7 +101,9 @@ describeLocal("Super Admin Phase 1: customers, status, plans", () => {
   }
 
   beforeAll(async () => {
-    sql("delete from private.change_requests; delete from private.staff_members;");
+    sql(
+      "delete from private.restore_tests; delete from private.change_requests; delete from private.staff_members;",
+    );
     owner = await person("owner", true);
     approver = await person("approver", true);
     member = await person("member", false);
@@ -180,7 +182,9 @@ describeLocal("Super Admin Phase 1: customers, status, plans", () => {
 
   afterAll(async () => {
     if (!local || !psqlAvailable) return;
-    sql("delete from private.change_requests; delete from private.staff_members;");
+    sql(
+      "delete from private.restore_tests; delete from private.change_requests; delete from private.staff_members;",
+    );
     if (workspaceId) await admin.from("workspaces").delete().eq("id", workspaceId);
     sql(`delete from public.plans where id = '${testPlan}'`);
     for (const p of people) await admin.auth.admin.deleteUser(p.id);

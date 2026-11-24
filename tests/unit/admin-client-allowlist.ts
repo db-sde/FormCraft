@@ -55,6 +55,7 @@ export const ADMIN_CLIENT_ALLOWED: Record<string, string> = {
   "src/app/api/cron/digests/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/domains/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/payments/route.ts": "scheduled worker: no user, CRON_SECRET",
+  "src/app/api/cron/ops/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/health/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/retention/route.ts": "scheduled worker: no user, CRON_SECRET",
   "src/app/api/cron/sheets/dispatch/route.ts": "scheduled worker: no user, CRON_SECRET",

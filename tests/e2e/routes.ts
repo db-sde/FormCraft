@@ -18,6 +18,9 @@ export const ADMIN_PAGE_ROUTES = [
   "/admin/customers",
   "/admin/customers/[id]",
   "/admin/plans",
+  "/admin/forms",
+  "/admin/usage",
+  "/admin/operations",
 ];
 
 export const PAGE_ROUTES = [
@@ -78,6 +81,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/view": "views-and-exit-save.spec.ts",
   "/api/places": "features-49-68.spec.ts",
   "/api/cron/payments": "api-contract.spec.ts",
+  "/api/cron/ops": "api-contract.spec.ts",
   "/api/[...unknown]": "qa-run4.spec.ts",
   "/api/uploads/[uploadId]": "qa-run4.spec.ts",
   "/api/responses/[id]/claim": "qa-run5.spec.ts",

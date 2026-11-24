@@ -29,6 +29,10 @@
     {
       "path": "/api/cron/payments",
       "schedule": "15 4 * * *"
+    },
+    {
+      "path": "/api/cron/ops",
+      "schedule": "15 2 * * *"
     }
   ]
 }

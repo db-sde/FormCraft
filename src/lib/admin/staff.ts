@@ -13,6 +13,7 @@ export type StaffPermission =
   | "privacy.manage"
   | "comms.send"
   | "ops.read"
+  | "ops.record"
   | "staff.manage"
   | "approvals.decide"
   | "audit.read";

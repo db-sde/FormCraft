@@ -2737,4 +2737,38 @@ sync waits for the provider decision.
   workspace's own audit log as "FormCraft support".
 - Support may now **ask** for status changes (owners/admins approve).
 
+## 2026-11-24 — Super Admin Phase 2: reports, operations, alerts
+
+Built (migration 72, `/admin/usage`, `/admin/forms`, `/admin/operations`,
+`/api/cron/ops`).
+
+- **Reports read the real tables**, not a copy, so they can't drift
+  (ADM-040/041/043). Counts leave out preview responses and deleted forms,
+  and the test checks every total against a direct count. If they become
+  slow we add a nightly rollup, but not before.
+- **Form inventory** shows title, workspace, state and response counts,
+  never questions or answers.
+- **Resource ranking** sorts only by a fixed list of measures. Anything
+  else gets `bad_sort`; no column name ever comes from the caller.
+- **Alerts come from three layers**, so one broken part can't hide the others:
+  1. the database checks itself every 5 minutes (pg_cron
+     `ops_run_checks`). It looks for a failing scheduler, late or
+     exhausted deliveries, a broken audit chain and each emergency
+     approval;
+  2. `/api/cron/ops` emails active owners and admins. It is called by
+     pg_cron every 5 minutes, with a daily Vercel cron as backup in case
+     pg_cron itself stops;
+  3. the Operations page shows open alerts.
+     There is one open alert per kind. Alerts close by themselves once
+     fixed, and critical ones are emailed again every 6 hours.
+- **Backups**: the status comes from the Supabase Management API
+  (`SUPABASE_MANAGEMENT_TOKEN`, read-only use). If there is no backup in
+  26 hours and no PITR, the alert is `backup_stale`. Without a token the
+  page says "not configured" rather than green.
+- **Restore drills** are recorded by hand (owner/admin, `ops.record`),
+  with an https evidence link. The page turns red after 90 days without one.
+- **Daily audit anchor**: the head of the hash chain goes to the
+  platform logs once a day, so rewriting the trail would also need
+  rewriting logs we don't control.
+
 <!-- Add new decisions above this line, newest first. -->
