@@ -22,6 +22,8 @@ export type AuditAction =
   | "form.captcha_changed"
   | "form.kiosk_changed"
   | "response.deleted"
+  | "support.status_changed"
+  | "support.plan_changed"
   | "response.answer_corrected"
   | "payment.refunded"
   | "template.created"

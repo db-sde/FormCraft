@@ -3142,6 +3142,9 @@ export type Database = {
           plan_id: string;
           response_retention_days: number | null;
           slug: string;
+          status: string;
+          status_changed_at: string | null;
+          status_message: string | null;
           updated_at: string;
         };
         ComputedFields: never;
@@ -3154,6 +3157,9 @@ export type Database = {
           plan_id?: string;
           response_retention_days?: number | null;
           slug: string;
+          status?: string;
+          status_changed_at?: string | null;
+          status_message?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -3165,6 +3171,9 @@ export type Database = {
           plan_id?: string;
           response_retention_days?: number | null;
           slug?: string;
+          status?: string;
+          status_changed_at?: string | null;
+          status_message?: string | null;
           updated_at?: string;
         };
         Relationships: [
@@ -3189,12 +3198,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      admin_apply_change: { Args: { p_request_id: string }; Returns: Json };
       admin_apply_staff_change: { Args: { p_request_id: string }; Returns: Json };
       admin_audit_status: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_bootstrap_owner: {
         Args: { p_display_name: string; p_user_id: string };
         Returns: undefined;
       };
+      admin_customer_profile: { Args: { p_workspace_id: string }; Returns: Json };
       admin_decide_change: {
         Args: { p_approve: boolean; p_id: string; p_note: string };
         Returns: Json;
@@ -3205,6 +3216,7 @@ export type Database = {
       };
       admin_find_account: { Args: { p_email: string }; Returns: Json };
       admin_list_change_requests: { Args: { p_status?: string }; Returns: Json };
+      admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_read_audit: { Args: { p_before?: number; p_limit?: number }; Returns: Json };
       admin_request_change: {
@@ -3215,6 +3227,10 @@ export type Database = {
           p_target_id: string;
           p_target_type: string;
         };
+        Returns: Json;
+      };
+      admin_search_customers: {
+        Args: { p_limit?: number; p_offset?: number; p_query: string };
         Returns: Json;
       };
       admin_verify_audit_chain: {
@@ -3460,6 +3476,9 @@ export type Database = {
           plan_id: string;
           response_retention_days: number | null;
           slug: string;
+          status: string;
+          status_changed_at: string | null;
+          status_message: string | null;
           updated_at: string;
         };
         SetofOptions: {
@@ -3488,6 +3507,7 @@ export type Database = {
         }[];
       };
       form_embed_origins: { Args: { p_slug: string }; Returns: string[] };
+      form_workspace_status: { Args: { p_form_id: string }; Returns: string };
       has_permission: {
         Args: { permission: string; target_workspace_id: string };
         Returns: boolean;
@@ -3713,6 +3733,7 @@ export type Database = {
         Args: { target_workspace_id: string };
         Returns: Database["public"]["Enums"]["workspace_role"];
       };
+      workspace_status: { Args: { p_workspace_id: string }; Returns: string };
       workspaces_requiring_sso: { Args: Record<PropertyKey, never>; Returns: number };
     };
     Enums: {

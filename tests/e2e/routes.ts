@@ -15,6 +15,9 @@ export const ADMIN_PAGE_ROUTES = [
   "/admin/approvals",
   "/admin/staff",
   "/admin/audit",
+  "/admin/customers",
+  "/admin/customers/[id]",
+  "/admin/plans",
 ];
 
 export const PAGE_ROUTES = [

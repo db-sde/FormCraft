@@ -12,6 +12,11 @@ export type WorkspaceSummary = {
   name: string;
   slug: string;
   role: "owner" | "admin" | "editor" | "viewer";
+  /** Set by FormCraft staff (Super Admin): restricted means no new or
+   * newly published forms; suspended means read-only and closed forms. */
+  status: "active" | "restricted" | "suspended";
+  /** What FormCraft told this workspace about it, if anything. */
+  statusMessage: string | null;
 };
 
 /** Returns the user's workspaces, oldest membership first — so the
@@ -35,7 +40,7 @@ export async function listWorkspacesForCurrentUser(
 
   const { data, error } = await supabase
     .from("workspace_members")
-    .select("role, workspaces(id, name, slug)")
+    .select("role, workspaces(id, name, slug, status, status_message)")
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
@@ -53,6 +58,8 @@ export async function listWorkspacesForCurrentUser(
       name: row.workspaces.name,
       slug: row.workspaces.slug,
       role: row.role,
+      status: row.workspaces.status as WorkspaceSummary["status"],
+      statusMessage: row.workspaces.status_message,
     }));
 }
 
@@ -81,7 +88,14 @@ export async function ensureDefaultWorkspace(
     });
 
     if (!error && data) {
-      return { id: data.id, name: data.name, slug: data.slug, role: "owner" };
+      return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        role: "owner",
+        status: "active",
+        statusMessage: null,
+      };
     }
     if (error && !error.message.includes("duplicate key")) {
       throw error;

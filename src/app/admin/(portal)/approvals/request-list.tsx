@@ -12,6 +12,7 @@ export type ChangeRequest = {
   id: string;
   action: string;
   target_email: string | null;
+  target_type: string;
   target_id: string;
   payload: Record<string, unknown>;
   reason: string;
@@ -26,6 +27,9 @@ const ACTION_LABEL: Record<string, string> = {
   "staff.add": "Add staff",
   "staff.set_role": "Change staff role",
   "staff.disable": "Disable staff",
+  "workspace.status": "Change account status",
+  "workspace.plan": "Change workspace plan",
+  "plan.update": "Change plan entitlements",
 };
 
 export function RequestList({
@@ -49,9 +53,15 @@ export function RequestList({
     id: string,
     decision: "approve" | "reject" | "apply" | "emergency",
     text?: string,
+    action?: string,
   ) =>
     start(async () => {
-      const result: ActionResult = await decideAction({ id, decision, note: text });
+      const result: ActionResult = await decideAction({
+        id,
+        decision,
+        note: text,
+        action,
+      });
       if (result.ok) {
         toast.success("Done.");
         setEmergencyFor(null);
@@ -78,7 +88,16 @@ export function RequestList({
         >
           <div className="flex flex-wrap items-baseline gap-2">
             <b>{ACTION_LABEL[r.action] ?? r.action}</b>
-            <span className="text-sm">{r.target_email ?? r.target_id}</span>
+            <span className="text-sm">
+              {r.target_email ??
+                (r.target_type === "workspace" ? (
+                  <a className="underline" href={`/admin/customers/${r.target_id}`}>
+                    workspace {r.target_id.slice(0, 8)}
+                  </a>
+                ) : (
+                  r.target_id
+                ))}
+            </span>
             {Object.keys(r.payload).length > 0 && (
               <code className="text-muted-foreground text-xs">
                 {JSON.stringify(r.payload)}
@@ -122,7 +141,11 @@ export function RequestList({
               </Button>
             )}
             {mode === "approved" && canApply && (
-              <Button size="sm" disabled={pending} onClick={() => run(r.id, "apply")}>
+              <Button
+                size="sm"
+                disabled={pending}
+                onClick={() => run(r.id, "apply", undefined, r.action)}
+              >
                 Apply now
               </Button>
             )}

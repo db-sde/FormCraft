@@ -1,5 +1,6 @@
 "use server";
 
+import { cannotCreate } from "@/domains/workspaces/status";
 import { rateLimit } from "@/domains/abuse/limit";
 
 import { recordAudit } from "@/domains/audit/record";
@@ -47,7 +48,7 @@ import { notSetUpMessage } from "@/lib/not-set-up";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
-  if (!canEdit(workspace.role)) redirect("/dashboard");
+  if (!canEdit(workspace.role) || cannotCreate(workspace)) redirect("/dashboard");
   const { id } = await createFormWithDraft(
     supabase,
     workspace.id,
@@ -66,7 +67,7 @@ export async function createFormAction(): Promise<void> {
 /** A blank form: only a welcome screen (QA FC4-26). */
 export async function createBlankFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
-  if (!canEdit(workspace.role)) redirect("/dashboard");
+  if (!canEdit(workspace.role) || cannotCreate(workspace)) redirect("/dashboard");
   const { id } = await createFormWithDraft(
     supabase,
     workspace.id,
@@ -100,7 +101,7 @@ export async function createSampleFormAction(): Promise<void> {
 
 export async function createFormFromTemplateAction(templateId: string): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
-  if (!canEdit(workspace.role)) redirect("/dashboard");
+  if (!canEdit(workspace.role) || cannotCreate(workspace)) redirect("/dashboard");
   const template = await getTemplateById(supabase, templateId);
   if (!template) redirect("/templates");
 
@@ -144,6 +145,9 @@ export async function generateFormAction(
   const { supabase, user, workspace } = await getCurrentWorkspace();
   if (!canEdit(workspace.role)) {
     return { message: "You have view-only access to this workspace." };
+  }
+  if (cannotCreate(workspace)) {
+    return { message: cannotCreate(workspace)! };
   }
   const limit = await rateLimit(`ai-form:${user.id}`, 10, 3_600_000);
   if (!limit.allowed) {
@@ -206,6 +210,9 @@ export async function importFormAction(
   if (!canEdit(workspace.role)) {
     return { message: "You have view-only access to this workspace." };
   }
+  if (cannotCreate(workspace)) {
+    return { message: cannotCreate(workspace)! };
+  }
   const admin = createAdminClient();
   const limit = await hitRateLimit(admin, `import-form:${user.id}`, 20, 3_600_000);
   if (!limit.allowed) {
@@ -256,6 +263,7 @@ export async function duplicateFormAction(
   if (!canEdit(workspace.role)) {
     return { ok: false, message: "You have view-only access to this workspace." };
   }
+  if (cannotCreate(workspace)) return { ok: false, message: cannotCreate(workspace)! };
   try {
     const copy = await duplicateForm(supabase, formId, workspace.id, user.id);
     if (!copy) return { ok: false, message: "Form not found." };

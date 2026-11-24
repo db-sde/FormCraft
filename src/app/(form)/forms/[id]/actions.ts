@@ -1,5 +1,6 @@
 "use server";
 
+import { cannotCreate } from "@/domains/workspaces/status";
 import { trackAccountEvent } from "@/lib/analytics/account-events";
 import { rateLimit } from "@/domains/abuse/limit";
 
@@ -139,6 +140,10 @@ export async function publishAction(formId: string): Promise<PublishResult> {
     !(await hasPermission(supabase, workspace.id, "publish"))
   ) {
     return { ok: false, code: "unknown", message: "You can't publish this form." };
+  }
+  // The database refuses it too (migration 71); this says why.
+  if (cannotCreate(workspace)) {
+    return { ok: false, code: "unknown", message: cannotCreate(workspace)! };
   }
 
   try {

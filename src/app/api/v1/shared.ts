@@ -24,6 +24,15 @@ export async function withApiKey(
   const admin = createAdminClient();
   const caller = await authenticateApiKey(admin, request.headers.get("authorization"));
   if (!caller) return apiError("unauthorized", "A valid API key is required.", 401);
+  // Suspended by FormCraft (Super Admin): the API is closed to it too.
+  const { data: ws } = await admin
+    .from("workspaces")
+    .select("status")
+    .eq("id", caller.workspaceId)
+    .maybeSingle();
+  if (ws?.status === "suspended") {
+    return apiError("workspace_suspended", "This workspace is suspended.", 403);
+  }
   if (!caller.scopes.includes(scope)) {
     return apiError("forbidden", `This key doesn't have the ${scope} permission.`, 403);
   }

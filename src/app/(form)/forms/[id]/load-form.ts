@@ -39,7 +39,8 @@ const loadForm = cache(async (formId: string) => {
     workspace,
     user,
     form,
-    viewOnly: !canEdit(workspace.role),
+    // Suspended by FormCraft: read-only, like a viewer.
+    viewOnly: !canEdit(workspace.role) || workspace.status === "suspended",
     isLive: publishInfo?.isPublished ?? false,
     hasUnpublishedChanges: publishInfo?.hasUnpublishedChanges ?? false,
   };

@@ -2706,4 +2706,35 @@ Built from `docs/super-admin-design.md` (migration 70, `/admin`):
   alerting owners on emergencies, the daily fingerprint copy, and Phases
   1–5.
 
+## 2026-11-24 — Super Admin Phase 1 (part 1): customers, status, plans
+
+Built (migration 71, `/admin/customers`, `/admin/plans`); billing-provider
+sync waits for the provider decision.
+
+- **Directory and 360** (ADM-008/009/010): search by workspace name,
+  slug, member email or custom domain (wildcards taken literally); the
+  360 shows members, plan and overrides, usage, counts, storage,
+  integration names and recent activity, never answers, files or secrets.
+  Every search and every 360 opened is in the audit trail.
+- **Account status** (ADM-012), enforced by the database, not the pages:
+  - **suspended**: members' writes refused on every table belonging to
+    the workspace or its forms (restrictive policies; reading and
+    exporting still work); no response can start or complete (trigger);
+    nothing publishes (trigger, which covers the service-role publish
+    path); the public API refuses the workspace; the app shows it
+    read-only with FormCraft's message.
+  - **restricted**: no new forms (policy) and no publishing (trigger);
+    live forms keep working.
+    Members can't change their own status (the plan guard covers status now).
+- **Plans and entitlements** (ADM-029/030): a workspace's plan and
+  overrides, and a plan's entitlements, change only through an approved
+  request. The database refuses unknown entitlement keys and wrong types
+  (a unit test keeps its key list equal to the code's). The plan guard
+  trigger accepted only the service role, which would have silently
+  undone approved changes; it now also accepts the admin apply step
+  (a transaction-local flag the API can't set).
+- **Customers are told**: status and plan changes by staff appear in the
+  workspace's own audit log as "FormCraft support".
+- Support may now **ask** for status changes (owners/admins approve).
+
 <!-- Add new decisions above this line, newest first. -->

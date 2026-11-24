@@ -198,16 +198,24 @@ export async function requestStaffChangeAction(input: unknown): Promise<ActionRe
 const Decision = z.object({
   id: z.string().uuid(),
   decision: z.enum(["approve", "reject", "apply", "emergency"]),
+  /** Which kind of change, to pick the function that carries it out (the
+   * database checks it matches the request). */
+  action: z.string().max(40).optional(),
   note: z.string().trim().max(500).optional(),
 });
 
 export async function decideAction(input: unknown): Promise<ActionResult> {
   const parsed = Decision.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid request." };
-  const { id, decision, note } = parsed.data;
+  const { id, decision, note, action } = parsed.data;
   const result =
     decision === "apply"
-      ? await adminCall("admin_apply_staff_change", { p_request_id: id })
+      ? await adminCall(
+          action?.startsWith("staff.")
+            ? "admin_apply_staff_change"
+            : "admin_apply_change",
+          { p_request_id: id },
+        )
       : decision === "emergency"
         ? await adminCall("admin_emergency_approve", { p_id: id, p_reason: note ?? "" })
         : await adminCall("admin_decide_change", {
@@ -217,5 +225,95 @@ export async function decideAction(input: unknown): Promise<ActionResult> {
           });
   revalidatePath("/admin/approvals");
   revalidatePath("/admin/staff");
+  revalidatePath("/admin/customers", "layout");
+  revalidatePath("/admin/plans");
   return explain(result, "That didn't work. Try again.");
+}
+
+// --- customers and plans (Phase 1) --------------------------------------------
+
+const WorkspaceChange = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("workspace.status"),
+    workspaceId: z.string().uuid(),
+    status: z.enum(["active", "restricted", "suspended"]),
+    message: z.string().trim().max(500).optional(),
+    reason: z.string().trim().min(5).max(500),
+  }),
+  z.object({
+    action: z.literal("workspace.plan"),
+    workspaceId: z.string().uuid(),
+    planId: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+    overrides: z.string().max(4000),
+    reason: z.string().trim().min(5).max(500),
+  }),
+]);
+
+/** Asks for a status or plan change for one workspace (approved by
+ * someone else on Approvals). */
+export async function requestWorkspaceChangeAction(
+  input: unknown,
+): Promise<ActionResult> {
+  const parsed = WorkspaceChange.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: "Fill in every field (a reason of 5+ characters)." };
+  const v = parsed.data;
+  let payload: Record<string, unknown>;
+  if (v.action === "workspace.status") {
+    payload = { status: v.status, ...(v.message ? { message: v.message } : {}) };
+  } else {
+    let overrides: unknown;
+    try {
+      overrides = v.overrides.trim() ? JSON.parse(v.overrides) : {};
+    } catch {
+      return {
+        ok: false,
+        error: 'Overrides must be a JSON object, like {"members": 5}.',
+      };
+    }
+    if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+      return { ok: false, error: "Overrides must be a JSON object." };
+    }
+    payload = { plan_id: v.planId, overrides };
+  }
+  const result = await adminCall("admin_request_change", {
+    p_action: v.action,
+    p_target_type: "workspace",
+    p_target_id: v.workspaceId,
+    p_payload: payload,
+    p_reason: v.reason,
+  });
+  revalidatePath(`/admin/customers/${v.workspaceId}`);
+  return explain(result, "Couldn't file the request.");
+}
+
+const PlanChange = z.object({
+  planId: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+  entitlements: z.string().max(8000),
+  reason: z.string().trim().min(5).max(500),
+});
+
+/** Asks for a change to a plan's entitlements (every workspace on it). */
+export async function requestPlanChangeAction(input: unknown): Promise<ActionResult> {
+  const parsed = PlanChange.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: "Fill in every field (a reason of 5+ characters)." };
+  let entitlements: unknown;
+  try {
+    entitlements = JSON.parse(parsed.data.entitlements);
+  } catch {
+    return { ok: false, error: "Entitlements must be a JSON object." };
+  }
+  if (!entitlements || typeof entitlements !== "object" || Array.isArray(entitlements)) {
+    return { ok: false, error: "Entitlements must be a JSON object." };
+  }
+  const result = await adminCall("admin_request_change", {
+    p_action: "plan.update",
+    p_target_type: "plan",
+    p_target_id: parsed.data.planId,
+    p_payload: { entitlements },
+    p_reason: parsed.data.reason,
+  });
+  revalidatePath("/admin/plans");
+  return explain(result, "Couldn't file the request.");
 }

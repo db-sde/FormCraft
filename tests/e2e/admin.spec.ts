@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
-import { adminClient, createConfirmedUser, deleteUser } from "./helpers";
+import {
+  adminClient,
+  createConfirmedUser,
+  createPublishedForm,
+  deleteUser,
+  loginViaUI,
+} from "./helpers";
+import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { totp } from "../totp";
 import { ADMIN_PAGE_ROUTES } from "./routes";
 
@@ -30,12 +37,32 @@ test.describe("Super Admin portal", () => {
   let owner: Awaited<ReturnType<typeof createConfirmedUser>>;
   let newcomer: Awaited<ReturnType<typeof createConfirmedUser>>;
   let outsider: Awaited<ReturnType<typeof createConfirmedUser>>;
+  let customer: Awaited<ReturnType<typeof createConfirmedUser>>;
+  let customerForm: { formId: string; liveLink: string };
 
   test.beforeAll(async () => {
     sql("delete from private.change_requests; delete from private.staff_members;");
     owner = await createConfirmedUser("e2e-staff-owner");
     newcomer = await createConfirmedUser("e2e-staff-new");
     outsider = await createConfirmedUser("e2e-staff-out");
+    customer = await createConfirmedUser("e2e-staff-cust");
+    customerForm = await createPublishedForm(customer, {
+      schemaVersion: 1,
+      meta: { title: "Customer survey" },
+      theme: {},
+      endings: [{ id: "end", title: "Thanks", isDefault: true }],
+      questions: [
+        {
+          id: "q1",
+          type: "short_text",
+          order: 0,
+          label: "Your name",
+          required: false,
+          settings: {},
+        },
+      ],
+      logic: [],
+    } as unknown as FormSchemaV1);
     const { error } = await adminClient().rpc("admin_bootstrap_owner", {
       p_user_id: owner.userId,
       p_display_name: "Olive Owner",
@@ -45,8 +72,12 @@ test.describe("Super Admin portal", () => {
 
   test.afterAll(async () => {
     sql("delete from private.change_requests; delete from private.staff_members;");
-    for (const u of [owner, newcomer, outsider]) if (u) await deleteUser(u.userId);
+    for (const u of [owner, newcomer, outsider, customer])
+      if (u) await deleteUser(u.userId);
   });
+
+  /** Authenticator secrets by email, from each account's first set-up. */
+  const secrets = new Map<string, string>();
 
   async function signIn(page: Page, user: { email: string; password: string }) {
     await page.goto(`${ADMIN}/admin`);
@@ -54,12 +85,20 @@ test.describe("Super Admin portal", () => {
     await page.getByLabel("Email").fill(user.email);
     await page.getByLabel("Password").fill(user.password);
     await page.getByRole("button", { name: "Continue" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Set up your authenticator" }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Set up authenticator" }).click();
-    const secret = (await page.locator("code").first().textContent())!.trim();
-    await page.getByLabel("6-digit code").fill(totp(secret));
+    const known = secrets.get(user.email);
+    if (known) {
+      await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+      // The next 30-second code: never one already used this window.
+      await page.getByLabel("6-digit code").fill(totp(known, Date.now() + 30_000));
+    } else {
+      await expect(
+        page.getByRole("heading", { name: "Set up your authenticator" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Set up authenticator" }).click();
+      const secret = (await page.locator("code").first().textContent())!.trim();
+      secrets.set(user.email, secret);
+      await page.getByLabel("6-digit code").fill(totp(secret));
+    }
     await page.getByRole("button", { name: "Continue" }).click();
   }
 
@@ -109,5 +148,46 @@ test.describe("Super Admin portal", () => {
       page.getByText("change.emergency_approved", { exact: true }).first(),
     ).toBeVisible();
     await expect(page.getByText("staff.add").first()).toBeVisible();
+  });
+
+  test("finds a customer, suspends them with an approval, and the customer sees it", async ({
+    page,
+    browser,
+  }) => {
+    await signIn(page, owner);
+    await page.getByRole("link", { name: "Customers" }).click();
+    await page.getByLabel("Search customers").fill(customer.email);
+    await page.getByRole("button", { name: "Search" }).click();
+    await page.getByRole("link", { name: "E2E workspace" }).click();
+    await expect(page.getByText(customer.email)).toBeVisible();
+
+    await page.getByLabel("New status").selectOption("suspended");
+    await page
+      .getByLabel("Message the customer sees (optional)")
+      .fill("Please contact billing.");
+    await page.getByLabel("Internal reason").fill("Chargeback on the last invoice");
+    await page.getByRole("button", { name: "Request status change" }).click();
+    await expect(page.getByText("Requested.")).toBeVisible();
+
+    await page.getByRole("link", { name: "Approvals" }).click();
+    await page.getByRole("button", { name: "Emergency approve…" }).click();
+    await page.getByLabel("Emergency reason").fill("No second staff member in this test");
+    await page.getByRole("button", { name: "Approve as emergency" }).click();
+    await page.getByRole("button", { name: "Apply now" }).click();
+    await expect(page.getByRole("button", { name: "Apply now" })).toHaveCount(0);
+
+    // The respondent finds the form closed…
+    const visitor = await (await browser.newContext()).newPage();
+    await visitor.goto(customerForm.liveLink);
+    await expect(visitor.getByText("This form isn't available right now.")).toBeVisible();
+    // …and the customer sees why on their dashboard.
+    await loginViaUI(visitor, customer.email, customer.password);
+    await expect(
+      visitor.getByText(/FormCraft has suspended this workspace/),
+    ).toBeVisible();
+    await expect(
+      visitor.getByText("Please contact billing.", { exact: false }),
+    ).toBeVisible();
+    await visitor.context().close();
   });
 });

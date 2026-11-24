@@ -1,8 +1,9 @@
 # Super Admin: design for the lean launch (32 features)
 
-Status: 24 November 2026. Phase 0's database gate, audit chain, approvals,
-staff sign-in and first portal pages are built (migration 70, `/admin`);
-the admin Vercel project and Phases 1–5 are not. See DECISIONS.md.
+Status: 24 November 2026. Phase 0 is live; Phase 1's customer directory,
+360 view, account status and plan changes are built (migrations 70–71,
+`/admin`). Billing-provider sync, the admin Vercel project and Phases 2–5
+are not. See DECISIONS.md.
 Source: _FormCraft Super Admin Lean Launch Developer Roadmap_ v2.0
 (ADM-001–ADM-112, 32 Build Now). This document says **how** to build them
 on FormCraft's current stack, safely, with the fewest new moving parts.

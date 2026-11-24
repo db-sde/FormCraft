@@ -13,6 +13,9 @@ type Client = SupabaseClient<Database>;
  */
 
 export type AvailabilitySettings = {
+  /** The workspace was suspended by FormCraft (Super Admin): its forms
+   * take no responses. The database refuses them too. */
+  workspaceSuspended?: boolean;
   closesAt: string | null;
   closedMessage: string | null;
   responseCap: number | null;
@@ -23,6 +26,7 @@ export type Availability =
   { open: true } | { open: false; reason: "closed" | "full"; message: string };
 
 export const DEFAULT_CLOSED_MESSAGE = "This form is no longer accepting responses.";
+export const UNAVAILABLE_MESSAGE = "This form isn't available right now.";
 export const DEFAULT_FULL_MESSAGE =
   "This form has reached its limit and isn't accepting more responses.";
 export const MAX_MESSAGE_LENGTH = 500;
@@ -34,6 +38,9 @@ export function availabilityOf(
   accepted: number,
   now: Date = new Date(),
 ): Availability {
+  if (settings.workspaceSuspended) {
+    return { open: false, reason: "closed", message: UNAVAILABLE_MESSAGE };
+  }
   if (settings.closesAt && now.getTime() >= new Date(settings.closesAt).getTime()) {
     return {
       open: false,
@@ -83,12 +90,14 @@ export async function getAvailabilitySettings(
 ): Promise<AvailabilitySettings | null> {
   const { data, error } = await admin
     .from("forms")
-    .select("closes_at, closed_message, response_cap, full_message")
+    .select("closes_at, closed_message, response_cap, full_message, workspaces(status)")
     .eq("id", formId)
     .maybeSingle();
   if (error) throw error;
   return data
     ? {
+        workspaceSuspended:
+          (data.workspaces as { status: string } | null)?.status === "suspended",
         closesAt: data.closes_at,
         closedMessage: data.closed_message,
         responseCap: data.response_cap,

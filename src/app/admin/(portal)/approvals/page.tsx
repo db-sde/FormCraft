@@ -35,7 +35,11 @@ export default async function ApprovalsPage() {
           requests={approved.ok ? approved.requests : []}
           mode="approved"
           isOwner={staff.role === "owner"}
-          canApply={staff.permissions.includes("staff.manage")}
+          canApply={
+            staff.permissions.includes("staff.manage") ||
+            staff.permissions.includes("customers.status") ||
+            staff.permissions.includes("plans.change")
+          }
         />
       </section>
     </main>

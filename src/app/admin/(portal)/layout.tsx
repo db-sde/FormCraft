@@ -5,6 +5,8 @@ import { staffSignOutAction } from "../actions";
 
 const NAV: { href: string; label: string; permission: StaffPermission }[] = [
   { href: "/admin", label: "Home", permission: "portal.access" },
+  { href: "/admin/customers", label: "Customers", permission: "customers.read" },
+  { href: "/admin/plans", label: "Plans", permission: "plans.read" },
   { href: "/admin/approvals", label: "Approvals", permission: "approvals.decide" },
   { href: "/admin/staff", label: "Staff", permission: "staff.manage" },
   { href: "/admin/audit", label: "Audit trail", permission: "audit.read" },

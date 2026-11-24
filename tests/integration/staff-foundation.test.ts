@@ -230,7 +230,13 @@ describeLocal("Super Admin Phase 0: staff, gate, approvals, audit", () => {
     expect(await call(support, "admin_whoami")).toMatchObject({
       ok: true,
       role: "support",
-      permissions: ["portal.access", "customers.read", "plans.read", "ops.read"],
+      permissions: [
+        "portal.access",
+        "customers.read",
+        "customers.status",
+        "plans.read",
+        "ops.read",
+      ],
     });
   });
 
