@@ -1,9 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { getUsage, getWorkspacePlan, spendAiCredit } from "@/domains/billing";
+import { getUsage, getWorkspacePlan } from "@/domains/billing";
+import { beginAi } from "@/domains/ai/gateway";
 import { completeResponse, startResponse } from "@/domains/responses";
 import { prepareUpload } from "@/domains/uploads/queries";
+
+vi.mock("server-only", () => ({}));
 
 /**
  * Plans and metering against the real database (migration 25): a
@@ -169,7 +172,10 @@ describe("usage", () => {
     const { entitlements } = await getWorkspacePlan(admin, workspaceId);
     const results = [];
     for (let i = 0; i < 3; i += 1) {
-      results.push(await spendAiCredit(admin, workspaceId, entitlements));
+      results.push(
+        (await beginAi(admin, { feature: "form_generate", workspaceId, entitlements }))
+          .ok,
+      );
     }
     expect(results).toEqual([true, true, false]);
     expect((await getUsage(user, workspaceId)).aiCredits).toBe(2);

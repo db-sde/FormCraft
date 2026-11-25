@@ -4,7 +4,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import { aiConfigured } from "@/domains/ai/config";
 import { followUpQuestion } from "@/domains/ai/response-analysis";
-import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
+import { getWorkspacePlan } from "@/domains/billing";
+import { beginAi } from "@/domains/ai/gateway";
 
 type Client = SupabaseClient<Database>;
 
@@ -60,9 +61,15 @@ export async function askFollowUp(
 
   const form = response.forms as { workspace_id: string; title: string };
   const { entitlements } = await getWorkspacePlan(admin, form.workspace_id);
-  if (!(await spendAiCredit(admin, form.workspace_id, entitlements))) return null;
+  const begun = await beginAi(admin, {
+    feature: "follow_up",
+    workspaceId: form.workspace_id,
+    entitlements,
+  });
+  if (!begun.ok) return null;
 
   const prompt = await followUpQuestion({
+    ai: begun.ai,
     formTitle: schema.meta.title,
     questionLabel: question.label,
     answer,

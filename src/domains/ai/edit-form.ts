@@ -1,8 +1,8 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { describeFormForAi } from "./rule-draft";
-import { AI_MODEL } from "./config";
+import type { AiSession } from "./gateway";
 import { LOGIC_GUIDE } from "./prompts";
 import { jsonOutputFormat, parseJsonReply } from "./output-format";
 import { applyEdit, describeThemeForAi, EditDraft, type EditResult } from "./form-edit";
@@ -24,10 +24,10 @@ ${LOGIC_GUIDE}`;
  * the problem spelled out; then the problem is reported as is.
  */
 export async function proposeFormEdit(
+  ai: AiSession,
   instruction: string,
   schema: FormSchemaV1,
 ): Promise<EditResult> {
-  const client = new Anthropic();
   const format = jsonOutputFormat(EditDraft);
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     {
@@ -40,11 +40,8 @@ export async function proposeFormEdit(
     message: "No changes came back. Try rephrasing.",
   };
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await client.beta.messages.create({
-      model: AI_MODEL,
+    const response = await ai.create({
       max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
       output_config: { effort: "medium", format },
       system: SYSTEM,
       messages,

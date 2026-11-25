@@ -213,7 +213,9 @@ export async function decideAction(input: unknown): Promise<ActionResult> {
       ? await adminCall(
           action?.startsWith("staff.")
             ? "admin_apply_staff_change"
-            : "admin_apply_change",
+            : action?.startsWith("ai.")
+              ? "admin_apply_ai_change"
+              : "admin_apply_change",
           { p_request_id: id },
         )
       : decision === "emergency"
@@ -227,6 +229,7 @@ export async function decideAction(input: unknown): Promise<ActionResult> {
   revalidatePath("/admin/staff");
   revalidatePath("/admin/customers", "layout");
   revalidatePath("/admin/plans");
+  revalidatePath("/admin/ai");
   return explain(result, "That didn't work. Try again.");
 }
 
@@ -347,4 +350,84 @@ export async function requestPlanChangeAction(input: unknown): Promise<ActionRes
   });
   revalidatePath("/admin/plans");
   return explain(result, "Couldn't file the request.");
+}
+
+// --- AI (Phase 3) -------------------------------------------------------------
+
+const AI_SETTING_TARGETS = [
+  "*",
+  "form_generate",
+  "form_edit",
+  "logic_rule",
+  "form_review",
+  "response_analysis",
+  "response_summary",
+  "follow_up",
+] as const;
+
+const AiChange = z.object({
+  feature: z.enum(AI_SETTING_TARGETS),
+  /** "keep" leaves a setting as it is. */
+  enabled: z.enum(["keep", "on", "off"]),
+  model: z.enum([
+    "keep",
+    "default",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+  ]),
+  maxTokens: z.string().trim().max(10),
+  ceilingUsd: z.string().trim().max(10),
+  reason: z.string().trim().min(5).max(500),
+});
+
+/** Asks for a change to an AI setting (approved by someone else). The
+ * database checks the values again when the change is carried out. */
+export async function requestAiChangeAction(input: unknown): Promise<ActionResult> {
+  const parsed = AiChange.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: "Fill in every field (a reason of 5+ characters)." };
+  const v = parsed.data;
+  const payload: Record<string, unknown> = {};
+  if (v.enabled !== "keep") payload.enabled = v.enabled === "on";
+  if (v.model === "default") {
+    if (v.feature === "*")
+      return { ok: false, error: "The platform needs a default model." };
+    payload.model = null;
+  } else if (v.model !== "keep") payload.model = v.model;
+  if (v.maxTokens === "none") payload.max_tokens = null;
+  else if (v.maxTokens) {
+    const n = Number(v.maxTokens);
+    if (!Number.isInteger(n) || n < 256 || n > 32000)
+      return { ok: false, error: "Max tokens must be a whole number from 256 to 32000." };
+    payload.max_tokens = n;
+  }
+  if (v.ceilingUsd) {
+    if (v.feature !== "*")
+      return { ok: false, error: "The ceiling is a platform setting." };
+    const n = Number(v.ceilingUsd);
+    if (!Number.isFinite(n) || n < 1 || n > 100_000)
+      return { ok: false, error: "The ceiling must be between $1 and $100,000 a day." };
+    payload.daily_ceiling_usd = n;
+  }
+  if (Object.keys(payload).length === 0) return { ok: false, error: "Change something." };
+  const result = await adminCall("admin_request_change", {
+    p_action: "ai.settings",
+    p_target_type: "ai_setting",
+    p_target_id: v.feature,
+    p_payload: payload,
+    p_reason: v.reason,
+  });
+  revalidatePath("/admin/ai");
+  revalidatePath("/admin/approvals");
+  return explain(result, "Couldn't file the request.");
+}
+
+/** Turns AI off for every customer at once. */
+export async function pauseAiAction(input: unknown): Promise<ActionResult> {
+  const parsed = z.object({ reason: z.string().trim().min(5).max(500) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Give a reason (5+ characters)." };
+  const result = await adminCall("admin_ai_pause", { p_reason: parsed.data.reason });
+  revalidatePath("/admin/ai");
+  return explain(result, "Couldn't pause AI.");
 }

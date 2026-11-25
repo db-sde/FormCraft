@@ -3198,6 +3198,9 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      admin_ai_overview: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_ai_pause: { Args: { p_reason: string }; Returns: Json };
+      admin_apply_ai_change: { Args: { p_request_id: string }; Returns: Json };
       admin_apply_change: { Args: { p_request_id: string }; Returns: Json };
       admin_apply_staff_change: { Args: { p_request_id: string }; Returns: Json };
       admin_audit_status: { Args: Record<PropertyKey, never>; Returns: Json };
@@ -3262,6 +3265,24 @@ export type Database = {
         }[];
       };
       admin_whoami: { Args: Record<PropertyKey, never>; Returns: Json };
+      ai_begin: {
+        Args: { p_credit_limit: number; p_feature: string; p_workspace_id: string };
+        Returns: Json;
+      };
+      ai_record_usage: {
+        Args: {
+          p_attempts: Json;
+          p_error_kind?: string;
+          p_feature: string;
+          p_latency_ms: number;
+          p_outcome: string;
+          p_request_id?: string;
+          p_requested_model: string;
+          p_served_model: string;
+          p_workspace_id: string;
+        };
+        Returns: number;
+      };
       analytics_rolled_count: {
         Args: { p_event_type: string; p_form_id: string; p_since: string };
         Returns: number;

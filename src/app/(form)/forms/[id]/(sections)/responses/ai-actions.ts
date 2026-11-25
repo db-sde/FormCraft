@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured } from "@/domains/ai/config";
+import { AI_PAUSED } from "@/domains/ai/gateway";
 import {
   aiFailure,
   AI_NOT_CONFIGURED,
@@ -79,6 +80,7 @@ export type AnalyzeResult =
       analyzed: number;
       failed: number;
       outOfCredits: boolean;
+      paused: boolean;
       remaining: boolean;
     }
   | AiFailure;
@@ -99,7 +101,14 @@ export async function analyzeResponsesAction(
     const { entitlements } = await getWorkspacePlan(admin, workspace.id);
     const ids = responseId ? [responseId] : await unanalyzedResponseIds(admin, formId);
     if (ids.length === 0)
-      return { ok: true, analyzed: 0, failed: 0, outOfCredits: false, remaining: false };
+      return {
+        ok: true,
+        analyzed: 0,
+        failed: 0,
+        outOfCredits: false,
+        paused: false,
+        remaining: false,
+      };
     const result = await analyzeResponses(admin, {
       formId,
       workspaceId: workspace.id,
@@ -108,6 +117,7 @@ export async function analyzeResponsesAction(
     });
     revalidatePath(`/forms/${formId}/responses`);
     if (result.analyzed === 0 && result.outOfCredits) return AI_OUT_OF_CREDITS;
+    if (result.analyzed === 0 && result.paused) return AI_PAUSED;
     const remaining = responseId
       ? false
       : (await unanalyzedResponseIds(admin, formId, 1)).length > 0;
@@ -134,6 +144,7 @@ export async function summarizeResponsesAction(formId: string): Promise<Summariz
       entitlements,
     });
     if (outcome === "out_of_credits") return AI_OUT_OF_CREDITS;
+    if (outcome === "paused") return AI_PAUSED;
     if (outcome === "no_responses")
       return {
         ok: false,

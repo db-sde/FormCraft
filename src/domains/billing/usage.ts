@@ -1,4 +1,3 @@
-import { trackAccountEvent } from "@/lib/analytics/account-events";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type { Entitlements } from "./entitlements";
@@ -7,7 +6,8 @@ type Client = SupabaseClient<Database>;
 
 /**
  * Usage metering (PRD §8). Completed responses are counted by a database
- * trigger the moment a response completes; AI credits are counted here.
+ * trigger the moment a response completes; AI credits are taken by the AI
+ * gateway (domains/ai/gateway.ts) when a call is allowed.
  * Seats and storage are measured from the rows themselves, so they can't
  * drift.
  *
@@ -88,35 +88,6 @@ async function storageBytes(
     }
     if ((data?.length ?? 0) < 1000) return { total, recordings };
   }
-}
-
-/** No limit, for the database function (its argument is nullable). */
-const SQL_NULL_LIMIT = null as unknown as number;
-
-/** One AI credit, if the plan has one left this month (service role).
- * The check and the spend are one database statement (spend_usage), so
- * two requests at once can't both take the last credit (foundations §3).
- * Each spend is an "ai_used" event (foundations §2). */
-export async function spendAiCredit(
-  admin: Client,
-  workspaceId: string,
-  entitlements: Entitlements,
-): Promise<boolean> {
-  const { data, error } = await admin.rpc("spend_usage", {
-    p_workspace_id: workspaceId,
-    p_metric: "ai_credits",
-    p_limit: entitlements.ai_credits_per_month ?? SQL_NULL_LIMIT,
-    p_amount: 1,
-  });
-  if (error) throw error;
-  if (data === null) return false;
-  void trackAccountEvent({
-    event: "ai_used",
-    distinctId: workspaceId,
-    workspaceId,
-    properties: { creditsUsedThisMonth: Number(data) },
-  });
-  return true;
 }
 
 export type UsageWarning = { metric: "responses" | "storage"; message: string };

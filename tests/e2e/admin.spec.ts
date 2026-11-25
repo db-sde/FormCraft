@@ -221,4 +221,42 @@ test.describe("Super Admin portal", () => {
     await expect(page.getByText("Restore drill recorded.")).toBeVisible();
     await expect(page.getByText(/worked · Spare project for the drill/)).toBeVisible();
   });
+
+  test("AI: spend and settings; a change goes through an approval", async ({ page }) => {
+    await signIn(page, owner);
+    await page
+      .getByRole("navigation", { name: "Staff" })
+      .getByRole("link", { name: "AI", exact: true })
+      .click();
+    await expect(page.getByRole("heading", { name: "AI", exact: true })).toBeVisible();
+    await expect(page.getByText("Spent today (UTC)")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Review a form" })).toBeVisible();
+    // Pausing is covered by the integration tests: other browser tests need AI on.
+    await expect(page.getByRole("button", { name: "Pause AI" })).toBeVisible();
+
+    // The code already asks for 4000 here, so this changes nothing for other tests.
+    await page.getByLabel("Setting for").selectOption("form_review");
+    await page.getByLabel(/Max output tokens/).fill("4000");
+    await page.locator("#ai-reason").fill("Keep reviews short");
+    await page.getByRole("button", { name: "Request change" }).click();
+    await expect(page.getByText("Requested.")).toBeVisible();
+
+    await page.getByRole("link", { name: "Approvals" }).click();
+    await expect(page.getByText("Change AI settings").first()).toBeVisible();
+    await page.getByRole("button", { name: "Emergency approve…" }).first().click();
+    await page.getByLabel("Emergency reason").fill("No second staff member in this test");
+    await page.getByRole("button", { name: "Approve as emergency" }).click();
+    await page.getByRole("button", { name: "Apply now" }).click();
+    await expect(page.getByRole("button", { name: "Apply now" })).toHaveCount(0);
+
+    await page
+      .getByRole("navigation", { name: "Staff" })
+      .getByRole("link", { name: "AI", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("row", { name: /Review a form/ })
+        .getByRole("cell", { name: "4000" }),
+    ).toBeVisible();
+  });
 });

@@ -1,6 +1,5 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import { AI_MODEL } from "./config";
+import type { AiSession } from "./gateway";
 import { LOGIC_GUIDE } from "./prompts";
 import { jsonOutputFormat, parseJsonReply } from "./output-format";
 import { buildGeneratedForm, FormDraft, type FormBuildResult } from "./form-draft";
@@ -20,13 +19,12 @@ Variable names use lowercase letters, numbers and _, starting with a letter. If 
 
 /** A whole form from a description. Returned for the caller to create;
  * nothing is stored here. */
-export async function generateForm(prompt: string): Promise<FormBuildResult> {
-  const client = new Anthropic();
-  const response = await client.beta.messages.create({
-    model: AI_MODEL,
+export async function generateForm(
+  ai: AiSession,
+  prompt: string,
+): Promise<FormBuildResult> {
+  const response = await ai.create({
     max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
     output_config: { effort: "medium", format: jsonOutputFormat(FormDraft) },
     system: SYSTEM,
     messages: [{ role: "user", content: prompt }],

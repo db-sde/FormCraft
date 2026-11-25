@@ -1,10 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { saveCredential } from "@/domains/integrations/credentials";
-import { spendAiCredit } from "@/domains/billing/usage";
+import { beginAi } from "@/domains/ai/gateway";
 import { reconcilePendingPayments } from "@/domains/payments/reconcile";
 import { audit } from "@/domains/audit/log";
+
+vi.mock("server-only", () => ({}));
 
 /**
  * The five foundations (migration 65) against the real database: AI
@@ -134,12 +136,14 @@ async function pendingAttempt(
 describe("AI credits (foundations §3)", () => {
   it("can't be overspent by requests at the same moment", async () => {
     const entitlements = { ai_credits_per_month: 3 } as Parameters<
-      typeof spendAiCredit
-    >[2];
+      typeof beginAi
+    >[1]["entitlements"];
     const results = await Promise.all(
-      Array.from({ length: 8 }, () => spendAiCredit(admin, workspaceId, entitlements)),
+      Array.from({ length: 8 }, () =>
+        beginAi(admin, { feature: "form_edit", workspaceId, entitlements }),
+      ),
     );
-    expect(results.filter(Boolean)).toHaveLength(3);
+    expect(results.filter((r) => r.ok)).toHaveLength(3);
     const { data } = await admin
       .from("usage_counters")
       .select("value")

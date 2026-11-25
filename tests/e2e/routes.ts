@@ -21,6 +21,7 @@ export const ADMIN_PAGE_ROUTES = [
   "/admin/forms",
   "/admin/usage",
   "/admin/operations",
+  "/admin/ai",
 ];
 
 export const PAGE_ROUTES = [

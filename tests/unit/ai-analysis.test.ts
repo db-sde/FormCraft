@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { createServer, type Server } from "node:http";
+import { testAiSession } from "../ai-session";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseFormSchema } from "@/domains/forms/schema";
@@ -117,6 +118,7 @@ describe("analyzeResponse", () => {
     replies = [{ text: reply }, { text: reply }];
 
     const plain = await analyzeResponse({
+      ai: (await testAiSession("response_analysis")).ai,
       schema,
       answers,
       leadCriteria: null,
@@ -139,6 +141,7 @@ describe("analyzeResponse", () => {
     );
 
     const scored = await analyzeResponse({
+      ai: (await testAiSession("response_analysis")).ai,
       schema,
       answers,
       leadCriteria: "Companies with a real problem",
@@ -151,12 +154,19 @@ describe("analyzeResponse", () => {
     const { analyzeResponse } = await import("@/domains/ai/response-analysis");
     replies = [{ stop_reason: "refusal" }];
     expect(
-      await analyzeResponse({ schema, answers, leadCriteria: null, knownTags: [] }),
+      await analyzeResponse({
+        ai: (await testAiSession("response_analysis")).ai,
+        schema,
+        answers,
+        leadCriteria: null,
+        knownTags: [],
+      }),
     ).toBeNull();
     // Nothing written: no request at all.
     requests = [];
     expect(
       await analyzeResponse({
+        ai: (await testAiSession("response_analysis")).ai,
         schema,
         answers: { mail: "x@y.co" },
         leadCriteria: null,
@@ -185,6 +195,7 @@ describe("summarizeResponses", () => {
       },
     ];
     const result = await summarizeResponses({
+      ai: (await testAiSession("response_summary")).ai,
       schema,
       transcripts: [
         "Q: What went wrong?\nA: The export button did   nothing and support never replied.",
@@ -231,7 +242,11 @@ describe("reviewForm", () => {
         }),
       },
     ];
-    const suggestions = await reviewForm({ schema, describedForm: "Form: Feedback" });
+    const suggestions = await reviewForm({
+      ai: (await testAiSession("form_review")).ai,
+      schema,
+      describedForm: "Form: Feedback",
+    });
     expect(suggestions).toEqual([
       {
         questionId: "why",
@@ -260,13 +275,35 @@ describe("followUpQuestion", () => {
       { text: JSON.stringify({ ask: false, question: "" }) },
       { text: JSON.stringify({ ask: true, question: "x".repeat(400) }) },
     ];
-    expect(await followUpQuestion({ ...input, answer: "The export broke." })).toBe(
-      "Which export were you using?",
-    );
-    expect(await followUpQuestion({ ...input, answer: "It was fine." })).toBeNull();
-    expect(await followUpQuestion({ ...input, answer: "Something." })).toBeNull();
+    expect(
+      await followUpQuestion({
+        ai: (await testAiSession("follow_up")).ai,
+        ...input,
+        answer: "The export broke.",
+      }),
+    ).toBe("Which export were you using?");
+    expect(
+      await followUpQuestion({
+        ai: (await testAiSession("follow_up")).ai,
+        ...input,
+        answer: "It was fine.",
+      }),
+    ).toBeNull();
+    expect(
+      await followUpQuestion({
+        ai: (await testAiSession("follow_up")).ai,
+        ...input,
+        answer: "Something.",
+      }),
+    ).toBeNull();
     expect(requests).toHaveLength(3);
-    expect(await followUpQuestion({ ...input, answer: " " })).toBeNull();
+    expect(
+      await followUpQuestion({
+        ai: (await testAiSession("follow_up")).ai,
+        ...input,
+        answer: " ",
+      }),
+    ).toBeNull();
     expect(requests).toHaveLength(3);
   });
 });

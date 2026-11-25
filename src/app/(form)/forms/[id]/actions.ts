@@ -30,14 +30,10 @@ import { proposeRule } from "@/domains/ai/propose-rule";
 import { proposeFormEdit } from "@/domains/ai/edit-form";
 import { describeFormForAi } from "@/domains/ai/rule-draft";
 import { reviewForm, type CopilotSuggestion } from "@/domains/ai/response-analysis";
-import {
-  aiFailure,
-  AI_NOT_CONFIGURED,
-  AI_OUT_OF_CREDITS,
-  type AiFailure,
-} from "@/domains/ai/errors";
+import { aiFailure, AI_NOT_CONFIGURED, type AiFailure } from "@/domains/ai/errors";
 import Anthropic from "@anthropic-ai/sdk";
-import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
+import { getWorkspacePlan } from "@/domains/billing";
+import { beginAi } from "@/domains/ai/gateway";
 import { canEdit } from "@/domains/workspaces";
 import { audit } from "@/domains/audit";
 import { isWoff2, MAX_FONT_BYTES } from "@/domains/themes/fonts";
@@ -297,23 +293,21 @@ export async function proposeRuleAction(
   }
   const admin = createAdminClient();
   const { entitlements } = await getWorkspacePlan(admin, workspace.id);
-  if (!(await spendAiCredit(admin, workspace.id, entitlements))) {
-    return {
-      ok: false,
-      code: "limited",
-      message: "You've used this month's AI credits on your plan.",
-    };
-  }
-
   let parsed: FormSchemaV1;
   try {
     parsed = parseFormSchema(schema);
   } catch {
     return { ok: false, code: "failed", message: "Save your form's changes first." };
   }
+  const begun = await beginAi(admin, {
+    feature: "logic_rule",
+    workspaceId: workspace.id,
+    entitlements,
+  });
+  if (!begun.ok) return begun;
 
   try {
-    const result = await proposeRule(text, parsed);
+    const result = await proposeRule(begun.ai, text, parsed);
     return result.ok
       ? { ok: true, proposal: result.proposal }
       : { ok: false, code: "failed", message: result.message };
@@ -382,10 +376,16 @@ export async function reviewFormAction(
     };
   }
   const { entitlements } = await getWorkspacePlan(admin, workspace.id);
-  if (!(await spendAiCredit(admin, workspace.id, entitlements))) return AI_OUT_OF_CREDITS;
+  const begun = await beginAi(admin, {
+    feature: "form_review",
+    workspaceId: workspace.id,
+    entitlements,
+  });
+  if (!begun.ok) return begun;
 
   try {
     const suggestions = await reviewForm({
+      ai: begun.ai,
       schema: parsed,
       describedForm: describeFormForAi(parsed),
     });
@@ -536,21 +536,20 @@ export async function proposeFormEditAction(
     };
   }
   const { entitlements } = await getWorkspacePlan(admin, workspace.id);
-  if (!(await spendAiCredit(admin, workspace.id, entitlements))) {
-    return {
-      ok: false,
-      code: "limited",
-      message: "You've used this month's AI credits on your plan.",
-    };
-  }
   let parsed: FormSchemaV1;
   try {
     parsed = parseFormSchema(schema);
   } catch {
     return { ok: false, code: "failed", message: "Save your form's changes first." };
   }
+  const begun = await beginAi(admin, {
+    feature: "form_edit",
+    workspaceId: workspace.id,
+    entitlements,
+  });
+  if (!begun.ok) return begun;
   try {
-    const result = await proposeFormEdit(text, parsed);
+    const result = await proposeFormEdit(begun.ai, text, parsed);
     return result.ok
       ? {
           ok: true,

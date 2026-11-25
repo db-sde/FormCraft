@@ -2771,4 +2771,53 @@ Built (migration 72, `/admin/usage`, `/admin/forms`, `/admin/operations`,
   platform logs once a day, so rewriting the trail would also need
   rewriting logs we don't control.
 
+## 2026-11-25 — Super Admin Phase 3: the AI gateway
+
+Built (migration 73, `src/domains/ai/gateway.ts`, `/admin/ai`).
+
+- **One gateway** (ADM-064): every model call goes through
+  `beginAi()` → `session.create()`. A unit test fails the build if any
+  other file constructs a client, sends a message or spends AI credits.
+  `spendAiCredit` is gone.
+- **The database decides each call** (`ai_begin`, one statement):
+  - AI on, the feature on, today's spend under the ceiling;
+  - then a credit taken atomically (so parallel calls can't beat the
+    plan);
+  - it answers with the model to use.
+    Callers no longer name a model. Unknown models are refused twice: by
+    a check constraint in the database and an allowlist in code (Opus 5.5,
+    Sonnet 5.5, Haiku 5.5; a test keeps the two lists equal).
+- **One credit per action, one usage row per model call**: a model's
+  one retry to fix its own draft costs no extra credit but is recorded.
+- **Cost** (ADM-065/068):
+  - It comes from the API's usage block. Each attempt (a refused one
+    and the fallback that served it) is priced at its own model's rate,
+    from a dated `ai_prices` table.
+  - A model with no price is charged at the requested model's rate (or
+    the dearest known) and raises a warning. Costs are never silently
+    zero.
+  - No prompts or replies are stored.
+- **Server-side fallback** is sent only for models that have one
+  (Opus 5.5, Sonnet 5.5). Haiku is called without it.
+- **Daily ceiling** (default $50, UTC day):
+  - When reached, every AI call is refused and a critical alert is
+    emailed. It clears itself when the day turns or the ceiling is
+    raised.
+  - The check reads finished calls, so calls already running when it is
+    reached can overshoot it slightly.
+- **Changes need two people** (ADM-069): model, token cap, on/off and
+  the ceiling change only through an approved `ai.settings` request.
+  The database re-checks the values when the change is carried out, and
+  the audit entry keeps the settings before and after.
+- **Pausing needs one**: an owner or admin can turn AI off for everyone
+  at once (incidents, runaway spend). Owners are told by alert. Turning
+  it back on needs an approved request, because pausing can only make
+  things safer.
+- **Customers see** "AI is paused on FormCraft right now" when it's off,
+  the feature is off or the ceiling is reached. Out of credits keeps its
+  own message.
+- **Defaults are unchanged**: every feature still uses Opus 5.5 at the
+  same effort, so nothing changes for customers until staff change a
+  setting.
+
 <!-- Add new decisions above this line, newest first. -->

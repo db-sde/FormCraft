@@ -106,3 +106,23 @@ for the restore test that still needs doing.
   accepts the allowlisted address. Update it with
   `npx supabase network-restrictions update --project-ref <ref>
 --db-allow-cidr <your ip>/32 --experimental`.
+
+## AI spend and the AI switch
+
+- **Runaway spend or a bad model reply**: an owner or admin opens
+  `/admin/ai` and uses **Pause AI** (fresh authenticator code, a
+  reason). Every AI call stops at once and owners get an alert.
+  Customers see "AI is paused on FormCraft right now". To turn it back
+  on, ask for a change ("Whole platform", On) and have someone else
+  approve it.
+- **Daily ceiling reached** (critical alert `ai_ceiling_reached`): AI is
+  off for everyone until midnight UTC. If the spend is expected, raise
+  the ceiling with an approved request. Otherwise look at **Top
+  workspaces by cost** first; a workspace that is abusing AI can be
+  restricted from its Customers page.
+- **`ai_price_missing` alert**: a fallback served a model with no price,
+  and its calls are being charged at another model's rate. Add the row
+  to `private.ai_prices` in a migration.
+- **Changing a model or token cap**: request it on `/admin/ai`, then
+  someone else approves it on Approvals. The audit entry keeps the
+  settings before and after.

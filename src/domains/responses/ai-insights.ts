@@ -3,7 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { parseFormSchema } from "@/domains/forms/schema";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
-import { spendAiCredit, type Entitlements } from "@/domains/billing";
+import type { Entitlements } from "@/domains/billing";
+import { AI_OUT_OF_CREDITS } from "@/domains/ai/errors";
+import { beginAi } from "@/domains/ai/gateway";
 import {
   analyzeResponse,
   describeResponseForAi,
@@ -108,7 +110,7 @@ export async function unanalyzedResponseIds(
 }
 
 /** Analyses the given responses (re-analysing replaces). Stops when the
- * plan's AI credits run out. */
+ * plan's AI credits run out or AI is paused. */
 export async function analyzeResponses(
   admin: Client,
   input: {
@@ -117,7 +119,7 @@ export async function analyzeResponses(
     responseIds: string[];
     entitlements: Entitlements;
   },
-): Promise<{ analyzed: number; outOfCredits: boolean; failed: number }> {
+): Promise<{ analyzed: number; outOfCredits: boolean; paused: boolean; failed: number }> {
   const { data: form } = await admin
     .from("forms")
     .select("ai_lead_criteria")
@@ -152,10 +154,17 @@ export async function analyzeResponses(
       failed += 1;
       continue;
     }
-    if (!(await spendAiCredit(admin, input.workspaceId, input.entitlements))) {
-      return { analyzed, outOfCredits: true, failed };
+    const begun = await beginAi(admin, {
+      feature: "response_analysis",
+      workspaceId: input.workspaceId,
+      entitlements: input.entitlements,
+    });
+    if (!begun.ok) {
+      const outOfCredits = begun === AI_OUT_OF_CREDITS;
+      return { analyzed, outOfCredits, paused: !outOfCredits, failed };
     }
     const result = await analyzeResponse({
+      ai: begun.ai,
       schema,
       answers: response.answers,
       followUps: response.followUps,
@@ -179,7 +188,7 @@ export async function analyzeResponses(
     for (const t of result.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
     analyzed += 1;
   }
-  return { analyzed, outOfCredits: false, failed };
+  return { analyzed, outOfCredits: false, paused: false, failed };
 }
 
 export async function insightsFor(
@@ -280,7 +289,7 @@ export async function generateFormSummary(
     userId: string;
     entitlements: Entitlements;
   },
-): Promise<"ok" | "no_responses" | "out_of_credits" | "failed"> {
+): Promise<"ok" | "no_responses" | "out_of_credits" | "paused" | "failed"> {
   const { data: rows, error } = await admin
     .from("responses")
     .select("id")
@@ -306,9 +315,13 @@ export async function generateFormSummary(
     .filter(Boolean);
   if (transcripts.length === 0) return "no_responses";
   const latest = schemas.get(responses[0].formVersionId)!;
-  if (!(await spendAiCredit(admin, input.workspaceId, input.entitlements)))
-    return "out_of_credits";
-  const result = await summarizeResponses({ schema: latest, transcripts });
+  const begun = await beginAi(admin, {
+    feature: "response_summary",
+    workspaceId: input.workspaceId,
+    entitlements: input.entitlements,
+  });
+  if (!begun.ok) return begun === AI_OUT_OF_CREDITS ? "out_of_credits" : "paused";
+  const result = await summarizeResponses({ ai: begun.ai, schema: latest, transcripts });
   if (!result) return "failed";
   const { error: saveError } = await admin.from("form_ai_summaries").upsert({
     form_id: input.formId,

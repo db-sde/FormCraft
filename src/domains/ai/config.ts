@@ -1,6 +1,5 @@
 import "server-only";
 
-export const AI_MODEL = "claude-opus-5-5";
 export const MAX_INSTRUCTION_LENGTH = 600;
 export const MAX_FORM_PROMPT_LENGTH = 2000;
 

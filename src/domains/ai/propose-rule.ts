@@ -1,5 +1,5 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
   describeFormForAi,
@@ -8,7 +8,7 @@ import {
   type DraftResult,
 } from "./rule-draft";
 
-import { AI_MODEL } from "./config";
+import type { AiSession } from "./gateway";
 import { LOGIC_GUIDE } from "./prompts";
 import { jsonOutputFormat, parseJsonReply } from "./output-format";
 
@@ -25,10 +25,10 @@ If the rule needs a variable the form doesn't have, add it to newVariables (lowe
  * out, then the problem is reported as is.
  */
 export async function proposeRule(
+  ai: AiSession,
   instruction: string,
   schema: FormSchemaV1,
 ): Promise<DraftResult> {
-  const client = new Anthropic();
   const format = jsonOutputFormat(RuleDraft);
   const messages: Anthropic.Beta.BetaMessageParam[] = [
     {
@@ -39,11 +39,8 @@ export async function proposeRule(
 
   let result: DraftResult = { ok: false, message: "No rule came back. Try rephrasing." };
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await client.beta.messages.create({
-      model: AI_MODEL,
+    const response = await ai.create({
       max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
       output_config: { effort: "medium", format },
       system: SYSTEM,
       messages,

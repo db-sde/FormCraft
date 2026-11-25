@@ -178,7 +178,7 @@ describe("response analysis", () => {
       responseIds,
       entitlements,
     });
-    expect(result).toEqual({ analyzed: 2, outOfCredits: true, failed: 0 });
+    expect(result).toEqual({ analyzed: 2, outOfCredits: true, paused: false, failed: 0 });
     expect(requests).toBe(2);
     expect(await creditsUsed()).toBe(2);
     expect(await unanalyzedResponseIds(admin, formId)).toHaveLength(1);

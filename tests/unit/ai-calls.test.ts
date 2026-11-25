@@ -3,6 +3,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseFormSchema } from "@/domains/forms/schema";
+import { testAiSession } from "../ai-session";
 
 vi.mock("server-only", () => ({}));
 
@@ -107,7 +108,11 @@ describe("proposeRule", () => {
   it("asks with the form described and a constrained schema, and translates the reply", async () => {
     const { proposeRule } = await import("@/domains/ai/propose-rule");
     replies = [{ text: ruleDraft("Student") }];
-    const result = await proposeRule("Students skip to the notes", schema);
+    const result = await proposeRule(
+      (await testAiSession("logic_rule")).ai,
+      "Students skip to the notes",
+      schema,
+    );
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -132,7 +137,11 @@ describe("proposeRule", () => {
   it("gives the model one chance to fix a draft that doesn't fit", async () => {
     const { proposeRule } = await import("@/domains/ai/propose-rule");
     replies = [{ text: ruleDraft("Teacher") }, { text: ruleDraft("Student") }];
-    const result = await proposeRule("Students skip", schema);
+    const result = await proposeRule(
+      (await testAiSession("logic_rule")).ai,
+      "Students skip",
+      schema,
+    );
 
     expect(result.ok).toBe(true);
     expect(requests).toHaveLength(2);
@@ -144,16 +153,22 @@ describe("proposeRule", () => {
   it("reports the problem when the fix fails too, and handles refusals and garbage", async () => {
     const { proposeRule } = await import("@/domains/ai/propose-rule");
     replies = [{ text: ruleDraft("Teacher") }, { text: ruleDraft("Teacher") }];
-    expect(await proposeRule("x", schema)).toEqual({
+    expect(
+      await proposeRule((await testAiSession("logic_rule")).ai, "x", schema),
+    ).toEqual({
       ok: false,
       message: "“Teacher” isn't an option of “Role”.",
     });
 
     replies = [{ stop_reason: "refusal" }];
-    expect(await proposeRule("x", schema)).toMatchObject({ ok: false });
+    expect(
+      await proposeRule((await testAiSession("logic_rule")).ai, "x", schema),
+    ).toMatchObject({ ok: false });
 
     replies = [{ text: "not json" }];
-    expect(await proposeRule("x", schema)).toMatchObject({ ok: false });
+    expect(
+      await proposeRule((await testAiSession("logic_rule")).ai, "x", schema),
+    ).toMatchObject({ ok: false });
   });
 });
 
@@ -183,7 +198,10 @@ describe("generateForm", () => {
         }),
       },
     ];
-    const result = await generateForm("A one-question feedback form");
+    const result = await generateForm(
+      (await testAiSession("form_generate")).ai,
+      "A one-question feedback form",
+    );
     expect(result.ok && result.schema.questions.map((q) => q.type)).toEqual([
       "welcome_screen",
       "rating",
@@ -197,7 +215,9 @@ describe("generateForm", () => {
   it("says when the form came out too big", async () => {
     const { generateForm } = await import("@/domains/ai/generate-form");
     replies = [{ text: '{"possible": tr', stop_reason: "max_tokens" }];
-    expect(await generateForm("huge")).toMatchObject({
+    expect(
+      await generateForm((await testAiSession("form_generate")).ai, "huge"),
+    ).toMatchObject({
       ok: false,
       message: expect.stringContaining("too big"),
     });

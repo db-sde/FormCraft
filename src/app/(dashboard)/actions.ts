@@ -40,7 +40,8 @@ import { aiConfigured, MAX_FORM_PROMPT_LENGTH } from "@/domains/ai/config";
 import { generateForm } from "@/domains/ai/generate-form";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getWorkspacePlan, spendAiCredit } from "@/domains/billing";
+import { getWorkspacePlan } from "@/domains/billing";
+import { beginAi } from "@/domains/ai/gateway";
 import { countLeadsForForm } from "@/domains/leads";
 import { ImportError, importFromUrl } from "@/domains/forms/import";
 import type { Json } from "@/lib/supabase/database.types";
@@ -155,13 +156,16 @@ export async function generateFormAction(
   }
   const admin = createAdminClient();
   const { entitlements } = await getWorkspacePlan(admin, workspace.id);
-  if (!(await spendAiCredit(admin, workspace.id, entitlements))) {
-    return { message: "You've used this month's AI credits on your plan." };
-  }
+  const begun = await beginAi(admin, {
+    feature: "form_generate",
+    workspaceId: workspace.id,
+    entitlements,
+  });
+  if (!begun.ok) return { message: begun.message };
 
   let result;
   try {
-    result = await generateForm(prompt);
+    result = await generateForm(begun.ai, prompt);
   } catch (error) {
     if (error instanceof Anthropic.RateLimitError) {
       return { message: "The AI is busy. Try again in a minute." };
