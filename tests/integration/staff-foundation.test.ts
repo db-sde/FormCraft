@@ -116,7 +116,7 @@ describeLocal("Super Admin Phase 0: staff, gate, approvals, audit", () => {
   beforeAll(async () => {
     // Staff are global: start from none (local database only).
     sql(
-      "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
+      "delete from private.restore_tests; delete from private.ops_drills; delete from private.access_reviews; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
     );
     owner = await person("owner", false);
     adminStaff = await person("admin", true);
@@ -136,7 +136,7 @@ describeLocal("Super Admin Phase 0: staff, gate, approvals, audit", () => {
   afterAll(async () => {
     if (!local || !psqlAvailable) return;
     sql(
-      "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
+      "delete from private.restore_tests; delete from private.ops_drills; delete from private.access_reviews; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
     );
     await admin.from("workspaces").delete().eq("slug", `staff-cust-${runId}`);
     for (const p of people) await admin.auth.admin.deleteUser(p.id);

@@ -10,6 +10,8 @@ import {
   staffTeam,
   type Person,
 } from "./staff-helpers";
+import { sendQueuedNotices } from "@/domains/ops/background";
+import type { OutgoingEmail } from "@/domains/notifications/mailer";
 
 /**
  * Super Admin Phase 4 (migration 74) against the real database: a privacy
@@ -515,6 +517,39 @@ describeLocal("Super Admin Phase 4: privacy requests, retention, notices", () =>
       code: "invalid",
       why: "daily_limit",
     });
+  });
+
+  it("email outage drill: a notice is retried once the provider is back, never sent twice", async () => {
+    // Straight into the queue (today's five-a-day limit is used up above).
+    const id =
+      sql(`insert into private.messages (kind, subject, body, audience, recipients, status, created_by, started_at)
+         values ('incident', 'Drill notice', 'Email provider outage drill.', '{"type":"all"}', 1, 'sending', '${owner.id}', now())
+         returning id;`).split("\n")[0];
+    sql(
+      `insert into private.message_sends (message_id, email) values ('${id}', '${customerA.email}');`,
+    );
+
+    const keys: string[] = [];
+    const down = async (email: OutgoingEmail) => {
+      keys.push(email.idempotencyKey!);
+      return { ok: false } as const;
+    };
+    expect(await sendQueuedNotices(admin, down)).toEqual({ sent: 0, failed: 1 });
+    expect(
+      sql(
+        `select status || ':' || attempts from private.message_sends where message_id = '${id}'`,
+      ),
+    ).toBe("queued:1");
+
+    const up = async (email: OutgoingEmail) => {
+      keys.push(email.idempotencyKey!);
+      return { ok: true, id: "re_drill" } as const;
+    };
+    expect(await sendQueuedNotices(admin, up)).toEqual({ sent: 1, failed: 0 });
+    expect(await sendQueuedNotices(admin, up)).toEqual({ sent: 0, failed: 0 });
+    expect(sql(`select status from private.messages where id = '${id}'`)).toBe("sent");
+    // The same key both times: the provider would drop a duplicate.
+    expect(new Set(keys).size).toBe(1);
   });
 
   it("keeps the ops job's functions to the secret key", async () => {

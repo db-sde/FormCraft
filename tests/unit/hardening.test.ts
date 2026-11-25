@@ -74,6 +74,20 @@ describe("keys and encryption", () => {
     process.env.ENCRYPTION_KEYS = "bad:short";
     expect(() => encryptJson("v")).toThrow(/32 bytes/);
   });
+
+  it("moving from APP_SECRET to ENCRYPTION_KEYS keeps old values readable until rewritten", () => {
+    const before = encryptJson({ token: "t" }, "ctx");
+    expect(before.kid).toBe("app");
+    process.env.ENCRYPTION_KEYS = `k1:${key32()}`;
+    // Still readable, flagged for the re-encrypt job, and new values use k1.
+    expect(decryptJson(before, "ctx")).toEqual({ token: "t" });
+    expect(needsReencryption(before)).toBe(true);
+    expect(encryptJson("v", "ctx").kid).toBe("k1");
+    // After the rewrite APP_SECRET may change: k1 values don't depend on it.
+    const after = encryptJson({ token: "t" }, "ctx");
+    process.env.APP_SECRET = "a-new-app-secret";
+    expect(decryptJson(after, "ctx")).toEqual({ token: "t" });
+  });
 });
 
 describe("network edges", () => {

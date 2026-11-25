@@ -3198,6 +3198,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      admin_access_review: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_ai_overview: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_ai_pause: { Args: { p_reason: string }; Returns: Json };
       admin_apply_ai_change: { Args: { p_request_id: string }; Returns: Json };
@@ -3225,6 +3226,7 @@ export type Database = {
         Returns: Json;
       };
       admin_list_change_requests: { Args: { p_status?: string }; Returns: Json };
+      admin_list_drills: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_message_cancel: { Args: { p_id: string }; Returns: Json };
@@ -3248,6 +3250,21 @@ export type Database = {
       admin_privacy_overview: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_privacy_verify: { Args: { p_id: string; p_note: string }; Returns: Json };
       admin_read_audit: { Args: { p_before?: number; p_limit?: number }; Returns: Json };
+      admin_record_access_review: {
+        Args: { p_notes: string; p_reviewed: string[] };
+        Returns: Json;
+      };
+      admin_record_drill: {
+        Args: {
+          p_evidence_url: string;
+          p_follow_ups: string;
+          p_kind: string;
+          p_outcome: string;
+          p_scenario: string;
+          p_succeeded: boolean;
+        };
+        Returns: Json;
+      };
       admin_record_restore_test: {
         Args: {
           p_backup_time: string;
@@ -3656,6 +3673,7 @@ export type Database = {
         Returns: undefined;
       };
       ops_phase4_checks: { Args: Record<PropertyKey, never>; Returns: undefined };
+      ops_phase5_checks: { Args: Record<PropertyKey, never>; Returns: undefined };
       ops_record_retention_run: {
         Args: {
           p_counts: Json;

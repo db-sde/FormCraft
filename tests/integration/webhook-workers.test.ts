@@ -50,6 +50,8 @@ type Received = { path: string; eventId: string | null; body: string };
 const received: Received[] = [];
 let server: Server;
 let base: string;
+/** For the outage drill: /flaky answers 503 while this is true. */
+let flakyDown = false;
 
 function receiver(): Promise<void> {
   return new Promise((resolve) => {
@@ -70,6 +72,7 @@ function receiver(): Promise<void> {
         };
         if (req.url === "/slow") setTimeout(() => respond(200), 150);
         else if (req.url === "/500") respond(500);
+        else if (req.url === "/flaky") respond(flakyDown ? 503 : 200);
         else if (req.url === "/429") respond(429);
         else respond(200);
       });
@@ -404,5 +407,43 @@ describe("dispatching", () => {
     await dispatchDueDeliveries(admin);
     expect((await deliveriesFor(dead))[0].status).toBe("failed");
     expect((await deliveriesFor(alive))[0].status).toBe("succeeded");
+  });
+
+  it("outage drill: a destination that's down, then back, gets every event exactly once", async () => {
+    await retireEarlierWork();
+    const endpointId = await newEndpoint("/flaky");
+    flakyDown = true;
+    for (let i = 0; i < 3; i += 1) {
+      await enqueueWebhookDeliveries(
+        admin,
+        await completedResponse({ q_name: `Drill ${i}` }),
+      );
+    }
+    received.length = 0;
+    await dispatchDueDeliveries(admin);
+    const during = await deliveriesFor(endpointId);
+    expect(during.map((d) => d.status)).toEqual(["failed", "failed", "failed"]);
+    // Backed off: nothing is retried before it's due.
+    for (const d of during) {
+      expect(new Date(d.next_attempt_at).getTime()).toBeGreaterThan(Date.now());
+    }
+
+    // The destination recovers; time passes (rewound, not slept).
+    flakyDown = false;
+    await admin
+      .from("webhook_deliveries")
+      .update({ next_attempt_at: new Date(Date.now() - 1000).toISOString() })
+      .eq("endpoint_id", endpointId);
+    await dispatchDueDeliveries(admin);
+    await dispatchDueDeliveries(admin);
+
+    const after = await deliveriesFor(endpointId);
+    expect(after.map((d) => d.status)).toEqual(["succeeded", "succeeded", "succeeded"]);
+    const delivered = received.filter((r) => r.path === "/flaky");
+    // Each event: one failed attempt and one success, never two successes.
+    const ids = after.map((d) => d.event_id);
+    for (const id of ids) {
+      expect(delivered.filter((r) => r.eventId === id)).toHaveLength(2);
+    }
   });
 });

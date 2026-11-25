@@ -76,7 +76,7 @@ export async function staffTeam(
   others: { person: Person; role: string }[],
 ): Promise<void> {
   sql(
-    "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
+    "delete from private.restore_tests; delete from private.ops_drills; delete from private.access_reviews; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
   );
   await admin.rpc("admin_bootstrap_owner", {
     p_user_id: owner.id,
@@ -100,6 +100,6 @@ export async function staffTeam(
 
 export function clearStaff() {
   sql(
-    "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
+    "delete from private.restore_tests; delete from private.ops_drills; delete from private.access_reviews; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
   );
 }

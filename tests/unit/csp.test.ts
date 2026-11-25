@@ -66,6 +66,24 @@ describe("Content-Security-Policy", () => {
   });
 });
 
+describe("the staff portal's policy", () => {
+  it("loads and frames nothing but its own server", () => {
+    const d = parse(
+      buildCsp({
+        nonce: "n",
+        supabaseUrl: "https://abc.supabase.co",
+        publicForm: false,
+        admin: true,
+      }),
+    );
+    expect(d["connect-src"]).toEqual(["'self'"]);
+    expect(d["img-src"]).toEqual(["'self'", "data:", "blob:"]);
+    expect(d["frame-src"]).toEqual(["'none'"]);
+    expect(d["frame-ancestors"]).toEqual(["'none'"]);
+    expect(d["script-src"]).toContain("'strict-dynamic'");
+  });
+});
+
 describe("upgrade-insecure-requests", () => {
   it("is only sent over HTTPS (it would break every asset on plain http)", () => {
     const opts = { nonce: "n", supabaseUrl: "https://p.supabase.co", publicForm: false };

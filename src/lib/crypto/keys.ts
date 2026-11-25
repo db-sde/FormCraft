@@ -61,17 +61,24 @@ function parseKeys(raw: string): EncryptionKey[] {
     });
 }
 
-/** Every key that can decrypt, current first. */
+function appDerivedKey(): EncryptionKey {
+  return {
+    id: "app",
+    key: Buffer.from(hkdfSync("sha256", appSecret(), "formcraft-encryption", "data", 32)),
+  };
+}
+
+/** Every key that can decrypt, current first. Once ENCRYPTION_KEYS is set,
+ * the key derived from APP_SECRET still decrypts (last, never used to
+ * encrypt), so moving to separate keys doesn't strand what was stored
+ * before: `npm run secrets:reencrypt` moves it, and only then may
+ * APP_SECRET change. */
 export function encryptionKeys(): EncryptionKey[] {
   const configured = process.env.ENCRYPTION_KEYS?.trim();
   const keys = configured ? parseKeys(configured) : [];
-  if (!keys.length) {
-    keys.push({
-      id: "app",
-      key: Buffer.from(
-        hkdfSync("sha256", appSecret(), "formcraft-encryption", "data", 32),
-      ),
-    });
+  if (!keys.length) return [appDerivedKey()];
+  if (process.env.APP_SECRET && !keys.some((k) => k.id === "app")) {
+    keys.push(appDerivedKey());
   }
   return keys;
 }

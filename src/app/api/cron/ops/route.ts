@@ -24,6 +24,8 @@ async function run(request: NextRequest) {
   await admin.rpc("ops_run_checks");
   // Phase 4: privacy deadlines, retention runs, stuck queues.
   await admin.rpc("ops_phase4_checks");
+  // Phase 5: high-risk changes carried out, the access review, restore drills.
+  await admin.rpc("ops_phase5_checks");
 
   // Background work; a failure here is logged and doesn't stop the alerts.
   const send = defaultSender();

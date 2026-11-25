@@ -59,6 +59,9 @@ export type CspOptions = {
   /** Sites allowed to frame a published form (its embed_origins); null
    * or absent: any site. */
   frameAncestors?: string[] | null;
+  /** The staff portal: it talks only to its own server (no browser
+   * Supabase client, no files, no embeds), so it loads nothing else. */
+  admin?: boolean;
   /** Development needs eval for React's tooling and plain-http reloads. */
   dev?: boolean;
   /** Served over HTTPS: any stray http:// subresource is upgraded.
@@ -79,10 +82,11 @@ export function buildCsp({
   supabaseUrl,
   publicForm,
   frameAncestors,
+  admin = false,
   dev = false,
   https = true,
 }: CspOptions) {
-  const supabase = origin(supabaseUrl);
+  const supabase = admin ? null : origin(supabaseUrl);
   const supabaseHosts = supabase
     ? [supabase, supabase.replace(/^http/, "ws")] // realtime/auth sockets
     : [];
@@ -134,6 +138,8 @@ export function buildCsp({
         : ["*"]
       : ["'none'"],
   };
+
+  if (admin) directives["frame-src"] = ["'none'"];
 
   const policy = Object.entries(directives).map(
     ([name, values]) => `${name} ${values.join(" ")}`,

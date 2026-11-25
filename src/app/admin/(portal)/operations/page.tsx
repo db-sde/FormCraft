@@ -4,6 +4,8 @@ import { adminCall, requireStaff } from "@/lib/admin/staff";
 import { getBackupStatus } from "@/domains/observability/backups";
 import { LocalTime } from "@/components/local-time";
 import { RestoreTestForm } from "./restore-test-form";
+import { DrillForm } from "./drill-form";
+import { DRILL_LABEL } from "./labels";
 
 export const metadata: Metadata = { title: "Operations" };
 
@@ -49,15 +51,27 @@ type Health = {
   }[];
 };
 
+type Drill = {
+  id: number;
+  kind: string;
+  ran_at: string;
+  scenario: string;
+  outcome: string;
+  succeeded: boolean;
+  follow_ups: string | null;
+  recorded_by: string | null;
+};
+
 const box = "border-border rounded-lg border-[1.5px] p-4";
 
 /** Webhook operations, system health and backups (ADM-059/071/077). The
  * hosting, database and email consoles stay the place for the rest. */
 export default async function OperationsPage() {
   const { staff } = await requireStaff("ops.read");
-  const [health, backups] = await Promise.all([
+  const [health, backups, drills] = await Promise.all([
     adminCall<Health>("admin_ops_health"),
     getBackupStatus(),
+    adminCall<{ drills: Drill[] }>("admin_list_drills"),
   ]);
   if (!health.ok) return <p>Couldn&apos;t load operations.</p>;
   const s = health.scheduler;
@@ -227,6 +241,28 @@ export default async function OperationsPage() {
       </section>
 
       {staff.permissions.includes("ops.record") && <RestoreTestForm />}
+
+      <section className="flex flex-col gap-2">
+        <h2 className="font-semibold">Other drills</h2>
+        {!drills.ok || drills.drills.length === 0 ? (
+          <p className="text-muted-foreground text-sm">None recorded yet.</p>
+        ) : (
+          <ul className="text-sm">
+            {drills.drills.map((d) => (
+              <li key={d.id} className="border-border border-b py-2">
+                <b>{DRILL_LABEL[d.kind] ?? d.kind}</b> ·{" "}
+                <LocalTime iso={d.ran_at} variant="day" /> ·{" "}
+                {d.succeeded ? "went as planned" : "needs work"} · {d.recorded_by ?? "—"}
+                <div className="text-muted-foreground">
+                  {d.scenario} → {d.outcome}
+                  {d.follow_ups ? ` Follow-ups: ${d.follow_ups}` : ""}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      {staff.permissions.includes("ops.record") && <DrillForm />}
     </main>
   );
 }

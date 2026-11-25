@@ -23,6 +23,7 @@ function pageCsp(
   request: NextRequest,
   publicForm: boolean,
   frameAncestors: string[] | null = null,
+  admin = false,
 ) {
   const nonce = newNonce();
   const policy = buildCsp({
@@ -30,6 +31,7 @@ function pageCsp(
     supabaseUrl: supabaseEnv.url,
     publicForm,
     frameAncestors,
+    admin,
     dev: process.env.NODE_ENV === "development",
     https: request.nextUrl.protocol === "https:",
   });
@@ -304,7 +306,7 @@ async function adminRoute(request: NextRequest, path: string) {
     if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     return NextResponse.redirect(new URL("/admin", request.url));
   }
-  const { nonce, policy } = pageCsp(request, false);
+  const { nonce, policy } = pageCsp(request, false, null, true);
   const response = await updateSession(request, {
     "x-nonce": nonce,
     "Content-Security-Policy": policy,

@@ -631,3 +631,65 @@ export async function cancelNoticeAction(input: unknown): Promise<ActionResult> 
   revalidatePath("/admin/messages");
   return explain(result, "Couldn't cancel it.");
 }
+
+// --- hardening (Phase 5) -----------------------------------------------------
+
+/** Records the monthly access review: every active staff member looked at. */
+export async function recordAccessReviewAction(input: unknown): Promise<ActionResult> {
+  const parsed = z
+    .object({
+      reviewed: z.array(z.string().uuid()).max(200),
+      notes: z.string().trim().max(2000),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid review." };
+  const result = await adminCall("admin_record_access_review", {
+    p_reviewed: parsed.data.reviewed,
+    p_notes: parsed.data.notes,
+  });
+  revalidatePath("/admin/staff", "layout");
+  if (!result.ok && result.why === "review_incomplete")
+    return {
+      ok: false,
+      error: "Tick every active staff member to confirm you reviewed them.",
+    };
+  return explain(result, "Couldn't record the review.");
+}
+
+const Drill = z.object({
+  kind: z.enum([
+    "webhook_outage",
+    "email_outage",
+    "scheduler_outage",
+    "ai_outage",
+    "staff_lockout",
+    "secret_rotation",
+    "incident_exercise",
+  ]),
+  scenario: z.string().trim().min(5).max(1000),
+  outcome: z.string().trim().min(5).max(2000),
+  succeeded: z.boolean(),
+  followUps: z.string().trim().max(2000),
+  evidenceUrl: z.string().trim().url().startsWith("https://").max(500).nullable(),
+});
+
+/** Records an outage, lockout or incident drill. */
+export async function recordDrillAction(input: unknown): Promise<ActionResult> {
+  const parsed = Drill.safeParse(input);
+  if (!parsed.success)
+    return {
+      ok: false,
+      error: "Say what was tried and what happened (links must be https).",
+    };
+  const v = parsed.data;
+  const result = await adminCall("admin_record_drill", {
+    p_kind: v.kind,
+    p_scenario: v.scenario,
+    p_outcome: v.outcome,
+    p_succeeded: v.succeeded,
+    p_follow_ups: v.followUps,
+    p_evidence_url: v.evidenceUrl,
+  });
+  revalidatePath("/admin/operations");
+  return explain(result, "Couldn't record the drill.");
+}

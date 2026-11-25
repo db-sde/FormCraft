@@ -2876,4 +2876,51 @@ retention cron jobs).
   - No marketing email and no unsubscribe handling: these are
     transactional service messages, and the email says so.
 
+## 2026-11-25 — Super Admin Phase 5: hardening
+
+Built (migration 76, `/admin/staff/review`, drills on Operations,
+`docs/admin-security-checklist.md`).
+
+- **New sign-in address** (threat: a stolen password):
+  - The portal remembers each staff member's addresses (from their
+    session). A new one, for someone already seen elsewhere, emails
+    owners once.
+  - The first address isn't news.
+  - Addresses change (mobile, travel), so it is a warning, not a block.
+    The block is the IP rule on the admin project.
+- **Every high-risk change carried out tells owners** (threat: two staff
+  working together). Owners already heard about emergency approvals; now
+  every approved request that is applied raises a one-off notice. The
+  first run starts from the current audit entry, so history isn't
+  replayed.
+- **Monthly access review**: the owner sees each staff member's role,
+  last seen, actions and refusals (30 days) and address count. They must
+  tick every active person to record a review. A reminder alert fires
+  when one is due. Changing access still goes through approvals.
+- **Drills**: restore tests keep their own record. Outages, lockouts,
+  secret rotations and incident exercises are recorded on Operations.
+  - Two outage drills now run in CI as tests: webhook destination down
+    then back, and email provider down then back. Each checks that
+    nothing is lost and nothing is sent twice.
+  - No successful restore in 90 days raises an alert, once a team has
+    existed that long.
+- **Step-up freshness is tested directly**: a code over 10 minutes old,
+  or a password alone, doesn't count.
+- **Admin pages load nothing from elsewhere**: `connect-src`, `img-src`
+  and `media-src` are `'self'`, and `frame-src` is `'none'`. The portal
+  has no browser Supabase client, no files and no embeds.
+- **Admin session cookies are HttpOnly**: possible because nothing in
+  the portal reads the session in the browser. The customer app's
+  cookies stay readable for its browser client.
+- **Encryption key migration fixed**:
+  - Before: setting `ENCRYPTION_KEYS` made every credential encrypted
+    under the `APP_SECRET`-derived key unreadable, which stopped either
+    secret from being rotated safely.
+  - Now that key stays as a decrypt-only fallback. The path is: set
+    `ENCRYPTION_KEYS`, re-encrypt, then `APP_SECRET` can change
+    (runbook, Secrets).
+- **Accepted for now**: no per-staff rate limit on reads. Reads of
+  personal data are logged and lists are capped, which together with the
+  monthly review is enough at this team size.
+
 <!-- Add new decisions above this line, newest first. -->

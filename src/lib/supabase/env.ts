@@ -36,4 +36,9 @@ export const supabaseEnv = {
 export const sessionCookieOptions = {
   sameSite: "lax" as const,
   secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") ?? false,
+  // The staff portal never reads the session in the browser (no browser
+  // client there), so its cookies are out of reach of page scripts. The
+  // customer app's browser client needs them readable. ADMIN_SURFACE isn't
+  // public, so browser code always sees false here.
+  httpOnly: process.env.ADMIN_SURFACE === "1",
 };

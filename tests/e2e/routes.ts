@@ -25,6 +25,7 @@ export const ADMIN_PAGE_ROUTES = [
   "/admin/privacy",
   "/admin/privacy/[id]",
   "/admin/messages",
+  "/admin/staff/review",
 ];
 
 export const PAGE_ROUTES = [

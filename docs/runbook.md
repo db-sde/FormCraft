@@ -161,3 +161,53 @@ for the restore test that still needs doing.
   and failed counts. **Cancel** stops the rest.
 - To fix a typo after asking, cancel it and write a new one: an approval
   covers the exact wording.
+
+## Staff incidents
+
+- **"Signed in from a new address" alert**: ask the person. If it wasn't
+  them, an owner disables the account at once (Staff → ask for "Disable",
+  then the owner's emergency approval if no second person is around).
+  Disabling signs them out everywhere. Then read their entries in the
+  Audit trail since the alert.
+- **A high-risk change you don't recognise** (the "carried out" alert):
+  check the request on Approvals and its audit entry. If it was abused,
+  disable the people involved, undo the change through a new approved
+  request, and treat it as an incident.
+- **Monthly access review**: Staff → Access review. Look at anyone not
+  seen for 30 days or with many refusals, ask for changes on Staff, then
+  tick everyone who still needs their role and record it. The reminder
+  alert clears.
+- **Lost the only owner**: there is no recovery code. With the secret
+  key, add a new owner through SQL on a trusted machine, and record why
+  in DECISIONS.md. The bootstrap command refuses once staff exist, by
+  design.
+
+## Secrets
+
+Rotate yearly, and at once after a leak or when someone with access
+leaves:
+
+- **CRON_SECRET**: set the new value in Vercel (Production), redeploy,
+  then run `select public.schedule_background_jobs('<app url>', '<new
+secret>');` so the database scheduler uses it. Within 5 minutes,
+  Operations → Scheduler should show 200s again (the `scheduler_failing`
+  alert says if not).
+- **Stored credentials (ENCRYPTION_KEYS)**: while `ENCRYPTION_KEYS` isn't
+  set, integration credentials are encrypted with a key derived from
+  `APP_SECRET`, so changing `APP_SECRET` would make them unreadable. Move
+  to separate keys first:
+  1. set `ENCRYPTION_KEYS=k1:<32 random bytes, base64>` and redeploy (old
+     values still decrypt);
+  2. run `npm run secrets:reencrypt` with the production secret key;
+  3. it should report nothing left to rewrite.
+     To rotate later, put a new key first (`k2:…,k1:…`), redeploy, re-encrypt,
+     then remove `k1`.
+- **APP_SECRET** (signing short-lived tokens: sign-in links, unlocks,
+  OAuth state): only after the step above. Set the new value and redeploy.
+  Links issued just before stop working, which is expected.
+- **Supabase secret key**: create a new secret key in the dashboard, set it
+  in Vercel, redeploy, then delete the old key. The admin project has its
+  own key, so either can be revoked alone.
+- **Resend / Anthropic / payment keys**: create the new key, set it in
+  Vercel, redeploy, revoke the old one in the provider's console.
+- Record each rotation on Operations as a "Secret rotation" drill.

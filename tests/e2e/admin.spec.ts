@@ -42,7 +42,7 @@ test.describe("Super Admin portal", () => {
 
   test.beforeAll(async () => {
     sql(
-      "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
+      "delete from private.restore_tests; delete from private.ops_drills; delete from private.access_reviews; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
     );
     owner = await createConfirmedUser("e2e-staff-owner");
     newcomer = await createConfirmedUser("e2e-staff-new");
@@ -74,7 +74,7 @@ test.describe("Super Admin portal", () => {
 
   test.afterAll(async () => {
     sql(
-      "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
+      "delete from private.restore_tests; delete from private.ops_drills; delete from private.access_reviews; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
     );
     for (const u of [owner, newcomer, outsider, customer])
       if (u) await deleteUser(u.userId);
@@ -123,6 +123,17 @@ test.describe("Super Admin portal", () => {
     const headers = (await page.request.get(`${ADMIN}/admin`)).headers();
     expect(headers["cache-control"]).toContain("no-store");
     expect(headers["x-robots-tag"]).toContain("noindex");
+    // The portal loads and frames nothing but its own server.
+    const csp = headers["content-security-policy"];
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("frame-src 'none'");
+    expect(csp).toMatch(/connect-src 'self'(;|$)/);
+    // Session cookies are out of reach of page scripts here.
+    const session = (await page.context().cookies()).filter((c) =>
+      c.name.startsWith("sb-"),
+    );
+    expect(session.length).toBeGreaterThan(0);
+    expect(session.every((c) => c.httpOnly && c.sameSite === "Lax")).toBe(true);
 
     await page.getByRole("link", { name: "Staff" }).click();
     await page.getByLabel("Their staff email").fill(newcomer.email);
@@ -308,5 +319,41 @@ test.describe("Super Admin portal", () => {
     await expect(page.getByText("Waiting for approval").first()).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).first().click();
     await expect(page.getByText("Cancelled").first()).toBeVisible();
+  });
+
+  test("hardening: the monthly access review and an outage drill are recorded", async ({
+    page,
+  }) => {
+    await signIn(page, owner);
+    const nav = page.getByRole("navigation", { name: "Staff" });
+    await nav.getByRole("link", { name: "Staff", exact: true }).click();
+    await page.getByRole("link", { name: "Access review" }).click();
+    await expect(page.getByRole("heading", { name: "Access review" })).toBeVisible();
+    // Every active staff member must be ticked.
+    const boxes = page.getByRole("checkbox");
+    await boxes.first().check();
+    if ((await boxes.count()) > 1) {
+      await page.getByRole("button", { name: "Record review" }).click();
+      await expect(page.getByText(/Tick every active staff member/)).toBeVisible();
+    }
+    for (const box of await boxes.all()) await box.check();
+    await page.getByLabel(/Notes/).fill("Everyone still needs their role");
+    await page.getByRole("button", { name: "Record review" }).click();
+    await expect(page.getByText("Access review recorded.")).toBeVisible();
+    await expect(page.getByText(/Last reviewed .* by Olive Owner/)).toBeVisible();
+
+    await nav.getByRole("link", { name: "Operations", exact: true }).click();
+    await page.getByLabel("Drill", { exact: true }).selectOption("email_outage");
+    await page
+      .getByLabel("What was tried")
+      .fill("Pointed email at a dead provider for 10 minutes");
+    await page
+      .getByLabel("What happened")
+      .fill("Notices queued, then sent once when it came back");
+    await page.getByRole("button", { name: "Record this drill" }).click();
+    await expect(page.getByText("Drill recorded.")).toBeVisible();
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "Email provider down" }),
+    ).toBeVisible();
   });
 });

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { adminCall, requireStaff } from "@/lib/admin/staff";
 import { LocalTime } from "@/components/local-time";
 import { StaffChangeForm } from "./staff-change-form";
@@ -21,7 +22,12 @@ export default async function StaffPage() {
   const staff = list.ok ? list.staff : [];
   return (
     <main className="flex flex-col gap-6">
-      <h1 className="font-heading text-2xl font-bold">Staff</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="font-heading text-2xl font-bold">Staff</h1>
+        <Link href="/admin/staff/review" className="text-sm underline">
+          Access review
+        </Link>
+      </div>
       <div className="border-border overflow-x-auto rounded-lg border-[1.5px]">
         <table className="w-full text-left text-sm">
           <thead className="bg-background text-muted-foreground text-xs uppercase">
