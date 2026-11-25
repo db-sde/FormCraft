@@ -22,6 +22,9 @@ export const ADMIN_PAGE_ROUTES = [
   "/admin/usage",
   "/admin/operations",
   "/admin/ai",
+  "/admin/privacy",
+  "/admin/privacy/[id]",
+  "/admin/messages",
 ];
 
 export const PAGE_ROUTES = [

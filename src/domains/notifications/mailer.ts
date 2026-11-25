@@ -12,6 +12,8 @@ export type OutgoingEmail = {
   html: string;
   text: string;
   attachments?: { filename: string; content: Uint8Array }[];
+  /** The same key never sends twice (a retried job, a duplicate run). */
+  idempotencyKey?: string;
 };
 
 export type Send = (
@@ -24,17 +26,20 @@ export function defaultSender(): Send | null {
   if (!key) return null;
   return async (email) => {
     try {
-      const { data, error } = await new Resend(key).emails.send({
-        from: process.env.EMAIL_FROM ?? "FormCraft <notifications@formcraft.local>",
-        to: email.to,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-        attachments: email.attachments?.map((a) => ({
-          filename: a.filename,
-          content: Buffer.from(a.content),
-        })),
-      });
+      const { data, error } = await new Resend(key).emails.send(
+        {
+          from: process.env.EMAIL_FROM ?? "FormCraft <notifications@formcraft.local>",
+          to: email.to,
+          subject: email.subject,
+          html: email.html,
+          text: email.text,
+          attachments: email.attachments?.map((a) => ({
+            filename: a.filename,
+            content: Buffer.from(a.content),
+          })),
+        },
+        email.idempotencyKey ? { idempotencyKey: email.idempotencyKey } : undefined,
+      );
       return error ? { ok: false } : { ok: true, id: data?.id };
     } catch {
       return { ok: false };

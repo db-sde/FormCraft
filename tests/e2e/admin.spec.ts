@@ -42,7 +42,7 @@ test.describe("Super Admin portal", () => {
 
   test.beforeAll(async () => {
     sql(
-      "delete from private.restore_tests; delete from private.change_requests; delete from private.staff_members;",
+      "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
     );
     owner = await createConfirmedUser("e2e-staff-owner");
     newcomer = await createConfirmedUser("e2e-staff-new");
@@ -74,7 +74,7 @@ test.describe("Super Admin portal", () => {
 
   test.afterAll(async () => {
     sql(
-      "delete from private.restore_tests; delete from private.change_requests; delete from private.staff_members;",
+      "delete from private.restore_tests; delete from private.messages; delete from private.privacy_requests; delete from private.change_requests; delete from private.staff_members;",
     );
     for (const u of [owner, newcomer, outsider, customer])
       if (u) await deleteUser(u.userId);
@@ -258,5 +258,55 @@ test.describe("Super Admin portal", () => {
         .getByRole("row", { name: /Review a form/ })
         .getByRole("cell", { name: "4000" }),
     ).toBeVisible();
+  });
+
+  test("privacy: a request is logged, checked, searched and closed; a notice is drafted", async ({
+    page,
+  }) => {
+    await signIn(page, owner);
+    const nav = page.getByRole("navigation", { name: "Staff" });
+    await nav.getByRole("link", { name: "Privacy", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Privacy", exact: true }),
+    ).toBeVisible();
+    await page.getByLabel("The person asks to").selectOption("access");
+    await page.getByLabel("Their email address").fill(customer.email);
+    await page.getByRole("button", { name: "Log request" }).click();
+    await expect(page).toHaveURL(/\/admin\/privacy\/[0-9a-f-]{36}$/);
+    await expect(page.getByText("Not checked yet")).toBeVisible();
+
+    await page.getByLabel("How you checked").fill("Replied from the address");
+    await page.getByRole("button", { name: "Record identity check" }).click();
+    await expect(page.getByText(/Checked .*Replied from the address/)).toBeVisible();
+    await page.getByRole("button", { name: "Find their data" }).click();
+    // A creator, not a respondent: no responses, but an account.
+    await expect(page.getByText(/0 response\(s\) and 0 booking\(s\)/)).toBeVisible();
+    await expect(page.getByText(/They also have a FormCraft account/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Download their data (JSON)" }),
+    ).toBeVisible();
+
+    await page
+      .getByLabel("What was done, or why it was refused")
+      .fill("Nothing held beyond the account");
+    await page.getByRole("button", { name: "Close request" }).click();
+    await expect(page.getByText("Outcome:")).toBeVisible();
+
+    await nav.getByRole("link", { name: "Notices", exact: true }).click();
+    await page.getByLabel("Kind").selectOption("incident");
+    await page.getByLabel("Subject").fill("Short delay to webhooks");
+    await page
+      .getByLabel("Message (plain text)")
+      .fill("Some webhooks were delayed this morning. All were delivered.");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByText(/Saved\. It would reach \d+ owner/)).toBeVisible();
+    await page
+      .getByLabel("Why it needs sending")
+      .first()
+      .fill("Tell customers about the delay");
+    await page.getByRole("button", { name: "Ask to send" }).first().click();
+    await expect(page.getByText("Waiting for approval").first()).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).first().click();
+    await expect(page.getByText("Cancelled").first()).toBeVisible();
   });
 });

@@ -138,6 +138,10 @@ function explain(result: AdminResult, fallback: string): ActionResult {
     not_pending: "This request was already decided.",
     reason_required: "Give a reason.",
     not_found: "That request no longer exists.",
+    not_verified: "Record how you checked the person's identity first.",
+    daily_limit: "Five notices started in the last day. Wait before sending another.",
+    "request does not match": "The approved request doesn't match this one any more.",
+    "notice does not match": "The approved wording doesn't match this notice any more.",
   };
   const key = result.why && result.why !== "not_permitted" ? result.why : result.code;
   return {
@@ -215,7 +219,11 @@ export async function decideAction(input: unknown): Promise<ActionResult> {
             ? "admin_apply_staff_change"
             : action?.startsWith("ai.")
               ? "admin_apply_ai_change"
-              : "admin_apply_change",
+              : action?.startsWith("privacy.")
+                ? "admin_apply_privacy_erasure"
+                : action?.startsWith("message.")
+                  ? "admin_apply_message_send"
+                  : "admin_apply_change",
           { p_request_id: id },
         )
       : decision === "emergency"
@@ -230,6 +238,8 @@ export async function decideAction(input: unknown): Promise<ActionResult> {
   revalidatePath("/admin/customers", "layout");
   revalidatePath("/admin/plans");
   revalidatePath("/admin/ai");
+  revalidatePath("/admin/privacy", "layout");
+  revalidatePath("/admin/messages");
   return explain(result, "That didn't work. Try again.");
 }
 
@@ -430,4 +440,194 @@ export async function pauseAiAction(input: unknown): Promise<ActionResult> {
   const result = await adminCall("admin_ai_pause", { p_reason: parsed.data.reason });
   revalidatePath("/admin/ai");
   return explain(result, "Couldn't pause AI.");
+}
+
+// --- privacy requests (Phase 4) ----------------------------------------------
+
+const PrivacyOpen = z.object({
+  type: z.enum(["access", "erasure", "rectification"]),
+  email: z.string().trim().toLowerCase().email().max(254),
+  receivedAt: z.string().max(40).nullable(),
+  note: z.string().trim().max(2000),
+});
+
+/** Logs a request as it arrived; the 30-day deadline runs from then. */
+export async function openPrivacyRequestAction(
+  input: unknown,
+): Promise<ActionResult & { id?: string }> {
+  const parsed = PrivacyOpen.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: "Choose a type and enter a valid email." };
+  const v = parsed.data;
+  const received = v.receivedAt ? new Date(v.receivedAt) : null;
+  const result = await adminCall<{ id: string }>("admin_privacy_open", {
+    p_type: v.type,
+    p_email: v.email,
+    p_received_at:
+      received && !Number.isNaN(received.getTime()) ? received.toISOString() : null,
+    p_note: v.note,
+  });
+  revalidatePath("/admin/privacy");
+  if (result.ok) return { ok: true, id: result.id };
+  return explain(result, "Couldn't log the request.");
+}
+
+const Id = z.object({ id: z.string().uuid() });
+
+export async function verifyPrivacyAction(input: unknown): Promise<ActionResult> {
+  const parsed = Id.extend({ note: z.string().trim().min(5).max(500) }).safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: "Say how you checked (5+ characters)." };
+  const result = await adminCall("admin_privacy_verify", {
+    p_id: parsed.data.id,
+    p_note: parsed.data.note,
+  });
+  revalidatePath(`/admin/privacy/${parsed.data.id}`);
+  return explain(result, "Couldn't record it.");
+}
+
+export async function findPrivacyAction(input: unknown): Promise<ActionResult> {
+  const parsed = Id.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+  const result = await adminCall("admin_privacy_find", { p_id: parsed.data.id });
+  revalidatePath(`/admin/privacy/${parsed.data.id}`);
+  return explain(result, "Couldn't search.");
+}
+
+/** The person's data as JSON, for the staff member to send them. */
+export async function exportPrivacyAction(
+  input: unknown,
+): Promise<{ ok: true; json: string } | { ok: false; error: string; why?: string }> {
+  const parsed = Id.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+  const result = await adminCall<{ export: unknown }>("admin_privacy_export", {
+    p_id: parsed.data.id,
+  });
+  if (!result.ok) {
+    const e = explain(result, "Couldn't export.");
+    return e.ok ? { ok: false, error: "Couldn't export." } : e;
+  }
+  return { ok: true, json: JSON.stringify(result.export, null, 2) };
+}
+
+/** Asks for the erasure; someone else approves it on Approvals. */
+export async function requestErasureAction(input: unknown): Promise<ActionResult> {
+  const parsed = Id.extend({
+    email: z.string().trim().toLowerCase().email().max(254),
+    reason: z.string().trim().min(5).max(500),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Give a reason (5+ characters)." };
+  const result = await adminCall("admin_request_change", {
+    p_action: "privacy.erase",
+    p_target_type: "privacy_request",
+    p_target_id: parsed.data.id,
+    p_payload: { email: parsed.data.email },
+    p_reason: parsed.data.reason,
+  });
+  revalidatePath(`/admin/privacy/${parsed.data.id}`);
+  revalidatePath("/admin/approvals");
+  return explain(result, "Couldn't file the request.");
+}
+
+export async function closePrivacyAction(input: unknown): Promise<ActionResult> {
+  const parsed = Id.extend({
+    status: z.enum(["completed", "rejected"]),
+    note: z.string().trim().min(5).max(2000),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Say what was done (5+ characters)." };
+  const result = await adminCall("admin_privacy_close", {
+    p_id: parsed.data.id,
+    p_status: parsed.data.status,
+    p_note: parsed.data.note,
+  });
+  revalidatePath("/admin/privacy", "layout");
+  return explain(result, "Couldn't close it.");
+}
+
+// --- customer notices (Phase 4) ----------------------------------------------
+
+const Draft = z.object({
+  kind: z.enum(["incident", "billing", "policy", "service"]),
+  subject: z.string().trim().min(3).max(150),
+  body: z.string().trim().min(10).max(5000),
+  audience: z.enum(["all", "plans", "workspaces"]),
+  plans: z.string().max(500),
+  workspaceIds: z.string().max(20_000),
+});
+
+/** Writes a notice and says how many owners it would reach. */
+export async function draftNoticeAction(
+  input: unknown,
+): Promise<ActionResult & { recipients?: number }> {
+  const parsed = Draft.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: "A subject (3–150 characters) and a message (10+)." };
+  const v = parsed.data;
+  if (/[\r\n]/.test(v.subject)) return { ok: false, error: "The subject is one line." };
+  const list = (text: string) =>
+    text
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+  const audience =
+    v.audience === "all"
+      ? { type: "all" }
+      : v.audience === "plans"
+        ? { type: "plans", plans: list(v.plans) }
+        : { type: "workspaces", ids: list(v.workspaceIds) };
+  const result = await adminCall<{ id: string; recipients: number }>(
+    "admin_message_draft",
+    {
+      p_kind: v.kind,
+      p_subject: v.subject,
+      p_body: v.body,
+      p_audience: audience,
+    },
+  );
+  revalidatePath("/admin/messages");
+  if (result.ok) return { ok: true, recipients: result.recipients };
+  if (result.code === "invalid" && result.why)
+    return { ok: false, error: `Check the audience: ${result.why}.` };
+  return explain(result, "Couldn't save the notice.");
+}
+
+type Notice = {
+  id: string;
+  kind: string;
+  subject: string;
+  body: string;
+  audience: unknown;
+  status: string;
+};
+
+/** Asks to send a notice exactly as written; the approval binds the
+ * wording and the audience. */
+export async function requestNoticeSendAction(input: unknown): Promise<ActionResult> {
+  const parsed = Id.extend({ reason: z.string().trim().min(5).max(500) }).safeParse(
+    input,
+  );
+  if (!parsed.success) return { ok: false, error: "Give a reason (5+ characters)." };
+  const list = await adminCall<{ messages: Notice[] }>("admin_message_list");
+  if (!list.ok) return explain(list, "Couldn't load the notice.");
+  const m = list.messages.find((x) => x.id === parsed.data.id);
+  if (!m || m.status !== "draft")
+    return { ok: false, error: "Only a draft can be sent." };
+  const result = await adminCall("admin_request_change", {
+    p_action: "message.send",
+    p_target_type: "message",
+    p_target_id: m.id,
+    p_payload: { kind: m.kind, subject: m.subject, body: m.body, audience: m.audience },
+    p_reason: parsed.data.reason,
+  });
+  revalidatePath("/admin/messages");
+  revalidatePath("/admin/approvals");
+  return explain(result, "Couldn't file the request.");
+}
+
+export async function cancelNoticeAction(input: unknown): Promise<ActionResult> {
+  const parsed = Id.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+  const result = await adminCall("admin_message_cancel", { p_id: parsed.data.id });
+  revalidatePath("/admin/messages");
+  return explain(result, "Couldn't cancel it.");
 }

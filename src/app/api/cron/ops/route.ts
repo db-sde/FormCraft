@@ -5,6 +5,7 @@ import { getBackupStatus } from "@/domains/observability/backups";
 import { defaultSender } from "@/domains/notifications/mailer";
 import { renderEmailHtml } from "@/domains/notifications/email-layout";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
+import { removeQueuedFiles, sendQueuedNotices } from "@/domains/ops/background";
 
 export const maxDuration = 60;
 
@@ -21,6 +22,24 @@ async function run(request: NextRequest) {
   if (rejected) return rejected;
   const admin = createAdminClient();
   await admin.rpc("ops_run_checks");
+  // Phase 4: privacy deadlines, retention runs, stuck queues.
+  await admin.rpc("ops_phase4_checks");
+
+  // Background work; a failure here is logged and doesn't stop the alerts.
+  const send = defaultSender();
+  const work: Record<string, unknown> = {};
+  try {
+    work.files = await removeQueuedFiles(admin);
+  } catch (error) {
+    console.error(
+      JSON.stringify({ event: "ops_file_removal_failed", error: String(error) }),
+    );
+  }
+  try {
+    work.notices = await sendQueuedNotices(admin, send);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "ops_notices_failed", error: String(error) }));
+  }
 
   // Backups: only with a token that can read them.
   const backups = await getBackupStatus();
@@ -62,11 +81,11 @@ async function run(request: NextRequest) {
 
   const { data: alerts } = await admin.rpc("ops_alerts_to_notify");
   const pending = alerts ?? [];
-  if (pending.length === 0 && !anchorLine) return NextResponse.json({ alerts: 0 });
+  if (pending.length === 0 && !anchorLine)
+    return NextResponse.json({ alerts: 0, ...work });
 
   const { data: people } = await admin.rpc("ops_alert_recipients");
   const to = (people ?? []).map((p) => p.email).filter(Boolean);
-  const send = defaultSender();
   const lines = pending.map((a) => `[${a.severity}] ${a.message}`);
   if (anchorLine) lines.push(anchorLine);
   let sent = false;
@@ -95,7 +114,7 @@ async function run(request: NextRequest) {
   if (pending.length > 0) {
     await admin.rpc("ops_mark_notified", { p_ids: pending.map((a) => a.id) });
   }
-  return NextResponse.json({ alerts: pending.length, emailed: sent });
+  return NextResponse.json({ alerts: pending.length, emailed: sent, ...work });
 }
 
 export const GET = run;

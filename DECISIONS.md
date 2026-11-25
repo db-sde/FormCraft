@@ -2820,4 +2820,60 @@ Built (migration 73, `src/domains/ai/gateway.ts`, `/admin/ai`).
   same effort, so nothing changes for customers until staff change a
   setting.
 
+## 2026-11-25 — Super Admin Phase 4: privacy requests, retention runs, notices
+
+Built (migration 74, `/admin/privacy`, `/admin/messages`, the ops and
+retention cron jobs).
+
+- **Privacy requests** (ADM-085/086): access, erasure or correction,
+  logged with a deadline 30 days after they arrived.
+  - **Identity check first**: nothing is exported or erased until staff
+    record how they checked who it is (for example, a reply from the
+    address).
+  - **Finding the data**: responses carrying the address in any
+    workspace (an email answer, a text answer that is the address, or a
+    contact step's email, in any letter case), plus bookings. An
+    expression index on answers keeps the search fast. If the person
+    also has a FormCraft account, the page says so; they delete it
+    through account deletion, not here.
+  - **Access**: a JSON export with question labels. Downloading it is
+    logged, and so are opening and searching a request.
+  - **Erasure** needs someone else's approval (owner, admin or privacy
+    lead) bound to the exact address. In one transaction it:
+    - deletes the responses (answers, follow-ups, payments and the rest
+      cascade);
+    - deletes webhook payloads, which outlive the response and carry
+      the answers;
+    - deletes answers remembered for the person's browser;
+    - clears the name, email and time zone on bookings but keeps the
+      slot, because calendars depend on it;
+    - queues the stored files for removal.
+      Evidence is kept as counts only. Each workspace affected gets an
+      entry in its own audit log, because it is the controller of those
+      responses.
+  - **Backups** keep erased data until they expire. The evidence says so.
+- **Files are removed later**: the database can't delete storage
+  objects, so erasure queues their paths. The ops job (every 5 minutes)
+  removes them through the storage API and retries a failure up to 10
+  times. A stuck file raises an alert.
+- **Retention runs** (ADM-091): each daily job runs on its own, is
+  recorded with counts or the error, and one failure no longer stops the
+  rest (the route answers 500 if any failed). A failed latest run, or no
+  run for 26 hours, raises a critical alert.
+- **Deadline alerts**: a request due within 5 days raises a warning; a
+  late one is critical.
+- **Customer notices** (ADM-098): service notices only (incident,
+  billing, policy, service) to workspace owners with confirmed emails,
+  one email per person.
+  - A notice can't be edited. The send approval binds its kind, wording
+    and audience, so a changed notice needs a new approval.
+  - At most five notices start a day.
+  - Sending is capped at 50 per 5-minute run, and every recipient has a
+    row (queued, sent, failed or skipped).
+  - Resend gets an idempotency key per recipient, so a retried run never
+    sends twice. A send is tried 3 times; failures in the last week
+    raise an alert.
+  - No marketing email and no unsubscribe handling: these are
+    transactional service messages, and the email says so.
+
 <!-- Add new decisions above this line, newest first. -->

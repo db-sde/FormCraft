@@ -3202,6 +3202,8 @@ export type Database = {
       admin_ai_pause: { Args: { p_reason: string }; Returns: Json };
       admin_apply_ai_change: { Args: { p_request_id: string }; Returns: Json };
       admin_apply_change: { Args: { p_request_id: string }; Returns: Json };
+      admin_apply_message_send: { Args: { p_request_id: string }; Returns: Json };
+      admin_apply_privacy_erasure: { Args: { p_request_id: string }; Returns: Json };
       admin_apply_staff_change: { Args: { p_request_id: string }; Returns: Json };
       admin_audit_status: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_bootstrap_owner: {
@@ -3225,7 +3227,26 @@ export type Database = {
       admin_list_change_requests: { Args: { p_status?: string }; Returns: Json };
       admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_message_cancel: { Args: { p_id: string }; Returns: Json };
+      admin_message_draft: {
+        Args: { p_audience: Json; p_body: string; p_kind: string; p_subject: string };
+        Returns: Json;
+      };
+      admin_message_list: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_ops_health: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_privacy_close: {
+        Args: { p_id: string; p_note: string; p_status: string };
+        Returns: Json;
+      };
+      admin_privacy_export: { Args: { p_id: string }; Returns: Json };
+      admin_privacy_find: { Args: { p_id: string }; Returns: Json };
+      admin_privacy_get: { Args: { p_id: string }; Returns: Json };
+      admin_privacy_open: {
+        Args: { p_email: string; p_note: string; p_received_at: string; p_type: string };
+        Returns: Json;
+      };
+      admin_privacy_overview: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_privacy_verify: { Args: { p_id: string; p_note: string }; Returns: Json };
       admin_read_audit: { Args: { p_before?: number; p_limit?: number }; Returns: Json };
       admin_record_restore_test: {
         Args: {
@@ -3620,6 +3641,31 @@ export type Database = {
         }[];
       };
       ops_mark_notified: { Args: { p_ids: number[] }; Returns: undefined };
+      ops_message_claim: {
+        Args: { p_limit?: number };
+        Returns: {
+          body: string;
+          email: string;
+          id: number;
+          kind: string;
+          subject: string;
+        }[];
+      };
+      ops_message_result: {
+        Args: { p_error?: string; p_id: number; p_ok: boolean; p_provider_id?: string };
+        Returns: undefined;
+      };
+      ops_phase4_checks: { Args: Record<PropertyKey, never>; Returns: undefined };
+      ops_record_retention_run: {
+        Args: {
+          p_counts: Json;
+          p_duration_ms?: number;
+          p_error?: string;
+          p_job: string;
+          p_ok: boolean;
+        };
+        Returns: undefined;
+      };
       ops_run_checks: { Args: Record<PropertyKey, never>; Returns: number };
       ops_set_alert: {
         Args: {
@@ -3629,6 +3675,18 @@ export type Database = {
           p_message: string;
           p_severity: string;
         };
+        Returns: undefined;
+      };
+      ops_storage_deletions_claim: {
+        Args: { p_limit?: number };
+        Returns: {
+          bucket: string;
+          id: number;
+          path: string;
+        }[];
+      };
+      ops_storage_deletions_done: {
+        Args: { p_error?: string; p_ids: number[] };
         Returns: undefined;
       };
       payment_attempts_to_reconcile: {

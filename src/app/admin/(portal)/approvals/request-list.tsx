@@ -31,6 +31,8 @@ const ACTION_LABEL: Record<string, string> = {
   "workspace.plan": "Change workspace plan",
   "plan.update": "Change plan entitlements",
   "ai.settings": "Change AI settings",
+  "privacy.erase": "Erase a person's data",
+  "message.send": "Send a customer notice",
 };
 
 export function RequestList({

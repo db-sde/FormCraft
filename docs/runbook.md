@@ -126,3 +126,38 @@ for the restore test that still needs doing.
 - **Changing a model or token cap**: request it on `/admin/ai`, then
   someone else approves it on Approvals. The audit entry keeps the
   settings before and after.
+
+## Privacy requests
+
+- **A request arrives** (email, form, letter): log it on `/admin/privacy`
+  with the date it arrived. The deadline is 30 days from then. Alerts
+  start 5 days before and turn critical once it's late.
+- **Check identity first**: email the address and wait for a reply from
+  it, then record how you checked. Export and erasure stay locked until
+  then.
+- **Find** shows every workspace holding responses or bookings with the
+  address. Tell those workspaces' owners: they collected the data and
+  are its controller.
+- **Access**: download the JSON and send it to the person, then close
+  the request saying what you sent.
+- **Erasure**: request it on the page and have another owner, admin or
+  privacy lead approve it on Approvals, then apply it. Erased files are
+  removed by the ops job within minutes ("Files from erasures waiting"
+  drops to 0). Backups keep copies until they expire.
+- **Refusing** (for example, the identity can't be checked): close the
+  request as refused and give the reason.
+- **Retention alert**: `retention_failing` names the job. Read the
+  error on the Privacy page, fix it, then run `/api/cron/retention`
+  again with the cron secret. `retention_stale` means the daily run
+  didn't happen: check the scheduler on Operations.
+
+## Customer notices
+
+- Service notices only: incidents, billing, policy changes. Write one on
+  `/admin/messages`, check how many owners it would reach, then use
+  **Ask to send**. Another owner or admin approves it on Approvals and
+  applies it.
+- It goes out at up to 50 emails every 5 minutes. The page shows sent
+  and failed counts. **Cancel** stops the rest.
+- To fix a typo after asking, cancel it and write a new one: an approval
+  covers the exact wording.
