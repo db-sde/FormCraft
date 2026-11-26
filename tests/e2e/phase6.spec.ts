@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { saveConnection } from "@/domains/connectors/framework";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -112,6 +113,7 @@ test.describe("phase 6", () => {
     page,
   }) => {
     const { formId, liveLink } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
     const admin = adminClient();
     const { data: form } = await admin
       .from("forms")

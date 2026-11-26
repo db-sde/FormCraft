@@ -4,6 +4,22 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import type { AnswerMap } from "@/domains/logic";
 import type { WebhookEvent, WebhookPayload } from "./payload";
 import { endpointEvents } from "./queries";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
+
+/** Unfinished-response events are a Starter-and-up feature (pricing doc). */
+async function partialsAllowed(
+  admin: SupabaseClient<Database>,
+  formId: string,
+): Promise<boolean> {
+  const { data: form } = await admin
+    .from("forms")
+    .select("workspace_id")
+    .eq("id", formId)
+    .maybeSingle();
+  if (!form) return false;
+  return (await getWorkspacePlan(admin, form.workspace_id)).entitlements
+    .partial_responses;
+}
 
 type Client = SupabaseClient<Database>;
 
@@ -143,6 +159,7 @@ export async function enqueuePartialSaveEvents(
   try {
     const response = await loadUnfinished(admin, responseId);
     if (!response || response.status !== "partial") return 0;
+    if (!(await partialsAllowed(admin, response.formId))) return 0;
     const endpoints = (
       await endpointsWanting(admin, response.formId, [
         "response.partial_saved",
@@ -262,6 +279,7 @@ export async function enqueueAbandonedEvents(
   for (const row of due ?? []) {
     const response = await loadUnfinished(admin, row.response_id);
     if (!response) continue;
+    if (!(await partialsAllowed(admin, response.formId))) continue;
     const key = `a:${Math.floor(Date.parse(row.last_active_at) / 1000)}`;
     const eventId = stableEventId([row.endpoint_id, row.response_id, "abandoned", key]);
     const { data } = await admin

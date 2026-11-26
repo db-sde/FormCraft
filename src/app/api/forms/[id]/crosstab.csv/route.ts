@@ -6,6 +6,7 @@ import { filtersFromParams } from "@/domains/responses";
 import { getLatestSchema } from "@/domains/responses/dashboard";
 import { crossTabRows, getCrossTab } from "@/domains/responses/crosstab";
 import { CSV_BOM, neutralizeFormulaInjection } from "@/domains/exports";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 const cell = (value: string) => {
   const safe = neutralizeFormulaInjection(value);
@@ -29,6 +30,8 @@ export async function GET(
       status: 403,
     });
   }
+  const blocked = await planBlocks(supabase, workspace.id, "advanced_reports");
+  if (blocked) return new Response(blocked, { status: 403 });
   const { data: form } = await supabase
     .from("forms")
     .select("id, title, confidential")

@@ -30,6 +30,9 @@ export type EmailLayoutInput = {
   sentTo?: string;
   /** Footer link, e.g. Notification settings. */
   footerLink?: { label: string; href: string };
+  /** A workspace's own branding (Starter and up): its name or logo at the
+   * top, its colour on the button, its footer instead of FormCraft's. */
+  brand?: EmailBrand;
   /**
    * Values already safe for HTML — used for template placeholders such as
    * Supabase's `{{ .ConfirmationURL }}`, which must not be escaped.
@@ -37,11 +40,23 @@ export type EmailLayoutInput = {
   raw?: { buttonHref?: boolean; sentTo?: boolean };
 };
 
+export type EmailBrand = {
+  name?: string;
+  /** This app's own storage only (checked when it's saved). */
+  logoUrl?: string;
+  /** #rrggbb. */
+  accent?: string;
+  footer?: string;
+};
+
 const INK = "#2b2118";
 const FONT = "Arial, Helvetica, sans-serif";
 
 export function renderEmailHtml(input: EmailLayoutInput): string {
   const e = escapeHtml;
+  const brand = input.brand;
+  const accent =
+    brand?.accent && /^#[0-9a-fA-F]{6}$/.test(brand.accent) ? brand.accent : "#f2b233";
   const button = input.button?.label && input.button.href ? input.button : null;
   const href = button ? (input.raw?.buttonHref ? button.href : e(button.href)) : "";
   const sentTo = input.sentTo ? (input.raw?.sentTo ? input.sentTo : e(input.sentTo)) : "";
@@ -73,7 +88,13 @@ export function renderEmailHtml(input: EmailLayoutInput): string {
   <tr><td align="center" style="padding:24px 12px;">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
       <tr><td style="padding:0 8px 16px 8px;font-family:${FONT};font-size:18px;font-weight:bold;letter-spacing:-0.02em;color:${INK};">
-        <span style="display:inline-block;width:15px;height:15px;background:#f2b233;border:1.5px solid ${INK};border-radius:4px;vertical-align:-2px;"></span>&nbsp;FormCraft
+        ${
+          brand?.logoUrl
+            ? `<img src="${e(brand.logoUrl)}" alt="${e(brand.name ?? "")}" height="32" style="display:block;height:32px;width:auto;border:0;">`
+            : brand?.name
+              ? e(brand.name)
+              : `<span style="display:inline-block;width:15px;height:15px;background:#f2b233;border:1.5px solid ${INK};border-radius:4px;vertical-align:-2px;"></span>&nbsp;FormCraft`
+        }
       </td></tr>
       <tr><td style="background:#fffaf1;border:1.5px solid ${INK};border-radius:10px;padding:32px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -87,7 +108,7 @@ export function renderEmailHtml(input: EmailLayoutInput): string {
             button
               ? `<tr><td>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-              <tr><td bgcolor="#f2b233" style="border:1.5px solid ${INK};border-radius:6px;">
+              <tr><td bgcolor="${accent}" style="border:1.5px solid ${INK};border-radius:6px;">
                 <a href="${href}" target="_blank" style="display:inline-block;padding:14px 24px;font-family:${FONT};font-size:16px;font-weight:bold;color:${INK};text-decoration:none;">${e(button.label)}</a>
               </td></tr>
             </table>
@@ -98,7 +119,7 @@ export function renderEmailHtml(input: EmailLayoutInput): string {
         </table>
       </td></tr>
       <tr><td style="padding:18px 8px 0 8px;font-family:${FONT};font-size:12px;line-height:1.6;color:#6f6254;">
-        ${sentTo ? `Sent to ${sentTo}.<br>` : ""}FormCraft${
+        ${sentTo ? `Sent to ${sentTo}.<br>` : ""}${brand?.footer ? e(brand.footer) : brand?.name ? e(brand.name) : "FormCraft"}${
           input.footerLink
             ? ` · <a href="${e(input.footerLink.href)}" style="color:#6f6254;text-decoration:underline;">${e(input.footerLink.label)}</a>`
             : ""

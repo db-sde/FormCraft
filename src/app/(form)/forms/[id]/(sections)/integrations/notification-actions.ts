@@ -8,6 +8,7 @@ import { assignableMembers } from "@/domains/responses/records";
 import { NotificationRuleInput } from "@/domains/notifications/rules";
 import { isValidTimeZone } from "@/domains/logic/datetime";
 import type { Json } from "@/lib/supabase/database.types";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 type Result = { ok: true; id?: string } | { ok: false; message: string };
 
@@ -48,6 +49,8 @@ export async function saveNotificationRuleAction(
   const ctx = await editable(formId);
   if (!ctx)
     return { ok: false, message: "You don't have permission to change this form." };
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "team_notifications");
+  if (blocked) return { ok: false, message: blocked };
   if (!(await onlyTeammates(ctx, parsed.data.memberIds))) {
     return { ok: false, message: "Recipients must be teammates who can see responses." };
   }
@@ -116,6 +119,8 @@ export async function saveDigestAction(
   const ctx = await editable(formId);
   if (!ctx)
     return { ok: false, message: "You don't have permission to change this form." };
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "team_notifications");
+  if (blocked) return { ok: false, message: blocked };
   if (!(await onlyTeammates(ctx, parsed.data.memberIds))) {
     return { ok: false, message: "Recipients must be teammates who can see responses." };
   }

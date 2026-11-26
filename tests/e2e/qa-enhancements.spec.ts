@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   createConfirmedUser,
   createPublishedForm,
   deleteUser,
@@ -69,6 +70,7 @@ test("search, Excel export and the drop-off chart", async ({ page, request }) =>
   const user = await createConfirmedUser("e2e-qa-enhancements");
   try {
     const { formId } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
     await submit(request, formId, "Ada Lovelace", "A dark mode for the editor");
     await submit(request, formId, "Grace Hopper", "Keyboard shortcuts everywhere");
     // One person gave their name, then left on the idea question.

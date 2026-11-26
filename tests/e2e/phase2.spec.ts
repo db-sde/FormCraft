@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -64,6 +65,7 @@ test.describe("phase 2", () => {
     page,
   }) => {
     const { formId, liveLink } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
     await page.goto(liveLink);
 
     // Products: quantities, a limit, and a running total.

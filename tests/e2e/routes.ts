@@ -30,6 +30,7 @@ export const ADMIN_PAGE_ROUTES = [
 
 export const PAGE_ROUTES = [
   "/",
+  "/pricing",
   "/login",
   "/login/sso",
   "/signup",
@@ -85,6 +86,8 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/events": "api-contract.spec.ts",
   "/api/responses/view": "views-and-exit-save.spec.ts",
   "/api/places": "features-49-68.spec.ts",
+  "/fonts/css": "smoke.spec.ts",
+  "/fonts/file/[...path]": "smoke.spec.ts",
   "/api/cron/payments": "api-contract.spec.ts",
   "/api/cron/ops": "api-contract.spec.ts",
   "/api/[...unknown]": "qa-run4.spec.ts",

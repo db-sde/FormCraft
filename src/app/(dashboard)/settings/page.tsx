@@ -24,6 +24,10 @@ import { remainingRecoveryCodes, verifiedTotpFactor } from "@/domains/identity/m
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SecuritySettings } from "@/components/dashboard/security-settings";
 import { getSsoSettings } from "@/domains/identity/sso";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
+import { PLAN_NAMES, PLAN_PRICES, PUBLIC_PLAN_IDS } from "@/domains/billing/catalog";
+import { EmailBrandingSettings } from "@/components/dashboard/email-branding-settings";
+import { readEmailBranding } from "@/domains/notifications/branding";
 
 const TITLES = {
   account: "Account settings",
@@ -107,23 +111,35 @@ export default async function SettingsPage({
         ])
       : null;
 
+  // The full audit log is a Business feature (pricing doc). On every plan,
+  // what FormCraft support did to the workspace stays visible.
+  const fullAudit =
+    tab === "audit" &&
+    (await getWorkspacePlan(supabase, workspace.id)).entitlements.audit_log;
   const auditRecords =
     tab === "audit" && canAdmin(workspace.role)
-      ? await listAuditLog(
-          supabase,
-          workspace.id,
-          before ? Number(before) || undefined : undefined,
-        )
+      ? (
+          await listAuditLog(
+            supabase,
+            workspace.id,
+            before ? Number(before) || undefined : undefined,
+          )
+        ).filter((r) => fullAudit || r.action.startsWith("support."))
       : null;
-  const retentionDays =
+  const workspaceRow =
     tab === "workspace"
-      ? ((
+      ? (
           await supabase
             .from("workspaces")
-            .select("response_retention_days")
+            .select("response_retention_days, email_branding")
             .eq("id", workspace.id)
             .single()
-        ).data?.response_retention_days ?? null)
+        ).data
+      : null;
+  const retentionDays = workspaceRow?.response_retention_days ?? null;
+  const workspaceEntitlements =
+    tab === "workspace"
+      ? (await getWorkspacePlan(supabase, workspace.id)).entitlements
       : null;
 
   const twoFactorEnabled = tab === "account" && !!(await verifiedTotpFactor(supabase));
@@ -207,6 +223,14 @@ export default async function SettingsPage({
           isOwner={workspace.role === "owner"}
         />
       )}
+      {tab === "workspace" && workspaceEntitlements && (
+        <EmailBrandingSettings
+          workspaceId={workspace.id}
+          initial={readEmailBranding(workspaceRow?.email_branding)}
+          allowed={workspaceEntitlements.email_templates}
+          isAdmin={canAdmin(workspace.role)}
+        />
+      )}
       {tab === "workspace" && (
         <RetentionSettings days={retentionDays} isAdmin={canAdmin(workspace.role)} />
       )}
@@ -233,6 +257,12 @@ export default async function SettingsPage({
             Only the owner and admins can see security settings.
           </p>
         ))}
+      {tab === "audit" && auditRecords && !fullAudit && (
+        <p className="text-muted-foreground text-sm">
+          {notOnPlanMessage("audit_log")} Changes made by FormCraft support are always
+          shown here.
+        </p>
+      )}
       {tab === "audit" &&
         (auditRecords ? (
           <AuditLog
@@ -250,7 +280,26 @@ export default async function SettingsPage({
         ))}
 
       {planData && (
-        <PlanUsage plan={planData[0]} usage={planData[1]} aiAvailable={aiConfigured()} />
+        <PlanUsage
+          plan={planData[0]}
+          usage={planData[1]}
+          aiAvailable={aiConfigured()}
+          upgradeOptions={
+            canAdmin(workspace.role) &&
+            PUBLIC_PLAN_IDS.includes(planData[0].planId as never)
+              ? PUBLIC_PLAN_IDS.slice(
+                  PUBLIC_PLAN_IDS.indexOf(planData[0].planId as never) + 1,
+                )
+                  .filter((id) => id !== "free")
+                  .map((id) => ({
+                    id,
+                    name: PLAN_NAMES[id],
+                    monthly: PLAN_PRICES[id].monthly,
+                    annual: PLAN_PRICES[id].annual,
+                  }))
+              : []
+          }
+        />
       )}
 
       {connectionData && (
@@ -261,7 +310,7 @@ export default async function SettingsPage({
             connectionData[0].data?.find((c) => c.provider === "razorpay") ?? null
           }
           payments={connectionData[1].entitlements.payments}
-          crm={connectionData[1].entitlements.crm}
+          crm={connectionData[1].entitlements.business_apps}
           isAdmin={canAdmin(workspace.role)}
           stripeWebhookUrl={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payments/stripe/${workspace.id}`}
           razorpayWebhookUrl={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payments/razorpay/${workspace.id}`}

@@ -49,6 +49,19 @@ export async function createConfirmedUser(prefix: string) {
   return { userId: data.user.id, email, password };
 }
 
+/** Puts every workspace a test user owns on a plan (the service role is
+ * the only way to change a plan). Call it after the workspace exists. */
+export async function setPlan(
+  userId: string,
+  planId: "free" | "starter" | "pro" | "business" | "enterprise",
+) {
+  const { error } = await adminClient()
+    .from("workspaces")
+    .update({ plan_id: planId })
+    .eq("owner_id", userId);
+  if (error) throw error;
+}
+
 /** Deletes everything a test user created, not just the auth row —
  * `workspaces.owner_id` is `on delete restrict` (deliberately: the app
  * never silently orphans/cascades away a workspace via a user

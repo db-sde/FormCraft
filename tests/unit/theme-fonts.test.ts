@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { isAllowedFontUrl, isWoff2, themeForPlan } from "@/domains/themes/fonts";
+import { FONT_LIBRARY, findLibraryFont } from "@/domains/themes/font-library";
+import { themeFontStack } from "@/components/theme-styles";
+import { THEME_PRESETS, contrastRatio } from "@/domains/themes";
 
 const SUPABASE = "https://abc.supabase.co";
 const base = {
@@ -19,16 +22,58 @@ describe("theme fonts (P2.22)", () => {
     expect(isAllowedFontUrl(ok, undefined)).toBe(false);
   });
 
-  it("show Inter for paid fonts the plan doesn't include", () => {
+  it("keep built-in and library fonts on every plan (pricing doc)", () => {
     expect(
       themeForPlan({ ...base, fontFamily: "lora" }, false, SUPABASE).fontFamily,
-    ).toBe("inter");
-    expect(themeForPlan({ ...base, fontFamily: "lora" }, true, SUPABASE).fontFamily).toBe(
-      "lora",
-    );
+    ).toBe("lora");
     expect(
-      themeForPlan({ ...base, fontFamily: "georgia" }, false, SUPABASE).fontFamily,
-    ).toBe("georgia");
+      themeForPlan(
+        { ...base, fontFamily: "library", libraryFont: "Fraunces" },
+        false,
+        SUPABASE,
+      ),
+    ).toMatchObject({ fontFamily: "library", libraryFont: "Fraunces" });
+  });
+
+  it("show Inter for a library name that isn't in the library", () => {
+    expect(
+      themeForPlan(
+        { ...base, fontFamily: "library", libraryFont: "Not A Font" },
+        true,
+        SUPABASE,
+      ),
+    ).toMatchObject({ fontFamily: "inter", libraryFont: undefined });
+    expect(
+      themeForPlan({ ...base, fontFamily: "library" }, true, SUPABASE).fontFamily,
+    ).toBe("inter");
+  });
+
+  it("show Inter for an uploaded font the plan doesn't include", () => {
+    const custom = {
+      ...base,
+      fontFamily: "custom" as const,
+      customFont: { name: "Brand", url: ok },
+    };
+    expect(themeForPlan(custom, false, SUPABASE).fontFamily).toBe("inter");
+  });
+
+  it("has 1,700+ library families, all with CSS-safe names and at least one weight", () => {
+    expect(FONT_LIBRARY.length).toBeGreaterThan(1_700);
+    for (const entry of FONT_LIBRARY) {
+      const [family] = entry.split("|");
+      expect(family).toMatch(/^[A-Za-z0-9 ]{2,60}$/);
+      expect(findLibraryFont(family)!.weights.length).toBeGreaterThan(0);
+    }
+    expect(new Set(FONT_LIBRARY.map((e) => e.split("|")[0])).size).toBe(
+      FONT_LIBRARY.length,
+    );
+    expect(themeFontStack({ fontFamily: "library", libraryFont: "Fraunces" })).toBe(
+      '"Fraunces", var(--font-inter), sans-serif',
+    );
+    // A name that could break out of the CSS string falls back.
+    expect(
+      themeFontStack({ fontFamily: "library", libraryFont: 'x", red; a: "' }),
+    ).not.toContain("red");
   });
 
   it("drop an uploaded font whose URL isn't allowed, even on a paid plan", () => {
@@ -44,6 +89,18 @@ describe("theme fonts (P2.22)", () => {
       ),
     ).toMatchObject({ fontFamily: "inter", customFont: undefined });
     expect(themeForPlan(custom, true, SUPABASE).fontFamily).toBe("inter");
+  });
+
+  it("has 50+ readable theme presets, each font in the library", () => {
+    expect(THEME_PRESETS.length).toBeGreaterThanOrEqual(50);
+    expect(new Set(THEME_PRESETS.map((p) => p.id)).size).toBe(THEME_PRESETS.length);
+    for (const { theme } of THEME_PRESETS) {
+      if (theme.fontFamily === "library")
+        expect(findLibraryFont(theme.libraryFont)).not.toBeNull();
+      expect(
+        contrastRatio(theme.textColor!, theme.backgroundColor),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it("recognise WOFF2 by its signature", () => {

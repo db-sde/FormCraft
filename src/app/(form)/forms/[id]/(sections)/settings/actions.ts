@@ -40,6 +40,8 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/domains/forms/access
 import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
 import { KioskConfig, KIOSK_PIN_PATTERN, setKioskPin } from "@/domains/forms/kiosk";
 import { notSetUpMessage } from "@/lib/not-set-up";
+import { planBlocks } from "@/domains/billing/entitlements";
+import { FormSeo, isOwnUpload } from "@/domains/forms/seo";
 
 export type SettingsResult = { ok: true } | { ok: false; message: string };
 
@@ -66,6 +68,10 @@ export async function updateUnfinishedSettingsAction(
   }
   const ctx = await ownFormOrFail(formId);
   if (!ctx) return { ok: false, message: "Form not found." };
+  if (settings.savePartialResponses) {
+    const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "partial_responses");
+    if (blocked) return { ok: false, message: blocked };
+  }
   try {
     await updatePartialResponseSettings(ctx.supabase, formId, ctx.workspace.id, {
       savePartialResponses: Boolean(settings.savePartialResponses),
@@ -392,6 +398,10 @@ export async function updateKioskAction(
   }
   const ctx = await publisherOrFail(formId);
   if (!ctx) return { ok: false, message: "You don't have permission to change this." };
+  if (parsed) {
+    const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "embed_controls");
+    if (blocked) return { ok: false, message: blocked };
+  }
   try {
     const { error } = await ctx.supabase
       .from("forms")
@@ -655,6 +665,11 @@ export async function setConfidentialAction(
   }
   const ctx = await publisherOrFail(formId);
   if (!ctx) return { ok: false, message: "You don't have permission to change this." };
+  // 360° feedback reports are Pro and up (pricing doc).
+  if (settings !== null) {
+    const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "advanced_reports");
+    if (blocked) return { ok: false, message: blocked };
+  }
   const { error } = await ctx.supabase
     .from("forms")
     .update({ confidential: settings })
@@ -669,5 +684,47 @@ export async function setConfidentialAction(
     };
   }
   revalidatePath(`/forms/${formId}`, "layout");
+  return { ok: true };
+}
+
+/** Link preview and SEO (Starter and up): the shared link's title,
+ * description and image, the tab icon, and search indexing. Images must
+ * be this workspace's own uploads. Null clears it back to the default. */
+export async function saveSeoAction(
+  formId: string,
+  input: FormSeo | null,
+): Promise<SettingsResult> {
+  const parsed =
+    input === null ? { success: true as const, data: {} } : FormSeo.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Keep the title under 70 characters and the description under 200.",
+    };
+  }
+  const ctx = await publisherOrFail(formId);
+  if (!ctx) return { ok: false, message: "You don't have permission to change this." };
+  const seo = Object.fromEntries(
+    Object.entries(parsed.data).filter(([, v]) => v !== undefined && v !== ""),
+  ) as FormSeo;
+  if (Object.keys(seo).length > 0) {
+    const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "custom_seo");
+    if (blocked) return { ok: false, message: blocked };
+  }
+  for (const url of [seo.imageUrl, seo.faviconUrl]) {
+    if (url && !isOwnUpload(url, ctx.workspace.id)) {
+      return {
+        ok: false,
+        message: "Upload the image here rather than linking to another site.",
+      };
+    }
+  }
+  const { error } = await ctx.supabase
+    .from("forms")
+    .update({ seo })
+    .eq("id", formId)
+    .eq("workspace_id", ctx.workspace.id);
+  if (error) return { ok: false, message: "Couldn't save that." };
+  revalidatePath(`/forms/${formId}/settings`);
   return { ok: true };
 }

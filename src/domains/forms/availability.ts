@@ -16,6 +16,8 @@ export type AvailabilitySettings = {
   /** The workspace was suspended by FormCraft (Super Admin): its forms
    * take no responses. The database refuses them too. */
   workspaceSuspended?: boolean;
+  /** Archived by its workspace: closed until it's restored. */
+  archived?: boolean;
   closesAt: string | null;
   closedMessage: string | null;
   responseCap: number | null;
@@ -38,7 +40,7 @@ export function availabilityOf(
   accepted: number,
   now: Date = new Date(),
 ): Availability {
-  if (settings.workspaceSuspended) {
+  if (settings.workspaceSuspended || settings.archived) {
     return { open: false, reason: "closed", message: UNAVAILABLE_MESSAGE };
   }
   if (settings.closesAt && now.getTime() >= new Date(settings.closesAt).getTime()) {
@@ -90,7 +92,9 @@ export async function getAvailabilitySettings(
 ): Promise<AvailabilitySettings | null> {
   const { data, error } = await admin
     .from("forms")
-    .select("closes_at, closed_message, response_cap, full_message, workspaces(status)")
+    .select(
+      "closes_at, closed_message, response_cap, full_message, archived_at, workspaces(status)",
+    )
     .eq("id", formId)
     .maybeSingle();
   if (error) throw error;
@@ -98,6 +102,7 @@ export async function getAvailabilitySettings(
     ? {
         workspaceSuspended:
           (data.workspaces as { status: string } | null)?.status === "suspended",
+        archived: data.archived_at !== null,
         closesAt: data.closes_at,
         closedMessage: data.closed_message,
         responseCap: data.response_cap,

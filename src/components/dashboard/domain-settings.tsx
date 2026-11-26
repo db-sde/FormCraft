@@ -102,7 +102,7 @@ export function DomainSettings({
         title="Custom domains"
         description={
           limit === 0
-            ? "Serve your forms from your own domain, like forms.example.com. Part of the Business plan."
+            ? "Serve your forms from your own domain, like forms.example.com. Available on Starter and up."
             : "Serve your forms from your own domain, like forms.example.com. Each form is at /its-link; choose one for the domain itself."
         }
         last={domains.length === 0}

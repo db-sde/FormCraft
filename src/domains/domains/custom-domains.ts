@@ -141,7 +141,7 @@ export async function addDomain(
   if (!withinLimit(entitlements, "custom_domains", count ?? 0)) {
     throw new DomainError(
       entitlements.custom_domains === 0
-        ? "Custom domains are part of the Business plan."
+        ? "Custom domains start on the Starter plan."
         : `Your plan includes ${entitlements.custom_domains} custom domain${entitlements.custom_domains === 1 ? "" : "s"}.`,
     );
   }

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import {
+  Archive,
+  ArchiveRestore,
   Copy,
   Ellipsis,
   EllipsisVertical,
@@ -30,6 +32,7 @@ import {
 import {
   duplicateFormAction,
   deleteFormAction,
+  archiveFormAction,
   formLeadCountAction,
   moveFormToFolderAction,
 } from "@/app/(dashboard)/actions";
@@ -262,6 +265,31 @@ export function FormActionsMenu({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setSavingTemplate(true)}>
                 <LayoutTemplate /> Save as template
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={async () => {
+                  const result = await archiveFormAction(form.id, !form.archived);
+                  if (result.ok) {
+                    toast.success(
+                      form.archived
+                        ? "Restored to your forms."
+                        : "Archived. It's closed to responses; restore it from Archived forms.",
+                    );
+                    router.refresh();
+                  } else {
+                    toast.error(result.message);
+                  }
+                }}
+              >
+                {form.archived ? (
+                  <>
+                    <ArchiveRestore /> Restore
+                  </>
+                ) : (
+                  <>
+                    <Archive /> Archive
+                  </>
+                )}
               </DropdownMenuItem>
               {folders.length > 0 && (
                 <DropdownMenuSub>

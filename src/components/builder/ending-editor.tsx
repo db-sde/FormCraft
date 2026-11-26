@@ -107,7 +107,7 @@ export function EndingSettingsPanel({
       <SchedulerField ending={ending} onChange={onChange} />
       <SwitchRow
         label="Show “Made with FormCraft”"
-        hint={brandingRemovable ? undefined : "Removing it is part of paid plans."}
+        hint={brandingRemovable ? undefined : "Removing it starts on the Starter plan."}
         checked={showsMadeWith(ending, brandingRemovable)}
         disabled={!brandingRemovable}
         onCheckedChange={(on) => onChange({ ...ending, showMadeWith: on })}

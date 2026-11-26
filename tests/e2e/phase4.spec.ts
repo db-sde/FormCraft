@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import type { Json } from "@/lib/supabase/database.types";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -151,6 +152,7 @@ test.describe("phase 4", () => {
 
   test("cross-tab of two questions, filtered, and its CSV", async ({ page }) => {
     const { formId } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
     await respond(formId, "t_a", 10);
     await respond(formId, "t_a", 3);
     await respond(formId, "t_b", 9);

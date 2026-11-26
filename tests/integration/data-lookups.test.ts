@@ -278,7 +278,8 @@ describe("data lookups", () => {
     expect(calls).toHaveLength(MAX_CALLS_PER_RESPONSE);
 
     const { responseId: other } = await startResponse(admin, formId);
-    await admin.from("workspaces").update({ plan_id: "pro" }).eq("id", workspaceId);
+    // Lookups start on Pro (pricing doc).
+    await admin.from("workspaces").update({ plan_id: "starter" }).eq("id", workspaceId);
     expect(await runLookups(admin, other, "mail", { mail: "a@b.co" })).toEqual({});
     expect(calls).toHaveLength(MAX_CALLS_PER_RESPONSE);
     await admin.from("workspaces").update({ plan_id: "business" }).eq("id", workspaceId);

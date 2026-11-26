@@ -79,13 +79,13 @@ test("a form in Spanish, switchable to English, recording the language", async (
   }
 });
 
-test("without the plan, the form shows only its own language", async ({ page }) => {
+test("translations are on every plan, Free included (pricing doc)", async ({ page }) => {
   const user = await createConfirmedUser("e2e-i18n-free");
   try {
     const { liveLink } = await createPublishedForm(user, schema);
     await page.goto(`${liveLink}?lang=es`);
-    await expect(page.getByRole("heading", { name: /What's your name\?/ })).toBeVisible();
-    await expect(page.getByLabel("Language")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /¿Cómo te llamas\?/ })).toBeVisible();
+    await expect(page.getByLabel("Idioma")).toBeVisible();
   } finally {
     await deleteUser(user.userId);
   }

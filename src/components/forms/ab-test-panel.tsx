@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 const percent = (rate: number | null) =>
   rate === null ? "—" : `${(rate * 100).toFixed(1)}%`;
@@ -104,9 +105,7 @@ export function AbTestPanel({
       wide
     >
       {!allowed ? (
-        <p className="text-muted-foreground text-sm">
-          A/B tests are included in the Business plan.
-        </p>
+        <p className="text-muted-foreground text-sm">{notOnPlanMessage("ab_testing")}</p>
       ) : (
         <div className="flex flex-col gap-5">
           {running ? null : canManage ? (

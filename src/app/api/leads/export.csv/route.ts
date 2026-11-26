@@ -5,6 +5,7 @@ import { buildLeadsTable } from "@/domains/leads";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { trackEvent } from "@/lib/analytics/track";
 import { hasPermission } from "@/domains/workspaces/permissions";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 /** Creator-only, session-scoped (RLS) export of the workspace's leads;
  * `?format=xlsx` for an Excel workbook instead of CSV. */
@@ -15,6 +16,8 @@ export async function GET(request: Request) {
       status: 403,
     });
   }
+  const blocked = await planBlocks(supabase, workspace.id, "advanced_reports");
+  if (blocked) return new Response(blocked, { status: 403 });
   const search = new URL(request.url).searchParams;
   const formId = search.get("form") ?? undefined;
   const excel = search.get("format") === "xlsx";

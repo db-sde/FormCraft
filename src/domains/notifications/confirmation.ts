@@ -6,9 +6,12 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import { takeQuota } from "@/domains/billing/quotas";
 import { renderRecall } from "@/domains/logic/recall";
 import { walkForm } from "@/domains/logic/walk";
-import { renderEmailHtml } from "./email-layout";
+import { renderEmailHtml, type EmailBrand } from "./email-layout";
+import { workspaceEmailBrand } from "./branding";
+import { fromHeader } from "./mailer";
 
 type Client = SupabaseClient<Database>;
 
@@ -124,6 +127,7 @@ export function buildConfirmationEmail(input: {
   variables: Record<string, unknown>;
   hidden: Record<string, string>;
   to: string;
+  brand?: EmailBrand;
 }) {
   const source = {
     schema: input.schema,
@@ -151,6 +155,7 @@ export function buildConfirmationEmail(input: {
       button: cta ?? undefined,
       fine: "You're getting this because you filled in this form.",
       sentTo: input.to,
+      brand: input.brand,
     }),
   };
 }
@@ -165,6 +170,7 @@ export type ConfirmationResult =
         | "no_recipient"
         | "already_handled"
         | "daily_cap"
+        | "email_quota"
         | "no_api_key"
         | "spam"
         | "send_failed";
@@ -228,10 +234,12 @@ export async function sendConfirmationEmail(
             subject: string;
             html: string;
             text: string;
+            fromName?: string;
           }) => {
+            const { fromName: name, ...rest } = message;
             const { error } = await new Resend(process.env.RESEND_API_KEY).emails.send({
-              from: process.env.EMAIL_FROM ?? "FormCraft <notifications@formcraft.local>",
-              ...message,
+              from: fromHeader(name),
+              ...rest,
             });
             return !error;
           }
@@ -247,6 +255,9 @@ export async function sendConfirmationEmail(
       .gte("created_at", since);
     if ((count ?? 0) >= DAILY_CONFIRMATIONS_PER_FORM)
       return { sent: false, reason: "daily_cap" };
+    // One email from the workspace's monthly allowance (pricing doc).
+    if (!(await takeQuota(admin, workspaceId, "emails", 1, { entitlements })))
+      return { sent: false, reason: "email_quota" };
 
     // Claim the send: a second call for the same response stops here.
     const { error: claimError } = await admin
@@ -264,7 +275,9 @@ export async function sendConfirmationEmail(
       seed: response.random_seed ?? undefined,
       now: response.completed_at ? new Date(response.completed_at) : undefined,
     });
+    const { brand, fromName } = await workspaceEmailBrand(admin, workspaceId);
     const email = buildConfirmationEmail({
+      brand,
       settings,
       schema,
       answers,
@@ -272,7 +285,7 @@ export async function sendConfirmationEmail(
       hidden,
       to,
     });
-    const ok = await send({ to, ...email });
+    const ok = await send({ to, ...email, fromName });
     await admin
       .from("confirmation_email_log")
       .update({ status: ok ? "sent" : "failed", error: ok ? null : "send failed" })

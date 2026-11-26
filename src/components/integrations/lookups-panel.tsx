@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Question = { id: string; number: number; label: string };
 type Output = { field: string; path: string };
@@ -49,9 +50,7 @@ export function LookupsPanel({
 
   if (!allowed) {
     return (
-      <p className="text-muted-foreground text-sm">
-        Data lookups are included in the Business plan.
-      </p>
+      <p className="text-muted-foreground text-sm">{notOnPlanMessage("data_lookups")}</p>
     );
   }
 

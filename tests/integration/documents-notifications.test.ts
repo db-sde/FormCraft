@@ -135,7 +135,12 @@ beforeAll(async () => {
   outsider = await person("docs-outsider");
   const { data: ws } = await admin
     .from("workspaces")
-    .insert({ name: "Docs", slug: `docs-${runId}`, owner_id: owner.id })
+    .insert({
+      name: "Docs",
+      slug: `docs-${runId}`,
+      owner_id: owner.id,
+      plan_id: "business",
+    })
     .select("id")
     .single();
   workspaceId = ws!.id;

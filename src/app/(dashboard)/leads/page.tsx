@@ -24,6 +24,7 @@ import { DeleteResponseButton } from "@/components/responses/delete-response-but
 import { SearchBox } from "@/components/shared/search-box";
 import { ExportMenu } from "@/components/shared/export-menu";
 import { canEdit } from "@/domains/workspaces";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 export const metadata: Metadata = { title: "Leads" };
 
@@ -34,6 +35,16 @@ export default async function LeadsPage({
 }) {
   const { page: pageParam, form: formParam, q } = await searchParams;
   const { supabase, workspace } = await getCurrentWorkspace();
+  // The leads list is a Pro-and-up report (pricing doc).
+  const blocked = await planBlocks(supabase, workspace.id, "advanced_reports");
+  if (blocked) {
+    return (
+      <main className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-10">
+        <h1 className="font-heading text-2xl font-bold">Leads</h1>
+        <p className="text-muted-foreground">{blocked}</p>
+      </main>
+    );
+  }
   const editable = canEdit(workspace.role);
   const forms = await listFormsForWorkspace(supabase, workspace.id);
   const formId = forms.some((f) => f.id === formParam) ? formParam : undefined;

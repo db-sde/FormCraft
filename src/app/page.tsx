@@ -132,6 +132,12 @@ export default async function Home({
       <header className="mx-auto box-content flex max-w-[1200px] items-center gap-4 px-[clamp(16px,4vw,40px)] py-[18px]">
         <Brand />
         <div className="flex-1" />
+        <Link
+          href="/pricing"
+          className="fc-focus rounded-xs px-1.5 py-2 text-[14.5px] font-semibold hover:underline"
+        >
+          Pricing
+        </Link>
         {user ? (
           <Link
             href="/dashboard"
@@ -318,6 +324,9 @@ export default async function Home({
         </span>
         <span>© 2026 FormCraft</span>
         <div className="flex-1" />
+        <Link href="/pricing" className="hover:underline">
+          Pricing
+        </Link>
         <Link href="/templates" className="hover:underline">
           Templates
         </Link>

@@ -20,6 +20,8 @@ import { isTurnstileConfigured } from "@/domains/abuse/turnstile";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VariantTestPanel } from "@/components/forms/variant-test-panel";
 import { ConfidentialPanel } from "@/components/forms/confidential-panel";
+import { FormSeoPanel } from "@/components/forms/form-seo-panel";
+import { readSeo } from "@/domains/forms/seo";
 import { readConfidential } from "@/domains/responses/feedback-report";
 import { listVariantTests, variantResults } from "@/domains/forms/variant-tests";
 import { hasLogic } from "@/domains/forms/variants";
@@ -74,7 +76,7 @@ export default async function FormSettingsPage({
     supabase
       .from("forms")
       .select(
-        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config, confidential",
+        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config, confidential, seo",
       )
       .eq("id", formId)
       .single(),
@@ -129,6 +131,16 @@ export default async function FormSettingsPage({
             accepted,
           }}
           captchaAvailable={isTurnstileConfigured()}
+          canManage={canPublish}
+        />
+      )}
+      {access && (
+        <FormSeoPanel
+          formId={formId}
+          workspaceId={workspace.id}
+          formTitle={form.title}
+          initial={readSeo(access.seo)}
+          allowed={plan.entitlements.custom_seo}
           canManage={canPublish}
         />
       )}

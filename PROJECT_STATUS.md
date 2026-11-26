@@ -1,8 +1,27 @@
 # Project Status
 
-Last updated: 2026-11-02
+Last updated: 2026-11-26
 
 ## Current milestone
+
+**Pricing plans and quotas** (2026-11-26, migrations 77–78, branch
+`claude/hardening`): Free / Starter / Pro / Business from the pricing
+doc, with a public `/pricing` page, per-plan quotas (emails, address
+lookups, AI credits by model, storage, API limits, seats, domains),
+feature gates on the server, upgrade requests to staff, form archiving,
+link preview and SEO, email branding, a 1,959-family font library and
+53 themes. See DECISIONS.md (2026-11-26).
+
+- **To deploy:** `npx supabase db push --linked` (migrations 77–78),
+  then deploy. No new environment variables are needed.
+- **Next:** checkout (Razorpay and Stripe) and add-ons; moving file
+  storage to R2.
+
+Earlier, Super Admin Phases 2–5 (migrations 70–76) went live on
+2026-11-25: reports, operations, the AI gateway, privacy requests,
+retention, access reviews and drills.
+
+### Hardening
 
 **Hardening** (2026-11-03, migrations 54–59, branch `claude/hardening`):
 background work every minute via Supabase's scheduler, requests running

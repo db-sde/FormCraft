@@ -37,6 +37,7 @@ import {
   saveLookup,
   type LookupInput,
 } from "@/domains/integrations/lookups";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 const MAX_URL_LENGTH = 2000;
 
@@ -464,6 +465,11 @@ export async function saveTrackingAction(
       })()
     : await editableFormWithFeature(formId, "tracking_pixels");
   if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
+  // LinkedIn and TikTok are Pro and up (GA4, GTM and Meta from Starter).
+  if (parsed.data.linkedinPartnerId || parsed.data.tiktokPixelId) {
+    const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "advanced_pixels");
+    if (blocked) return { ok: false, message: blocked };
+  }
   const { data, error } = await ctx.supabase
     .from("forms")
     .update({
@@ -569,7 +575,7 @@ export async function saveHubspotSyncAction(
   formId: string,
   mapping: Record<string, string> | null,
 ): Promise<FeatureResult> {
-  const ctx = await editableFormWithFeature(formId, "crm");
+  const ctx = await editableFormWithFeature(formId, "business_apps");
   if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
   const { data: existing } = await ctx.supabase
     .from("webhook_endpoints")
@@ -619,7 +625,7 @@ export async function testHubspotAction(
   formId: string,
   mapping: Record<string, string>,
 ): Promise<FeatureResult> {
-  const ctx = await editableFormWithFeature(formId, "crm");
+  const ctx = await editableFormWithFeature(formId, "business_apps");
   if ("error" in ctx) return { ok: false, message: ctx.error ?? "Not allowed." };
   const { data: draft } = await ctx.supabase
     .from("form_versions")

@@ -48,17 +48,18 @@ const fontOf = (page: import("@playwright/test").Page) =>
     .first()
     .evaluate((el) => getComputedStyle(el).fontFamily);
 
-test("the plan decides the badge and paid fonts, not the saved form", async ({
+test("the plan decides the badge, not the saved form; built-in fonts are on every plan", async ({
   page,
 }) => {
   const user = await createConfirmedUser("e2e-branding");
   try {
     const { liveLink } = await createPublishedForm(user, schema);
 
-    // Free (a new workspace, no grandfathering): badge stays, Lora becomes Inter.
+    // Free (a new workspace, no grandfathering): the badge stays; Lora is a
+    // built-in font, on every plan (pricing doc).
     await finish(page, liveLink);
     await expect(page.getByText("Made with FormCraft")).toBeVisible();
-    expect(await fontOf(page)).not.toContain("Lora");
+    expect(await fontOf(page)).toContain("Lora");
 
     await adminClient()
       .from("workspaces")

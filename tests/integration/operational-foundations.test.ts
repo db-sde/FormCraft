@@ -135,7 +135,8 @@ async function pendingAttempt(
 
 describe("AI credits (foundations §3)", () => {
   it("can't be overspent by requests at the same moment", async () => {
-    const entitlements = { ai_credits_per_month: 3 } as Parameters<
+    // Form tools run on Sonnet: 5 credits a call, so 15 cover three.
+    const entitlements = { ai_form_tools: true, ai_credits_per_month: 15 } as Parameters<
       typeof beginAi
     >[1]["entitlements"];
     const results = await Promise.all(
@@ -150,7 +151,7 @@ describe("AI credits (foundations §3)", () => {
       .eq("workspace_id", workspaceId)
       .eq("metric", "ai_credits")
       .single();
-    expect(Number(data!.value)).toBe(3);
+    expect(Number(data!.value)).toBe(15);
   });
 });
 

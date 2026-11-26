@@ -15,6 +15,7 @@ import { outboundUrlProblem, resolvesToDisallowedAddress, safeFetch } from "./ur
 import { buildSlackMessage } from "./slack";
 import { sendToHubspot } from "@/domains/integrations/hubspot";
 import { parseFormSchema } from "@/domains/forms/schema";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
 
 type Client = SupabaseClient<Database>;
 
@@ -236,7 +237,7 @@ export async function enqueueWebhookDeliveries(
 
   let endpointsQuery = admin
     .from("webhook_endpoints")
-    .select("id, config")
+    .select("id, config, kind")
     .eq("form_id", response.formId)
     .eq("enabled", true);
   if (onlyEndpointIds) endpointsQuery = endpointsQuery.in("id", onlyEndpointIds);
@@ -244,9 +245,21 @@ export async function enqueueWebhookDeliveries(
   if (endpointsError) throw endpointsError;
   // Only those that asked for completed responses (all, unless they
   // chose their own events, F-53).
-  const endpoints = (allEndpoints ?? []).filter((e) =>
+  let endpoints = (allEndpoints ?? []).filter((e) =>
     endpointEvents(e.config).includes("response.completed"),
   );
+  // HubSpot is a Starter-and-up app: after a downgrade it stops here.
+  if (endpoints.some((e) => e.kind === "hubspot")) {
+    const { data: form } = await admin
+      .from("forms")
+      .select("workspace_id")
+      .eq("id", response.formId)
+      .maybeSingle();
+    const allowed =
+      form &&
+      (await getWorkspacePlan(admin, form.workspace_id)).entitlements.business_apps;
+    if (!allowed) endpoints = endpoints.filter((e) => e.kind !== "hubspot");
+  }
   if (endpoints.length === 0) return 0;
 
   const rows = endpoints.map((endpoint) => {

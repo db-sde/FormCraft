@@ -4,6 +4,8 @@ import { isValidTimeZone, zoneOffsetMinutes } from "@/domains/logic/datetime";
 import { renderEmailHtml } from "./email-layout";
 import { defaultSender, type Send } from "./mailer";
 import { ruleRecipients } from "./rules";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import { takeQuota } from "@/domains/billing/quotas";
 import { parseFormSchema } from "@/domains/forms/schema";
 import { npsOf } from "@/domains/responses/summary";
 
@@ -200,6 +202,15 @@ export async function sendDueDigests(
     }
     const to = await ruleRecipients(admin, form.workspace_id, digest.member_ids);
     if (!send || to.length === 0) {
+      skipped += 1;
+      continue;
+    }
+    // Digests are a Pro feature, and each one counts against the emails.
+    const { entitlements } = await getWorkspacePlan(admin, form.workspace_id);
+    if (
+      !entitlements.team_notifications ||
+      !(await takeQuota(admin, form.workspace_id, "emails", to.length, { entitlements }))
+    ) {
       skipped += 1;
       continue;
     }

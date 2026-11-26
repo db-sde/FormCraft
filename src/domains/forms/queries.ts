@@ -9,10 +9,14 @@ import {
   validateSemantics,
 } from "./schema/validate";
 import { compileFormSchema, type CompiledFormV1 } from "./schema/compile";
+import { FormSchemaError } from "./schema/validate";
 import type { FormSchemaV1 } from "./schema/v1";
 import { availabilityOf } from "./availability";
 import { readKioskConfig, type KioskConfig } from "./kiosk";
+import { readSeo, type FormSeo } from "./seo";
 import { assertBlockLocks } from "@/domains/blocks/queries";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import { publishBlockedBy } from "@/domains/billing/schema-features";
 import { TYPE_HELPER_TEXT, welcomeTakesNewName } from "./builder";
 
 type Client = SupabaseClient<Database>;
@@ -58,6 +62,8 @@ export type FormListItem = {
   preview: FormPreview;
   /** Live, but past its close date or response cap (F-46, F-47). */
   closed: "closed" | "full" | null;
+  /** Archived: hidden from the main list and closed to responses. */
+  archived: boolean;
 };
 
 /** The first real question of a form, drawn in the form's own theme on
@@ -227,14 +233,19 @@ export function starterFormSchema(title: string): FormSchemaV1 {
 export async function listFormsForWorkspace(
   supabase: Client,
   workspaceId: string,
+  options: { archived?: boolean } = {},
 ): Promise<FormListItem[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("forms")
     .select(
-      "id, title, slug, updated_at, created_at, created_by, folder_id, closes_at, response_cap, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count), accepted:responses(count)",
+      "id, title, slug, updated_at, created_at, created_by, folder_id, closes_at, response_cap, archived_at, form_versions(status), draft:form_versions(schema), completed:responses(count), incomplete:responses(count), accepted:responses(count)",
     )
     .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+  query = options.archived
+    ? query.not("archived_at", "is", null)
+    : query.is("archived_at", null);
+  const { data, error } = await query
     // These filter the embedded rows, not the forms.
     .eq("draft.status", "draft")
     .eq("completed.status", "completed")
@@ -274,8 +285,28 @@ export async function listFormsForWorkspace(
       folderId: form.folder_id,
       preview: previewFromSchema(form.draft?.[0]?.schema),
       closed: availability.open ? null : availability.reason,
+      archived: form.archived_at !== null,
     };
   });
+}
+
+/** Archives a form (hidden and closed to responses, nothing deleted) or
+ * restores it. Every plan (pricing doc). */
+export async function setFormArchived(
+  supabase: Client,
+  formId: string,
+  workspaceId: string,
+  archived: boolean,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("forms")
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .eq("id", formId)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .select("id");
+  if (error) throw error;
+  if (!data?.length) throw new Error("form not found");
 }
 
 /**
@@ -499,6 +530,13 @@ export async function publishForm(
     (draft.forms as { workspace_id: string }).workspace_id,
     parsed,
   );
+  // Paid features inside the form must be on the workspace's plan.
+  const { entitlements } = await getWorkspacePlan(
+    admin,
+    (draft.forms as { workspace_id: string }).workspace_id,
+  );
+  const blocked = publishBlockedBy(parsed, entitlements);
+  if (blocked) throw new FormSchemaError(blocked, "not_on_plan");
   const compiled = compileFormSchema(parsed);
 
   const { data, error } = await admin.rpc("publish_form_version", {
@@ -715,6 +753,8 @@ export type PublicForm = {
   captchaRequired: boolean;
   /** Kiosk mode's settings (F-15); null when it's off. */
   kiosk: KioskConfig | null;
+  /** Link preview and SEO as set (shown only on a plan with them). */
+  seo: FormSeo;
 };
 
 export type FormSettings = {
@@ -798,7 +838,7 @@ export async function getPublicFormBySlug(
   const { data: form, error: formError } = await supabase
     .from("forms")
     .select(
-      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, captcha_required, kiosk_config",
+      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, captcha_required, kiosk_config, seo",
     )
     .eq("slug", slug)
     .is("deleted_at", null)
@@ -834,6 +874,7 @@ export async function getPublicFormBySlug(
     pixelConsent: form.pixel_consent === "ask" ? "ask" : "none",
     captchaRequired: form.captcha_required,
     kiosk: readKioskConfig(form.kiosk_config),
+    seo: readSeo(form.seo),
   };
 }
 

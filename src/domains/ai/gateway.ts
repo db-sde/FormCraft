@@ -2,7 +2,11 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import type { Entitlements } from "@/domains/billing/entitlements";
+import {
+  notOnPlanMessage,
+  type Entitlements,
+  type Feature,
+} from "@/domains/billing/entitlements";
 import { trackAccountEvent } from "@/lib/analytics/account-events";
 import { AI_OUT_OF_CREDITS, type AiFailure } from "./errors";
 
@@ -48,6 +52,19 @@ export type AllowedModel = keyof typeof ALLOWED_MODELS;
 export function isAllowedModel(model: unknown): model is AllowedModel {
   return typeof model === "string" && Object.hasOwn(ALLOWED_MODELS, model);
 }
+
+/** Which plan feature each AI feature needs (pricing doc): writing and
+ * editing forms from Starter, response insights from Pro. Follow-up
+ * questions only need credits. */
+export const AI_PLAN_FEATURE: Record<AiFeature, Feature | null> = {
+  form_generate: "ai_form_tools",
+  form_edit: "ai_form_tools",
+  logic_rule: "ai_form_tools",
+  form_review: "ai_form_tools",
+  response_analysis: "ai_insights",
+  response_summary: "ai_insights",
+  follow_up: null,
+};
 
 export const AI_PAUSED: AiFailure = {
   ok: false,
@@ -120,6 +137,10 @@ export async function beginAi(
   admin: Client,
   input: { feature: AiFeature; workspaceId: string; entitlements: Entitlements },
 ): Promise<{ ok: true; ai: AiSession } | AiFailure> {
+  const needs = AI_PLAN_FEATURE[input.feature];
+  if (needs && !input.entitlements[needs]) {
+    return { ok: false, code: "limited", message: notOnPlanMessage(needs) };
+  }
   const { data, error } = await admin.rpc("ai_begin", {
     p_workspace_id: input.workspaceId,
     p_feature: input.feature,

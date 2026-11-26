@@ -8,8 +8,9 @@ export function apiError(code: string, message: string, status: number) {
 }
 
 /**
- * The /api/v1 surface (Zapier / Make): `Authorization: Bearer fc_live_…`,
- * scoped to the key's workspace, 120 requests a minute per key. Every
+ * The /api/v1 surface (Zapier / Make / n8n): `Authorization: Bearer
+ * fc_live_…`, scoped to the key's workspace, within the plan's limits (a
+ * minute per key, a day per workspace; pricing doc). Every
  * query below filters by the caller's workspace explicitly — this runs
  * with the service role, so nothing else would.
  */
@@ -36,8 +37,28 @@ export async function withApiKey(
   if (!caller.scopes.includes(scope)) {
     return apiError("forbidden", `This key doesn't have the ${scope} permission.`, 403);
   }
-  if (!(await hitRateLimit(admin, `api:${caller.keyId}`, 120, 60_000)).allowed) {
+  if (
+    caller.perMinute !== null &&
+    !(await hitRateLimit(admin, `api:${caller.keyId}`, caller.perMinute, 60_000)).allowed
+  ) {
     return apiError("rate_limited", "Too many requests. Slow down a little.", 429);
+  }
+  if (
+    caller.perDay !== null &&
+    !(
+      await hitRateLimit(
+        admin,
+        `api-day:${caller.workspaceId}`,
+        caller.perDay,
+        86_400_000,
+      )
+    ).allowed
+  ) {
+    return apiError(
+      "daily_limit",
+      "This workspace has used today's API requests for its plan. Try again tomorrow or upgrade.",
+      429,
+    );
   }
   try {
     return await handler(caller, admin);

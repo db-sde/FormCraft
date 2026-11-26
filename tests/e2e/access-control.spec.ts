@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   createConfirmedUser,
   createPublishedForm,
   deleteUser,
@@ -44,6 +45,7 @@ test("another workspace's data is invisible and untouchable", async ({
   const intruder = await createConfirmedUser("e2e-intruder");
   try {
     const { formId } = await createPublishedForm(owner, schema);
+    await setPlan(owner.userId, "business");
     const start = await request.post("/api/responses/start", { data: { formId } });
     const { responseId } = await start.json();
     await request.post(`/api/responses/${responseId}/complete`, {
@@ -81,8 +83,10 @@ test("another workspace's data is invisible and untouchable", async ({
     expect(csv.status()).toBe(404);
 
     for (const url of ["/api/leads/export.csv", `/api/leads/export.csv?form=${formId}`]) {
+      // The intruder's own workspace is on Free, where the export isn't
+      // included: refused, or (on a plan with it) only their own leads.
       const leads = await page.request.get(url);
-      expect(leads.ok()).toBeTruthy();
+      expect(leads.ok() || leads.status() === 403).toBeTruthy();
       expect(await leads.text()).not.toContain("secret-lead@example.com");
     }
 

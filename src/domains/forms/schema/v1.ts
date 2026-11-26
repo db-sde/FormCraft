@@ -679,8 +679,9 @@ export const ThemeV1 = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
-  /** The first four are on every plan; the rest need custom fonts
-   * (P2.22) — the server shows Inter instead when the plan lacks them. */
+  /** Built-in fonts and the font library are on every plan; an uploaded
+   * font ("custom") needs Starter and up (pricing doc) — the server shows
+   * Inter instead when the plan lacks it. */
   fontFamily: z
     .enum([
       "inter",
@@ -693,8 +694,15 @@ export const ThemeV1 = z.object({
       "nunito",
       "dm_serif",
       "custom",
+      "library",
     ])
     .default("inter"),
+  /** A font library family (with fontFamily "library"): letters, digits
+   * and spaces only, so it's safe in CSS; served from /fonts. */
+  libraryFont: z
+    .string()
+    .regex(/^[A-Za-z0-9 ]{2,60}$/)
+    .optional(),
   /** An uploaded, licensed WOFF2 font (with fontFamily "custom"). */
   customFont: z.object({ name: safeText(60), url: webUrl }).optional(),
   buttonStyle: z.enum(["rounded", "square", "pill"]).default("rounded"),

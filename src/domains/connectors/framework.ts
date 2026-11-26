@@ -5,6 +5,7 @@ import { isExhausted, nextBackoffDelayMs } from "@/domains/webhooks/backoff";
 import { refreshIfNeeded, TokenError, type Tokens } from "./oauth";
 import { isReplayable } from "./catalog";
 import { SQL_NULL } from "@/lib/supabase/sql-null";
+import { connectorAllowed } from "./plans";
 
 type Client = SupabaseClient<Database>;
 type JobRow = Database["public"]["Tables"]["connector_jobs"]["Row"];
@@ -380,6 +381,14 @@ export async function runJob(admin: Client, job: JobRow, fetcher: typeof fetch =
       ok: false,
       retry: false,
       error: `No action ${job.provider}:${job.action}`,
+    });
+    return;
+  }
+  // The app is no longer on the workspace's plan (a downgrade): skipped.
+  if (!(await connectorAllowed(admin, job.workspace_id, job.provider))) {
+    await finish(admin, job, {
+      ok: true,
+      skipped: "This app isn't included in the workspace's plan any more.",
     });
     return;
   }

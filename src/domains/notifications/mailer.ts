@@ -14,7 +14,19 @@ export type OutgoingEmail = {
   attachments?: { filename: string; content: Uint8Array }[];
   /** The same key never sends twice (a retried job, a duplicate run). */
   idempotencyKey?: string;
+  /** A workspace's sender name (email branding); the address stays ours. */
+  fromName?: string;
 };
+
+/** The From header: the configured sender, or "<name> via FormCraft" at
+ * the same address when a workspace brands its emails. */
+export function fromHeader(fromName?: string): string {
+  const base = process.env.EMAIL_FROM ?? "FormCraft <notifications@formcraft.local>";
+  const name = fromName?.replace(/[<>"@,;\r\n]/g, "").trim();
+  if (!name) return base;
+  const address = /<([^>]+)>/.exec(base)?.[1] ?? base;
+  return `${name} via FormCraft <${address}>`;
+}
 
 export type Send = (
   email: OutgoingEmail,
@@ -28,7 +40,7 @@ export function defaultSender(): Send | null {
     try {
       const { data, error } = await new Resend(key).emails.send(
         {
-          from: process.env.EMAIL_FROM ?? "FormCraft <notifications@formcraft.local>",
+          from: fromHeader(email.fromName),
           to: email.to,
           subject: email.subject,
           html: email.html,

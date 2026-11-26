@@ -7,6 +7,7 @@ import { z } from "zod";
 import { deleteAccount } from "@/domains/identity";
 import { requireUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 export type AccountResult =
   { ok: true; message?: string } | { ok: false; message: string };
@@ -144,9 +145,13 @@ export async function setResponseRetentionAction(
   const { getCurrentWorkspace } = await import("@/lib/auth/current-workspace");
   const { canAdmin } = await import("@/domains/workspaces");
   const { audit } = await import("@/domains/audit");
-  const { user, workspace } = await getCurrentWorkspace();
+  const { user, workspace, supabase } = await getCurrentWorkspace();
   if (!canAdmin(workspace.role))
     return { ok: false, message: "Only the owner and admins can change this." };
+  if (days !== null) {
+    const blocked = await planBlocks(supabase, workspace.id, "auto_deletion");
+    if (blocked) return { ok: false, message: blocked };
+  }
   const admin = createAdminClient();
   const { error } = await admin
     .from("workspaces")

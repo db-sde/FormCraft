@@ -39,6 +39,7 @@ import { audit } from "@/domains/audit";
 import { isWoff2, MAX_FONT_BYTES } from "@/domains/themes/fonts";
 import { hasPermission } from "@/domains/workspaces/permissions";
 import { notSetUpMessage } from "@/lib/not-set-up";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 export async function renameFormAction(
   formId: string,
@@ -425,7 +426,7 @@ export async function uploadThemeFontAction(
   const admin = createAdminClient();
   const { entitlements } = await getWorkspacePlan(admin, workspace.id);
   if (!entitlements.custom_fonts) {
-    return { ok: false, message: "Your own fonts are part of paid plans." };
+    return { ok: false, message: notOnPlanMessage("custom_fonts") };
   }
   if (formData.get("licensed") !== "yes") {
     return { ok: false, message: "Confirm you're licensed to use this font on the web." };

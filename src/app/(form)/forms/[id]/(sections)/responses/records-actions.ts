@@ -25,6 +25,7 @@ import { audit } from "@/domains/audit/log";
 import { correctAnswer } from "@/domains/responses/corrections";
 import { getResponseDetail } from "@/domains/responses/dashboard";
 import { currentRequestId } from "@/lib/http/request-id";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -53,6 +54,8 @@ export async function setReviewStatusAction(
   if (!isReviewStatus(status)) return { ok: false, message: "Pick a status." };
   const auth = await authorize(formId, responseId);
   if (!auth) return { ok: false, message: NOT_ALLOWED };
+  const blocked = await planBlocks(auth.supabase, auth.workspace.id, "response_workflow");
+  if (blocked) return { ok: false, message: blocked };
   const ok = await setReviewStatus(createAdminClient(), {
     responseId,
     status,
@@ -70,6 +73,8 @@ export async function setAssigneeAction(
 ): Promise<Result> {
   const auth = await authorize(formId, responseId);
   if (!auth) return { ok: false, message: NOT_ALLOWED };
+  const blocked = await planBlocks(auth.supabase, auth.workspace.id, "response_workflow");
+  if (blocked) return { ok: false, message: blocked };
   const ok = await setAssignee(createAdminClient(), {
     workspaceId: auth.workspace.id,
     responseId,
@@ -94,6 +99,8 @@ export async function addCommentAction(
   }
   const auth = await authorize(formId, responseId);
   if (!auth) return { ok: false, message: NOT_ALLOWED };
+  const blocked = await planBlocks(auth.supabase, auth.workspace.id, "response_workflow");
+  if (blocked) return { ok: false, message: blocked };
   const admin = createAdminClient();
   if (!(await hitRateLimit(admin, `comment:${auth.user.id}`, 30, 60_000)).allowed) {
     return { ok: false, message: "Too many comments at once. Wait a minute." };
@@ -189,6 +196,12 @@ export async function correctAnswerAction(
 ): Promise<Result> {
   const auth = await authorize(formId, responseId);
   if (!auth) return { ok: false, message: NOT_ALLOWED };
+  const blocked = await planBlocks(
+    auth.supabase,
+    auth.workspace.id,
+    "submission_editing",
+  );
+  if (blocked) return { ok: false, message: blocked };
   if (!(await hasPermission(auth.supabase, auth.workspace.id, "edit_responses"))) {
     await audit(createAdminClient(), {
       workspaceId: auth.workspace.id,

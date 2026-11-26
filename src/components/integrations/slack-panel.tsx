@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/lib/toast";
 import { cn } from "cn";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Question = { id: string; number: number; label: string };
 
@@ -82,11 +83,7 @@ export function SlackPanel({
   const [pending, start] = useTransition();
 
   if (!allowed) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        Slack is part of the Business plan. See Settings → Plan.
-      </p>
-    );
+    return <p className="text-muted-foreground text-sm">{notOnPlanMessage("slack")}</p>;
   }
 
   return (

@@ -26,7 +26,11 @@ export async function testAiSession(
   const begun = await beginAi(admin as never, {
     feature,
     workspaceId: "00000000-0000-4000-8000-000000000001",
-    entitlements: { ai_credits_per_month: null } as never,
+    entitlements: {
+      ai_credits_per_month: null,
+      ai_form_tools: true,
+      ai_insights: true,
+    } as never,
   });
   if (!begun.ok) throw new Error(begun.message);
   return { ai: begun.ai, recorded };

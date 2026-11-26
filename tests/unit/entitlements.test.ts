@@ -50,8 +50,10 @@ describe("usage", () => {
       completedResponses: 1001,
       aiCredits: 0,
       placesLookups: 0,
+      emails: 0,
+      addressLookups: 0,
       members: 1,
-      storageMb: 10,
+      storageMb: 5,
       recordingsMb: 0,
     };
     const e = resolveEntitlements({ responses_per_month: 1000, storage_mb: 10 }, {});
@@ -59,6 +61,40 @@ describe("usage", () => {
     expect(usageWarnings({ ...usage, completedResponses: 1000 }, e)).toEqual([]);
     expect(
       usageWarnings(usage, resolveEntitlements({ responses_per_month: null }, {})),
+    ).toEqual([]);
+  });
+
+  it("warns at 80% storage, when it's full, and when a quota is used up", () => {
+    const usage: Usage = {
+      periodStart: "2026-10-01",
+      completedResponses: 0,
+      aiCredits: 100,
+      placesLookups: 0,
+      emails: 2000,
+      addressLookups: 10,
+      members: 1,
+      storageMb: 8,
+      recordingsMb: 0,
+    };
+    const e = resolveEntitlements(
+      {
+        storage_mb: 10,
+        emails_per_month: 2000,
+        ai_credits_per_month: 100,
+        address_lookups_per_month: 500,
+      },
+      {},
+    );
+    const warnings = usageWarnings(usage, e);
+    expect(warnings.map((w) => w.metric)).toEqual(["storage", "emails", "ai"]);
+    expect(warnings[0].message).toContain("80%");
+    expect(usageWarnings({ ...usage, storageMb: 10 }, e)[0].message).toContain("full");
+    // A plan without AI or address suggestions isn't warned about them.
+    expect(
+      usageWarnings(
+        { ...usage, storageMb: 0, emails: 0 },
+        resolveEntitlements({ ai_credits_per_month: 0 }, {}),
+      ),
     ).toEqual([]);
   });
 });

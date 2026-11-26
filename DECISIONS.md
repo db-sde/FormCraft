@@ -3,6 +3,58 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-26 — Pricing plans and quotas (pricing doc, migrations 77–78)
+
+Built from "FormCraft Pricing Plans & Unit Economics" (updated). No
+developer doc existed, so these were decided here:
+
+- **Plans**: Free $0, Starter $15/$19, Pro $39/$49, Business $69/$89
+  (annual/monthly), in `src/domains/billing/catalog.ts`. The migration 77
+  seed is generated from it and a unit test keeps them equal. Enterprise
+  stays as a hidden plan for custom contracts (`is_public = false`).
+- **Plans and quotas first, checkout later.** Until Razorpay and Stripe
+  checkout exist, owners and admins send an upgrade request
+  (`request_plan_upgrade`, at most one open a day). Staff see it on
+  Customers and as an alert, and change the plan through an approved
+  request; a plan change closes the request.
+- **Responses are never refused.** The doc's response numbers are
+  fair-use levels: above them the creator sees a notice and the admin
+  Usage page flags the workspace.
+- **What happens when a quota runs out** (doc):
+  - Emails: owner notifications stop and are held back by day and form.
+    The owner gets one summary a day from the digests cron instead. It
+    isn't counted: it's one email a day and it's how they learn the rest
+    stopped. Respondent emails that a form can't work without
+    (verification codes, booking confirmations) are counted, never
+    refused.
+  - Address lookups: suggestions stop and respondents type the address.
+  - AI: calls stop with a plain message; nothing else changes.
+  - Storage: new files are refused (413) with a clear message; answers
+    are still saved. Owners are emailed at 80% and 95%, once a month.
+- **AI credits by model**: Haiku 5.5 = 1, Sonnet 5.5 = 5, Opus = 10
+  (`private.ai_prices.credits_per_call`). Light work (response analysis,
+  follow-up questions) runs on Haiku and the rest on Sonnet; staff can
+  change either through approvals.
+- **Feature gates are checked on the server** at each action and API
+  route, and again at publish for features a form carries in its schema
+  (`publishBlockedBy`). A form published before a downgrade keeps
+  working as published until it's published again.
+- **New on every plan**: form archiving (an archived form refuses new
+  responses, enforced by a trigger), the font library and 50+ themes.
+  - Font library: 1,959 open-licensed Google Fonts families. They're
+    served through `/fonts/css` and `/fonts/file/…` on FormCraft's own
+    domain, so respondents' browsers never contact Google and the CSP
+    stays `'self'`. Only names in the library are served; uploading your
+    own font stays Starter and up.
+- **Starter and up**: link preview and SEO (Free shares the form's own
+  title and description), and email branding (logo, colour, footer,
+  sender name; the address stays FormCraft's).
+- **SOC 2 wording**: "hosted on SOC 2 audited infrastructure (Vercel,
+  Supabase)". Never "FormCraft is SOC 2 compliant".
+- **Not built yet** (recorded, not promised on the pricing page):
+  creating extra workspaces (`multiple_workspaces` is left off the
+  pages), checkout, add-ons, and moving file storage to R2.
+
 ## 2026-11-20 — Integration audit (roadmap v3.1 §J): honest labels and three connector fixes
 
 The owner's §J asks for every listed connection to be audited with

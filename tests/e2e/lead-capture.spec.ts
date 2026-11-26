@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   createConfirmedUser,
   createPublishedForm,
   deleteUser,
@@ -50,6 +51,7 @@ test("a respondent who leaves before the last question is still a lead", async (
   const user = await createConfirmedUser("e2e-leads");
   try {
     const { formId, liveLink } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
 
     const respondentContext = await browser.newContext();
     const r = await respondentContext.newPage();

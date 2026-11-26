@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Source = "fixed" | "variable" | "order";
 
@@ -341,9 +342,7 @@ export function PaymentPanel({
 
   if (!allowed && !initial) {
     return (
-      <p className="text-muted-foreground text-sm">
-        Payments are part of the Business plan.
-      </p>
+      <p className="text-muted-foreground text-sm">{notOnPlanMessage("payments")}</p>
     );
   }
   if (providers.length === 0) {

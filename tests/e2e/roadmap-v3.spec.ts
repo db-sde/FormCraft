@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -151,6 +152,7 @@ test.describe("roadmap v3.1", () => {
       ],
       logic: [],
     } as FormSchemaV1);
+    await setPlan(user.userId, "business");
     const visitor = await page.context().browser()!.newContext();
     const form = await visitor.newPage();
     await form.goto(liveLink);

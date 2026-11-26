@@ -9,6 +9,7 @@ import {
   suggestAddresses,
 } from "@/domains/places";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getWorkspacePlan, quotaUsed, takeQuota } from "@/domains/billing";
 import { apiError, getClientIp, readJsonBody } from "../responses/shared";
 
 /**
@@ -68,9 +69,33 @@ export async function POST(request: NextRequest) {
   if (!question || question.type !== "address" || !question.settings.autocomplete) {
     return apiError("not_found", "No address suggestions here.", 404);
   }
+  if (!form) return apiError("not_found", "No address suggestions here.", 404);
+
+  // The plan's monthly allowance of addresses (pricing doc). Google bills
+  // one event per address picked (session billing), so the "details" call
+  // takes one; searching stops once it's used up, so no session is left
+  // half-done (that would bill each search). The respondent types instead.
+  const { entitlements } = await getWorkspacePlan(admin, form.workspace_id);
+  const allowance = entitlements.address_lookups_per_month;
+  if (allowance === 0) {
+    return apiError("not_on_plan", "Address suggestions aren't on this plan.", 403);
+  }
+  if (input.action === "details") {
+    if (
+      !(await takeQuota(admin, form.workspace_id, "address_lookups", 1, { entitlements }))
+    ) {
+      return apiError("quota", "Address suggestions are paused. Type it instead.", 429);
+    }
+  } else if (
+    allowance !== null &&
+    (await quotaUsed(admin, form.workspace_id, "address_lookups")) >= allowance
+  ) {
+    return apiError("quota", "Address suggestions are paused. Type it instead.", 429);
+  }
+
   // Counted per workspace and month, for the usage page (cost monitoring).
   // (A query only runs when awaited.) Never holds up the lookup itself.
-  if (form) {
+  {
     await admin
       .rpc("increment_usage", {
         p_workspace_id: form.workspace_id,

@@ -65,7 +65,7 @@ async function signIn(label: string) {
 const setCredits = (n: number) =>
   admin
     .from("workspaces")
-    .update({ entitlement_overrides: { ai_credits_per_month: n } })
+    .update({ entitlement_overrides: { ai_insights: true, ai_credits_per_month: n } })
     .eq("id", workspaceId);
 const creditsUsed = async () =>
   Number(

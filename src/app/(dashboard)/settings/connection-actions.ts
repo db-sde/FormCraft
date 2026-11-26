@@ -21,6 +21,7 @@ import {
 import { canAdmin } from "@/domains/workspaces";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 export type ConnectionResult =
   { ok: true; message?: string } | { ok: false; message: string };
@@ -30,7 +31,7 @@ async function adminWithFeature(feature: Feature) {
   if (!canAdmin(ctx.workspace.role))
     return { error: "Only the owner and admins can connect accounts." };
   const { entitlements } = await getWorkspacePlan(createAdminClient(), ctx.workspace.id);
-  if (!entitlements[feature]) return { error: "This is part of the Business plan." };
+  if (!entitlements[feature]) return { error: notOnPlanMessage(feature) };
   return { ctx };
 }
 
@@ -138,7 +139,7 @@ export async function connectHubspotAction(token: string): Promise<ConnectionRes
       message: "Paste a HubSpot private app access token (it starts with pat-).",
     };
   }
-  const allowed = await adminWithFeature("crm");
+  const allowed = await adminWithFeature("business_apps");
   if ("error" in allowed) return { ok: false, message: allowed.error ?? "Not allowed." };
   if (!(await verifyHubspotToken(value))) {
     return {

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Source = { value: string; label: string };
 
@@ -47,9 +48,7 @@ export function HubspotPanel({
   const [pending, start] = useTransition();
   if (!allowed && !initial) {
     return (
-      <p className="text-muted-foreground text-sm">
-        CRM integrations are part of the Business plan.
-      </p>
+      <p className="text-muted-foreground text-sm">{notOnPlanMessage("business_apps")}</p>
     );
   }
   if (!connected) {

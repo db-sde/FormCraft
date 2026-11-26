@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Copy, RefreshCw, Trash2 } from "lucide-react";
 import type { ThemeV1, ThemeVariantV1 } from "@/domains/forms/schema/v1";
 import { saveLookAsVariant } from "@/domains/themes/variants";
-import { THEME_FONT_STACK } from "@/components/theme-styles";
+import { themeFontStack } from "@/components/theme-styles";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { PANEL_INPUT, PanelNote, SectionHead } from "./panel-ui";
@@ -68,7 +68,7 @@ export function LinkThemes({
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
                   <b
                     className="truncate text-[13px]"
-                    style={{ fontFamily: THEME_FONT_STACK[variant.theme.fontFamily] }}
+                    style={{ fontFamily: themeFontStack(variant.theme) }}
                   >
                     {variant.name}
                   </b>

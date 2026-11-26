@@ -12,6 +12,7 @@ import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Status = { label: string | null; status: string } | null;
 
@@ -87,7 +88,7 @@ export function ConnectionSettings({
         description={
           payments
             ? "Take payments in forms with your own Stripe account. Respondents pay on Stripe; card details never reach FormCraft."
-            : "Payments are part of the Business plan."
+            : notOnPlanMessage("payments")
         }
       >
         {connected(stripe, "stripe")}
@@ -148,7 +149,7 @@ export function ConnectionSettings({
         description={
           payments
             ? "Take payments in INR with your own Razorpay account — cards, UPI, netbanking and wallets, whichever Razorpay has activated for you. Respondents pay in Razorpay's checkout; their details never reach FormCraft."
-            : "Payments are part of the Business plan."
+            : notOnPlanMessage("payments")
         }
       >
         {connected(razorpay, "razorpay")}
@@ -223,7 +224,7 @@ export function ConnectionSettings({
         description={
           crm
             ? "Create or update a HubSpot contact for each response, with the fields you map on each form's Integrations page."
-            : "CRM integrations are part of the Business plan."
+            : notOnPlanMessage("business_apps")
         }
         last
       >

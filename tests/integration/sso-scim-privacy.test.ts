@@ -210,7 +210,7 @@ describe("single sign-on", () => {
       .delete()
       .eq("user_id", newcomer.id)
       .eq("workspace_id", workspaceId);
-    await admin.from("workspaces").update({ plan_id: "business" }).eq("id", workspaceId);
+    await admin.from("workspaces").update({ plan_id: "pro" }).eq("id", workspaceId);
     expect(await joinSsoWorkspace(admin, asSso(newcomer))).toBeNull();
     await admin
       .from("workspaces")
@@ -262,7 +262,7 @@ describe("SCIM", () => {
     );
 
     // A downgrade switches the token off.
-    await admin.from("workspaces").update({ plan_id: "business" }).eq("id", workspaceId);
+    await admin.from("workspaces").update({ plan_id: "pro" }).eq("id", workspaceId);
     expect(await authenticateScim(admin, `Bearer ${token}`)).toBeNull();
     await admin
       .from("workspaces")

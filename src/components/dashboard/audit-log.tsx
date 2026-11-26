@@ -6,6 +6,8 @@ const LABEL: Record<string, string> = {
   "form.published": "Published a form",
   "form.unpublished": "Unpublished a form",
   "form.deleted": "Deleted a form",
+  "form.archived": "Archived a form",
+  "form.restored": "Restored an archived form",
   "form.version_restored": "Restored a form version",
   "form.availability_changed": "Changed when a form closes",
   "form.password_set": "Set a form password",

@@ -12,6 +12,7 @@ import {
   InfectedFileError,
   ScanUnavailableError,
   FileTooLargeError,
+  StorageFullError,
 } from "@/domains/uploads";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -125,6 +126,13 @@ function uploadErrorResponse(error: unknown) {
   }
   if (error instanceof FileTooLargeError) {
     return apiError("too_large", error.message, 413);
+  }
+  if (error instanceof StorageFullError) {
+    return apiError(
+      "storage_full",
+      "This form can't take more files right now. Your other answers are kept.",
+      413,
+    );
   }
   return apiError("unknown", "Upload failed. Please try again.", 500);
 }

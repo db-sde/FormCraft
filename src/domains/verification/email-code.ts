@@ -10,6 +10,7 @@ import {
   type Send,
 } from "@/domains/notifications/mailer";
 import { renderEmailHtml } from "@/domains/notifications/email-layout";
+import { takeQuota } from "@/domains/billing/quotas";
 
 type Client = SupabaseClient<Database>;
 
@@ -143,6 +144,20 @@ export async function sendEmailCode(
     return { ok: false, code: "failed", message: "Couldn't send a code. Try again." };
 
   const title = input.formTitle.trim() || "a form";
+  // Counted against the workspace's emails, never refused: the respondent
+  // can't finish the form without it (sends per question are capped above).
+  const { data: owner } = await admin
+    .from("responses")
+    .select("forms!inner(workspace_id)")
+    .eq("id", input.responseId)
+    .maybeSingle();
+  const workspaceId = (owner?.forms as { workspace_id: string } | undefined)
+    ?.workspace_id;
+  if (workspaceId) {
+    await takeQuota(admin, workspaceId, "emails", 1, { countOnly: true }).catch(
+      () => undefined,
+    );
+  }
   const sent = await send({
     to: [email],
     // The code leads the subject, so it shows in the notification.

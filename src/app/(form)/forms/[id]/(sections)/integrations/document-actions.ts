@@ -13,6 +13,7 @@ import {
   DocumentSettings,
 } from "@/domains/documents/settings";
 import type { Json } from "@/lib/supabase/database.types";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -67,6 +68,8 @@ export async function saveDocumentAction(
   const ctx = await editable(formId);
   if (!ctx)
     return { ok: false, message: "You don't have permission to change this form." };
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "pdf_documents");
+  if (blocked) return { ok: false, message: blocked };
   const { kind, settings, recipients, memberIds, enabled } = parsed.data;
   const schema = ctx.schema;
   const questionIds = new Set(schema?.questions.map((q) => q.id) ?? []);

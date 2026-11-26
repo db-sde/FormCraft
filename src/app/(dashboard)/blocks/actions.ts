@@ -16,6 +16,7 @@ import {
   type BlockSummary,
 } from "@/domains/blocks/queries";
 import { parseBlockQuestions } from "@/domains/blocks/content";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 /**
  * Question blocks (master spec F-09). Everyone in the workspace can read
@@ -94,6 +95,8 @@ export async function createBlockAction(input: {
   if (!name.success) return { ok: false, message: name.error.issues[0].message };
   const ctx = await editorOrNull();
   if (!ctx) return { ok: false, message: "Only editors can create blocks." };
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "block_library");
+  if (blocked) return { ok: false, message: blocked };
   try {
     const questions = parseBlockQuestions(input.questions);
     const { id, version } = await createBlock(ctx.supabase, {
@@ -130,6 +133,8 @@ export async function publishBlockVersionAction(
   if (!name.success) return { ok: false, message: name.error.issues[0].message };
   const ctx = await editorOrNull();
   if (!ctx) return { ok: false, message: "Only editors can change blocks." };
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "block_library");
+  if (blocked) return { ok: false, message: blocked };
   const block = await getBlock(ctx.supabase, ctx.workspace.id, blockId);
   if (!block || block.archived_at) return { ok: false, message: "Block not found." };
   try {

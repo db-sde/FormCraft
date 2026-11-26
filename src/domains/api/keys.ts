@@ -69,7 +69,20 @@ export async function createApiKey(
   if (!name) throw new ApiKeyError("Name the key, e.g. “Zapier”.");
   const { entitlements } = await getWorkspacePlan(admin, input.workspaceId);
   if (!entitlements.api_access)
-    throw new ApiKeyError("API keys are part of the Business plan.");
+    throw new ApiKeyError("API keys aren't included in your plan.");
+  // How many live keys the plan allows (2 / 5 / 25 / unlimited).
+  if (entitlements.api_keys !== null) {
+    const { count } = await admin
+      .from("api_keys")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", input.workspaceId)
+      .is("revoked_at", null);
+    if ((count ?? 0) >= entitlements.api_keys) {
+      throw new ApiKeyError(
+        `Your plan allows ${entitlements.api_keys} API keys. Revoke one or upgrade for more.`,
+      );
+    }
+  }
   const key = `${KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
   const { data, error } = await admin
     .from("api_keys")
@@ -87,7 +100,14 @@ export async function createApiKey(
   return { id: data.id, key };
 }
 
-export type ApiCaller = { keyId: string; workspaceId: string; scopes: ApiScope[] };
+export type ApiCaller = {
+  keyId: string;
+  workspaceId: string;
+  scopes: ApiScope[];
+  /** The plan's API limits (60–1,000 a minute per key; a daily cap). */
+  perMinute: number | null;
+  perDay: number | null;
+};
 
 /** The workspace an `Authorization: Bearer fc_live_…` header belongs to,
  * if the key is live and the plan still includes the API. */
@@ -116,5 +136,7 @@ export async function authenticateApiKey(
     keyId: data.id,
     workspaceId: data.workspace_id,
     scopes: (data.scopes ?? []) as ApiScope[],
+    perMinute: entitlements.api_requests_per_minute,
+    perDay: entitlements.api_requests_per_day,
   };
 }

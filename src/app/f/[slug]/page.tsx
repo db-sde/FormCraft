@@ -285,7 +285,17 @@ export default async function PublicFormPage({
     <div className={embedded ? undefined : "min-h-screen"}>
       {entitlements.tracking_pixels && (
         <TrackingScripts
-          ids={publicForm.tracking}
+          ids={
+            // LinkedIn and TikTok are Pro and up; GA4, GTM and Meta Starter.
+            entitlements.advanced_pixels
+              ? publicForm.tracking
+              : {
+                  ...publicForm.tracking,
+                  linkedin: null,
+                  linkedinConversion: null,
+                  tiktok: null,
+                }
+          }
           formId={publicForm.formId}
           consent={publicForm.pixelConsent}
           nonce={requestHeaders.get("x-nonce") ?? undefined}
@@ -313,6 +323,27 @@ export async function generateMetadata({
   const { title, description } = publicForm.compiled.schema.meta;
   // Respondent tabs show only the form's title (Part 8 §4) — it never
   // changes per question, so it doesn't reveal progress or answers.
-  // Shared form links get a real preview card in chat apps/social.
-  return { title: { absolute: title }, description, openGraph: { title, description } };
+  // Shared form links get a real preview card in chat apps/social; on a
+  // plan with custom link previews (Starter and up) the creator's own
+  // title, description, image, icon and indexing choice are used.
+  const custom = (await getWorkspacePlan(createAdminClient(), publicForm.workspaceId))
+    .entitlements.custom_seo
+    ? publicForm.seo
+    : {};
+  const shareTitle = custom.title || title;
+  const shareDescription = custom.description || description;
+  return {
+    title: { absolute: title },
+    description: shareDescription,
+    openGraph: {
+      title: shareTitle,
+      description: shareDescription,
+      ...(custom.imageUrl ? { images: [{ url: custom.imageUrl }] } : {}),
+    },
+    twitter: custom.imageUrl
+      ? { card: "summary_large_image", title: shareTitle, images: [custom.imageUrl] }
+      : undefined,
+    ...(custom.faviconUrl ? { icons: { icon: custom.faviconUrl } } : {}),
+    ...(custom.indexing === false ? { robots: { index: false, follow: false } } : {}),
+  };
 }

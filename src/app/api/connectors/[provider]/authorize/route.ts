@@ -12,6 +12,7 @@ import {
   oauthProvider,
   safeReturnPath,
 } from "@/domains/connectors/oauth";
+import { connectorAllowed } from "@/domains/connectors/plans";
 
 /** Calendars are personal (each host connects their own); the rest are
  * the workspace's and need the right to manage integrations. */
@@ -37,6 +38,8 @@ export async function GET(
   if (!config) return fail("unknown");
   if (!isConfigured(provider)) return fail("not_configured");
   const { supabase, workspace, user } = await getCurrentWorkspace();
+  if (!(await connectorAllowed(supabase, workspace.id, provider)))
+    return fail("not_on_plan");
   const personal = PERSONAL.has(provider);
   if (!personal) {
     const allowed =

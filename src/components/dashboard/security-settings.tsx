@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 const CODE = "bg-muted rounded px-1.5 py-0.5 font-mono text-[12.5px] break-all";
 
@@ -44,9 +45,7 @@ function SsoSection({
       wide
     >
       {!allowed ? (
-        <p className="text-muted-foreground text-sm">
-          Single sign-on is included in the Enterprise plan.
-        </p>
+        <p className="text-muted-foreground text-sm">{notOnPlanMessage("sso")}</p>
       ) : !sso ? (
         <div className="flex flex-col gap-2 text-sm">
           <p>
@@ -142,9 +141,7 @@ function ScimSection({
       wide
     >
       {!allowed ? (
-        <p className="text-muted-foreground text-sm">
-          SCIM provisioning is included in the Enterprise plan.
-        </p>
+        <p className="text-muted-foreground text-sm">{notOnPlanMessage("scim")}</p>
       ) : (
         <div className="flex flex-col gap-3 text-sm">
           <p>

@@ -3,30 +3,13 @@ import {
   featureName,
   usageWarnings,
   type Entitlements,
-  type Feature,
   type Usage,
   type WorkspacePlan,
 } from "@/domains/billing";
 import { SettingsSection } from "@/components/dashboard/account-settings";
 import { cn } from "cn";
-
-const FEATURES: Feature[] = [
-  "remove_branding",
-  "custom_fonts",
-  "confirmation_emails",
-  "popup_embeds",
-  "tracking_pixels",
-  "multilingual",
-  "scheduling",
-  "slack",
-  "crm",
-  "payments",
-  "api_access",
-  "ab_testing",
-  "data_lookups",
-  "sso",
-  "scim",
-];
+import { UpgradeRequest } from "./upgrade-request";
+import { FEATURE_GROUPS } from "@/domains/billing/catalog";
 
 function Meter({
   label,
@@ -76,11 +59,14 @@ export function PlanUsage({
   plan,
   usage,
   aiAvailable,
+  upgradeOptions = [],
 }: {
   plan: WorkspacePlan;
   usage: Usage;
   /** AI credits mean nothing until the server has an AI key. */
   aiAvailable: boolean;
+  /** Bigger plans an owner or admin can ask for (empty for others). */
+  upgradeOptions?: { id: string; name: string; monthly: number; annual: number }[];
 }) {
   const e: Entitlements = plan.entitlements;
   const warnings = usageWarnings(usage, e);
@@ -92,7 +78,7 @@ export function PlanUsage({
     <>
       <SettingsSection
         title="Plan"
-        description="What this workspace can use. To change plans, contact us."
+        description="What this workspace can use. Compare plans on the pricing page."
       >
         <p className="font-heading text-[28px] leading-none font-bold">{plan.planName}</p>
         {warnings.map((w) => (
@@ -112,15 +98,24 @@ export function PlanUsage({
             used={usage.completedResponses}
             limit={e.responses_per_month}
           />
-          {aiAvailable && (
+          <Meter
+            label="Notification emails"
+            used={usage.emails}
+            limit={e.emails_per_month}
+          />
+          {aiAvailable && e.ai_credits_per_month !== 0 && (
             <Meter
               label="AI credits"
               used={usage.aiCredits}
               limit={e.ai_credits_per_month}
             />
           )}
-          {usage.placesLookups > 0 && (
-            <Meter label="Address lookups" used={usage.placesLookups} limit={null} />
+          {(e.address_lookups_per_month !== 0 || usage.addressLookups > 0) && (
+            <Meter
+              label="Address suggestions"
+              used={usage.addressLookups}
+              limit={e.address_lookups_per_month}
+            />
           )}
           <Meter label="Members" used={usage.members} limit={e.members} />
           <Meter
@@ -139,31 +134,32 @@ export function PlanUsage({
           )}
         </ul>
         <p className="text-muted-foreground text-[12.5px]">
-          Going over a response limit never loses a submission: every response is still
-          saved and delivered.
+          Responses are unlimited: the number shown is the plan&apos;s fair-use level, and
+          every response is saved and delivered whatever the count. When emails run out,
+          you get one summary a day; when AI credits or address suggestions run out, they
+          pause until the 1st.
         </p>
       </SettingsSection>
+      {upgradeOptions.length > 0 && (
+        <SettingsSection
+          title="Upgrade"
+          description="Ask for a bigger plan. We'll be in touch about billing and switch the workspace over."
+        >
+          <UpgradeRequest plans={upgradeOptions} />
+        </SettingsSection>
+      )}
       <SettingsSection title="Included" last>
-        <ul className="grid gap-x-6 gap-y-2 text-[13.5px] sm:grid-cols-2">
-          {FEATURES.map((f) => (
-            <li
-              key={f}
-              className={cn("flex items-center gap-2", !e[f] && "text-muted-foreground")}
-            >
-              {e[f] ? (
-                <Check
-                  className="size-4 text-[var(--chip-live-dot)]"
-                  aria-label="Included"
-                />
-              ) : (
-                <Minus className="size-4" aria-label="Not included" />
-              )}
-              {featureName(f)}
-            </li>
-          ))}
+        <ul className="mb-3 grid gap-x-6 gap-y-2 text-[13.5px] sm:grid-cols-2">
           <li className="flex items-center gap-2">
             <Check className="size-4 text-[var(--chip-live-dot)]" aria-label="Included" />
-            Files up to {e.upload_mb === null ? "any size" : `${e.upload_mb} MB`}
+            Files up to {e.upload_mb === null ? "any size" : `${e.upload_mb} MB`} each
+          </li>
+          <li className="flex items-center gap-2">
+            <Check className="size-4 text-[var(--chip-live-dot)]" aria-label="Included" />
+            Video and audio answers up to{" "}
+            {e.recording_seconds === null
+              ? "any length"
+              : `${Math.round(e.recording_seconds / 60)} min`}
           </li>
           <li
             className={cn(
@@ -183,7 +179,42 @@ export function PlanUsage({
               ? "Unlimited custom domains"
               : `${e.custom_domains} custom domain${e.custom_domains === 1 ? "" : "s"}`}
           </li>
+          <li className="flex items-center gap-2">
+            <Check className="size-4 text-[var(--chip-live-dot)]" aria-label="Included" />
+            API: {e.api_requests_per_minute ?? "unlimited"} requests a minute
+            {e.api_requests_per_day === null
+              ? ", no daily cap"
+              : `, ${e.api_requests_per_day.toLocaleString()} a day`}
+          </li>
         </ul>
+        {FEATURE_GROUPS.map((group) => (
+          <div key={group.title} className="mt-3">
+            <h3 className="text-muted-foreground mb-1.5 text-[12px] font-semibold uppercase">
+              {group.title}
+            </h3>
+            <ul className="grid gap-x-6 gap-y-2 text-[13.5px] sm:grid-cols-2">
+              {group.features.map((f) => (
+                <li
+                  key={f}
+                  className={cn(
+                    "flex items-center gap-2",
+                    !e[f] && "text-muted-foreground",
+                  )}
+                >
+                  {e[f] ? (
+                    <Check
+                      className="size-4 text-[var(--chip-live-dot)]"
+                      aria-label="Included"
+                    />
+                  ) : (
+                    <Minus className="size-4" aria-label="Not included" />
+                  )}
+                  {featureName(f)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </SettingsSection>
     </>
   );

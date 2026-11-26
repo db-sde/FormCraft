@@ -68,6 +68,7 @@ import { loadFormForPage } from "../../load-form";
 import { ABANDONED_AFTER_MINUTES } from "@/domains/responses/activity";
 import { cn } from "cn";
 import { hasPermission } from "@/domains/workspaces/permissions";
+import { getWorkspacePlan, notOnPlanMessage } from "@/domains/billing/entitlements";
 
 const PAGE_SIZE = 25;
 
@@ -348,7 +349,14 @@ export default async function ResponsesPage({
     );
   }
 
-  const view: ResponseView = sp.view === "incomplete" ? "incomplete" : "completed";
+  // Plan (pricing doc): unfinished responses and the deeper analytics from
+  // Starter, cross-tabs from Pro. Decided here, where the data is loaded.
+  const { entitlements } = await getWorkspacePlan(supabase, workspace.id);
+  const crossAllowed = entitlements.advanced_reports;
+  const view: ResponseView =
+    sp.view === "incomplete" && entitlements.partial_responses
+      ? "incomplete"
+      : "completed";
   const completed = view === "completed";
   const tab =
     completed && (sp.tab === "summary" || sp.tab === "crosstab") ? sp.tab : "table";
@@ -405,7 +413,9 @@ export default async function ResponsesPage({
       getFunnelSummaryForForm(supabase, formId, filters.since),
       view === "incomplete" ? getDropoff(supabase, formId) : null,
       tab === "summary" ? getResponseSummary(supabase, formId, filters) : null,
-      tab === "summary" ? getConversionInsights(supabase, formId, filters.since) : null,
+      tab === "summary" && entitlements.advanced_analytics
+        ? getConversionInsights(supabase, formId, filters.since)
+        : null,
       tab === "summary"
         ? Promise.all([
             getFormSummary(supabase, formId),
@@ -413,7 +423,9 @@ export default async function ResponsesPage({
             supabase.from("forms").select("ai_lead_criteria").eq("id", formId).single(),
           ])
         : null,
-      tab === "summary" ? getReach(supabase, formId, filters.since) : null,
+      tab === "summary" && entitlements.advanced_analytics
+        ? getReach(supabase, formId, filters.since)
+        : null,
     ]);
 
   // Cross-tab (F-30): two choice or scale questions.
@@ -423,10 +435,10 @@ export default async function ResponsesPage({
     crossable.find((q) => q.id === sp.y)?.id ??
     crossable.find((q) => q.id !== crossRow)?.id;
   const [crossTab, sources] = await Promise.all([
-    tab === "crosstab" && latest && crossRow && crossColumn
+    tab === "crosstab" && crossAllowed && latest && crossRow && crossColumn
       ? getCrossTab(supabase, formId, latest, crossRow, crossColumn, filters)
       : null,
-    listSources(supabase, formId),
+    entitlements.advanced_analytics ? listSources(supabase, formId) : Promise.resolve([]),
   ]);
 
   const base = `/forms/${formId}/responses`;
@@ -534,17 +546,21 @@ export default async function ResponsesPage({
                     <>
                       Plus {counts.partial.toLocaleString()} unfinished session
                       {counts.partial === 1 ? "" : "s"}, not shown below.{" "}
-                      <Link
-                        href={href({
-                          view: "incomplete",
-                          tab: undefined,
-                          ending: undefined,
-                          page: undefined,
-                        })}
-                        className="text-foreground decoration-primary font-semibold underline decoration-2 underline-offset-2"
-                      >
-                        Show partial responses
-                      </Link>
+                      {!entitlements.partial_responses ? (
+                        notOnPlanMessage("partial_responses")
+                      ) : (
+                        <Link
+                          href={href({
+                            view: "incomplete",
+                            tab: undefined,
+                            ending: undefined,
+                            page: undefined,
+                          })}
+                          className="text-foreground decoration-primary font-semibold underline decoration-2 underline-offset-2"
+                        >
+                          Show partial responses
+                        </Link>
+                      )}
                     </>
                   ) : (
                     "Everyone who reached an ending."
@@ -782,7 +798,12 @@ export default async function ResponsesPage({
             />
           )}
 
-          {tab === "crosstab" && (
+          {tab === "crosstab" && !crossAllowed && (
+            <p className="text-muted-foreground text-sm">
+              {notOnPlanMessage("advanced_reports")}
+            </p>
+          )}
+          {tab === "crosstab" && crossAllowed && (
             <CrossTabView
               action={base}
               hidden={Object.fromEntries(

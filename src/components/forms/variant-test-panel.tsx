@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SettingsSection } from "@/components/dashboard/account-settings";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Props = {
   formId: string;
@@ -257,7 +258,7 @@ export function VariantTestPanel({
       <div className="flex flex-col gap-4">
         {!allowed && (
           <p className="text-muted-foreground text-sm">
-            A/B tests are part of paid plans.
+            {notOnPlanMessage("ab_testing")}
           </p>
         )}
         {allowed && !canManage && (

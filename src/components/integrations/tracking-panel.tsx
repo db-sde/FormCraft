@@ -6,6 +6,7 @@ import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 /** Analytics and ad pixels (P2.12): only the IDs; FormCraft adds the
  * official snippet for each on the live form. */
@@ -33,7 +34,7 @@ export function TrackingPanel({
   if (!allowed && !hasAny) {
     return (
       <p className="text-muted-foreground text-sm">
-        Analytics and ad pixels are part of paid plans. See Settings → Plan.
+        {notOnPlanMessage("tracking_pixels")} See Settings → Plan.
       </p>
     );
   }

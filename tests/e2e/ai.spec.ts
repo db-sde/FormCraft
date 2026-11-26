@@ -3,6 +3,7 @@ import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { FAKE_AI_PORT } from "../../playwright.config";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -111,6 +112,7 @@ test("a follow-up for the respondent; analysis, summary and review for the creat
   const user = await createConfirmedUser("e2e-ai");
   try {
     const { formId, liveLink } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
 
     // Respondent: one optional follow-up about what they wrote.
     await page.goto(liveLink);

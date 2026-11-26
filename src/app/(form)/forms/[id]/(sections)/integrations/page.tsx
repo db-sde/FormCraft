@@ -71,6 +71,7 @@ export async function generateMetadata({
 const CONNECT_ERRORS: Record<string, string> = {
   not_configured: notSetUpMessage("That app"),
   forbidden: "You need permission to manage integrations to connect apps.",
+  not_on_plan: "That app isn't included in your plan. See Settings → Plan.",
   declined: "The app wasn't connected because access was declined.",
   workspace: "That connection was started in another workspace. Try again here.",
   expired:
@@ -412,7 +413,7 @@ export default async function IntegrationsPage({
       >
         <HubspotPanel
           formId={formId}
-          allowed={entitlements.crm}
+          allowed={entitlements.business_apps}
           connected={!!connections?.some((c) => c.provider === "hubspot")}
           initial={
             (hubspotConfig?.config as { mapping?: Record<string, string> } | null)

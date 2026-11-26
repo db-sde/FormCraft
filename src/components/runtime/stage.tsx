@@ -155,6 +155,16 @@ export function WelcomeBackBanner({
  * nothing the creator typed reaches the CSS, and only for a URL in our
  * own storage (anything else is skipped and the fallback font shows). */
 function CustomFontFace({ theme }: { theme: ThemeV1 }) {
+  // A font library family (every plan): its stylesheet from FormCraft's
+  // own /fonts route, which only serves families in the library.
+  if (theme.fontFamily === "library" && theme.libraryFont) {
+    return (
+      <link
+        rel="stylesheet"
+        href={`/fonts/css?family=${encodeURIComponent(theme.libraryFont)}`}
+      />
+    );
+  }
   const url = theme.customFont?.url;
   if (
     theme.fontFamily !== "custom" ||

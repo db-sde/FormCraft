@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { canEdit } from "@/domains/workspaces";
 import { parseEmbedOrigins } from "@/domains/forms/embed-origins";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 type Result = { ok: true; origins: string[] | null } | { ok: false; message: string };
 
@@ -16,6 +17,10 @@ export async function saveEmbedOriginsAction(
     input === null ? { ok: true as const, origins: null } : parseEmbedOrigins(input);
   if (!parsed.ok) return parsed;
   const { supabase, workspace } = await getCurrentWorkspace();
+  if (parsed.origins !== null) {
+    const blocked = await planBlocks(supabase, workspace.id, "embed_controls");
+    if (blocked) return { ok: false, message: blocked };
+  }
   if (!canEdit(workspace.role))
     return { ok: false, message: "You have view-only access." };
   const { data, error } = await supabase

@@ -12,7 +12,24 @@ export const THEME_FONT_STACK: Record<ThemeV1["fontFamily"], string> = {
   dm_serif: "var(--font-dm-serif), serif",
   // Stage declares the uploaded face as "fc-custom" (stage.tsx).
   custom: '"fc-custom", var(--font-inter), sans-serif',
+  // A font library family: themeFontStack puts its name first.
+  library: "var(--font-inter), sans-serif",
 };
+
+/** The CSS font stack for a theme (a library family by name, loaded from
+ * /fonts by the stage; its name is letters, digits and spaces only). */
+export function themeFontStack(
+  theme: Pick<ThemeV1, "fontFamily" | "libraryFont">,
+): string {
+  if (
+    theme.fontFamily === "library" &&
+    theme.libraryFont &&
+    /^[A-Za-z0-9 ]{2,60}$/.test(theme.libraryFont)
+  ) {
+    return `"${theme.libraryFont}", var(--font-inter), sans-serif`;
+  }
+  return THEME_FONT_STACK[theme.fontFamily];
+}
 
 export const THEME_BUTTON_RADIUS: Record<ThemeV1["buttonStyle"], string> = {
   rounded: "8px",
@@ -41,7 +58,7 @@ export function themeSurfaceStyle(theme: ThemeV1): Record<string, string | undef
     ...themeTokenOverrides(theme),
     backgroundColor: theme.backgroundColor,
     color: theme.textColor ?? undefined,
-    fontFamily: THEME_FONT_STACK[theme.fontFamily],
+    fontFamily: themeFontStack(theme),
     backgroundImage: theme.backgroundImageUrl
       ? `url(${theme.backgroundImageUrl})`
       : undefined,

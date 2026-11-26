@@ -142,12 +142,19 @@ describe("confirmation emails", () => {
 
 describe("API keys", () => {
   it("need the plan, are stored hashed, and authenticate their workspace", async () => {
-    await admin.from("workspaces").update({ plan_id: "pro" }).eq("id", workspaceId);
+    // The API is on every plan (pricing doc), unless an override removes it.
+    await admin
+      .from("workspaces")
+      .update({ entitlement_overrides: { api_access: false } })
+      .eq("id", workspaceId);
     await expect(
       createApiKey(admin, { workspaceId, name: "Zapier", createdBy: userId }),
     ).rejects.toBeInstanceOf(ApiKeyError);
 
-    await admin.from("workspaces").update({ plan_id: "business" }).eq("id", workspaceId);
+    await admin
+      .from("workspaces")
+      .update({ entitlement_overrides: {} })
+      .eq("id", workspaceId);
     const { id, key } = await createApiKey(admin, {
       workspaceId,
       name: "Zapier",
@@ -162,17 +169,42 @@ describe("API keys", () => {
     expect(row?.key_hash).not.toContain(key.slice(8));
     expect(key.startsWith(row!.prefix)).toBe(true);
 
+    // Business: 1,000 a minute, no daily cap (pricing doc).
     expect(await authenticateApiKey(admin, `Bearer ${key}`)).toEqual({
       keyId: id,
       workspaceId,
       scopes: ["forms:read", "responses:read", "hooks:write"],
+      perMinute: 1000,
+      perDay: null,
     });
     expect(await authenticateApiKey(admin, `Bearer ${key.slice(0, -1)}x`)).toBeNull();
     expect(await authenticateApiKey(admin, key)).toBeNull();
 
-    // A downgrade cuts access straight away.
-    await admin.from("workspaces").update({ plan_id: "pro" }).eq("id", workspaceId);
+    // Losing API access cuts the key off straight away.
+    await admin
+      .from("workspaces")
+      .update({ entitlement_overrides: { api_access: false } })
+      .eq("id", workspaceId);
     expect(await authenticateApiKey(admin, `Bearer ${key}`)).toBeNull();
+    await admin
+      .from("workspaces")
+      .update({ entitlement_overrides: {} })
+      .eq("id", workspaceId);
+  });
+
+  it("stop at the plan's number of keys (Free: 2)", async () => {
+    await admin.from("workspaces").update({ plan_id: "free" }).eq("id", workspaceId);
+    const { count } = await admin
+      .from("api_keys")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .is("revoked_at", null);
+    for (let i = count ?? 0; i < 2; i += 1) {
+      await createApiKey(admin, { workspaceId, name: `Key ${i}`, createdBy: userId });
+    }
+    await expect(
+      createApiKey(admin, { workspaceId, name: "One too many", createdBy: userId }),
+    ).rejects.toBeInstanceOf(ApiKeyError);
     await admin.from("workspaces").update({ plan_id: "business" }).eq("id", workspaceId);
   });
 

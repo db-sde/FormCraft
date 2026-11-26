@@ -1334,6 +1334,7 @@ export type Database = {
       forms: {
         Row: {
           ai_lead_criteria: string | null;
+          archived_at: string | null;
           captcha_required: boolean;
           closed_message: string | null;
           closes_at: string | null;
@@ -1359,6 +1360,7 @@ export type Database = {
           response_cap: number | null;
           resume_links_enabled: boolean;
           save_partial_responses: boolean;
+          seo: Json;
           slug: string;
           tiktok_pixel_id: string | null;
           title: string;
@@ -1368,6 +1370,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           ai_lead_criteria?: string | null;
+          archived_at?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
           closes_at?: string | null;
@@ -1393,6 +1396,7 @@ export type Database = {
           response_cap?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
+          seo?: Json;
           slug: string;
           tiktok_pixel_id?: string | null;
           title: string;
@@ -1401,6 +1405,7 @@ export type Database = {
         };
         Update: {
           ai_lead_criteria?: string | null;
+          archived_at?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
           closes_at?: string | null;
@@ -1426,6 +1431,7 @@ export type Database = {
           response_cap?: number | null;
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
+          seo?: Json;
           slug?: string;
           tiktok_pixel_id?: string | null;
           title?: string;
@@ -1817,23 +1823,35 @@ export type Database = {
       };
       plans: {
         Row: {
+          annual_usd: number | null;
           entitlements: Json;
           id: string;
+          is_public: boolean;
+          monthly_usd: number | null;
           name: string;
           sort_order: number;
+          tagline: string | null;
         };
         ComputedFields: never;
         Insert: {
+          annual_usd?: number | null;
           entitlements?: Json;
           id: string;
+          is_public?: boolean;
+          monthly_usd?: number | null;
           name: string;
           sort_order?: number;
+          tagline?: string | null;
         };
         Update: {
+          annual_usd?: number | null;
           entitlements?: Json;
           id?: string;
+          is_public?: boolean;
+          monthly_usd?: number | null;
           name?: string;
           sort_order?: number;
+          tagline?: string | null;
         };
         Relationships: [];
       };
@@ -3135,6 +3153,7 @@ export type Database = {
       workspaces: {
         Row: {
           created_at: string;
+          email_branding: Json;
           entitlement_overrides: Json;
           id: string;
           name: string;
@@ -3150,6 +3169,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           created_at?: string;
+          email_branding?: Json;
           entitlement_overrides?: Json;
           id?: string;
           name: string;
@@ -3164,6 +3184,7 @@ export type Database = {
         };
         Update: {
           created_at?: string;
+          email_branding?: Json;
           entitlement_overrides?: Json;
           id?: string;
           name?: string;
@@ -3229,6 +3250,7 @@ export type Database = {
       admin_list_drills: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_list_upgrade_requests: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_message_cancel: { Args: { p_id: string }; Returns: Json };
       admin_message_draft: {
         Args: { p_audience: Json; p_body: string; p_kind: string; p_subject: string };
@@ -3548,6 +3570,7 @@ export type Database = {
         Args: { workspace_name: string; workspace_slug: string };
         Returns: {
           created_at: string;
+          email_branding: Json;
           entitlement_overrides: Json;
           id: string;
           name: string;
@@ -3657,6 +3680,19 @@ export type Database = {
           severity: string;
         }[];
       };
+      ops_claim_deferred_notifications: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          day: string;
+          form_id: string;
+          responses: number;
+          workspace_id: string;
+        }[];
+      };
+      ops_defer_notification: {
+        Args: { p_form_id: string; p_workspace_id: string };
+        Returns: undefined;
+      };
       ops_mark_notified: { Args: { p_ids: number[] }; Returns: undefined };
       ops_message_claim: {
         Args: { p_limit?: number };
@@ -3717,6 +3753,18 @@ export type Database = {
         }[];
       };
       prune_operational_data: { Args: { p_batch?: number }; Returns: Json };
+      public_plans: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          annual_usd: number;
+          entitlements: Json;
+          id: string;
+          monthly_usd: number;
+          name: string;
+          sort_order: number;
+          tagline: string;
+        }[];
+      };
       publish_form_version: {
         Args: { compiled_schema: Json; target_form_id: string };
         Returns: {
@@ -3745,6 +3793,10 @@ export type Database = {
       record_payment_paid: {
         Args: { p_provider_payment_id: string; p_provider_ref: string };
         Returns: string;
+      };
+      request_plan_upgrade: {
+        Args: { p_note: string; p_plan_id: string; p_workspace_id: string };
+        Returns: Json;
       };
       resolve_custom_domain: {
         Args: { p_hostname: string };
@@ -3879,6 +3931,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["workspace_role"];
       };
       workspace_status: { Args: { p_workspace_id: string }; Returns: string };
+      workspace_storage_bytes: { Args: { p_workspace_id: string }; Returns: number };
       workspaces_requiring_sso: { Args: Record<PropertyKey, never>; Returns: number };
     };
     Enums: {

@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { renderEmailHtml } from "@/domains/notifications/email-layout";
 import { cleanAddress, defaultSender, type Send } from "@/domains/notifications/mailer";
+import { takeQuota } from "@/domains/billing/quotas";
+import { workspaceEmailBrand } from "@/domains/notifications/branding";
 
 type Client = SupabaseClient<Database>;
 
@@ -85,7 +87,7 @@ export async function sendBookingEmails(
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, starts_at, ends_at, status, attendee_name, attendee_email, attendee_time_zone, booking_types(name, location, time_zone), host:profiles!bookings_host_id_fkey(full_name, email)",
+      "id, starts_at, ends_at, status, attendee_name, attendee_email, attendee_time_zone, booking_types(name, location, time_zone, workspace_id), host:profiles!bookings_host_id_fkey(full_name, email)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -94,6 +96,7 @@ export async function sendBookingEmails(
     name: string;
     location: string | null;
     time_zone: string;
+    workspace_id: string;
   };
   const host = b.host as { full_name: string | null; email: string } | null;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
@@ -110,8 +113,17 @@ export async function sendBookingEmails(
     sequence: kind === "rescheduled" ? 1 : 0,
   });
 
+  const { brand, fromName } = await workspaceEmailBrand(admin, type.workspace_id);
   const attendee = cleanAddress(b.attendee_email);
-  if (attendee) {
+  // Each email counts against the workspace's monthly allowance. The
+  // attendee's own confirmation, change and cancellation always go (they
+  // need them); reminders and host emails stop when it's used up.
+  if (
+    attendee &&
+    (await takeQuota(admin, type.workspace_id, "emails", 1, {
+      countOnly: kind !== "reminder",
+    }))
+  ) {
     const time = when(b.starts_at, b.attendee_time_zone || type.time_zone);
     const body =
       kind === "cancelled"
@@ -127,7 +139,9 @@ export async function sendBookingEmails(
     const result = await send({
       to: [attendee],
       subject: `${SUBJECT[kind]}: ${type.name}`.slice(0, 200),
+      fromName,
       html: renderEmailHtml({
+        brand,
         tag: SUBJECT[kind],
         tagColor: cancelled ? "#f8e1dd" : "#dcf1e3",
         title: `${SUBJECT[kind]}: ${type.name}`,
@@ -152,13 +166,19 @@ export async function sendBookingEmails(
   }
 
   const hostEmail = cleanAddress(host?.email);
-  if (hostEmail && kind !== "reminder") {
+  if (
+    hostEmail &&
+    kind !== "reminder" &&
+    (await takeQuota(admin, type.workspace_id, "emails"))
+  ) {
     const time = when(b.starts_at, type.time_zone);
     const who = b.attendee_name || b.attendee_email || "Someone";
     const result = await send({
       to: [hostEmail],
       subject: `${SUBJECT[kind]}: ${type.name} with ${who}`.slice(0, 200),
+      fromName,
       html: renderEmailHtml({
+        brand,
         tag: SUBJECT[kind],
         tagColor: cancelled ? "#f8e1dd" : "#e4ecfb",
         title: `${type.name} with ${who}`,

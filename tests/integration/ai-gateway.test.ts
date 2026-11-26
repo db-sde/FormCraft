@@ -19,7 +19,13 @@ import {
 const runId = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
 const describeLocal = canRunLocally ? describe : describe.skip;
 
-type Begin = { ok: boolean; code?: string; model?: string; max_tokens?: number | null };
+type Begin = {
+  ok: boolean;
+  code?: string;
+  model?: string;
+  max_tokens?: number | null;
+  credits_cost?: number;
+};
 const begin = async (
   workspaceId: string,
   feature = "form_edit",
@@ -66,7 +72,9 @@ describeLocal("Super Admin Phase 3: the AI gateway", () => {
     sql(`
       update private.ai_settings set enabled = true, model = null, max_tokens = null
        where feature <> '*';
-      update private.ai_settings set enabled = true, model = 'claude-opus-5-5',
+      update private.ai_settings set model = 'claude-haiku-5-5'
+       where feature in ('response_analysis', 'follow_up');
+      update private.ai_settings set enabled = true, model = 'claude-sonnet-5-5',
              daily_ceiling_usd = 50 where feature = '*';
       delete from private.ai_daily_cost where day = (now() at time zone 'UTC')::date;
       delete from private.ops_alerts where kind like 'ai_%';`);
@@ -103,7 +111,8 @@ describeLocal("Super Admin Phase 3: the AI gateway", () => {
   it("allows a call with the configured model, and refuses when switched off", async () => {
     expect(await begin(workspaceId)).toMatchObject({
       ok: true,
-      model: "claude-opus-5-5",
+      model: "claude-sonnet-5-5",
+      credits_cost: 5,
     });
     sql(
       "update private.ai_settings set model = 'claude-haiku-5-5', max_tokens = 1000 where feature = 'form_edit';",
@@ -127,11 +136,40 @@ describeLocal("Super Admin Phase 3: the AI gateway", () => {
 
   it("can't be beaten on credits by calls at the same moment", async () => {
     sql(`delete from public.usage_counters where workspace_id = '${workspaceId}';`);
+    // Sonnet is 5 credits a call, so 20 credits cover four.
     const results = await Promise.all(
-      Array.from({ length: 10 }, () => begin(workspaceId, "form_edit", 4)),
+      Array.from({ length: 10 }, () => begin(workspaceId, "form_edit", 20)),
     );
     expect(results.filter((r) => r.ok)).toHaveLength(4);
     expect(results.filter((r) => r.code === "credits")).toHaveLength(6);
+  });
+
+  it("charges each model's credits: Haiku 1, Sonnet 5, Opus 10 (pricing doc)", async () => {
+    sql(`delete from public.usage_counters where workspace_id = '${workspaceId}';`);
+    expect(await begin(workspaceId, "response_analysis", 100)).toMatchObject({
+      ok: true,
+      model: "claude-haiku-5-5",
+      credits_cost: 1,
+    });
+    expect(await begin(workspaceId, "form_review", 100)).toMatchObject({
+      ok: true,
+      model: "claude-sonnet-5-5",
+      credits_cost: 5,
+    });
+    sql(
+      "update private.ai_settings set model = 'claude-opus-5-5' where feature = 'form_edit';",
+    );
+    expect(await begin(workspaceId, "form_edit", 100)).toMatchObject({
+      ok: true,
+      credits_cost: 10,
+    });
+    // 16 used: a Sonnet call needs 5 more, which 20 doesn't leave.
+    expect(await begin(workspaceId, "form_review", 20)).toEqual({
+      ok: false,
+      code: "credits",
+    });
+    expect(await begin(workspaceId, "response_analysis", 20)).toMatchObject({ ok: true });
+    reset();
   });
 
   it("records cost at each model's price, fallbacks included", async () => {
@@ -210,7 +248,7 @@ describeLocal("Super Admin Phase 3: the AI gateway", () => {
       await call(support, "admin_request_change", {
         p_action: "ai.settings",
         p_target_type: "ai_setting",
-        p_target_id: "follow_up",
+        p_target_id: "logic_rule",
         p_payload: { model: "claude-haiku-5-5" },
         p_reason: "Faster follow-ups",
       }),
@@ -219,7 +257,7 @@ describeLocal("Super Admin Phase 3: the AI gateway", () => {
     const req = await call(adminStaff, "admin_request_change", {
       p_action: "ai.settings",
       p_target_type: "ai_setting",
-      p_target_id: "follow_up",
+      p_target_id: "logic_rule",
       p_payload: { model: "claude-haiku-5-5", max_tokens: 600 },
       p_reason: "Faster follow-ups for respondents",
     });
@@ -249,7 +287,7 @@ describeLocal("Super Admin Phase 3: the AI gateway", () => {
     ).toEqual({
       ok: true,
     });
-    expect(setting("follow_up")).toMatchObject({
+    expect(setting("logic_rule")).toMatchObject({
       model: "claude-haiku-5-5",
       max_tokens: 600,
       updated_by: adminStaff.id,

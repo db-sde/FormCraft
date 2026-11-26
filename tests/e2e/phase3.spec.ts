@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -59,6 +60,7 @@ test.describe("phase 3", () => {
 
   test("a registration PDF is set up, numbered and downloaded", async ({ page }) => {
     const { formId, liveLink } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
     await page.goto(liveLink);
     await page.getByRole("textbox").fill("Grace Hopper");
     await page.keyboard.press("Enter");
@@ -71,7 +73,11 @@ test.describe("phase 3", () => {
       .nth(2) // summary, order, registration, certificate
       .click();
     await page.getByLabel("Number prefix").fill("REG-");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page
+      .locator("form")
+      .filter({ has: page.getByLabel("Number prefix") })
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
     await expect(page.getByText("On · Nobody (download only)")).toBeVisible();
 
     const { data: response } = await adminClient()

@@ -266,6 +266,9 @@ async function route(request: NextRequest) {
   if (adminSurfaceEnabled()) return adminRoute(request, path);
   if (isAdminPath(path)) return new NextResponse("Not found", { status: 404 });
 
+  // Font library stylesheets and files (public, cached, no session): on
+  // the app and on custom domains, where forms load them too.
+  if (path.startsWith("/fonts/")) return NextResponse.next();
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
   if (!isAppHost(host)) return customDomain(request, host);
 

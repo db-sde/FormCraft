@@ -17,6 +17,7 @@ import {
 } from "@/domains/connectors/framework";
 import { listCalendars } from "@/domains/bookings/google-calendar";
 import type { Json } from "@/lib/supabase/database.types";
+import { getWorkspacePlan, upgradeHint } from "@/domains/billing";
 
 type Result = { ok: true; id?: string } | { ok: false; message: string };
 
@@ -74,6 +75,28 @@ export async function saveBookingTypeAction(
   const allMembers = new Set((roster ?? []).map((r) => r.user_id));
   if (parsed.data.hostIds.some((h) => !allMembers.has(h))) {
     return { ok: false, message: "Hosts must be members of this workspace." };
+  }
+  // Plan limits (pricing doc): Free has one booking type; more than one
+  // host per type (team hosts) is Pro and up.
+  const { entitlements } = await getWorkspacePlan(supabase, workspace.id);
+  if (parsed.data.hostIds.length > 1 && !entitlements.team_hosts) {
+    return {
+      ok: false,
+      message: `More than one host is a team feature. ${upgradeHint("team_hosts")}`,
+    };
+  }
+  if (!id && entitlements.booking_types !== null) {
+    const { count } = await supabase
+      .from("booking_types")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspace.id)
+      .is("archived_at", null);
+    if ((count ?? 0) >= entitlements.booking_types) {
+      return {
+        ok: false,
+        message: `Your plan includes ${entitlements.booking_types} booking type. Archive one or upgrade for unlimited.`,
+      };
+    }
   }
   const row = {
     workspace_id: workspace.id,

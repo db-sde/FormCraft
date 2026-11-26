@@ -1,5 +1,6 @@
 import { test, expect, devices, type Page } from "@playwright/test";
 import {
+  setPlan,
   addQuestion,
   adminClient,
   createConfirmedUser,
@@ -71,6 +72,7 @@ test("creator builds and publishes, respondents fill it on desktop and phone, th
     // --- Creator: build and publish -------------------------------------
     watch(page, problems, "creator");
     await loginViaUI(page, creator.email, creator.password);
+    await setPlan(creator.userId, "business");
     await startFromScratch(page);
     const formId = page.url().split("/forms/")[1];
 

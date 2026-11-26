@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { adminCall, requireStaff } from "@/lib/admin/staff";
+import { PLAN_ENTITLEMENTS, type PlanId } from "@/domains/billing/catalog";
+
+/** The plan's fair-use response level (pricing doc), or null. Responses
+ * are never refused; above it, FormCraft may suggest a bigger plan. */
+function fairUse(planId: string): number | null {
+  const plan = PLAN_ENTITLEMENTS[planId as PlanId];
+  return plan ? plan.responses_per_month : null;
+}
 
 export const metadata: Metadata = { title: "Usage" };
 
@@ -223,7 +231,17 @@ export default async function UsagePage({
                     </Link>
                   </td>
                   <td className="px-3 py-2">{w.plan_id}</td>
-                  <td className="px-3 py-2">{w.responses}</td>
+                  <td className="px-3 py-2">
+                    {w.responses}
+                    {fairUse(w.plan_id) !== null && w.responses > fairUse(w.plan_id)! && (
+                      <span
+                        className="ml-1.5 rounded-sm bg-[var(--chip-draft-bg)] px-1.5 py-px text-xs font-semibold text-[var(--chip-draft-fg)]"
+                        title={`Above the ${w.plan_id} plan's fair-use level of ${fairUse(w.plan_id)!.toLocaleString()}`}
+                      >
+                        Over fair use
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{w.ai_credits}</td>
                   <td className="px-3 py-2">
                     {(Number(w.storage) / 1_048_576).toFixed(1)} MB

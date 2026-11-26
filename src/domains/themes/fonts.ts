@@ -1,8 +1,9 @@
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
+import { findLibraryFont } from "./font-library";
 
 /**
- * Theme fonts (PRD P2.22). The free four are on every plan; the rest —
- * and uploaded fonts — need the plan's `custom_fonts`. The server
+ * Theme fonts (PRD P2.22). The built-in fonts and the font library are on
+ * every plan; an uploaded font needs the plan's `custom_fonts`. The server
  * applies `themeForPlan` before a form is shown, so a font the plan
  * doesn't include renders as Inter whatever the saved theme says.
  */
@@ -20,10 +21,13 @@ export const FONT_LABEL: Record<ThemeV1["fontFamily"], string> = {
   nunito: "Nunito",
   dm_serif: "DM Serif Display",
   custom: "Your own font",
+  library: "Font library",
 };
 
+/** Only an uploaded font is paid (Starter and up): the built-in fonts and
+ * the font library are on every plan (pricing doc, 26 Nov 2026). */
 export function isPaidFont(font: ThemeV1["fontFamily"]): boolean {
-  return !(FREE_FONTS as readonly string[]).includes(font);
+  return font === "custom";
 }
 
 export const MAX_FONT_BYTES = 2 * 1024 * 1024;
@@ -49,6 +53,12 @@ export function themeForPlan(
   customFonts: boolean,
   supabaseUrl: string | undefined,
 ): ThemeV1 {
+  // A library family must be in the library (it's served by name).
+  if (theme.fontFamily === "library") {
+    return findLibraryFont(theme.libraryFont)
+      ? theme
+      : { ...theme, fontFamily: "inter", libraryFont: undefined };
+  }
   if (!isPaidFont(theme.fontFamily)) return theme;
   const customOk =
     theme.fontFamily !== "custom" ||

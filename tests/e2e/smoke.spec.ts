@@ -128,6 +128,7 @@ test.describe("smoke: every page renders cleanly", () => {
       ]);
       const signedIn: Record<string, string> = {
         "/dashboard": "/dashboard",
+        "/pricing": "/pricing",
         "/leads": "/leads",
         "/templates": "/templates",
         "/settings": "/settings",
@@ -236,5 +237,30 @@ test.describe("smoke: every page renders cleanly", () => {
     } finally {
       await deleteUser(user.userId);
     }
+  });
+});
+
+test.describe("font library (pricing doc: every plan)", () => {
+  test("serves library fonts from FormCraft's own domain, and nothing else", async ({
+    request,
+  }) => {
+    expect((await request.get("/fonts/css?family=Not%20A%20Font")).status()).toBe(404);
+    expect((await request.get("/fonts/css?family=Inter%7D")).status()).toBe(404);
+    expect(
+      (await request.get("/fonts/file/s/x/v1/..%2F..%2Fsecret.woff2")).status(),
+    ).toBe(404);
+
+    const css = await request.get("/fonts/css?family=Fraunces");
+    expect(css.status()).toBe(200);
+    expect(css.headers()["content-type"]).toContain("text/css");
+    const body = await css.text();
+    expect(body).toContain("font-family: 'Fraunces'");
+    // Every file comes from /fonts/file: respondents never contact Google.
+    expect(body.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/https?:\/\//);
+    const file = /url\((\/fonts\/file\/[^)]+)\)/.exec(body)![1];
+    const font = await request.get(file);
+    expect(font.status()).toBe(200);
+    expect(font.headers()["content-type"]).toBe("font/woff2");
+    expect(font.headers()["cache-control"]).toContain("immutable");
   });
 });

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   createConfirmedUser,
   createPublishedForm,
   deleteUser,
@@ -31,6 +32,7 @@ test("forms can be filed in folders, and deleting a folder keeps its forms", asy
   const user = await createConfirmedUser("e2e-folders");
   try {
     await createPublishedForm(user, schema("Alpha form"));
+    await setPlan(user.userId, "business");
     await createPublishedForm(user, schema("Beta form"));
     await loginViaUI(page, user.email, user.password);
 

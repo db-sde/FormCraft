@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { setKioskPin } from "@/domains/forms/kiosk";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -307,6 +308,7 @@ test.describe("phase 1", () => {
         },
       ],
     });
+    await setPlan(user.userId, "business");
     await loginViaUI(page, user.email, user.password);
     await page.goto(`/forms/${formId}`);
     await page

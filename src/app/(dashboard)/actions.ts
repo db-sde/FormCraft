@@ -22,6 +22,7 @@ import {
   moveFormToFolder,
   renameFolder,
   softDeleteForm,
+  setFormArchived,
 } from "@/domains/forms";
 import {
   deleteWorkspaceTemplate,
@@ -46,6 +47,7 @@ import { countLeadsForForm } from "@/domains/leads";
 import { ImportError, importFromUrl } from "@/domains/forms/import";
 import type { Json } from "@/lib/supabase/database.types";
 import { notSetUpMessage } from "@/lib/not-set-up";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 export async function createFormAction(): Promise<void> {
   const { supabase, user, workspace } = await getCurrentWorkspace();
@@ -307,6 +309,31 @@ export async function deleteFormAction(
   }
 }
 
+/** Archives a form or restores it (every plan). */
+export async function archiveFormAction(
+  formId: string,
+  archived: boolean,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!FormId.safeParse(formId).success) return { ok: false, message: "Form not found." };
+  const { supabase, workspace, user } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { ok: false, message: "You have view-only access to this workspace." };
+  }
+  try {
+    await setFormArchived(supabase, formId, workspace.id, Boolean(archived));
+    await recordAudit({
+      workspaceId: workspace.id,
+      actorId: user.id,
+      action: archived ? "form.archived" : "form.restored",
+      target: { type: "form", id: formId },
+    });
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Couldn't change that. Please try again." };
+  }
+}
+
 /** Leads a form has, for the delete dialog's warning. */
 export async function formLeadCountAction(formId: string): Promise<number | null> {
   if (!FormId.safeParse(formId).success) return null;
@@ -346,6 +373,8 @@ async function editableWorkspace() {
 export async function createFolderAction(name: string): Promise<FolderResult> {
   const ctx = await editableWorkspace();
   if (!ctx) return { ok: false, message: "You have view-only access to this workspace." };
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "folders");
+  if (blocked) return { ok: false, message: blocked };
   try {
     const folder = await createFolder(ctx.supabase, ctx.workspace.id, name);
     revalidatePath("/dashboard");

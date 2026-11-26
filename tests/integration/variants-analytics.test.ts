@@ -155,7 +155,7 @@ beforeAll(async () => {
   viewer = await person("p4-viewer");
   const { data: ws } = await admin
     .from("workspaces")
-    .insert({ name: "P4", slug: `p4-${runId}`, owner_id: owner.id })
+    .insert({ name: "P4", slug: `p4-${runId}`, owner_id: owner.id, plan_id: "business" })
     .select("id")
     .single();
   workspaceId = ws!.id;

@@ -15,6 +15,8 @@ export type AuditAction =
   | "form.published"
   | "form.unpublished"
   | "form.deleted"
+  | "form.archived"
+  | "form.restored"
   | "form.version_restored"
   | "form.availability_changed"
   | "form.password_set"

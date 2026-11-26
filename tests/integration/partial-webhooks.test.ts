@@ -142,7 +142,12 @@ beforeAll(async () => {
   userId = user.user!.id;
   const { data: ws } = await admin
     .from("workspaces")
-    .insert({ name: "Partial", slug: `partial-${runId}`, owner_id: userId })
+    .insert({
+      name: "Partial",
+      slug: `partial-${runId}`,
+      owner_id: userId,
+      plan_id: "business",
+    })
     .select("id")
     .single();
   workspaceId = ws!.id;

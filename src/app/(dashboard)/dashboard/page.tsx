@@ -16,14 +16,49 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: `Forms · ${workspace.name}` };
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ archived?: string }>;
+}) {
+  const archivedView = (await searchParams).archived === "1";
   const { supabase, workspace, user } = await getCurrentWorkspace();
   const [forms, plan, usage, folders] = await Promise.all([
-    listFormsForWorkspace(supabase, workspace.id),
+    listFormsForWorkspace(supabase, workspace.id, { archived: archivedView }),
     getWorkspacePlan(supabase, workspace.id),
     getUsage(supabase, workspace.id),
     listFolders(supabase, workspace.id),
   ]);
+
+  if (archivedView) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="font-heading text-[32px] leading-none font-bold tracking-[-0.03em]">
+            Archived forms
+          </h1>
+          <Link href="/dashboard" className="text-sm font-semibold underline">
+            Back to forms
+          </Link>
+        </div>
+        <p className="text-muted-foreground text-sm">
+          Archived forms are closed to new responses. Their responses are kept; restore a
+          form from its menu to bring it back.
+        </p>
+        {forms.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Nothing archived.</p>
+        ) : (
+          <FormsBrowser
+            forms={forms}
+            workspaceName={workspace.name}
+            canEdit={canEdit(workspace.role)}
+            folders={folders}
+            currentUserId={user.id}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (forms.length === 0) {
     const fullName = (user.user_metadata?.full_name as string | undefined) ?? "";
@@ -104,6 +139,11 @@ export default async function DashboardPage() {
         folders={folders}
         currentUserId={user.id}
       />
+      <p className="mt-6 text-sm">
+        <Link href="/dashboard?archived=1" className="text-muted-foreground underline">
+          Archived forms
+        </Link>
+      </p>
     </>
   );
 }

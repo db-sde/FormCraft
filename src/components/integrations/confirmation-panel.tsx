@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/lib/toast";
 import { NotSetUpYet } from "@/components/not-set-up-yet";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 /** Confirmation emails to respondents (P2.18): to the address they gave
  * in the chosen question, once per response. */
@@ -41,7 +42,7 @@ export function ConfirmationPanel({
   if (!allowed && !initial.enabled) {
     return (
       <p className="text-muted-foreground text-sm">
-        Confirmation emails are part of paid plans. See Settings → Plan.
+        {notOnPlanMessage("confirmation_emails")} See Settings → Plan.
       </p>
     );
   }

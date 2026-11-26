@@ -1,4 +1,4 @@
-import { renderEmailHtml } from "./email-layout";
+import { renderEmailHtml, type EmailBrand } from "./email-layout";
 
 export type ResponseCompletedEmailInput = {
   formTitle: string;
@@ -8,6 +8,8 @@ export type ResponseCompletedEmailInput = {
   settingsUrl?: string;
   /** The address it's sent to, shown in the footer. */
   recipient?: string;
+  /** The workspace's email branding (Starter and up). */
+  brand?: EmailBrand;
 };
 
 export type EmailContent = { subject: string; html: string; text: string };
@@ -52,6 +54,7 @@ export function buildResponseCompletedEmail(
     button: { label: "View response", href: input.dashboardUrl },
     fine,
     sentTo: input.recipient,
+    brand: input.brand,
     footerLink: input.settingsUrl
       ? { label: "Notification settings", href: input.settingsUrl }
       : undefined,

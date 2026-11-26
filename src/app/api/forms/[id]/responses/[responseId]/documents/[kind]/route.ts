@@ -13,6 +13,7 @@ import {
 } from "@/domains/documents/issue";
 import { renderDocumentPdf } from "@/domains/documents/pdf";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/domains/documents/settings";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 // Rendering a PDF: bounded explicitly (seconds).
 export const maxDuration = 60;
@@ -39,6 +40,13 @@ export async function GET(
     !(await responseInForm(supabase, workspace.id, formId, responseId))
   ) {
     return NextResponse.json({ error: { code: "not_found" } }, { status: 404 });
+  }
+  const blocked = await planBlocks(supabase, workspace.id, "pdf_documents");
+  if (blocked) {
+    return NextResponse.json(
+      { error: { code: "not_on_plan", message: blocked } },
+      { status: 403 },
+    );
   }
 
   const admin = createAdminClient();

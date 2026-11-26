@@ -128,7 +128,12 @@ beforeAll(async () => {
   outsider = await person("bk-out");
   const { data: ws } = await admin
     .from("workspaces")
-    .insert({ name: "Bookings", slug: `bk-${runId}`, owner_id: ana.id })
+    .insert({
+      name: "Bookings",
+      slug: `bk-${runId}`,
+      owner_id: ana.id,
+      plan_id: "business",
+    })
     .select("id")
     .single();
   workspaceId = ws!.id;

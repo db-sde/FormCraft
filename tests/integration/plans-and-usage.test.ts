@@ -165,9 +165,12 @@ describe("usage", () => {
   });
 
   it("stops AI credits at the plan's limit", async () => {
+    // Form tools run on Sonnet by default: 5 credits a call (migration 77).
     await admin
       .from("workspaces")
-      .update({ entitlement_overrides: { ai_credits_per_month: 2 } })
+      .update({
+        entitlement_overrides: { ai_form_tools: true, ai_credits_per_month: 10 },
+      })
       .eq("id", workspaceId);
     const { entitlements } = await getWorkspacePlan(admin, workspaceId);
     const results = [];
@@ -178,7 +181,7 @@ describe("usage", () => {
       );
     }
     expect(results).toEqual([true, true, false]);
-    expect((await getUsage(user, workspaceId)).aiCredits).toBe(2);
+    expect((await getUsage(user, workspaceId)).aiCredits).toBe(10);
   });
 
   it("doesn't let a user add usage themselves", async () => {

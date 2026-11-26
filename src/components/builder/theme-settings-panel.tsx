@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { Check, Contrast } from "lucide-react";
 import type { ThemeV1, ThemeVariantV1 } from "@/domains/forms/schema/v1";
 import { THEME_PRESETS, contrastRatio } from "@/domains/themes";
-import { THEME_FONT_STACK } from "@/components/theme-styles";
+import { THEME_FONT_STACK, themeFontStack } from "@/components/theme-styles";
+import { FontLibraryPicker } from "./font-library-picker";
 import { FONT_LABEL, isPaidFont } from "@/domains/themes/fonts";
 import { uploadThemeFontAction } from "@/app/(form)/forms/[id]/actions";
 import { stageTextColor } from "@/components/runtime/stage-theme";
@@ -66,6 +67,10 @@ export function ThemeSettingsPanel({
    * finish later, and two at once mustn't overwrite each other. */
   onChange: (next: ThemeV1 | ((current: ThemeV1) => ThemeV1)) => void;
 }) {
+  const [allPresets, setAllPresets] = useState(false);
+  const shownPresets = allPresets
+    ? THEME_PRESETS
+    : THEME_PRESETS.filter((preset, i) => i < 8 || preset.id === theme.preset);
   const set = (patch: Partial<ThemeV1>) =>
     onChange((current) => ({ ...current, ...patch, preset: undefined }));
 
@@ -81,7 +86,7 @@ export function ThemeSettingsPanel({
       <div className="col-span-full flex flex-col gap-1.5">
         <span className="text-[13.5px] font-semibold">Presets</span>
         <div className="grid grid-cols-2 gap-2">
-          {THEME_PRESETS.map((preset) => {
+          {shownPresets.map((preset) => {
             const on = theme.preset === preset.id;
             const p = preset.theme;
             return (
@@ -114,7 +119,7 @@ export function ThemeSettingsPanel({
                 </span>
                 <span
                   className="flex items-center justify-between text-[13px] font-semibold"
-                  style={{ fontFamily: THEME_FONT_STACK[p.fontFamily] }}
+                  style={{ fontFamily: themeFontStack(p) }}
                 >
                   {preset.name}
                   {on && <Check className="size-[13px]" />}
@@ -123,6 +128,13 @@ export function ThemeSettingsPanel({
             );
           })}
         </div>
+        <button
+          type="button"
+          onClick={() => setAllPresets((v) => !v)}
+          className="fc-focus text-muted-foreground hover:text-foreground self-start text-[12.5px] font-semibold underline-offset-2 hover:underline"
+        >
+          {allPresets ? "Show fewer themes" : `Show all ${THEME_PRESETS.length} themes`}
+        </button>
       </div>
 
       <SectionHead>Colours</SectionHead>
@@ -170,12 +182,20 @@ export function ThemeSettingsPanel({
       <SectionHead>Type &amp; shape</SectionHead>
       <PanelField
         label="Font"
-        hint={customFonts ? undefined : "Fonts marked “Paid” need a paid plan."}
+        hint={
+          customFonts
+            ? "Font library: 1,900+ open-licensed fonts, served from FormCraft."
+            : "Uploading your own font starts on the Starter plan."
+        }
       >
         <Select
           value={theme.fontFamily}
           onValueChange={(fontFamily) =>
-            set({ fontFamily: fontFamily as ThemeV1["fontFamily"] })
+            set(
+              fontFamily === "library"
+                ? { fontFamily: "library", libraryFont: theme.libraryFont ?? "Roboto" }
+                : { fontFamily: fontFamily as ThemeV1["fontFamily"] },
+            )
           }
         >
           <SelectTrigger className="h-[38px] w-full" aria-label="Font">
@@ -198,6 +218,12 @@ export function ThemeSettingsPanel({
           </SelectContent>
         </Select>
       </PanelField>
+      {theme.fontFamily === "library" && (
+        <FontLibraryPicker
+          value={theme.libraryFont}
+          onChange={(libraryFont) => set({ fontFamily: "library", libraryFont })}
+        />
+      )}
       {theme.fontFamily === "custom" && customFonts && (
         <FontUpload
           formId={formId}

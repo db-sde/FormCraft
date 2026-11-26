@@ -1,7 +1,10 @@
 import { scanBytes } from "./scan";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import { getWorkspacePlan, type Entitlements } from "@/domains/billing/entitlements";
+import { firstTimeThisMonth } from "@/domains/billing/quotas";
+import { defaultSender } from "@/domains/notifications/mailer";
+import { renderEmailHtml } from "@/domains/notifications/email-layout";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import { sniffContentType, matchesAcceptedTypes, mediaMimeType } from "./sniff";
 
@@ -51,6 +54,14 @@ export class ScanUnavailableError extends Error {
   }
 }
 
+/** The workspace's plan storage is full (pricing doc: enforced at upload). */
+export class StorageFullError extends Error {
+  constructor() {
+    super("the form's storage is full");
+    this.name = "StorageFullError";
+  }
+}
+
 export class ResponseCompletedError extends Error {
   constructor() {
     super("this response was already submitted");
@@ -69,6 +80,9 @@ export type PreparedUpload = {
   acceptedMimeTypes: string[];
   /** A recorded answer (roadmap #21): the kind the question asks for. */
   mediaKind?: "audio" | "video";
+  /** For the storage warnings after the file is stored. */
+  workspaceId?: string;
+  entitlements?: Entitlements;
 };
 
 /**
@@ -121,43 +135,116 @@ export async function prepareUpload(
   )
     throw new QuestionNotFoundError();
 
+  // The plan's storage (pricing doc: enforced at upload time): a file may
+  // use what's left of it, and none is taken once it's full.
+  const workspaceId = (response.forms as { workspace_id: string } | null)?.workspace_id;
+  const entitlements = workspaceId
+    ? (await getWorkspacePlan(admin, workspaceId)).entitlements
+    : null;
+  let storageLeft = HARD_MAX_BYTES;
+  if (workspaceId && entitlements?.storage_mb != null) {
+    const { data: used } = await admin.rpc("workspace_storage_bytes", {
+      p_workspace_id: workspaceId,
+    });
+    storageLeft = entitlements.storage_mb * 1024 * 1024 - Number(used ?? 0);
+    if (storageLeft <= 0) throw new StorageFullError();
+  }
+  const base = {
+    responseId,
+    questionId,
+    workspaceId,
+    entitlements: entitlements ?? undefined,
+  };
+
   // A signature (F-10) is a small PNG the browser drew; nothing else.
   if (question.type === "signature") {
     return {
-      responseId,
-      questionId,
-      maxBytes: SIGNATURE_MAX_BYTES,
+      ...base,
+      maxBytes: Math.min(SIGNATURE_MAX_BYTES, storageLeft),
       acceptedMimeTypes: ["image/png"],
     };
   }
 
-  // A recording: its size follows from its length.
+  // A recording: its size follows from its length, which the plan caps
+  // too (1 / 3 / 10 minutes).
   if (question.type === "media") {
+    const planSeconds = entitlements?.recording_seconds;
+    const seconds =
+      planSeconds == null
+        ? question.settings.maxSeconds
+        : Math.min(question.settings.maxSeconds, planSeconds);
     return {
-      responseId,
-      questionId,
-      maxBytes: mediaMaxBytes(question.settings.kind, question.settings.maxSeconds),
+      ...base,
+      maxBytes: Math.min(mediaMaxBytes(question.settings.kind, seconds), storageLeft),
       acceptedMimeTypes: [`${question.settings.kind}/*`],
       mediaKind: question.settings.kind,
     };
   }
 
   // The plan's per-file ceiling applies on top of the question's own.
-  const workspaceId = (response.forms as { workspace_id: string } | null)?.workspace_id;
-  const planMb = workspaceId
-    ? (await getWorkspacePlan(admin, workspaceId)).entitlements.upload_mb
-    : null;
-
+  const planMb = entitlements?.upload_mb ?? null;
   return {
-    responseId,
-    questionId,
+    ...base,
     maxBytes: Math.min(
       question.settings.maxSizeMb * 1024 * 1024,
       planMb === null ? HARD_MAX_BYTES : planMb * 1024 * 1024,
       HARD_MAX_BYTES,
+      storageLeft,
     ),
     acceptedMimeTypes: question.settings.acceptedMimeTypes,
   };
+}
+
+/**
+ * Tells the workspace owner when its files reach 80% and 95% of the
+ * plan's storage, once each a month. Never throws (the file is stored).
+ */
+export async function warnIfStorageHigh(
+  admin: Client,
+  workspaceId: string,
+  entitlements: Entitlements,
+): Promise<void> {
+  try {
+    const limitMb = entitlements.storage_mb;
+    if (limitMb === null) return;
+    const { data: used } = await admin.rpc("workspace_storage_bytes", {
+      p_workspace_id: workspaceId,
+    });
+    const share = Number(used ?? 0) / (limitMb * 1024 * 1024);
+    const level = share >= 0.95 ? 95 : share >= 0.8 ? 80 : null;
+    if (!level) return;
+    if (!(await firstTimeThisMonth(admin, workspaceId, `storage_${level}`))) return;
+    const send = defaultSender();
+    const { data: ws } = await admin
+      .from("workspaces")
+      .select("name, owner:profiles!workspaces_owner_id_fkey(email)")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    const to = (ws?.owner as { email: string | null } | null)?.email;
+    if (!send || !ws || !to) return;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const body =
+      level === 95
+        ? `${ws.name} has used ${Math.round(share * 100)}% of its ${limitMb / 1000} GB of file storage. When it's full, forms stop accepting new files (answers are still saved). Delete old files or upgrade to keep them coming.`
+        : `${ws.name} has used ${Math.round(share * 100)}% of its ${limitMb / 1000} GB of file storage.`;
+    await send({
+      to: [to],
+      subject: `File storage ${level}% used in ${ws.name}`,
+      text: `${body}
+
+See usage: ${appUrl}/settings`,
+      html: renderEmailHtml({
+        tag: "Storage",
+        tagColor: level === 95 ? "#f8e1dd" : "#fdf0d5",
+        title: `File storage ${level}% used`,
+        body,
+        button: { label: "See your plan and usage", href: `${appUrl}/settings` },
+        fine: "Sent once at 80% and once at 95% each month.",
+      }),
+    });
+  } catch {
+    // A warning never affects the upload.
+  }
 }
 
 /**
@@ -243,6 +330,9 @@ export async function recordUpload(
       );
   }
 
+  if (context.workspaceId && context.entitlements) {
+    await warnIfStorageHigh(admin, context.workspaceId, context.entitlements);
+  }
   return { uploadId: row.id };
 }
 

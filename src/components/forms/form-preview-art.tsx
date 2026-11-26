@@ -1,6 +1,6 @@
 import type { FormPreview } from "@/domains/forms";
 import { contrastRatio } from "@/domains/themes";
-import { THEME_BUTTON_RADIUS, THEME_FONT_STACK } from "@/components/theme-styles";
+import { THEME_BUTTON_RADIUS, themeFontStack } from "@/components/theme-styles";
 import { cn } from "cn";
 
 /** Readable text for a given background when the theme doesn't set one. */
@@ -36,7 +36,7 @@ export function FormPreviewArt({
   const text = theme.textColor ?? inkFor(theme.backgroundColor);
   const onPrimary = inkFor(theme.primaryColor);
   const radius = THEME_BUTTON_RADIUS[theme.buttonStyle];
-  const font = THEME_FONT_STACK[theme.fontFamily];
+  const font = themeFontStack(theme);
   const line = `color-mix(in oklab, ${text} 22%, ${theme.backgroundColor})`;
   const chip = `color-mix(in oklab, ${theme.backgroundColor} 60%, #fff)`;
 

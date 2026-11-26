@@ -19,7 +19,10 @@ import {
   listFormDocuments,
 } from "@/domains/documents/issue";
 import { renderDocumentPdf } from "@/domains/documents/pdf";
-import { renderEmailHtml } from "./email-layout";
+import { renderEmailHtml, type EmailBrand } from "./email-layout";
+import { workspaceEmailBrand } from "./branding";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import { takeQuota } from "@/domains/billing/quotas";
 import {
   cleanAddress,
   cleanSubject,
@@ -142,6 +145,7 @@ export function ruleEmail(
   rule: NotificationRule,
   ctx: ResponseContext,
   links: { response: string; settings: string },
+  brand?: EmailBrand,
 ): Omit<OutgoingEmail, "to" | "attachments"> {
   const subject = ruleSubject(rule.subject, ctx);
   const lines = rule.includeAnswers
@@ -170,6 +174,7 @@ export function ruleEmail(
     button: { label: "View response", href: links.response },
     fine: `You're getting this because a teammate added you to the “${rule.name}” notification on this form.`,
     footerLink: { label: "Notification settings", href: links.settings },
+    brand,
   });
   const text = [
     subject,
@@ -206,6 +211,8 @@ export async function sendRuleEmails(
     if (rules.length === 0) return out;
     const send = options.send === undefined ? defaultSender() : options.send;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const { entitlements } = await getWorkspacePlan(admin, ctx.form.workspaceId);
+    const { brand, fromName } = await workspaceEmailBrand(admin, ctx.form.workspaceId);
     const documents = rules.some((r) => r.attachDocument)
       ? await listFormDocuments(admin, ctx.form.id)
       : [];
@@ -231,10 +238,29 @@ export async function sendRuleEmails(
         out.push({ ruleId: rule.id, sent: false });
         continue;
       }
-      const email = ruleEmail(rule, ctx, {
-        response: `${appUrl}/forms/${ctx.form.id}/responses/${responseId}`,
-        settings: `${appUrl}/forms/${ctx.form.id}/integrations`,
-      });
+      if (!entitlements.team_notifications) {
+        await log("skipped", { reason: "Teammate email rules aren't on this plan" });
+        out.push({ ruleId: rule.id, sent: false });
+        continue;
+      }
+      if (
+        !(await takeQuota(admin, ctx.form.workspaceId, "emails", to.length, {
+          entitlements,
+        }))
+      ) {
+        await log("skipped", { reason: "This month's emails are used up" });
+        out.push({ ruleId: rule.id, sent: false });
+        continue;
+      }
+      const email = ruleEmail(
+        rule,
+        ctx,
+        {
+          response: `${appUrl}/forms/${ctx.form.id}/responses/${responseId}`,
+          settings: `${appUrl}/forms/${ctx.form.id}/integrations`,
+        },
+        brand,
+      );
       const attachments: OutgoingEmail["attachments"] = [];
       const doc = documents.find((d) => d.kind === rule.attachDocument && d.enabled);
       if (doc && documentApplies(doc.kind, doc.settings, ctx)) {
@@ -245,7 +271,7 @@ export async function sendRuleEmails(
           content: await renderDocumentPdf(content),
         });
       }
-      const result = await send({ ...email, to, attachments });
+      const result = await send({ ...email, to, attachments, fromName });
       await log(
         result.ok ? "ok" : "failed",
         result.ok

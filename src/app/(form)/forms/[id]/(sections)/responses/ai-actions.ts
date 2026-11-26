@@ -6,6 +6,7 @@ import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiConfigured } from "@/domains/ai/config";
 import { AI_PAUSED } from "@/domains/ai/gateway";
+import { planBlocks } from "@/domains/billing/entitlements";
 import {
   aiFailure,
   AI_NOT_CONFIGURED,
@@ -58,6 +59,9 @@ async function gate(
       message: "You don't have permission to analyze these responses.",
     };
   }
+  // AI insights are a Pro-and-up feature (pricing doc).
+  const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "ai_insights");
+  if (blocked) return { ok: false, code: "limited", message: blocked };
   const limit = await hitRateLimit(
     createAdminClient(),
     `${limitKey}:${ctx.user.id}`,

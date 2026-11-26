@@ -24,6 +24,10 @@ export type Usage = {
   /** Google address lookups this month (F-65): billed to the operator's
    * Google account, shown so the cost can be watched. */
   placesLookups: number;
+  /** Notification emails sent this month (counted against the plan). */
+  emails: number;
+  /** Addresses picked with Google suggestions (counted against the plan). */
+  addressLookups: number;
   members: number;
   storageMb: number;
   /** Of which video and audio answers (roadmap #21). */
@@ -61,6 +65,8 @@ export async function getUsage(
     completedResponses: value("completed_responses"),
     aiCredits: value("ai_credits"),
     placesLookups: value("places_lookups"),
+    emails: value("emails"),
+    addressLookups: value("address_lookups"),
     members: members.count ?? 0,
     storageMb: Math.round((storage.total / 1_048_576) * 10) / 10,
     recordingsMb: Math.round((storage.recordings / 1_048_576) * 10) / 10,
@@ -90,23 +96,55 @@ async function storageBytes(
   }
 }
 
-export type UsageWarning = { metric: "responses" | "storage"; message: string };
+export type UsageWarning = {
+  metric: "responses" | "storage" | "emails" | "ai" | "addresses";
+  message: string;
+};
 
 /** What the creator should be told about limits right now. */
 export function usageWarnings(usage: Usage, entitlements: Entitlements): UsageWarning[] {
   const warnings: UsageWarning[] = [];
   const responses = entitlements.responses_per_month;
+  // Responses are never refused: above the fair-use level FormCraft may
+  // get in touch about a bigger plan (pricing doc).
   if (responses !== null && usage.completedResponses > responses) {
     warnings.push({
       metric: "responses",
-      message: `You've had ${usage.completedResponses.toLocaleString()} responses this month, over your plan's ${responses.toLocaleString()}. They're all saved; upgrade to keep within your plan.`,
+      message: `You've had ${usage.completedResponses.toLocaleString()} responses this month, above your plan's fair-use level of ${responses.toLocaleString()}. Every response is saved and delivered; we may get in touch about a plan that fits.`,
     });
   }
   const storage = entitlements.storage_mb;
-  if (storage !== null && usage.storageMb > storage) {
+  if (storage !== null && usage.storageMb >= storage) {
     warnings.push({
       metric: "storage",
-      message: `Uploaded files use ${usage.storageMb.toLocaleString()} MB, over your plan's ${storage.toLocaleString()} MB.`,
+      message: `File storage is full (${usage.storageMb.toLocaleString()} of ${storage.toLocaleString()} MB). Forms stop accepting new files until you delete some or upgrade; answers are still saved.`,
+    });
+  } else if (storage !== null && usage.storageMb >= storage * 0.8) {
+    warnings.push({
+      metric: "storage",
+      message: `File storage is ${Math.round((usage.storageMb / storage) * 100)}% used (${usage.storageMb.toLocaleString()} of ${storage.toLocaleString()} MB).`,
+    });
+  }
+  const emails = entitlements.emails_per_month;
+  if (emails !== null && usage.emails >= emails) {
+    warnings.push({
+      metric: "emails",
+      message: `This month's ${emails.toLocaleString()} notification emails are used. You get one summary a day instead of an email per response until the 1st.`,
+    });
+  }
+  const credits = entitlements.ai_credits_per_month;
+  if (credits !== null && credits > 0 && usage.aiCredits >= credits) {
+    warnings.push({
+      metric: "ai",
+      message: "This month's AI credits are used. AI features pause until the 1st.",
+    });
+  }
+  const lookups = entitlements.address_lookups_per_month;
+  if (lookups !== null && lookups > 0 && usage.addressLookups >= lookups) {
+    warnings.push({
+      metric: "addresses",
+      message:
+        "This month's address suggestions are used. Respondents type addresses until the 1st.",
     });
   }
   return warnings;

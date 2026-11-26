@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { FAKE_PLACES_PORT } from "../../playwright.config";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -548,6 +549,7 @@ test.describe("F-65: address suggestions", () => {
       ],
       logic: [],
     } as FormSchemaV1);
+    await setPlan(user.userId, "business");
     const visitor = await browser.newContext();
     try {
       const page = await visitor.newPage();

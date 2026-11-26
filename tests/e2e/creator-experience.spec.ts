@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { Json } from "@/lib/supabase/database.types";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -107,6 +108,7 @@ test("leads: choosing a form keeps what you searched for", async ({ page }) => {
   const user = await createConfirmedUser("e2e-filter");
   try {
     await createPublishedForm(user, withContact);
+    await setPlan(user.userId, "business");
     await loginViaUI(page, user.email, user.password);
     await page.goto("/leads?q=grace&page=2");
     await page.getByRole("combobox", { name: "Filter by form" }).click();

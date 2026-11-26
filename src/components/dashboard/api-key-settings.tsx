@@ -11,6 +11,7 @@ import { SettingsSection } from "@/components/dashboard/account-settings";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/lib/toast";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 /** Settings → API: keys for the API, and Zapier/Make steps that call it (Business). */
 export function ApiKeySettings({
@@ -40,7 +41,7 @@ export function ApiKeySettings({
         description={
           allowed
             ? "For your own code, or a Zapier or Make step that calls the API. A key can read this workspace's forms and responses and subscribe to new responses. FormCraft isn't in the Zapier or Make app directories yet: to send responses there now, paste a Zapier “Catch Hook” or Make “Custom webhook” URL into a form's Webhooks."
-            : "API keys (for the API, including Zapier or Make steps that call it) are part of the Business plan."
+            : notOnPlanMessage("api_access")
         }
         last={keys.length === 0 && !created}
       >

@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import {
+  setPlan,
   createConfirmedUser,
   deleteUser,
   loginViaUI,
@@ -13,6 +14,7 @@ test.describe("publish and respond", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedUser("e2e-publish");
     await loginViaUI(page, user.email, user.password);
+    await setPlan(user.userId, "business");
   });
 
   test.afterEach(async () => {

@@ -24,6 +24,7 @@ import {
 } from "@/domains/forms/embed-sdk";
 import { CopyLinkField } from "./copy-link-field";
 import { cn } from "cn";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 
 type Tab = "link" | "qr" | "embed";
 type EmbedMode = "standard" | "full";
@@ -322,7 +323,7 @@ export function ShareEmbed({
       </div>
       {!popupEmbeds && (
         <p className="text-muted-foreground text-xs">
-          Popup, slide-in, side tab and button embeds are part of paid plans.
+          {notOnPlanMessage("popup_embeds")}
         </p>
       )}
       {themes.length > 0 && (

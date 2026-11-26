@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import {
+  setPlan,
   createConfirmedUser,
   createPublishedForm,
   deleteUser,
@@ -148,6 +149,7 @@ test("dashboard: unpublishing asks first, and deleting a form says its leads go 
   const user = await createConfirmedUser("e2e-qa-dashboard");
   try {
     const { formId } = await createPublishedForm(user, schema);
+    await setPlan(user.userId, "business");
     await submit(request, formId);
     await loginViaUI(page, user.email, user.password);
 

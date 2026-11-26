@@ -17,6 +17,7 @@ const ERRORS: Record<string, string> = {
   expired: "That took too long. Try connecting again.",
   exchange_failed: "Google Calendar couldn't be connected. Try again.",
   forbidden: "You don't have permission to connect that.",
+  not_on_plan: "Google Calendar sync starts on the Starter plan.",
 };
 
 /** Native bookings (F-27): booking types, upcoming bookings, and your

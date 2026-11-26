@@ -24,6 +24,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hitRateLimit } from "@/domains/abuse/shared-rate-limit";
 import { audit } from "@/domains/audit";
+import { planBlocks } from "@/domains/billing/entitlements";
 
 export type TeamResult =
   { ok: true; message?: string; link?: string } | { ok: false; message: string };
@@ -221,6 +222,12 @@ export async function setMemberPermissionsAction(
   if (!canAdmin(workspace.role))
     return { ok: false, message: "Only the owner and admins can do this." };
   const clean = sanitizeOverrides(overrides);
+  // Per-person permissions are Pro and up; going back to the role's
+  // defaults (no overrides) is always allowed.
+  if (Object.keys(clean).length > 0) {
+    const blocked = await planBlocks(supabase, workspace.id, "granular_permissions");
+    if (blocked) return { ok: false, message: blocked };
+  }
   const { data, error } = await supabase
     .from("workspace_members")
     .update({ permissions: clean })

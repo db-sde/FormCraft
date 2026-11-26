@@ -1,5 +1,5 @@
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
-import { THEME_FONT_STACK } from "@/components/theme-styles";
+import { themeFontStack } from "@/components/theme-styles";
 
 function luminance(hex: string): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex ?? "");
@@ -66,6 +66,6 @@ export function stageVars(theme: ThemeV1): React.CSSProperties {
     "--st-label-weight": theme.fontFamily === "georgia" ? "500" : "600",
     backgroundColor: theme.backgroundColor,
     color: text,
-    fontFamily: THEME_FONT_STACK[theme.fontFamily],
+    fontFamily: themeFontStack(theme),
   } as React.CSSProperties;
 }
