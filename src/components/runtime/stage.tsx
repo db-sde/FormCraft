@@ -154,17 +154,37 @@ export function WelcomeBackBanner({
 /** The uploaded font (P2.22), declared under a fixed internal name so
  * nothing the creator typed reaches the CSS, and only for a URL in our
  * own storage (anything else is skipped and the fallback font shows). */
+/** A font library stylesheet from FormCraft's own /fonts route (which
+ * only serves library families), preloaded. */
+function LibraryFontLink({ family, weights }: { family: string; weights: number[] }) {
+  const href = `/fonts/css?family=${encodeURIComponent(family)}&w=${weights.join(",")}`;
+  return (
+    <>
+      <link rel="preload" as="style" href={href} />
+      <link rel="stylesheet" href={href} />
+    </>
+  );
+}
+
 function CustomFontFace({ theme }: { theme: ThemeV1 }) {
-  // A font library family (every plan): its stylesheet from FormCraft's
-  // own /fonts route, which only serves families in the library.
+  // Font library families (every plan). Within the performance budget
+  // (developer spec item 3: two families, four files): the body in 400
+  // and 600 (and 700 when titles use it too), the heading in one weight.
+  const heading = theme.headingFont ? (
+    <LibraryFontLink family={theme.headingFont} weights={[theme.headingWeight ?? 700]} />
+  ) : null;
   if (theme.fontFamily === "library" && theme.libraryFont) {
     return (
-      <link
-        rel="stylesheet"
-        href={`/fonts/css?family=${encodeURIComponent(theme.libraryFont)}`}
-      />
+      <>
+        <LibraryFontLink
+          family={theme.libraryFont}
+          weights={theme.headingFont ? [400, 600] : [400, 600, 700]}
+        />
+        {heading}
+      </>
     );
   }
+  if (heading && theme.fontFamily !== "custom") return heading;
   const url = theme.customFont?.url;
   if (
     theme.fontFamily !== "custom" ||
@@ -174,7 +194,10 @@ function CustomFontFace({ theme }: { theme: ThemeV1 }) {
     return null;
   }
   return (
-    <style>{`@font-face{font-family:"fc-custom";src:url("${url}") format("woff2");font-display:swap}`}</style>
+    <>
+      <style>{`@font-face{font-family:"fc-custom";src:url("${url}") format("woff2");font-display:swap}`}</style>
+      {heading}
+    </>
   );
 }
 
@@ -202,9 +225,9 @@ export function StageNumber({ n }: { n: number }) {
 }
 
 export const stageLabelClass =
-  "text-(length:--st-label) leading-[1.22] [font-weight:var(--st-label-weight)] tracking-[-0.01em] text-pretty";
+  "text-(length:--st-label) leading-[1.22] [font-weight:var(--st-label-weight)] [font-family:var(--st-heading-font,inherit)] tracking-[-0.01em] text-pretty";
 export const stageTitleClass =
-  "text-(length:--st-title) leading-[1.1] font-bold tracking-[-0.02em] text-balance";
+  "text-(length:--st-title) leading-[1.1] font-bold [font-family:var(--st-heading-font,inherit)] tracking-[-0.02em] text-balance";
 export const stageDescClass =
   "text-(length:--st-desc) leading-normal text-(--st-muted) text-pretty";
 

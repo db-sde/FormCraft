@@ -22,6 +22,17 @@ export const PLAN_PRICES: Record<PublicPlanId, { monthly: number; annual: number
   business: { monthly: 89, annual: 69 },
 };
 
+/** Prices in Indian rupees for checkout through Razorpay (26 Nov 2026:
+ * the US dollar prices at about ₹85, rounded). Staff can change them in
+ * the database like the dollar prices. */
+export const PLAN_PRICES_INR: Record<PublicPlanId, { monthly: number; annual: number }> =
+  {
+    free: { monthly: 0, annual: 0 },
+    starter: { monthly: 1_599, annual: 1_299 },
+    pro: { monthly: 4_199, annual: 3_299 },
+    business: { monthly: 7_599, annual: 5_899 },
+  };
+
 export const PLAN_NAMES: Record<PlanId, string> = {
   free: "Free",
   starter: "Starter",
@@ -102,6 +113,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, Entitlements> = {
     recording_seconds: 180,
     booking_types: null,
     api_requests_per_minute: 150,
+    api_burst: 1_000,
     api_requests_per_day: 50_000,
     api_keys: 5,
   }),
@@ -117,6 +129,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, Entitlements> = {
     recording_seconds: 600,
     booking_types: null,
     api_requests_per_minute: 300,
+    api_burst: 10_000,
     api_requests_per_day: 250_000,
     api_keys: 25,
   }),
@@ -132,6 +145,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, Entitlements> = {
     recording_seconds: 600,
     booking_types: null,
     api_requests_per_minute: 1_000,
+    api_burst: 50_000,
     api_requests_per_day: null,
     api_keys: null,
   }),
@@ -148,6 +162,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanId, Entitlements> = {
     recording_seconds: 600,
     booking_types: null,
     api_requests_per_minute: 1_000,
+    api_burst: 50_000,
     api_requests_per_day: null,
     api_keys: null,
   }),

@@ -32,7 +32,6 @@ import {
 import {
   duplicateFormAction,
   deleteFormAction,
-  archiveFormAction,
   formLeadCountAction,
   moveFormToFolderAction,
 } from "@/app/(dashboard)/actions";
@@ -68,6 +67,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "cn";
+import { useArchiveForm } from "@/components/forms/use-archive-form";
 import { SaveTemplateDialog } from "./save-template-dialog";
 
 /**
@@ -105,6 +105,7 @@ export function FormActionsMenu({
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [newTitle, setNewTitle] = useState(form.title);
   const [pending, startTransition] = useTransition();
+  const archive = useArchiveForm(() => router.refresh());
 
   function copyLink() {
     const url = `${window.location.origin}/f/${form.slug}`;
@@ -204,6 +205,7 @@ export function FormActionsMenu({
 
   return (
     <>
+      {archive.dialog}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
@@ -266,21 +268,7 @@ export function FormActionsMenu({
               <DropdownMenuItem onSelect={() => setSavingTemplate(true)}>
                 <LayoutTemplate /> Save as template
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={async () => {
-                  const result = await archiveFormAction(form.id, !form.archived);
-                  if (result.ok) {
-                    toast.success(
-                      form.archived
-                        ? "Restored to your forms."
-                        : "Archived. It's closed to responses; restore it from Archived forms.",
-                    );
-                    router.refresh();
-                  } else {
-                    toast.error(result.message);
-                  }
-                }}
-              >
+              <DropdownMenuItem onSelect={() => archive.run(form.id, !form.archived)}>
                 {form.archived ? (
                   <>
                     <ArchiveRestore /> Restore

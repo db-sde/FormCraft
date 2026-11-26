@@ -13,7 +13,7 @@ import { FormSchemaError } from "./schema/validate";
 import type { FormSchemaV1 } from "./schema/v1";
 import { availabilityOf } from "./availability";
 import { readKioskConfig, type KioskConfig } from "./kiosk";
-import { readSeo, type FormSeo } from "./seo";
+import { readSeoLive, type FormSeoLive } from "./seo";
 import { assertBlockLocks } from "@/domains/blocks/queries";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
 import { publishBlockedBy } from "@/domains/billing/schema-features";
@@ -292,21 +292,44 @@ export async function listFormsForWorkspace(
 
 /** Archives a form (hidden and closed to responses, nothing deleted) or
  * restores it. Every plan (pricing doc). */
-export async function setFormArchived(
+export type UpcomingBooking = {
+  id: string;
+  starts_at: string;
+  attendee_name: string | null;
+};
+
+export type ArchiveResult =
+  | { ok: true; cancelled: number }
+  | { ok: false; code: "denied" | "not_found" }
+  | { ok: false; code: "upcoming_bookings"; count: number; bookings: UpcomingBooking[] };
+
+/**
+ * Archives a form (developer spec item 4): unpublished, its link shows
+ * "no longer available", queued deliveries cancelled, A/B tests stopped.
+ * Refused while bookings are coming up unless `keepBookings` (their
+ * reminders still go out). The database checks the caller's role.
+ */
+export async function archiveForm(
   supabase: Client,
   formId: string,
-  workspaceId: string,
-  archived: boolean,
-): Promise<void> {
-  const { data, error } = await supabase
-    .from("forms")
-    .update({ archived_at: archived ? new Date().toISOString() : null })
-    .eq("id", formId)
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .select("id");
+  keepBookings = false,
+): Promise<ArchiveResult> {
+  const { data, error } = await supabase.rpc("archive_form", {
+    p_form_id: formId,
+    p_keep_bookings: keepBookings,
+  });
   if (error) throw error;
-  if (!data?.length) throw new Error("form not found");
+  return data as unknown as ArchiveResult;
+}
+
+/** Restores an archived form, unpublished, with everything it had. */
+export async function restoreForm(
+  supabase: Client,
+  formId: string,
+): Promise<{ ok: true } | { ok: false; code: "denied" | "not_found" }> {
+  const { data, error } = await supabase.rpc("restore_form", { p_form_id: formId });
+  if (error) throw error;
+  return data as unknown as { ok: true } | { ok: false; code: "denied" | "not_found" };
 }
 
 /**
@@ -551,6 +574,25 @@ export async function publishForm(
       .update({ published_by: publishedBy })
       .eq("id", data.id);
   }
+  // The form's email templates, kept against this version (spec item 2).
+  await admin
+    .rpc("snapshot_email_templates", { p_form_id: formId, p_form_version_id: data.id })
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+  // Link preview settings go live with the publish (developer spec 1).
+  try {
+    const { publishSeo } = await import("./seo-publish");
+    await publishSeo(admin, {
+      formId,
+      workspaceId: (draft.forms as { workspace_id: string }).workspace_id,
+      schema: compiled.schema,
+      entitlements,
+    });
+  } catch {
+    // The form is live; its preview falls back to the defaults.
+  }
 
   return {
     compiled,
@@ -753,8 +795,12 @@ export type PublicForm = {
   captchaRequired: boolean;
   /** Kiosk mode's settings (F-15); null when it's off. */
   kiosk: KioskConfig | null;
-  /** Link preview and SEO as set (shown only on a plan with them). */
-  seo: FormSeo;
+  /** Link preview and SEO as published (custom fields only on a plan
+   * with them), with the share card made at publish. */
+  seo: FormSeoLive;
+  slug: string;
+  closesAt: string | null;
+  archived: boolean;
 };
 
 export type FormSettings = {
@@ -838,7 +884,7 @@ export async function getPublicFormBySlug(
   const { data: form, error: formError } = await supabase
     .from("forms")
     .select(
-      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, captcha_required, kiosk_config, seo",
+      "id, workspace_id, save_partial_responses, resume_links_enabled, ga_measurement_id, gtm_container_id, meta_pixel_id, linkedin_partner_id, linkedin_conversion_id, tiktok_pixel_id, pixel_consent, captcha_required, kiosk_config, seo_live, slug, closes_at, archived_at",
     )
     .eq("slug", slug)
     .is("deleted_at", null)
@@ -874,7 +920,10 @@ export async function getPublicFormBySlug(
     pixelConsent: form.pixel_consent === "ask" ? "ask" : "none",
     captchaRequired: form.captcha_required,
     kiosk: readKioskConfig(form.kiosk_config),
-    seo: readSeo(form.seo),
+    seo: readSeoLive(form.seo_live),
+    slug: form.slug,
+    closesAt: form.closes_at,
+    archived: form.archived_at !== null,
   };
 }
 

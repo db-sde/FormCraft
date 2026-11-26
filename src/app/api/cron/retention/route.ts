@@ -89,6 +89,17 @@ async function run(request: NextRequest) {
     remembered_answers: await job(admin, "remembered_answers", async () => ({
       deleted: await purgeStaleProfiles(admin),
     })),
+    // The font library's catalogue, from Google once a month.
+    font_families: await job(admin, "font_families", async () => {
+      const { refreshFontFamilies } = await import("@/domains/themes/font-refresh");
+      return refreshFontFamilies(admin);
+    }),
+    // API usage by the hour, past the 30 days Settings → API shows.
+    api_usage: await job(admin, "api_usage", async () => {
+      const { data, error } = await admin.rpc("ops_prune_api_usage");
+      if (error) throw error;
+      return { pruned: data };
+    }),
   };
   const failed = Object.entries(results)
     .filter(([, r]) => !r.ok)

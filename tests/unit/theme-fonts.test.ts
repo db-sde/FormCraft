@@ -35,10 +35,10 @@ describe("theme fonts (P2.22)", () => {
     ).toMatchObject({ fontFamily: "library", libraryFont: "Fraunces" });
   });
 
-  it("show Inter for a library name that isn't in the library", () => {
+  it("show Inter for a library name that isn't safe in CSS", () => {
     expect(
       themeForPlan(
-        { ...base, fontFamily: "library", libraryFont: "Not A Font" },
+        { ...base, fontFamily: "library", libraryFont: 'x"; color: red' },
         true,
         SUPABASE,
       ),
@@ -46,6 +46,9 @@ describe("theme fonts (P2.22)", () => {
     expect(
       themeForPlan({ ...base, fontFamily: "library" }, true, SUPABASE).fontFamily,
     ).toBe("inter");
+    expect(
+      themeForPlan({ ...base, headingFont: "bad;name" } as never, true, SUPABASE),
+    ).toMatchObject({ headingFont: undefined });
   });
 
   it("show Inter for an uploaded font the plan doesn't include", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { EmailTemplateButton } from "@/components/integrations/email-template-editor";
 import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import {
@@ -295,6 +296,10 @@ export function NotificationRulesPanel({
               <Button size="sm" variant="outline" onClick={() => setEditing(rule.id)}>
                 Edit
               </Button>
+              <EmailTemplateButton
+                target={{ kind: "rule", ruleId: rule.id }}
+                label="Email"
+              />
               <Button
                 size="sm"
                 variant="ghost"

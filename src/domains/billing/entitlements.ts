@@ -27,6 +27,8 @@ export const ENTITLEMENT_DEFAULTS = {
   recording_seconds: 60 as number | null,
   booking_types: 1 as number | null,
   api_requests_per_minute: 60 as number | null,
+  /** The API's token bucket size: how many requests may come at once. */
+  api_burst: 100 as number | null,
   api_requests_per_day: 5000 as number | null,
   api_keys: 2 as number | null,
   // Features on every plan.

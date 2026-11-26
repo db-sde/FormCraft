@@ -1,5 +1,6 @@
 "use client";
 
+import { EmailTemplateButton } from "@/components/integrations/email-template-editor";
 import { useState, useTransition } from "react";
 import { toast } from "@/lib/toast";
 import { setNotificationsAction } from "@/app/(form)/forms/[id]/(sections)/settings/actions";
@@ -51,6 +52,12 @@ export function NotificationsPanel({
         <span className="text-[13.5px] font-semibold">Send to</span>
         <span className="border-border bg-background flex h-7 items-center self-start rounded-full border-[1.5px] px-2.5 text-[13px] font-semibold">
           {ownerEmail || "The form owner"}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <EmailTemplateButton target={{ kind: "owner_notification", formId }} />
+        <span className="text-muted-foreground text-xs">
+          Your own words and brand (Starter and up). Answers appear only if you add them.
         </span>
       </div>
       {!emailConfigured && (

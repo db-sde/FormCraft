@@ -16,6 +16,8 @@ export type OutgoingEmail = {
   idempotencyKey?: string;
   /** A workspace's sender name (email branding); the address stays ours. */
   fromName?: string;
+  /** Where replies go (custom email templates). */
+  replyTo?: string;
 };
 
 /** The From header: the configured sender, or "<name> via FormCraft" at
@@ -45,6 +47,7 @@ export function defaultSender(): Send | null {
           subject: email.subject,
           html: email.html,
           text: email.text,
+          ...(email.replyTo ? { replyTo: email.replyTo } : {}),
           attachments: email.attachments?.map((a) => ({
             filename: a.filename,
             content: Buffer.from(a.content),

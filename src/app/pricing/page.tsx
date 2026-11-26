@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, Minus } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { Brand, LogoMark } from "@/components/app-shell/brand";
+import { Brand } from "@/components/app-shell/brand";
+import { SiteFooter } from "@/components/marketing/site-footer";
+import { ApiLimitsTable } from "@/components/marketing/api-limits-table";
+import { SOC2_SHORT } from "@/domains/marketing/claims";
 import {
   featureName,
   resolveEntitlements,
@@ -22,6 +25,8 @@ type Plan = {
   name: string;
   monthly: number;
   annual: number;
+  monthlyInr: number;
+  annualInr: number;
   tagline: string;
   e: Entitlements;
 };
@@ -67,11 +72,6 @@ const LIMIT_ROWS: { label: string; value: (e: Entitlements) => string }[] = [
     label: "Booking types",
     value: (e) => n(e.booking_types),
   },
-  {
-    label: "API",
-    value: (e) =>
-      `${n(e.api_requests_per_minute)}/min · ${e.api_requests_per_day === null ? "no daily cap" : `${e.api_requests_per_day.toLocaleString()}/day`} · ${e.api_keys === null ? "unlimited" : e.api_keys} keys`,
-  },
   { label: "FormCraft fee on payments", value: () => "0%" },
 ];
 
@@ -92,6 +92,8 @@ export default async function PricingPage({
     name: r.name,
     monthly: Number(r.monthly_usd ?? 0),
     annual: Number(r.annual_usd ?? 0),
+    monthlyInr: Number(r.monthly_inr ?? 0),
+    annualInr: Number(r.annual_inr ?? 0),
     tagline: r.tagline ?? "",
     e: resolveEntitlements(r.entitlements, null),
   }));
@@ -171,6 +173,12 @@ export default async function PricingPage({
                         ? " / month"
                         : " / month, billed yearly"}
                   </span>
+                  {price > 0 && (
+                    <span className="text-muted-foreground block text-sm">
+                      or ₹{(monthly ? p.monthlyInr : p.annualInr).toLocaleString("en-IN")}{" "}
+                      in India
+                    </span>
+                  )}
                 </p>
                 <ul className="flex flex-col gap-1.5 text-sm">
                   <li>
@@ -189,7 +197,13 @@ export default async function PricingPage({
                   )}
                 </ul>
                 <Link
-                  href={signedIn ? "/settings?tab=plan" : "/signup"}
+                  href={
+                    signedIn
+                      ? p.id === "free"
+                        ? "/dashboard"
+                        : `/settings?tab=plan&plan=${p.id}`
+                      : "/signup"
+                  }
                   className={cn(
                     "fc-focus border-ink mt-auto flex h-10 items-center justify-center rounded-sm border-[1.5px] px-4 text-sm font-bold",
                     highlight ? "bg-primary" : "bg-background",
@@ -206,9 +220,9 @@ export default async function PricingPage({
           })}
         </section>
         <p className="text-muted-foreground text-sm">
-          Paid plans: sign up free, then ask for the plan in Settings → Plan and
-          we&apos;ll set up billing with you. Prices in US dollars; GST is added for
-          customers in India.
+          Paid plans: sign up free, then choose the plan in Settings → Plan. Pay by card
+          in US dollars, or by UPI or card in rupees. Cancel any time; your forms and
+          responses stay.
         </p>
 
         <section aria-labelledby="compare" className="flex flex-col gap-3">
@@ -245,15 +259,42 @@ export default async function PricingPage({
                 {FEATURE_GROUPS.map((group) => (
                   <FeatureGroupRows key={group.title} group={group} plans={plans} />
                 ))}
+                <tr className="border-border border-t">
+                  <th scope="row" className="px-3 py-2 font-normal">
+                    {SOC2_SHORT}
+                  </th>
+                  {plans.map((p) => (
+                    <td key={p.id} className="px-3 py-2">
+                      <Check
+                        className="size-4 text-[var(--chip-live-dot)]"
+                        aria-label="Included"
+                      />
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>
           <p className="text-muted-foreground text-sm">
             Every plan includes all 29 question types, logic and quizzes, themes, payments
             through your own Stripe or Razorpay account, webhooks, Google Sheets,
-            two-factor sign-in, privacy requests and account deletion. Hosted on SOC 2
-            audited infrastructure (Vercel, Supabase). Some features need their provider
-            set up first, such as Google sign-in for Sheets.
+            two-factor sign-in, privacy requests and account deletion. Some features need
+            their provider set up first, such as Google sign-in for Sheets. See{" "}
+            <Link className="underline" href="/security">
+              security
+            </Link>{" "}
+            for how FormCraft protects your data.
+          </p>
+          <h3 id="api-limits" className="font-heading mt-4 text-xl font-bold">
+            API limits
+          </h3>
+          <ApiLimitsTable />
+          <p className="text-muted-foreground text-sm">
+            Per workspace, across all its keys. Details on the{" "}
+            <Link className="underline" href="/developers">
+              developer page
+            </Link>
+            .
           </p>
           <p className="text-muted-foreground text-sm">
             When a monthly allowance runs out, nothing is lost: notification emails switch
@@ -264,20 +305,7 @@ export default async function PricingPage({
         </section>
       </main>
 
-      <footer className="text-muted-foreground mx-auto box-content flex max-w-[1200px] flex-wrap items-center gap-x-7 gap-y-4 px-[clamp(16px,4vw,40px)] py-7 text-[13.5px]">
-        <span className="text-foreground flex items-center gap-2 font-bold">
-          <LogoMark size={14} />
-          FormCraft
-        </span>
-        <span>© 2026 FormCraft</span>
-        <div className="flex-1" />
-        <Link href="/" className="hover:underline">
-          Home
-        </Link>
-        <Link href="/templates" className="hover:underline">
-          Templates
-        </Link>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

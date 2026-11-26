@@ -150,10 +150,12 @@ export async function sendDueDigests(
   const { data: digests } = await admin
     .from("notification_digests")
     .select(
-      "form_id, member_ids, time_zone, frequency, last_sent_on, forms!inner(title, workspace_id, deleted_at)",
+      "form_id, member_ids, time_zone, frequency, last_sent_on, forms!inner(title, workspace_id, deleted_at, archived_at)",
     )
     .eq("enabled", true)
-    .is("forms.deleted_at", null);
+    .is("forms.deleted_at", null)
+    // Archived forms send no digests (developer spec item 4).
+    .is("forms.archived_at", null);
   for (const digest of digests ?? []) {
     const form = digest.forms as { title: string; workspace_id: string };
     const period = digestPeriod(

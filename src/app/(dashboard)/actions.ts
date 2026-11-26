@@ -1,5 +1,6 @@
 "use server";
 
+import { SWITCHED_OFF, featureEnabled } from "@/domains/flags";
 import { cannotCreate } from "@/domains/workspaces/status";
 import { rateLimit } from "@/domains/abuse/limit";
 
@@ -22,7 +23,9 @@ import {
   moveFormToFolder,
   renameFolder,
   softDeleteForm,
-  setFormArchived,
+  archiveForm,
+  restoreForm,
+  type UpcomingBooking,
 } from "@/domains/forms";
 import {
   deleteWorkspaceTemplate,
@@ -310,21 +313,65 @@ export async function deleteFormAction(
 }
 
 /** Archives a form or restores it (every plan). */
+export type ArchiveActionResult =
+  | { ok: true; cancelled?: number }
+  | { ok: false; message: string }
+  | {
+      ok: false;
+      code: "upcoming_bookings";
+      message: string;
+      count: number;
+      bookings: UpcomingBooking[];
+    };
+
+/** Archives or restores one form (owners, admins and editors). Archiving
+ * a form with upcoming bookings needs `keepBookings` (developer spec 4). */
 export async function archiveFormAction(
   formId: string,
   archived: boolean,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+  keepBookings = false,
+): Promise<ArchiveActionResult> {
   if (!FormId.safeParse(formId).success) return { ok: false, message: "Form not found." };
   const { supabase, workspace, user } = await getCurrentWorkspace();
   if (!canEdit(workspace.role)) {
     return { ok: false, message: "You have view-only access to this workspace." };
   }
+  if (archived && !(await featureEnabled("form_archiving", workspace.id)))
+    return { ok: false, message: SWITCHED_OFF };
   try {
-    await setFormArchived(supabase, formId, workspace.id, Boolean(archived));
+    if (archived) {
+      const result = await archiveForm(supabase, formId, Boolean(keepBookings));
+      if (!result.ok) {
+        if (result.code === "upcoming_bookings") {
+          return {
+            ok: false,
+            code: "upcoming_bookings",
+            count: result.count,
+            bookings: result.bookings,
+            message: `This form has ${result.count} upcoming booking${result.count === 1 ? "" : "s"}.`,
+          };
+        }
+        return { ok: false, message: "You can't archive this form." };
+      }
+      await recordAudit({
+        workspaceId: workspace.id,
+        actorId: user.id,
+        action: "form.archived",
+        target: { type: "form", id: formId },
+        metadata: {
+          cancelledDeliveries: result.cancelled,
+          keptBookings: Boolean(keepBookings),
+        },
+      });
+      revalidatePath("/dashboard");
+      return { ok: true, cancelled: result.cancelled };
+    }
+    const result = await restoreForm(supabase, formId);
+    if (!result.ok) return { ok: false, message: "You can't restore this form." };
     await recordAudit({
       workspaceId: workspace.id,
       actorId: user.id,
-      action: archived ? "form.archived" : "form.restored",
+      action: "form.restored",
       target: { type: "form", id: formId },
     });
     revalidatePath("/dashboard");
@@ -332,6 +379,51 @@ export async function archiveFormAction(
   } catch {
     return { ok: false, message: "Couldn't change that. Please try again." };
   }
+}
+
+/** Archives or restores several forms at once, one audit entry each.
+ * Forms with upcoming bookings are left as they are and named, so the
+ * user can decide about each one. */
+export async function archiveFormsAction(
+  formIds: string[],
+  archived: boolean,
+): Promise<
+  { ok: true; changed: number; withBookings: string[] } | { ok: false; message: string }
+> {
+  const ids = z.array(FormId).max(200).safeParse(formIds);
+  if (!ids.success || ids.data.length === 0)
+    return { ok: false, message: "Choose forms first." };
+  const { supabase, workspace, user } = await getCurrentWorkspace();
+  if (!canEdit(workspace.role)) {
+    return { ok: false, message: "You have view-only access to this workspace." };
+  }
+  if (archived && !(await featureEnabled("form_archiving", workspace.id)))
+    return { ok: false, message: SWITCHED_OFF };
+  let changed = 0;
+  const withBookings: string[] = [];
+  for (const id of new Set(ids.data)) {
+    try {
+      const result = archived
+        ? await archiveForm(supabase, id)
+        : await restoreForm(supabase, id);
+      if (!result.ok) {
+        if (result.code === "upcoming_bookings") withBookings.push(id);
+        continue;
+      }
+      changed += 1;
+      await recordAudit({
+        workspaceId: workspace.id,
+        actorId: user.id,
+        action: archived ? "form.archived" : "form.restored",
+        target: { type: "form", id },
+        metadata: { bulk: true },
+      });
+    } catch {
+      // Left as it was; the count says how many changed.
+    }
+  }
+  revalidatePath("/dashboard");
+  return { ok: true, changed, withBookings };
 }
 
 /** Leads a form has, for the delete dialog's warning. */

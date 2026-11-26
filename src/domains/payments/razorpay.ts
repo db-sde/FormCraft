@@ -68,7 +68,7 @@ function auth(secrets: Pick<RazorpaySecrets, "keyId" | "keySecret">) {
   return `Basic ${Buffer.from(`${secrets.keyId}:${secrets.keySecret}`).toString("base64")}`;
 }
 
-async function call<T>(
+export async function razorpayCall<T>(
   secrets: Pick<RazorpaySecrets, "keyId" | "keySecret">,
   path: string,
   init: { method?: string; body?: unknown } = {},
@@ -103,7 +103,7 @@ export async function verifyRazorpayKeys(
   secrets: Pick<RazorpaySecrets, "keyId" | "keySecret">,
   fetchImpl: typeof fetch = fetch,
 ): Promise<boolean> {
-  const res = await call(secrets, "/v1/orders?count=1", {}, fetchImpl);
+  const res = await razorpayCall(secrets, "/v1/orders?count=1", {}, fetchImpl);
   return res.ok;
 }
 
@@ -120,7 +120,7 @@ export function createRazorpayOrder(
   input: { amount: number; responseId: string; formId: string },
   fetchImpl: typeof fetch = fetch,
 ) {
-  return call<RazorpayOrder>(
+  return razorpayCall<RazorpayOrder>(
     secrets,
     "/v1/orders",
     {
@@ -158,7 +158,12 @@ export function fetchRazorpayPayment(
       message: "Not a payment id.",
     });
   }
-  return call<RazorpayPayment>(secrets, `/v1/payments/${paymentId}`, {}, fetchImpl);
+  return razorpayCall<RazorpayPayment>(
+    secrets,
+    `/v1/payments/${paymentId}`,
+    {},
+    fetchImpl,
+  );
 }
 
 /** A captured payment is money received. An authorized one isn't yet:
@@ -180,7 +185,7 @@ export function fetchRazorpayOrderPayments(
       message: "Not an order id.",
     });
   }
-  return call<{ items: RazorpayPayment[] }>(
+  return razorpayCall<{ items: RazorpayPayment[] }>(
     secrets,
     `/v1/orders/${orderId}/payments`,
     {},

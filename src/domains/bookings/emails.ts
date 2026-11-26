@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { renderEmailHtml } from "@/domains/notifications/email-layout";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import {
+  mergeContextFromResponse,
+  templateForSend,
+} from "@/domains/email-templates/queries";
+import { renderForSend } from "@/domains/email-templates/send";
+import { loadResponseContext } from "@/domains/responses/context";
 import { cleanAddress, defaultSender, type Send } from "@/domains/notifications/mailer";
 import { takeQuota } from "@/domains/billing/quotas";
 import { workspaceEmailBrand } from "@/domains/notifications/branding";
@@ -87,7 +94,7 @@ export async function sendBookingEmails(
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, starts_at, ends_at, status, attendee_name, attendee_email, attendee_time_zone, booking_types(name, location, time_zone, workspace_id), host:profiles!bookings_host_id_fkey(full_name, email)",
+      "id, starts_at, ends_at, status, attendee_name, attendee_email, attendee_time_zone, booking_type_id, response_id, booking_types(name, location, time_zone, workspace_id), host:profiles!bookings_host_id_fkey(full_name, email)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -136,33 +143,87 @@ export async function sendBookingEmails(
       { label: "When", value: time },
       ...(type.location ? [{ label: "Where", value: type.location }] : []),
     ];
-    const result = await send({
-      to: [attendee],
-      subject: `${SUBJECT[kind]}: ${type.name}`.slice(0, 200),
-      fromName,
-      html: renderEmailHtml({
-        brand,
-        tag: SUBJECT[kind],
-        tagColor: cancelled ? "#f8e1dd" : "#dcf1e3",
-        title: `${SUBJECT[kind]}: ${type.name}`,
-        body,
-        meta,
-        ...(manage && !cancelled
-          ? { button: { label: "Change or cancel", href: manage } }
-          : {}),
-        fine:
-          manage && !cancelled
-            ? "Keep this email: its link lets you move or cancel this booking."
-            : "You booked this through a form.",
-      }),
-      text: [
-        body,
-        ...meta.map((m) => `${m.label}: ${m.value}`),
-        ...(manage && !cancelled ? ["", `Change or cancel: ${manage}`] : []),
-      ].join("\n"),
-      attachments: [{ filename: "booking.ics", content: new TextEncoder().encode(ics) }],
-    });
-    sent.attendee = result.ok;
+    // The booking type's own template (Starter and up) for confirmations
+    // and reminders; changes and cancellations keep the standard email.
+    const templateKind =
+      kind === "reminder"
+        ? ("booking_reminder" as const)
+        : kind === "confirmed"
+          ? ("booking_confirmation" as const)
+          : null;
+    const stored = templateKind
+      ? await templateForSend(
+          admin,
+          type.workspace_id,
+          { kind: templateKind, bookingTypeId: b.booking_type_id },
+          (await getWorkspacePlan(admin, type.workspace_id)).entitlements,
+        )
+      : null;
+    if (stored) {
+      const ctx = b.response_id ? await loadResponseContext(admin, b.response_id) : null;
+      const merge = ctx
+        ? mergeContextFromResponse(ctx)
+        : { formTitle: type.name, answers: {}, hidden: {}, answerLines: [] };
+      const custom = await renderForSend(admin, {
+        workspaceId: type.workspace_id,
+        stored,
+        merge: {
+          ...merge,
+          respondentEmail: merge.respondentEmail ?? attendee,
+          booking: { type: type.name, time },
+        },
+        theme: ctx?.schema.theme,
+        footerReason: "You're getting this because you booked through a form.",
+      });
+      const extra = manage
+        ? {
+            html: custom.html.replace(
+              '</td></tr><tr><td style="padding:8px 32px 28px',
+              `<p style="margin:0 0 14px;font-size:14px"><a href="${manage}">Change or cancel this booking</a></p></td></tr><tr><td style="padding:8px 32px 28px`,
+            ),
+            text: `${custom.text}\n\nChange or cancel: ${manage}`,
+          }
+        : {};
+      const result = await send({
+        to: [attendee],
+        ...custom,
+        ...extra,
+        attachments: [
+          { filename: "booking.ics", content: new TextEncoder().encode(ics) },
+        ],
+      });
+      sent.attendee = result.ok;
+    } else {
+      const result = await send({
+        to: [attendee],
+        subject: `${SUBJECT[kind]}: ${type.name}`.slice(0, 200),
+        fromName,
+        html: renderEmailHtml({
+          brand,
+          tag: SUBJECT[kind],
+          tagColor: cancelled ? "#f8e1dd" : "#dcf1e3",
+          title: `${SUBJECT[kind]}: ${type.name}`,
+          body,
+          meta,
+          ...(manage && !cancelled
+            ? { button: { label: "Change or cancel", href: manage } }
+            : {}),
+          fine:
+            manage && !cancelled
+              ? "Keep this email: its link lets you move or cancel this booking."
+              : "You booked this through a form.",
+        }),
+        text: [
+          body,
+          ...meta.map((m) => `${m.label}: ${m.value}`),
+          ...(manage && !cancelled ? ["", `Change or cancel: ${manage}`] : []),
+        ].join("\n"),
+        attachments: [
+          { filename: "booking.ics", content: new TextEncoder().encode(ics) },
+        ],
+      });
+      sent.attendee = result.ok;
+    }
   }
 
   const hostEmail = cleanAddress(host?.email);

@@ -42,8 +42,9 @@ export default async function DashboardPage({
           </Link>
         </div>
         <p className="text-muted-foreground text-sm">
-          Archived forms are closed to new responses. Their responses are kept; restore a
-          form from its menu to bring it back.
+          Archived forms are unpublished, and their links say they&apos;re no longer
+          available. Responses, files and settings are kept and can still be read and
+          exported. Restore a form to bring it back as it was, then publish it again.
         </p>
         {forms.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing archived.</p>
@@ -54,6 +55,7 @@ export default async function DashboardPage({
             canEdit={canEdit(workspace.role)}
             folders={folders}
             currentUserId={user.id}
+            archivedView
           />
         )}
       </div>

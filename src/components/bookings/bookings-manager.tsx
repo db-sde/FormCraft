@@ -1,5 +1,6 @@
 "use client";
 
+import { EmailTemplateButton } from "@/components/integrations/email-template-editor";
 import { useState, useTransition } from "react";
 import { CalendarCheck, Plus } from "lucide-react";
 import {
@@ -373,6 +374,14 @@ export function BookingsManager({
                   <Button size="sm" variant="outline" onClick={() => setEditing(t.id)}>
                     Edit
                   </Button>
+                  <EmailTemplateButton
+                    target={{ kind: "booking_confirmation", bookingTypeId: t.id }}
+                    label="Confirmation email"
+                  />
+                  <EmailTemplateButton
+                    target={{ kind: "booking_reminder", bookingTypeId: t.id }}
+                    label="Reminder email"
+                  />
                   <Button
                     size="sm"
                     variant="ghost"

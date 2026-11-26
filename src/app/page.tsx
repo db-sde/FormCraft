@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SiteFooter } from "@/components/marketing/site-footer";
 import {
   ArrowRight,
   AtSign,
@@ -16,7 +17,7 @@ import {
   Webhook,
 } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { Brand, LogoMark } from "@/components/app-shell/brand";
+import { Brand } from "@/components/app-shell/brand";
 
 const CHIPS: [string, typeof Star, number][] = [
   ["Short text", TextCursorInput, -3],
@@ -317,20 +318,7 @@ export default async function Home({
         </section>
       </main>
 
-      <footer className="text-muted-foreground mx-auto box-content flex max-w-[1200px] flex-wrap items-center gap-x-7 gap-y-4 px-[clamp(16px,4vw,40px)] py-7 text-[13.5px]">
-        <span className="text-foreground flex items-center gap-2 font-bold">
-          <LogoMark size={14} />
-          FormCraft
-        </span>
-        <span>© 2026 FormCraft</span>
-        <div className="flex-1" />
-        <Link href="/pricing" className="hover:underline">
-          Pricing
-        </Link>
-        <Link href="/templates" className="hover:underline">
-          Templates
-        </Link>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -4,10 +4,12 @@ import {
   type ThemeV1,
   type ThemeVariantV1,
 } from "@/domains/forms/schema/v1";
+import { applyPreset, findPreset } from "./presets";
 
 /**
  * Link themes (F-66): a form's link can pick one of the looks its creator
- * saved, with `?theme=<id>` (or `data-theme` on an embed). Anything else —
+ * saved or a built-in preset, with `?theme=<id>` (or `data-theme` on an
+ * embed). Anything else —
  * an unknown id, a malformed value, a list of them — gets the form's own
  * theme. The URL only ever names a saved look: no colours, fonts or CSS
  * come from it, and the form's custom CSS applies whichever look is used.
@@ -17,8 +19,11 @@ export function themeForLink(schema: FormSchemaV1, requested: unknown): ThemeV1 
     return schema.theme;
   }
   const variant = schema.themeVariants?.find((v) => v.id === requested);
-  if (!variant) return schema.theme;
-  return { ...variant.theme, customCss: schema.theme.customCss };
+  if (variant) return { ...variant.theme, customCss: schema.theme.customCss };
+  // The built-in presets' ids are allowed too (developer spec item 3):
+  // known values only, never anything from the URL itself.
+  const preset = findPreset(requested);
+  return preset ? applyPreset(schema.theme, preset) : schema.theme;
 }
 
 /** The id a new link theme gets from its name: "Dark mode" → "dark-mode",

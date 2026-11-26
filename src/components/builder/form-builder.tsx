@@ -1831,6 +1831,11 @@ export function FormBuilder({
                         })),
                     }}
                     customFonts={customFonts}
+                    formTitle={schema.meta.title}
+                    languages={[
+                      schema.languages?.default ?? "en",
+                      ...(schema.languages?.others ?? []),
+                    ]}
                     layout={schema.meta.layout ?? "conversational"}
                     onLayoutChange={(layout) =>
                       setSchema((s) => ({

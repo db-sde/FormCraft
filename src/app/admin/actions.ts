@@ -693,3 +693,37 @@ export async function recordDrillAction(input: unknown): Promise<ActionResult> {
   revalidatePath("/admin/operations");
   return explain(result, "Couldn't record the drill.");
 }
+
+const FlagChange = z.object({
+  key: z.enum([
+    "form_archiving",
+    "link_preview_seo",
+    "api_free",
+    "font_library",
+    "email_templates",
+    "checkout",
+  ]),
+  enabled: z.boolean().nullable(),
+  workspaceId: z.string().uuid().nullable(),
+  reason: z.string().trim().min(5).max(500),
+});
+
+/** Turns a feature on or off for everyone or one workspace (kill
+ * switch; one staff member, with a reason). */
+export async function setFeatureFlagAction(input: unknown): Promise<ActionResult> {
+  const parsed = FlagChange.safeParse(input);
+  if (!parsed.success)
+    return {
+      ok: false,
+      error: "Give a reason (5 characters or more) and a valid workspace id.",
+    };
+  const v = parsed.data;
+  const result = await adminCall("admin_set_feature_flag", {
+    p_key: v.key,
+    p_enabled: v.enabled,
+    p_workspace_id: v.workspaceId,
+    p_reason: v.reason,
+  });
+  revalidatePath("/admin/operations");
+  return explain(result, "Couldn't change the switch.");
+}

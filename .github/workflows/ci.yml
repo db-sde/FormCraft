@@ -29,6 +29,8 @@ jobs:
 
       - run: npm run format:check
 
+      - run: npm run check:claims
+
       - run: npm run test
 
       - run: npm run build

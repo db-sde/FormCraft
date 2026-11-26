@@ -5,6 +5,7 @@ import { getBackupStatus } from "@/domains/observability/backups";
 import { LocalTime } from "@/components/local-time";
 import { RestoreTestForm } from "./restore-test-form";
 import { DrillForm } from "./drill-form";
+import { FeatureFlags, type FlagRow, type OverrideRow } from "./feature-flags";
 import { DRILL_LABEL } from "./labels";
 
 export const metadata: Metadata = { title: "Operations" };
@@ -68,10 +69,11 @@ const box = "border-border rounded-lg border-[1.5px] p-4";
  * hosting, database and email consoles stay the place for the rest. */
 export default async function OperationsPage() {
   const { staff } = await requireStaff("ops.read");
-  const [health, backups, drills] = await Promise.all([
+  const [health, backups, drills, flagData] = await Promise.all([
     adminCall<Health>("admin_ops_health"),
     getBackupStatus(),
     adminCall<{ drills: Drill[] }>("admin_list_drills"),
+    adminCall<{ flags: FlagRow[]; overrides: OverrideRow[] }>("admin_list_feature_flags"),
   ]);
   if (!health.ok) return <p>Couldn&apos;t load operations.</p>;
   const s = health.scheduler;
@@ -263,6 +265,13 @@ export default async function OperationsPage() {
         )}
       </section>
       {staff.permissions.includes("ops.record") && <DrillForm />}
+      {flagData.ok && (
+        <FeatureFlags
+          flags={flagData.flags}
+          overrides={flagData.overrides}
+          canChange={staff.permissions.includes("ops.record")}
+        />
+      )}
     </main>
   );
 }

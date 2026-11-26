@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Contrast } from "lucide-react";
+import { Contrast } from "lucide-react";
 import type { ThemeV1, ThemeVariantV1 } from "@/domains/forms/schema/v1";
-import { THEME_PRESETS, contrastRatio } from "@/domains/themes";
-import { THEME_FONT_STACK, themeFontStack } from "@/components/theme-styles";
+import { contrastRatio } from "@/domains/themes";
+import { scriptForLanguage } from "@/domains/themes/font-metadata";
+import { THEME_FONT_STACK } from "@/components/theme-styles";
 import { FontLibraryPicker } from "./font-library-picker";
+import { ThemeGallery } from "./theme-gallery";
 import { FONT_LABEL, isPaidFont } from "@/domains/themes/fonts";
 import { uploadThemeFontAction } from "@/app/(form)/forms/[id]/actions";
 import { stageTextColor } from "@/components/runtime/stage-theme";
@@ -21,12 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "cn";
+import { Slider } from "@/components/ui/slider";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 /** WCAG AA for body text. */
 const READABLE = 4.5;
-const PRESET_RADIUS = { rounded: "4px", square: "0", pill: "999px" } as const;
 
 /** The Design panel (Part 4): presets, colours, type & shape, images. */
 export function ThemeSettingsPanel({
@@ -35,6 +36,8 @@ export function ThemeSettingsPanel({
   formId,
   onChange,
   customFonts = true,
+  formTitle = "",
+  languages = [],
   layout = "conversational",
   onLayoutChange,
   autoAdvance,
@@ -58,6 +61,10 @@ export function ThemeSettingsPanel({
   /** A review of the answers before submitting (F-60). */
   reviewStep?: boolean;
   onReviewStepChange?: (on: boolean) => void;
+  /** For the theme and font previews. */
+  formTitle?: string;
+  /** The form's languages: fonts are offered only if they can show them. */
+  languages?: string[];
   /** The plan includes paid and uploaded fonts (P2.22). */
   customFonts?: boolean;
   theme: ThemeV1;
@@ -67,10 +74,8 @@ export function ThemeSettingsPanel({
    * finish later, and two at once mustn't overwrite each other. */
   onChange: (next: ThemeV1 | ((current: ThemeV1) => ThemeV1)) => void;
 }) {
-  const [allPresets, setAllPresets] = useState(false);
-  const shownPresets = allPresets
-    ? THEME_PRESETS
-    : THEME_PRESETS.filter((preset, i) => i < 8 || preset.id === theme.preset);
+  // Fonts offered must show every language the form is in.
+  const scripts = [...new Set(languages.map(scriptForLanguage))];
   const set = (patch: Partial<ThemeV1>) =>
     onChange((current) => ({ ...current, ...patch, preset: undefined }));
 
@@ -83,59 +88,12 @@ export function ThemeSettingsPanel({
 
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-      <div className="col-span-full flex flex-col gap-1.5">
-        <span className="text-[13.5px] font-semibold">Presets</span>
-        <div className="grid grid-cols-2 gap-2">
-          {shownPresets.map((preset) => {
-            const on = theme.preset === preset.id;
-            const p = preset.theme;
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => onChange({ ...theme, ...p, preset: preset.id })}
-                className={cn(
-                  "fc-focus bg-card flex flex-col gap-1.5 rounded-[8px] border-[1.5px] p-1.5 text-left",
-                  on ? "border-ink shadow-card" : "border-border hover:border-input",
-                )}
-              >
-                <span
-                  aria-hidden
-                  className="flex h-[52px] flex-col justify-center gap-[5px] rounded-[5px] px-2.5"
-                  style={{ background: p.backgroundColor }}
-                >
-                  <span
-                    className="h-1.5 w-[70%] rounded-[2px]"
-                    style={{ background: p.textColor ?? stageTextColor(p) }}
-                  />
-                  <span
-                    className="h-3 w-[34px]"
-                    style={{
-                      background: p.primaryColor,
-                      borderRadius: PRESET_RADIUS[p.buttonStyle],
-                    }}
-                  />
-                </span>
-                <span
-                  className="flex items-center justify-between text-[13px] font-semibold"
-                  style={{ fontFamily: themeFontStack(p) }}
-                >
-                  {preset.name}
-                  {on && <Check className="size-[13px]" />}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          onClick={() => setAllPresets((v) => !v)}
-          className="fc-focus text-muted-foreground hover:text-foreground self-start text-[12.5px] font-semibold underline-offset-2 hover:underline"
-        >
-          {allPresets ? "Show fewer themes" : `Show all ${THEME_PRESETS.length} themes`}
-        </button>
-      </div>
+      <ThemeGallery
+        theme={theme}
+        formTitle={formTitle}
+        canSave
+        onApply={(next) => onChange(next)}
+      />
 
       <SectionHead>Colours</SectionHead>
       <ColorField
@@ -221,8 +179,58 @@ export function ThemeSettingsPanel({
       {theme.fontFamily === "library" && (
         <FontLibraryPicker
           value={theme.libraryFont}
+          previewText={formTitle}
+          scripts={scripts}
           onChange={(libraryFont) => set({ fontFamily: "library", libraryFont })}
         />
+      )}
+      <PanelField
+        label="Heading font"
+        hint="Titles and questions. At most two fonts load, so forms stay fast."
+      >
+        <Select
+          value={theme.headingFont ? "library" : "same"}
+          onValueChange={(v) =>
+            set(
+              v === "same"
+                ? { headingFont: undefined, headingWeight: undefined }
+                : {
+                    headingFont:
+                      theme.headingFont ?? theme.libraryFont ?? "Playfair Display",
+                    headingWeight: theme.headingWeight ?? 700,
+                  },
+            )
+          }
+        >
+          <SelectTrigger className="h-[38px] w-full" aria-label="Heading font">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="same">Same as the body</SelectItem>
+            <SelectItem value="library">From the font library</SelectItem>
+          </SelectContent>
+        </Select>
+      </PanelField>
+      {theme.headingFont && (
+        <>
+          <FontLibraryPicker
+            value={theme.headingFont}
+            previewText={formTitle}
+            scripts={scripts}
+            weight={theme.headingWeight ?? 700}
+            onChange={(headingFont) => set({ headingFont })}
+          />
+          <Segmented
+            label="Heading weight"
+            value={String(theme.headingWeight ?? 700)}
+            options={[
+              { value: "400", label: "Regular" },
+              { value: "600", label: "Semibold" },
+              { value: "700", label: "Bold" },
+            ]}
+            onChange={(w) => set({ headingWeight: Number(w) as 400 | 600 | 700 })}
+          />
+        </>
       )}
       {theme.fontFamily === "custom" && customFonts && (
         <FontUpload
@@ -240,6 +248,31 @@ export function ThemeSettingsPanel({
           { value: "pill", label: "Pill" },
         ]}
         onChange={(buttonStyle) => set({ buttonStyle })}
+      />
+      <PanelField
+        label="Corner radius"
+        hint={`${theme.cornerRadius ?? 8}px on fields and choices`}
+      >
+        <Slider
+          aria-label="Corner radius"
+          min={0}
+          max={24}
+          step={1}
+          value={[theme.cornerRadius ?? 8]}
+          onValueChange={([r]) => set({ cornerRadius: r })}
+        />
+      </PanelField>
+      <Segmented
+        label="Spacing"
+        value={theme.spacing ?? "comfortable"}
+        options={[
+          { value: "compact", label: "Compact" },
+          { value: "comfortable", label: "Comfortable" },
+          { value: "spacious", label: "Spacious" },
+        ]}
+        onChange={(spacing) =>
+          set({ spacing: spacing === "comfortable" ? undefined : spacing })
+        }
       />
       <Segmented
         label="Progress bar"
@@ -277,6 +310,47 @@ export function ThemeSettingsPanel({
             </SelectContent>
           </Select>
         </PanelField>
+      )}
+
+      <Segmented
+        label="Background"
+        value={theme.backgroundGradient ? "gradient" : "solid"}
+        options={[
+          { value: "solid", label: "Colour" },
+          { value: "gradient", label: "Gradient" },
+        ]}
+        onChange={(v) =>
+          set({
+            backgroundGradient:
+              v === "gradient"
+                ? {
+                    from: theme.backgroundColor,
+                    to: theme.primaryColor,
+                    angle: 180,
+                  }
+                : undefined,
+          })
+        }
+      />
+      {theme.backgroundGradient && (
+        <>
+          <ColorField
+            label="Gradient from"
+            value={theme.backgroundGradient.from}
+            onChange={(from) =>
+              HEX_RE.test(from) &&
+              set({ backgroundGradient: { ...theme.backgroundGradient!, from } })
+            }
+          />
+          <ColorField
+            label="Gradient to"
+            value={theme.backgroundGradient.to}
+            onChange={(to) =>
+              HEX_RE.test(to) &&
+              set({ backgroundGradient: { ...theme.backgroundGradient!, to } })
+            }
+          />
+        </>
       )}
 
       <SectionHead>Images</SectionHead>

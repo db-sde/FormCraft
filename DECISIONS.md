@@ -3,6 +3,104 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-27 — Six competitive gap features and checkout (migrations 79–86)
+
+Built from "FormCraft Developer Spec: Six Competitive Gap Features" and
+the product owner's checkout choices (27 Nov 2026).
+
+- **Rollout**: each feature has a switch (`feature_flags`), all on.
+  Archiving, SEO and fonts were already live, so nothing disappears.
+  Staff with Operations access turn one off for everyone or one
+  workspace from the admin portal, with a reason. Turning one off for
+  everyone raises an alert. Changes apply within 30 seconds.
+- **Archiving (item 4)**:
+  - Archiving unpublishes the form. Its link, custom domain, embed and
+    resume links answer HTTP 410 at the edge, marked noindex.
+  - Queued webhook, Sheets and connector deliveries are cancelled with a
+    reason the response timeline shows. A/B tests stop.
+  - Upcoming bookings block archiving until the user keeps them; kept
+    bookings still get their reminders.
+  - Restore brings the form back unpublished; publishing again restarts
+    its integrations.
+  - Available from the menu, the builder's Settings, bulk select and the
+    API (`POST /api/v1/forms/{id}/archive|restore`, new opt-in
+    `forms:write` permission, `?archived=` on the list). Each form gets
+    its own audit entry.
+  - `unpublish_form` now checks the publish permission in the database
+    too (it only checked membership).
+- **Link preview and SEO (item 1)**:
+  - Settings are a draft (`forms.seo`) that publishing copies to
+    `forms.seo_live`.
+  - Publishing also makes the share card with `ImageResponse` and stores
+    it: the FormCraft badge on plans without branding removal.
+  - Uploaded share images and icons are cropped and re-encoded on the
+    server (sharp), which drops EXIF and location data. They're stored
+    in a public, server-only `share-assets` bucket under content-hashed
+    names.
+  - Indexing is off unless turned on. Password-protected, closed and
+    archived forms are always noindex and show only share fields.
+  - The canonical and og:url use the verified custom domain when there
+    is one. The sitemap lists only indexed forms on the app's own host
+    (a form on a custom domain has its canonical address there).
+- **API on Free (item 5)**: a token bucket and a daily count (UTC) per
+  workspace, taken atomically in Postgres (`api_take`), so every Vercel
+  instance agrees.
+  - Headers on every response, and a 429 body in the spec's shape.
+  - Owners get one email the first time each day the cap is hit.
+  - Settings → API shows usage for 24 hours and 30 days, and the last
+    refusal.
+  - Creating keys is limited to 10 an hour.
+  - One table (catalog.ts) drives /developers, /pricing and the
+    database.
+- **Fonts and themes (item 3)**:
+  - 1,959 Google Fonts families come from a single parser
+    (`font-metadata.ts`). `font_families` is seeded by migration and
+    refreshed monthly by the daily retention job; an import under 1,700
+    is refused.
+  - Files are still served through FormCraft's `/fonts` routes and
+    cached at the CDN, rather than copied into a bucket. Respondents'
+    browsers never contact Google either way, and the cache is the copy.
+  - Separate heading and body fonts, within the budget: two families
+    and four files.
+  - The picker offers only fonts whose scripts cover the form's
+    languages.
+  - 66 presets in eight groups. A unit test checks text and button
+    contrast (4.5:1) on every one.
+  - Workspaces can save brand themes. Preset ids are valid `?theme=`
+    values.
+- **Email templates (item 2)**:
+  - Covers confirmations, owner notifications, rule emails and booking
+    confirmations and reminders.
+  - The body is structured blocks rendered by FormCraft into
+    table-based HTML and plain text, never raw HTML.
+  - Merge values are substituted after the creator's markup and escaped,
+    so answers can't become markup or links. Subject, sender and
+    reply-to lose line breaks after merging.
+  - FormCraft's standard owner email still keeps answers out. They
+    appear only when the creator puts them in their own template.
+  - Each publish snapshots the form's templates.
+- **SOC 2 wording (item 6)**: the approved lines live in
+  `src/domains/marketing/claims.ts`. `npm run check:claims`, run in CI,
+  fails on the banned phrasings and on SOC logo files. /security and
+  /legal/subprocessors are new. /enterprise, the comparison pages and a
+  help centre don't exist, so they weren't made.
+- **Checkout**:
+  - Stripe takes US dollars (cards), Razorpay takes rupees (UPI autopay
+    and cards), both as subscriptions.
+  - Rupee prices are the dollar prices at about ₹85, rounded:
+    Starter ₹1,299/₹1,599, Pro ₹3,299/₹4,199, Business ₹5,899/₹7,599.
+    They're stored per plan.
+  - The plan changes only when the provider says so (a signed webhook,
+    or the server asking Stripe about its own Checkout session). Each
+    event is applied once.
+  - Cancelling takes effect at the end of the period, then the
+    workspace is on Free with its data intact. A plan staff set by
+    hand, such as Enterprise, isn't changed by another subscription
+    ending.
+  - With no billing keys set, the upgrade request stays.
+  - **Not done**: tax (GST and VAT) collection. It needs the business's
+    registrations first.
+
 ## 2026-11-26 — Pricing plans and quotas (pricing doc, migrations 77–78)
 
 Built from "FormCraft Pricing Plans & Unit Economics" (updated). No

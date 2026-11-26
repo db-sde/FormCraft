@@ -175,6 +175,7 @@ describe("API keys", () => {
       workspaceId,
       scopes: ["forms:read", "responses:read", "hooks:write"],
       perMinute: 1000,
+      burst: 50000,
       perDay: null,
     });
     expect(await authenticateApiKey(admin, `Bearer ${key.slice(0, -1)}x`)).toBeNull();

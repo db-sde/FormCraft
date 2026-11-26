@@ -78,7 +78,7 @@ async function loadUnfinished(
   const { data: r } = await admin
     .from("responses")
     .select(
-      "id, form_id, status, last_question_id, last_active_at, hidden_fields, spam_suspected, is_preview, forms!inner(save_partial_responses)",
+      "id, form_id, status, last_question_id, last_active_at, hidden_fields, spam_suspected, is_preview, forms!inner(save_partial_responses, archived_at)",
     )
     .eq("id", responseId)
     .maybeSingle();
@@ -87,7 +87,9 @@ async function loadUnfinished(
     r.status === "completed" ||
     r.spam_suspected ||
     r.is_preview ||
-    !(r.forms as { save_partial_responses: boolean }).save_partial_responses
+    !(r.forms as { save_partial_responses: boolean }).save_partial_responses ||
+    // Nothing is sent for an archived form (developer spec item 4).
+    (r.forms as { archived_at: string | null }).archived_at !== null
   ) {
     return null;
   }

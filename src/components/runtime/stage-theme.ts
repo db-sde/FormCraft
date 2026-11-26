@@ -1,6 +1,8 @@
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
 import { themeFontStack } from "@/components/theme-styles";
 
+const SAFE_FAMILY = /^[A-Za-z0-9 ]{2,60}$/;
+
 function luminance(hex: string): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex ?? "");
   if (!m) return 0.5;
@@ -63,8 +65,29 @@ export function stageVars(theme: ThemeV1): React.CSSProperties {
     "--st-tile-br": button === "square" ? "0px" : button === "pill" ? "16px" : "10px",
     "--st-key-br": button === "square" ? "0px" : button === "pill" ? "999px" : "5px",
     "--st-cell-br": button === "square" ? "0px" : button === "pill" ? "12px" : "8px",
-    "--st-label-weight": theme.fontFamily === "georgia" ? "500" : "600",
+    "--st-label-weight": theme.headingFont
+      ? String(theme.headingWeight ?? 700)
+      : theme.fontFamily === "georgia"
+        ? "500"
+        : "600",
+    ...(theme.headingFont && SAFE_FAMILY.test(theme.headingFont)
+      ? { "--st-heading-font": `"${theme.headingFont}", ${themeFontStack(theme)}` }
+      : {}),
+    "--st-space":
+      theme.spacing === "compact" ? "0.8" : theme.spacing === "spacious" ? "1.3" : "1",
+    ...(theme.cornerRadius !== undefined
+      ? {
+          "--st-tile-br": `${theme.cornerRadius}px`,
+          "--st-cell-br": `${theme.cornerRadius}px`,
+          ...(button === "rounded" ? { "--st-br": `${theme.cornerRadius}px` } : {}),
+        }
+      : {}),
     backgroundColor: theme.backgroundColor,
+    ...(theme.backgroundGradient
+      ? {
+          backgroundImage: `linear-gradient(${theme.backgroundGradient.angle}deg, ${theme.backgroundGradient.from}, ${theme.backgroundGradient.to})`,
+        }
+      : {}),
     color: text,
     fontFamily: themeFontStack(theme),
   } as React.CSSProperties;

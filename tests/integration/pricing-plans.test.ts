@@ -7,7 +7,7 @@ import { firstTimeThisMonth, quotaUsed, takeQuota } from "@/domains/billing/quot
 import { publishBlockedBy } from "@/domains/billing/schema-features";
 import { beginAi } from "@/domains/ai/gateway";
 import { startResponse } from "@/domains/responses";
-import { setFormArchived } from "@/domains/forms/queries";
+import { archiveForm, restoreForm } from "@/domains/forms/queries";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { admin, canRunLocally, person, sql, url, type Person } from "./staff-helpers";
 
@@ -210,10 +210,15 @@ describeLocal("pricing plans and quotas", () => {
     expect(error).not.toBeNull();
   });
 
-  it("refuses new responses on an archived form, and takes them again once restored", async () => {
-    await setFormArchived(owner.client, formId, workspaceId, true);
+  it("refuses new responses on an archived form; restored, it's unpublished until published again", async () => {
+    expect(await archiveForm(owner.client, formId)).toMatchObject({ ok: true });
     await expect(startResponse(admin, formId)).rejects.toThrow();
-    await setFormArchived(owner.client, formId, workspaceId, false);
+    expect(await restoreForm(owner.client, formId)).toMatchObject({ ok: true });
+    await expect(startResponse(admin, formId)).rejects.toThrow();
+    await admin.rpc("publish_form_version", {
+      target_form_id: formId,
+      compiled_schema: schema,
+    });
     const started = await startResponse(admin, formId);
     expect(started.responseId).toBeTruthy();
   });

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { featureEnabled } from "@/domains/flags";
 import { aiConfigured } from "@/domains/ai/config";
 import Link from "next/link";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
@@ -14,6 +15,7 @@ import { dnsInstructions, listDomains } from "@/domains/domains";
 import { listFormsForWorkspace } from "@/domains/forms";
 import { DomainSettings } from "@/components/dashboard/domain-settings";
 import { ApiKeySettings } from "@/components/dashboard/api-key-settings";
+import { ApiUsage, type ApiUsageSummary } from "@/components/dashboard/api-usage";
 import { ConnectionSettings } from "@/components/dashboard/connection-settings";
 import { RetentionSettings } from "@/components/dashboard/retention-settings";
 import { AuditLog } from "@/components/dashboard/audit-log";
@@ -22,6 +24,8 @@ import { listApiKeys } from "@/domains/api";
 import { getUsage, getWorkspacePlan } from "@/domains/billing";
 import { remainingRecoveryCodes, verifiedTotpFactor } from "@/domains/identity/mfa";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { billingProviders } from "@/domains/billing/checkout/config";
+import { syncStripeCheckout } from "@/domains/billing/checkout/stripe";
 import { SecuritySettings } from "@/components/dashboard/security-settings";
 import { getSsoSettings } from "@/domains/identity/sso";
 import { notOnPlanMessage } from "@/domains/billing/entitlements";
@@ -71,9 +75,20 @@ export default async function SettingsPage({
     before?: string;
     notice?: string;
     connect_error?: string;
+    checkout?: string;
+    session_id?: string;
+    plan?: string;
   }>;
 }) {
-  const { tab: rawTab, before, notice, connect_error: connectError } = await searchParams;
+  const {
+    tab: rawTab,
+    before,
+    notice,
+    connect_error: connectError,
+    checkout: checkoutReturn,
+    session_id: checkoutSession,
+    plan: wantedPlan,
+  } = await searchParams;
   const tab: Tab = TABS.some(([key]) => key === rawTab) ? (rawTab as Tab) : "account";
   const { supabase, user, workspace } = await getCurrentWorkspace();
   const name = (user.user_metadata?.full_name as string | undefined) ?? "";
@@ -100,6 +115,7 @@ export default async function SettingsPage({
       ? await Promise.all([
           listApiKeys(supabase, workspace.id),
           getWorkspacePlan(supabase, workspace.id),
+          supabase.rpc("api_usage_summary", { p_workspace_id: workspace.id }),
         ])
       : null;
 
@@ -159,12 +175,70 @@ export default async function SettingsPage({
         ])
       : null;
 
+  // Back from Stripe Checkout: ask Stripe what happened before showing
+  // the plan (the webhook does the same; whichever is first applies).
+  if (
+    tab === "plan" &&
+    checkoutReturn === "stripe" &&
+    checkoutSession &&
+    canAdmin(workspace.role)
+  ) {
+    await syncStripeCheckout(createAdminClient(), checkoutSession, workspace.id).catch(
+      () => false,
+    );
+  }
   const planData =
     tab === "plan"
       ? await Promise.all([
           getWorkspacePlan(supabase, workspace.id),
           getUsage(supabase, workspace.id),
+          canAdmin(workspace.role)
+            ? supabase
+                .from("billing_subscriptions")
+                .select(
+                  "provider, plan_id, billing_interval, status, current_period_end, cancel_at_period_end",
+                )
+                .eq("workspace_id", workspace.id)
+                .in("status", ["active", "past_due", "pending"])
+                .order("updated_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+          supabase.rpc("public_plans"),
         ])
+      : null;
+  const providers =
+    tab === "plan" && (await featureEnabled("checkout", workspace.id))
+      ? billingProviders()
+      : [];
+  const checkout =
+    planData &&
+    canAdmin(workspace.role) &&
+    providers.length > 0 &&
+    planData[0].planId !== "enterprise"
+      ? {
+          providers,
+          currentPlanId: planData[0].planId,
+          initialPlan: wantedPlan,
+          current: planData[2].data
+            ? {
+                provider: planData[2].data.provider as "stripe" | "razorpay",
+                planId: planData[2].data.plan_id,
+                interval: planData[2].data.billing_interval as "month" | "year",
+                status: planData[2].data.status as "pending" | "active" | "past_due",
+                currentPeriodEnd: planData[2].data.current_period_end,
+                cancelAtPeriodEnd: planData[2].data.cancel_at_period_end,
+              }
+            : null,
+          plans: (planData[3].data ?? [])
+            .filter((p) => p.id !== "free")
+            .map((p) => ({
+              id: p.id as "starter" | "pro" | "business",
+              name: p.name,
+              usd: { monthly: Number(p.monthly_usd), annual: Number(p.annual_usd) },
+              inr: { monthly: Number(p.monthly_inr), annual: Number(p.annual_inr) },
+            })),
+        }
       : null;
 
   return (
@@ -284,6 +358,7 @@ export default async function SettingsPage({
           plan={planData[0]}
           usage={planData[1]}
           aiAvailable={aiConfigured()}
+          checkout={checkout}
           upgradeOptions={
             canAdmin(workspace.role) &&
             PUBLIC_PLAN_IDS.includes(planData[0].planId as never)
@@ -323,6 +398,16 @@ export default async function SettingsPage({
           allowed={apiData?.[1].entitlements.api_access ?? false}
           isAdmin={canAdmin(workspace.role)}
           appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
+        />
+      )}
+      {tab === "api" && apiData && (
+        <ApiUsage
+          entitlements={apiData[1].entitlements}
+          usage={
+            (apiData[2].data as { ok?: boolean } | null)?.ok
+              ? (apiData[2].data as unknown as ApiUsageSummary)
+              : null
+          }
         />
       )}
 

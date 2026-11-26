@@ -1,6 +1,7 @@
 "use server";
 
 import { recordAudit } from "@/domains/audit/record";
+import { rateLimit } from "@/domains/abuse/limit";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -19,6 +20,13 @@ export async function createApiKeyAction(
   const { user, workspace } = await getCurrentWorkspace();
   if (!canAdmin(workspace.role))
     return { ok: false, message: "Only the owner and admins can make API keys." };
+  // At most 10 new keys an hour per workspace (developer spec item 5).
+  if (!(await rateLimit(`api-key-create:${workspace.id}`, 10, 3_600_000)).allowed) {
+    return {
+      ok: false,
+      message: "That's 10 new keys in the last hour. Try again a little later.",
+    };
+  }
   try {
     const { key } = await createApiKey(createAdminClient(), {
       workspaceId: workspace.id,

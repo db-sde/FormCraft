@@ -74,6 +74,7 @@ export function ApiKeySettings({
                 ["forms:read", "Read forms"],
                 ["responses:read", "Read responses"],
                 ["hooks:write", "Subscribe to responses"],
+                ["forms:write", "Archive and restore forms"],
               ].map(([scope, label]) => (
                 <label key={scope} className="flex items-center gap-1.5">
                   <input

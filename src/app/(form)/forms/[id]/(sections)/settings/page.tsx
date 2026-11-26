@@ -21,7 +21,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { VariantTestPanel } from "@/components/forms/variant-test-panel";
 import { ConfidentialPanel } from "@/components/forms/confidential-panel";
 import { FormSeoPanel } from "@/components/forms/form-seo-panel";
-import { readSeo } from "@/domains/forms/seo";
+import { ArchiveFormSection } from "@/components/forms/archive-form-section";
+import { defaultShareDescription, readSeo } from "@/domains/forms/seo";
 import { readConfidential } from "@/domains/responses/feedback-report";
 import { listVariantTests, variantResults } from "@/domains/forms/variant-tests";
 import { hasLogic } from "@/domains/forms/variants";
@@ -76,7 +77,7 @@ export default async function FormSettingsPage({
     supabase
       .from("forms")
       .select(
-        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config, confidential, seo",
+        "closes_at, closed_message, response_cap, full_message, captcha_required, kiosk_config, confidential, seo, archived_at",
       )
       .eq("id", formId)
       .single(),
@@ -137,8 +138,9 @@ export default async function FormSettingsPage({
       {access && (
         <FormSeoPanel
           formId={formId}
-          workspaceId={workspace.id}
           formTitle={form.title}
+          defaultDescription={draftForm ? (defaultShareDescription(draftForm) ?? "") : ""}
+          host={new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://formcraft.app").host}
           initial={readSeo(access.seo)}
           allowed={plan.entitlements.custom_seo}
           canManage={canPublish}
@@ -185,6 +187,7 @@ export default async function FormSettingsPage({
         />
       )}
       <VersionHistory formId={formId} versions={versions} />
+      <ArchiveFormSection formId={formId} archived={Boolean(access?.archived_at)} />
     </div>
   );
 }

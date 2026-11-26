@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { featureEnabled } from "@/domains/flags";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { getWorkspacePlan } from "@/domains/billing/entitlements";
@@ -15,8 +16,19 @@ type Client = SupabaseClient<Database>;
 export const KEY_PREFIX = "fc_live_";
 
 /** What a key may do (P3.11). */
-export const API_SCOPES = ["forms:read", "responses:read", "hooks:write"] as const;
+export const API_SCOPES = [
+  "forms:read",
+  "forms:write",
+  "responses:read",
+  "hooks:write",
+] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
+/** A new key's permissions when none are chosen: changing forms is opt-in. */
+export const DEFAULT_API_SCOPES: ApiScope[] = [
+  "forms:read",
+  "responses:read",
+  "hooks:write",
+];
 
 const hash = (key: string) => createHash("sha256").update(key).digest("hex");
 
@@ -61,7 +73,7 @@ export async function createApiKey(
   admin: Client,
   input: { workspaceId: string; name: string; createdBy: string; scopes?: ApiScope[] },
 ): Promise<{ id: string; key: string }> {
-  const scopes = (input.scopes ?? [...API_SCOPES]).filter((s) =>
+  const scopes = (input.scopes ?? [...DEFAULT_API_SCOPES]).filter((s) =>
     (API_SCOPES as readonly string[]).includes(s),
   );
   if (scopes.length === 0) throw new ApiKeyError("Give the key at least one permission.");
@@ -104,8 +116,10 @@ export type ApiCaller = {
   keyId: string;
   workspaceId: string;
   scopes: ApiScope[];
-  /** The plan's API limits (60–1,000 a minute per key; a daily cap). */
+  /** The plan's API limits, per workspace across its keys (developer
+   * spec item 5): a rate per minute, a burst, and a daily cap. */
   perMinute: number | null;
+  burst: number | null;
   perDay: number | null;
 };
 
@@ -123,8 +137,11 @@ export async function authenticateApiKey(
     .eq("key_hash", hash(key))
     .maybeSingle();
   if (!data || data.revoked_at) return null;
-  const { entitlements } = await getWorkspacePlan(admin, data.workspace_id);
+  const { planId, entitlements } = await getWorkspacePlan(admin, data.workspace_id);
   if (!entitlements.api_access) return null;
+  // The API on Free can be switched off by staff (developer spec item 5).
+  if (planId === "free" && !(await featureEnabled("api_free", data.workspace_id, admin)))
+    return null;
   // Note use at most once a minute.
   if (!data.last_used_at || Date.now() - new Date(data.last_used_at).getTime() > 60_000) {
     await admin
@@ -137,6 +154,7 @@ export async function authenticateApiKey(
     workspaceId: data.workspace_id,
     scopes: (data.scopes ?? []) as ApiScope[],
     perMinute: entitlements.api_requests_per_minute,
+    burst: entitlements.api_burst,
     perDay: entitlements.api_requests_per_day,
   };
 }

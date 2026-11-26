@@ -1,5 +1,5 @@
 import type { ThemeV1 } from "@/domains/forms/schema/v1";
-import { findLibraryFont } from "./font-library";
+import { SAFE_FAMILY } from "./font-metadata";
 
 /**
  * Theme fonts (PRD P2.22). The built-in fonts and the font library are on
@@ -53,9 +53,14 @@ export function themeForPlan(
   customFonts: boolean,
   supabaseUrl: string | undefined,
 ): ThemeV1 {
-  // A library family must be in the library (it's served by name).
+  // Library families are named in CSS, so the name must be CSS-safe; the
+  // /fonts route serves only real library families (a name it doesn't
+  // know just falls back to Inter in the browser).
+  if (theme.headingFont && !SAFE_FAMILY.test(theme.headingFont)) {
+    theme = { ...theme, headingFont: undefined, headingWeight: undefined };
+  }
   if (theme.fontFamily === "library") {
-    return findLibraryFont(theme.libraryFont)
+    return theme.libraryFont && SAFE_FAMILY.test(theme.libraryFont)
       ? theme
       : { ...theme, fontFamily: "inter", libraryFont: undefined };
   }

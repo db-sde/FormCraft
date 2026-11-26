@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { findLibraryFont } from "@/domains/themes/font-library";
+import { featureEnabled } from "@/domains/flags";
+import { findFontFamily } from "@/domains/themes/font-refresh";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * A font library family's stylesheet (pricing doc: 1,700+ fonts, every
@@ -9,10 +11,22 @@ import { findLibraryFont } from "@/domains/themes/font-library";
  * in the library are served.
  */
 export async function GET(request: NextRequest) {
-  const font = findLibraryFont(request.nextUrl.searchParams.get("family"));
+  if (!(await featureEnabled("font_library", null)))
+    return new NextResponse("Unknown font", { status: 404 });
+  const font = await findFontFamily(
+    createAdminClient(),
+    request.nextUrl.searchParams.get("family"),
+  );
   if (!font) return new NextResponse("Unknown font", { status: 404 });
+  // Only the weights asked for (`w=400,600`), of those the family has:
+  // the stage loads at most four files (developer spec item 3).
+  const asked = (request.nextUrl.searchParams.get("w") ?? "")
+    .split(",")
+    .map(Number)
+    .filter((w) => font.weights.includes(w));
+  const weights = asked.length ? [...new Set(asked)].sort() : font.weights;
   const family = encodeURIComponent(font.family).replace(/%20/g, "+");
-  const upstream = `https://fonts.googleapis.com/css2?family=${family}:wght@${font.weights.join(";")}&display=swap`;
+  const upstream = `https://fonts.googleapis.com/css2?family=${family}:wght@${weights.join(";")}&display=swap`;
   let css: string;
   try {
     const res = await fetch(upstream, {

@@ -114,6 +114,20 @@ export const ADMIN_CLIENT_ALLOWED: Record<string, string> = {
   "src/app/invite/[token]/page.tsx":
     "reading an invitation by its token before the invitee belongs to the workspace",
   "src/domains/abuse/limit.ts": "narrow helper that holds the key itself",
+  "src/app/(dashboard)/email-template-actions.ts":
+    "loads a response for previews and test emails after checking view_responses; renders the workspace name and owner address",
+  "src/app/(dashboard)/settings/billing-actions.ts":
+    "billing: reads plan prices and the workspace's subscription after checking owner/admin; plan changes come only from the provider",
+  "src/app/api/billing/razorpay/route.ts":
+    "FormCraft billing webhook: signed by Razorpay, no Supabase session",
+  "src/app/api/billing/stripe/route.ts":
+    "FormCraft billing webhook: signed by Stripe, no Supabase session",
+  "src/app/api/forms/[id]/seo-asset/route.ts":
+    "writes re-encoded share images to the server-only share-assets bucket after checking the member, permission and plan",
+  "src/app/fonts/css/route.ts":
+    "public font catalogue lookup (font_families) and the feature switch; no workspace data",
+  "src/app/sitemap.ts":
+    "public list of forms whose creators turned indexing on (sitemap_forms)",
   "src/domains/audit/record.ts": "narrow helper that holds the key itself",
   "src/lib/analytics/track.ts": "analytics events (written by the server only)",
 };

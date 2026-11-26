@@ -1,4 +1,5 @@
 import { openVariantTest } from "@/domains/forms/variant-tests";
+import { featureEnabled } from "@/domains/flags";
 import { assignVariant } from "@/domains/forms/variants";
 import type { Metadata } from "next";
 import { cache } from "react";
@@ -26,8 +27,9 @@ import {
 } from "@/domains/experiments";
 import { knownAnswersFor } from "@/domains/responses/profile";
 import { lookupPlan } from "@/domains/integrations/lookups";
-import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
+import { getPasswordHash, isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import { checkAvailability } from "@/domains/forms/availability";
+import { defaultShareDescription } from "@/domains/forms/seo";
 import { turnstileSiteKey } from "@/domains/abuse/turnstile";
 import { FormClosedScreen } from "@/components/runtime/form-closed";
 import { PasswordGate } from "./password-gate";
@@ -318,32 +320,83 @@ export async function generateMetadata({
   const { slug } = await params;
   const publicForm = await loadPublicForm(slug);
   if (!publicForm)
-    return { title: { absolute: "This form isn't available" }, robots: { index: false } };
+    return {
+      title: { absolute: "This form isn't available" },
+      robots: { index: false, follow: false },
+    };
+  return shareMetadata(publicForm);
+}
 
-  const { title, description } = publicForm.compiled.schema.meta;
-  // Respondent tabs show only the form's title (Part 8 §4) — it never
-  // changes per question, so it doesn't reveal progress or answers.
-  // Shared form links get a real preview card in chat apps/social; on a
-  // plan with custom link previews (Starter and up) the creator's own
-  // title, description, image, icon and indexing choice are used.
-  const custom = (await getWorkspacePlan(createAdminClient(), publicForm.workspaceId))
-    .entitlements.custom_seo
-    ? publicForm.seo
-    : {};
-  const shareTitle = custom.title || title;
-  const shareDescription = custom.description || description;
+/**
+ * The link preview and search tags (developer spec item 1), rendered on
+ * the server for every public address: the default link, a custom slug
+ * and a custom domain (whose address is the canonical one). Respondent
+ * tabs show only the form's title (Part 8 §4). Custom fields apply on a
+ * plan with custom SEO; otherwise the automatic preview: the form's title
+ * and the card made at publish. Password-protected, closed and archived
+ * forms show only the share title and description and are never indexed.
+ */
+async function shareMetadata(
+  publicForm: NonNullable<Awaited<ReturnType<typeof loadPublicForm>>>,
+): Promise<Metadata> {
+  const admin = createAdminClient();
+  const schema = publicForm.compiled.schema;
+  const [{ entitlements }, passwordHash, { data: domains }, seoOn] = await Promise.all([
+    getWorkspacePlan(admin, publicForm.workspaceId),
+    getPasswordHash(admin, publicForm.formId),
+    admin
+      .from("custom_domains")
+      .select("hostname, default_form_id")
+      .eq("workspace_id", publicForm.workspaceId)
+      .eq("status", "verified")
+      .limit(5),
+    featureEnabled("link_preview_seo", publicForm.workspaceId, admin),
+  ]);
+  const seo = publicForm.seo;
+  const custom = entitlements.custom_seo && seoOn ? seo : {};
+  const closed =
+    publicForm.archived ||
+    (publicForm.closesAt !== null && Date.parse(publicForm.closesAt) <= Date.now());
+  const restricted = Boolean(passwordHash) || closed;
+
+  const shareTitle = custom.title || schema.meta.title;
+  const shareDescription =
+    custom.description ||
+    (restricted ? undefined : defaultShareDescription(schema)) ||
+    undefined;
+  const image = custom.imageUrl || seo.cardUrl;
+
+  const domain =
+    domains?.find((d) => d.default_form_id === publicForm.formId) ?? domains?.[0];
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const canonical = domain
+    ? `https://${domain.hostname}${domain.default_form_id === publicForm.formId ? "/" : `/${publicForm.slug}`}`
+    : `${appUrl}/f/${publicForm.slug}`;
+  const icon =
+    custom.faviconUrl ||
+    (entitlements.remove_branding && schema.theme.logoUrl
+      ? schema.theme.logoUrl
+      : undefined);
+  const index = !restricted && custom.indexing === true;
+
   return {
-    title: { absolute: title },
+    title: { absolute: schema.meta.title },
     description: shareDescription,
+    alternates: { canonical },
     openGraph: {
+      type: "website",
+      url: canonical,
       title: shareTitle,
       description: shareDescription,
-      ...(custom.imageUrl ? { images: [{ url: custom.imageUrl }] } : {}),
+      ...(image ? { images: [{ url: image, width: 1200, height: 630 }] } : {}),
     },
-    twitter: custom.imageUrl
-      ? { card: "summary_large_image", title: shareTitle, images: [custom.imageUrl] }
-      : undefined,
-    ...(custom.faviconUrl ? { icons: { icon: custom.faviconUrl } } : {}),
-    ...(custom.indexing === false ? { robots: { index: false, follow: false } } : {}),
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: shareTitle,
+      description: shareDescription,
+      ...(image ? { images: [image] } : {}),
+    },
+    ...(icon ? { icons: { icon } } : {}),
+    robots: index ? { index: true, follow: true } : { index: false, follow: false },
   };
 }

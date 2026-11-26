@@ -7,6 +7,7 @@ import {
   PLAN_ENTITLEMENTS,
   upgradeHint,
   PLAN_PRICES,
+  PLAN_PRICES_INR,
   PUBLIC_PLAN_IDS,
 } from "@/domains/billing/catalog";
 
@@ -50,7 +51,8 @@ describe("entitlement keys: database and code agree", () => {
   });
 
   it("seeds every plan exactly as catalog.ts defines it", () => {
-    const seed = migrations.find((s) =>
+    // The latest migration that seeds the plans (scripts/plan-sql.ts).
+    const seed = migrations.findLast((s) =>
       s.includes(
         "insert into public.plans (id, name, sort_order, entitlements, monthly_usd",
       ),
@@ -68,6 +70,16 @@ describe("entitlement keys: database and code agree", () => {
         expect([Number(row![2]), Number(row![3])], id).toEqual([
           price.monthly,
           price.annual,
+        ]);
+        const inr = PLAN_PRICES_INR[id as keyof typeof PLAN_PRICES_INR];
+        const rupees = seed.match(
+          new RegExp(
+            `\\('${id}', '[^']+', \\d+, '\\{[^']+\\}'::jsonb, [\\d.]+, [\\d.]+, ([\\d.]+), ([\\d.]+)`,
+          ),
+        );
+        expect([Number(rupees![1]), Number(rupees![2])], `${id} INR`).toEqual([
+          inr.monthly,
+          inr.annual,
         ]);
       }
     }

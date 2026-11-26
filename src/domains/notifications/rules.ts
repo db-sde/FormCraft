@@ -1,3 +1,8 @@
+import {
+  mergeContextFromResponse,
+  templateForSend,
+} from "@/domains/email-templates/queries";
+import { renderForSend } from "@/domains/email-templates/send";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -252,18 +257,37 @@ export async function sendRuleEmails(
         out.push({ ruleId: rule.id, sent: false });
         continue;
       }
-      const email = ruleEmail(
-        rule,
-        ctx,
-        {
-          response: `${appUrl}/forms/${ctx.form.id}/responses/${responseId}`,
-          settings: `${appUrl}/forms/${ctx.form.id}/integrations`,
-        },
-        brand,
+      // The rule's own template (Starter and up), else the standard email.
+      const stored = await templateForSend(
+        admin,
+        ctx.form.workspaceId,
+        { kind: "rule", ruleId: rule.id },
+        entitlements,
       );
+      const email = stored
+        ? await renderForSend(admin, {
+            workspaceId: ctx.form.workspaceId,
+            stored,
+            merge: mergeContextFromResponse(ctx),
+            theme: ctx.schema.theme,
+            footerReason: `You're getting this because a teammate added you to the “${rule.name}” notification.`,
+          })
+        : {
+            ...ruleEmail(
+              rule,
+              ctx,
+              {
+                response: `${appUrl}/forms/${ctx.form.id}/responses/${responseId}`,
+                settings: `${appUrl}/forms/${ctx.form.id}/integrations`,
+              },
+              brand,
+            ),
+            fromName,
+          };
       const attachments: OutgoingEmail["attachments"] = [];
       const doc = documents.find((d) => d.kind === rule.attachDocument && d.enabled);
-      if (doc && documentApplies(doc.kind, doc.settings, ctx)) {
+      const wantsPdf = stored ? stored.template.attachPdf !== false : true;
+      if (wantsPdf && doc && documentApplies(doc.kind, doc.settings, ctx)) {
         const issued = await issueNumber(admin, doc.id, responseId);
         const content = await documentContent(admin, ctx, doc, issued);
         attachments.push({
@@ -271,7 +295,7 @@ export async function sendRuleEmails(
           content: await renderDocumentPdf(content),
         });
       }
-      const result = await send({ ...email, to, attachments, fromName });
+      const result = await send({ ...email, to, attachments });
       await log(
         result.ok ? "ok" : "failed",
         result.ok

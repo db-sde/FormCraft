@@ -350,7 +350,7 @@
     --st-tile: 15px;
     --st-pad: 40px 56px;
     --st-pad-x: 28px;
-    --st-gap: 16px;
+    --st-gap: calc(16px * var(--st-space, 1));
     --st-btn-h: 42px;
     --st-num: 14px;
     --st-maxw: 560px;
@@ -375,7 +375,7 @@
     --st-tile: 15.5px;
     --st-pad: 64px 22px 28px;
     --st-pad-x: 22px;
-    --st-gap: 18px;
+    --st-gap: calc(18px * var(--st-space, 1));
     --st-btn-h: 48px;
     --st-num: 13px;
     --st-maxw: 100%;
@@ -400,7 +400,7 @@
     --st-tile: 16px;
     --st-pad: 72px 96px;
     --st-pad-x: 40px;
-    --st-gap: 22px;
+    --st-gap: calc(22px * var(--st-space, 1));
     --st-btn-h: 46px;
     --st-num: 15px;
     --st-maxw: 640px;
@@ -414,7 +414,7 @@
     --st-tile: 15.5px;
     --st-pad: 64px 22px 28px;
     --st-pad-x: 22px;
-    --st-gap: 18px;
+    --st-gap: calc(18px * var(--st-space, 1));
     --st-btn-h: 48px;
     --st-num: 13px;
     --st-maxw: 100%;
@@ -440,7 +440,7 @@
       --st-tile: 16px;
       --st-pad: 72px 96px;
       --st-pad-x: 40px;
-      --st-gap: 22px;
+      --st-gap: calc(22px * var(--st-space, 1));
       --st-btn-h: 46px;
       --st-num: 15px;
       --st-maxw: 640px;

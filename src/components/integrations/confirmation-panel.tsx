@@ -1,5 +1,6 @@
 "use client";
 
+import { EmailTemplateButton } from "@/components/integrations/email-template-editor";
 import { useState, useTransition } from "react";
 import { saveConfirmationAction } from "@/app/(form)/forms/[id]/(sections)/integrations/actions";
 import type { ConfirmationSettings } from "@/domains/notifications/confirmation";
@@ -67,6 +68,12 @@ export function ConfirmationPanel({
         });
       }}
     >
+      <div className="flex flex-wrap items-center gap-2">
+        <EmailTemplateButton target={{ kind: "confirmation", formId }} />
+        <span className="text-muted-foreground text-xs">
+          Design the email with blocks, your logo and answers (Starter and up).
+        </span>
+      </div>
       {!emailConfigured && (
         <NotSetUpYet feature="Confirmation email">
           You can set it up now; emails start going out once it&apos;s switched on.

@@ -302,6 +302,70 @@ export type Database = {
           },
         ];
       };
+      billing_subscriptions: {
+        Row: {
+          billing_interval: string;
+          cancel_at_period_end: boolean;
+          created_at: string;
+          currency: string;
+          current_period_end: string | null;
+          id: string;
+          plan_id: string;
+          provider: string;
+          provider_customer_id: string | null;
+          provider_subscription_id: string;
+          status: string;
+          updated_at: string;
+          workspace_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          billing_interval: string;
+          cancel_at_period_end?: boolean;
+          created_at?: string;
+          currency: string;
+          current_period_end?: string | null;
+          id?: string;
+          plan_id: string;
+          provider: string;
+          provider_customer_id?: string | null;
+          provider_subscription_id: string;
+          status: string;
+          updated_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          billing_interval?: string;
+          cancel_at_period_end?: boolean;
+          created_at?: string;
+          currency?: string;
+          current_period_end?: string | null;
+          id?: string;
+          plan_id?: string;
+          provider?: string;
+          provider_customer_id?: string | null;
+          provider_subscription_id?: string;
+          status?: string;
+          updated_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "billing_subscriptions_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "plans";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "billing_subscriptions_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       booking_hosts: {
         Row: {
           added_at: string;
@@ -514,6 +578,52 @@ export type Database = {
             columns: ["response_id"];
             isOneToOne: false;
             referencedRelation: "responses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      brand_themes: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          name: string;
+          theme: Json;
+          updated_at: string;
+          workspace_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          name: string;
+          theme: Json;
+          updated_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          name?: string;
+          theme?: Json;
+          updated_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "brand_themes_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "brand_themes_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
             referencedColumns: ["id"];
           },
         ];
@@ -923,6 +1033,140 @@ export type Database = {
           },
         ];
       };
+      email_template_versions: {
+        Row: {
+          created_at: string;
+          form_version_id: string;
+          id: string;
+          snapshot: Json;
+          template_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          form_version_id: string;
+          id?: string;
+          snapshot: Json;
+          template_id: string;
+        };
+        Update: {
+          created_at?: string;
+          form_version_id?: string;
+          id?: string;
+          snapshot?: Json;
+          template_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "email_template_versions_form_version_id_fkey";
+            columns: ["form_version_id"];
+            isOneToOne: false;
+            referencedRelation: "form_versions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "email_template_versions_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "email_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      email_templates: {
+        Row: {
+          body: Json;
+          booking_type_id: string | null;
+          created_at: string;
+          form_id: string | null;
+          id: string;
+          kind: string;
+          name: string | null;
+          preheader: string | null;
+          rendered_html_cache: string | null;
+          reply_to: Json;
+          rule_id: string | null;
+          sender_name: string | null;
+          subject: string;
+          updated_at: string;
+          updated_by: string | null;
+          workspace_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          body: Json;
+          booking_type_id?: string | null;
+          created_at?: string;
+          form_id?: string | null;
+          id?: string;
+          kind: string;
+          name?: string | null;
+          preheader?: string | null;
+          rendered_html_cache?: string | null;
+          reply_to?: Json;
+          rule_id?: string | null;
+          sender_name?: string | null;
+          subject: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          body?: Json;
+          booking_type_id?: string | null;
+          created_at?: string;
+          form_id?: string | null;
+          id?: string;
+          kind?: string;
+          name?: string | null;
+          preheader?: string | null;
+          rendered_html_cache?: string | null;
+          reply_to?: Json;
+          rule_id?: string | null;
+          sender_name?: string | null;
+          subject?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_booking_type_id_fkey";
+            columns: ["booking_type_id"];
+            isOneToOne: false;
+            referencedRelation: "booking_types";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "email_templates_form_id_fkey";
+            columns: ["form_id"];
+            isOneToOne: false;
+            referencedRelation: "forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "email_templates_rule_id_fkey";
+            columns: ["rule_id"];
+            isOneToOne: false;
+            referencedRelation: "notification_rules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "email_templates_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "email_templates_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       email_verifications: {
         Row: {
           attempts: number;
@@ -1046,6 +1290,74 @@ export type Database = {
           },
         ];
       };
+      feature_flag_overrides: {
+        Row: {
+          enabled: boolean;
+          key: string;
+          reason: string | null;
+          updated_at: string;
+          updated_by: string | null;
+          workspace_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          enabled: boolean;
+          key: string;
+          reason?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          workspace_id: string;
+        };
+        Update: {
+          enabled?: boolean;
+          key?: string;
+          reason?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feature_flag_overrides_key_fkey";
+            columns: ["key"];
+            isOneToOne: false;
+            referencedRelation: "feature_flags";
+            referencedColumns: ["key"];
+          },
+          {
+            foreignKeyName: "feature_flag_overrides_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      feature_flags: {
+        Row: {
+          enabled: boolean;
+          key: string;
+          reason: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          enabled?: boolean;
+          key: string;
+          reason?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          enabled?: boolean;
+          key?: string;
+          reason?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       folders: {
         Row: {
           created_at: string;
@@ -1075,6 +1387,34 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      font_families: {
+        Row: {
+          category: string;
+          family: string;
+          popularity: number;
+          refreshed_at: string;
+          scripts: string[];
+          weights: number[];
+        };
+        ComputedFields: never;
+        Insert: {
+          category: string;
+          family: string;
+          popularity?: number;
+          refreshed_at?: string;
+          scripts?: string[];
+          weights: number[];
+        };
+        Update: {
+          category?: string;
+          family?: string;
+          popularity?: number;
+          refreshed_at?: string;
+          scripts?: string[];
+          weights?: number[];
+        };
+        Relationships: [];
       };
       form_access_secrets: {
         Row: {
@@ -1335,6 +1675,7 @@ export type Database = {
         Row: {
           ai_lead_criteria: string | null;
           archived_at: string | null;
+          archived_by: string | null;
           captcha_required: boolean;
           closed_message: string | null;
           closes_at: string | null;
@@ -1361,6 +1702,7 @@ export type Database = {
           resume_links_enabled: boolean;
           save_partial_responses: boolean;
           seo: Json;
+          seo_live: Json;
           slug: string;
           tiktok_pixel_id: string | null;
           title: string;
@@ -1371,6 +1713,7 @@ export type Database = {
         Insert: {
           ai_lead_criteria?: string | null;
           archived_at?: string | null;
+          archived_by?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
           closes_at?: string | null;
@@ -1397,6 +1740,7 @@ export type Database = {
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           seo?: Json;
+          seo_live?: Json;
           slug: string;
           tiktok_pixel_id?: string | null;
           title: string;
@@ -1406,6 +1750,7 @@ export type Database = {
         Update: {
           ai_lead_criteria?: string | null;
           archived_at?: string | null;
+          archived_by?: string | null;
           captcha_required?: boolean;
           closed_message?: string | null;
           closes_at?: string | null;
@@ -1432,6 +1777,7 @@ export type Database = {
           resume_links_enabled?: boolean;
           save_partial_responses?: boolean;
           seo?: Json;
+          seo_live?: Json;
           slug?: string;
           tiktok_pixel_id?: string | null;
           title?: string;
@@ -1439,6 +1785,13 @@ export type Database = {
           workspace_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "forms_archived_by_fkey";
+            columns: ["archived_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "forms_created_by_fkey";
             columns: ["created_by"];
@@ -1823,10 +2176,12 @@ export type Database = {
       };
       plans: {
         Row: {
+          annual_inr: number | null;
           annual_usd: number | null;
           entitlements: Json;
           id: string;
           is_public: boolean;
+          monthly_inr: number | null;
           monthly_usd: number | null;
           name: string;
           sort_order: number;
@@ -1834,20 +2189,24 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          annual_inr?: number | null;
           annual_usd?: number | null;
           entitlements?: Json;
           id: string;
           is_public?: boolean;
+          monthly_inr?: number | null;
           monthly_usd?: number | null;
           name: string;
           sort_order?: number;
           tagline?: string | null;
         };
         Update: {
+          annual_inr?: number | null;
           annual_usd?: number | null;
           entitlements?: Json;
           id?: string;
           is_public?: boolean;
+          monthly_inr?: number | null;
           monthly_usd?: number | null;
           name?: string;
           sort_order?: number;
@@ -3248,6 +3607,7 @@ export type Database = {
       };
       admin_list_change_requests: { Args: { p_status?: string }; Returns: Json };
       admin_list_drills: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_list_feature_flags: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_upgrade_requests: { Args: Record<PropertyKey, never>; Returns: Json };
@@ -3315,6 +3675,15 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number; p_query: string };
         Returns: Json;
       };
+      admin_set_feature_flag: {
+        Args: {
+          p_enabled: boolean;
+          p_key: string;
+          p_reason: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
       admin_usage_overview: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_verify_audit_chain: {
         Args: Record<PropertyKey, never>;
@@ -3346,6 +3715,67 @@ export type Database = {
       analytics_rolled_count: {
         Args: { p_event_type: string; p_form_id: string; p_since: string };
         Returns: number;
+      };
+      api_take: {
+        Args: {
+          p_burst: number;
+          p_per_day: number;
+          p_per_minute: number;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
+      api_usage_summary: { Args: { p_workspace_id: string }; Returns: Json };
+      archive_form: {
+        Args: { p_form_id: string; p_keep_bookings?: boolean };
+        Returns: Json;
+      };
+      billing_apply_subscription: {
+        Args: {
+          p_cancel_at_period_end: boolean;
+          p_currency: string;
+          p_current_period_end: string;
+          p_customer_id: string;
+          p_interval: string;
+          p_plan_id: string;
+          p_provider: string;
+          p_status: string;
+          p_subscription_id: string;
+          p_workspace_id: string;
+        };
+        Returns: Json;
+      };
+      billing_claim_event: {
+        Args: { p_event_id: string; p_provider: string; p_type: string };
+        Returns: boolean;
+      };
+      billing_plan_for_provider_plan: {
+        Args: { p_provider: string; p_provider_plan_id: string };
+        Returns: {
+          billing_interval: string;
+          plan_id: string;
+        }[];
+      };
+      billing_provider_plan: {
+        Args: {
+          p_amount: number;
+          p_currency: string;
+          p_interval: string;
+          p_plan_id: string;
+          p_provider: string;
+        };
+        Returns: string;
+      };
+      billing_remember_provider_plan: {
+        Args: {
+          p_amount: number;
+          p_currency: string;
+          p_interval: string;
+          p_plan_id: string;
+          p_provider: string;
+          p_provider_plan_id: string;
+        };
+        Returns: undefined;
       };
       book_slot: {
         Args: {
@@ -3608,7 +4038,12 @@ export type Database = {
           started: number;
         }[];
       };
+      feature_enabled: {
+        Args: { p_key: string; p_workspace_id: string };
+        Returns: boolean;
+      };
       form_embed_origins: { Args: { p_slug: string }; Returns: string[] };
+      form_is_archived: { Args: { p_slug: string }; Returns: boolean };
       form_workspace_status: { Args: { p_form_id: string }; Returns: string };
       has_permission: {
         Args: { permission: string; target_workspace_id: string };
@@ -3710,6 +4145,7 @@ export type Database = {
       };
       ops_phase4_checks: { Args: Record<PropertyKey, never>; Returns: undefined };
       ops_phase5_checks: { Args: Record<PropertyKey, never>; Returns: undefined };
+      ops_prune_api_usage: { Args: Record<PropertyKey, never>; Returns: number };
       ops_record_retention_run: {
         Args: {
           p_counts: Json;
@@ -3720,6 +4156,7 @@ export type Database = {
         };
         Returns: undefined;
       };
+      ops_replace_font_families: { Args: { p_fonts: Json }; Returns: number };
       ops_run_checks: { Args: Record<PropertyKey, never>; Returns: number };
       ops_set_alert: {
         Args: {
@@ -3756,9 +4193,11 @@ export type Database = {
       public_plans: {
         Args: Record<PropertyKey, never>;
         Returns: {
+          annual_inr: number;
           annual_usd: number;
           entitlements: Json;
           id: string;
+          monthly_inr: number;
           monthly_usd: number;
           name: string;
           sort_order: number;
@@ -3875,6 +4314,7 @@ export type Database = {
           response_id: string;
         }[];
       };
+      restore_form: { Args: { p_form_id: string }; Returns: Json };
       rollup_analytics_events: {
         Args: { p_batch?: number; p_keep_days?: number };
         Returns: number;
@@ -3906,6 +4346,19 @@ export type Database = {
         }[];
       };
       shares_workspace_with: { Args: { target_user_id: string }; Returns: boolean };
+      sitemap_forms: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          hostname: string;
+          is_default: boolean;
+          slug: string;
+          updated_at: string;
+        }[];
+      };
+      snapshot_email_templates: {
+        Args: { p_form_id: string; p_form_version_id: string };
+        Returns: number;
+      };
       spend_usage: {
         Args: {
           p_amount?: number;

@@ -173,6 +173,46 @@ async function embedOrigins(slug: string | null): Promise<string[] | null> {
   return value;
 }
 
+const archivedCache = new Map<string, { value: boolean; until: number }>();
+
+/** Whether a form is archived (developer spec item 4), cached for a
+ * minute. A failed lookup lets the page decide (it shows the form as
+ * unavailable too). */
+async function isArchived(slug: string | null): Promise<boolean> {
+  if (!slug) return false;
+  const hit = archivedCache.get(slug);
+  if (hit && hit.until > Date.now()) return hit.value;
+  let value = false;
+  try {
+    const res = await fetch(`${supabaseEnv.url}/rest/v1/rpc/form_is_archived`, {
+      method: "POST",
+      headers: restHeaders(),
+      body: JSON.stringify({ p_slug: slug }),
+    });
+    value = res.ok ? (await res.json()) === true : false;
+  } catch {
+    value = false;
+  }
+  if (archivedCache.size > 5000) archivedCache.clear();
+  archivedCache.set(slug, { value, until: Date.now() + 60_000 });
+  return value;
+}
+
+/** An archived form's link, custom domain, embed and resume links: gone
+ * (HTTP 410) and never indexed. Nothing about the form is shown. */
+const archivedPage = () =>
+  new NextResponse(
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>No longer available</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;background:#fffaf1;color:#2b2118"><main style="max-width:420px;padding:2rem;text-align:center"><h1 style="font-size:1.6rem;margin:0 0 .5rem">This form is no longer available</h1><p style="margin:0;color:#6b5d50">Its owner has archived it, so it isn\'t taking responses.</p></main></body></html>',
+    {
+      status: 410,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex, nofollow",
+      },
+    },
+  );
+
 /** The form a public path is for: /f/<slug>[/…]. */
 function slugOf(path: string): string | null {
   return /^\/f\/([a-z0-9][a-z0-9-]{0,80})(?:\/|$)/.exec(path)?.[1] ?? null;
@@ -210,6 +250,7 @@ async function customDomain(request: NextRequest, host: string) {
     const match = /^\/(?:f\/)?([a-z0-9][a-z0-9-]{0,80})\/?$/.exec(path);
     slug = match ? match[1] : null;
   }
+  if (await isArchived(slug)) return archivedPage();
   const { nonce, policy } = pageCsp(request, true, await embedOrigins(slug));
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
@@ -280,6 +321,7 @@ async function route(request: NextRequest) {
     return apiResponse(NextResponse.next({ request: { headers } }));
   }
   if (path.startsWith("/f/")) {
+    if (await isArchived(slugOf(path))) return archivedPage();
     const headers = new Headers(request.headers);
     headers.delete(CUSTOM_DOMAIN_HEADER);
     const { nonce, policy } = pageCsp(request, true, await embedOrigins(slugOf(path)));

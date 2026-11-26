@@ -1,5 +1,6 @@
 "use server";
 
+import { SWITCHED_OFF, featureEnabled } from "@/domains/flags";
 import { recordAudit } from "@/domains/audit/record";
 
 import { getDraftForEdit, saveDraftSchema, StaleDraftError } from "@/domains/forms";
@@ -699,7 +700,9 @@ export async function saveSeoAction(
   if (!parsed.success) {
     return {
       ok: false,
-      message: "Keep the title under 70 characters and the description under 200.",
+      message: parsed.error.issues.some((i) => i.message.includes("merge tags"))
+        ? "Share fields can't use {{merge tags}}."
+        : "Keep the title under 70 characters and the description under 200.",
     };
   }
   const ctx = await publisherOrFail(formId);
@@ -710,6 +713,8 @@ export async function saveSeoAction(
   if (Object.keys(seo).length > 0) {
     const blocked = await planBlocks(ctx.supabase, ctx.workspace.id, "custom_seo");
     if (blocked) return { ok: false, message: blocked };
+    if (!(await featureEnabled("link_preview_seo", ctx.workspace.id)))
+      return { ok: false, message: SWITCHED_OFF };
   }
   for (const url of [seo.imageUrl, seo.faviconUrl]) {
     if (url && !isOwnUpload(url, ctx.workspace.id)) {
@@ -725,6 +730,13 @@ export async function saveSeoAction(
     .eq("id", formId)
     .eq("workspace_id", ctx.workspace.id);
   if (error) return { ok: false, message: "Couldn't save that." };
+  await recordAudit({
+    workspaceId: ctx.workspace.id,
+    actorId: ctx.userId,
+    action: "form.seo_changed",
+    target: { type: "form", id: formId },
+    metadata: { indexing: seo.indexing === true, image: Boolean(seo.imageUrl) },
+  });
   revalidatePath(`/forms/${formId}/settings`);
   return { ok: true };
 }

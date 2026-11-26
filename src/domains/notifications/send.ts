@@ -7,6 +7,13 @@ import { getNotificationsEnabled } from "./queries";
 import { workspaceEmailBrand } from "./branding";
 import { fromHeader } from "./mailer";
 import { buildResponseCompletedEmail } from "./template";
+import { getWorkspacePlan } from "@/domains/billing/entitlements";
+import {
+  mergeContextFromResponse,
+  templateForSend,
+} from "@/domains/email-templates/queries";
+import { renderForSend } from "@/domains/email-templates/send";
+import { loadResponseContext } from "@/domains/responses/context";
 
 type Client = SupabaseClient<Database>;
 
@@ -74,22 +81,46 @@ export async function notifyFormOwnerOfCompletedResponse(
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
     const { brand, fromName } = await workspaceEmailBrand(admin, form.workspace_id);
-    const email = buildResponseCompletedEmail({
-      brand,
-      formTitle: form.title,
-      submittedAt: new Date().toISOString(),
-      dashboardUrl: `${appUrl}/forms/${formId}/responses/${responseId}`,
-      settingsUrl: `${appUrl}/forms/${formId}/integrations`,
-      recipient: ownerEmail,
-    });
+    // The creator's own template (Starter and up), else the standard one,
+    // which keeps answers out of email.
+    const { entitlements } = await getWorkspacePlan(admin, form.workspace_id);
+    const stored = await templateForSend(
+      admin,
+      form.workspace_id,
+      { kind: "owner_notification", formId },
+      entitlements,
+    );
+    const ctx = stored ? await loadResponseContext(admin, responseId) : null;
+    const email =
+      stored && ctx
+        ? await renderForSend(admin, {
+            workspaceId: form.workspace_id,
+            stored,
+            merge: mergeContextFromResponse(ctx),
+            theme: ctx.schema.theme,
+            footerReason: "You're getting this because you own this form.",
+          })
+        : {
+            ...buildResponseCompletedEmail({
+              brand,
+              formTitle: form.title,
+              submittedAt: new Date().toISOString(),
+              dashboardUrl: `${appUrl}/forms/${formId}/responses/${responseId}`,
+              settingsUrl: `${appUrl}/forms/${formId}/integrations`,
+              recipient: ownerEmail,
+            }),
+            fromName,
+            replyTo: undefined as string | undefined,
+          };
 
     const resend = new Resend(apiKey);
     const { error: sendError } = await resend.emails.send({
-      from: fromHeader(fromName),
+      from: fromHeader(email.fromName),
       to: ownerEmail,
       subject: email.subject,
       html: email.html,
       text: email.text,
+      ...(email.replyTo ? { replyTo: email.replyTo } : {}),
     });
     if (sendError) return { sent: false, reason: "send_failed" };
 

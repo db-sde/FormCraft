@@ -82,6 +82,9 @@ test.describe("smoke: every page renders cleanly", () => {
     const problems = watchForBreakage(page);
     for (const path of [
       "/",
+      "/developers",
+      "/security",
+      "/legal/subprocessors",
       "/login",
       "/login/sso",
       "/signup",
@@ -117,6 +120,9 @@ test.describe("smoke: every page renders cleanly", () => {
       const problems = watchForBreakage(page);
       const visited = new Set<string>([
         "/",
+        "/developers",
+        "/security",
+        "/legal/subprocessors",
         "/login",
         "/login/sso",
         "/signup",

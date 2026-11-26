@@ -9,6 +9,7 @@ import {
 import { SettingsSection } from "@/components/dashboard/account-settings";
 import { cn } from "cn";
 import { UpgradeRequest } from "./upgrade-request";
+import { PlanCheckout } from "./plan-checkout";
 import { FEATURE_GROUPS } from "@/domains/billing/catalog";
 
 function Meter({
@@ -52,15 +53,18 @@ function Meter({
   );
 }
 
-/** Settings → Plan (PRD §7–8): what the workspace's plan includes and
- * what it has used this month. Plans are changed by an admin for now
- * (no checkout); see DECISIONS.md. */
+/** Settings → Plan (PRD §7–8): what the workspace's plan includes, what
+ * it has used this month, and checkout (Stripe or Razorpay) when billing
+ * is set up; otherwise an upgrade request to FormCraft. */
 export function PlanUsage({
   plan,
   usage,
   aiAvailable,
   upgradeOptions = [],
+  checkout,
 }: {
+  /** Online checkout, when FormCraft's billing is set up. */
+  checkout?: React.ComponentProps<typeof PlanCheckout> | null;
   plan: WorkspacePlan;
   usage: Usage;
   /** AI credits mean nothing until the server has an AI key. */
@@ -140,13 +144,22 @@ export function PlanUsage({
           pause until the 1st.
         </p>
       </SettingsSection>
-      {upgradeOptions.length > 0 && (
+      {checkout ? (
         <SettingsSection
-          title="Upgrade"
-          description="Ask for a bigger plan. We'll be in touch about billing and switch the workspace over."
+          title={checkout.current ? "Subscription" : "Upgrade"}
+          description="Pay by card in US dollars, or by UPI or card in rupees. Your plan changes as soon as the payment is confirmed."
         >
-          <UpgradeRequest plans={upgradeOptions} />
+          <PlanCheckout {...checkout} />
         </SettingsSection>
+      ) : (
+        upgradeOptions.length > 0 && (
+          <SettingsSection
+            title="Upgrade"
+            description="Ask for a bigger plan. We'll be in touch about billing and switch the workspace over."
+          >
+            <UpgradeRequest plans={upgradeOptions} />
+          </SettingsSection>
+        )
       )}
       <SettingsSection title="Included" last>
         <ul className="mb-3 grid gap-x-6 gap-y-2 text-[13.5px] sm:grid-cols-2">

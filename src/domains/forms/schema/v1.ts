@@ -703,6 +703,26 @@ export const ThemeV1 = z.object({
     .string()
     .regex(/^[A-Za-z0-9 ]{2,60}$/)
     .optional(),
+  /** A separate font library family for titles and question labels
+   * (developer spec item 3); the body font when unset. */
+  headingFont: z
+    .string()
+    .regex(/^[A-Za-z0-9 ]{2,60}$/)
+    .optional(),
+  headingWeight: z.union([z.literal(400), z.literal(600), z.literal(700)]).optional(),
+  /** A background gradient, under any background image. */
+  backgroundGradient: z
+    .object({
+      from: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      to: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      angle: z.number().int().min(0).max(360).default(180),
+    })
+    .optional(),
+  /** Corner radius of fields and choice tiles, in pixels (rounded buttons
+   * follow it too). */
+  cornerRadius: z.number().int().min(0).max(24).optional(),
+  /** Space between a question's parts. */
+  spacing: z.enum(["compact", "comfortable", "spacious"]).optional(),
   /** An uploaded, licensed WOFF2 font (with fontFamily "custom"). */
   customFont: z.object({ name: safeText(60), url: webUrl }).optional(),
   buttonStyle: z.enum(["rounded", "square", "pill"]).default("rounded"),

@@ -12,6 +12,12 @@ import { walkForm } from "@/domains/logic/walk";
 import { renderEmailHtml, type EmailBrand } from "./email-layout";
 import { workspaceEmailBrand } from "./branding";
 import { fromHeader } from "./mailer";
+import {
+  mergeContextFromResponse,
+  templateForSend,
+} from "@/domains/email-templates/queries";
+import { renderForSend } from "@/domains/email-templates/send";
+import { loadResponseContext } from "@/domains/responses/context";
 
 type Client = SupabaseClient<Database>;
 
@@ -187,6 +193,8 @@ export async function sendConfirmationEmail(
       subject: string;
       html: string;
       text: string;
+      fromName?: string;
+      replyTo?: string;
     }) => Promise<boolean>;
   } = {},
 ): Promise<ConfirmationResult> {
@@ -235,6 +243,7 @@ export async function sendConfirmationEmail(
             html: string;
             text: string;
             fromName?: string;
+            replyTo?: string;
           }) => {
             const { fromName: name, ...rest } = message;
             const { error } = await new Resend(process.env.RESEND_API_KEY).emails.send({
@@ -276,16 +285,36 @@ export async function sendConfirmationEmail(
       now: response.completed_at ? new Date(response.completed_at) : undefined,
     });
     const { brand, fromName } = await workspaceEmailBrand(admin, workspaceId);
-    const email = buildConfirmationEmail({
-      brand,
-      settings,
-      schema,
-      answers,
-      variables: walk.variables,
-      hidden,
-      to,
-    });
-    const ok = await send({ to, ...email, fromName });
+    // The creator's own template (Starter and up), else the standard one.
+    const stored = await templateForSend(
+      admin,
+      workspaceId,
+      { kind: "confirmation", formId: response.form_id },
+      entitlements,
+    );
+    const responseCtx = stored ? await loadResponseContext(admin, responseId) : null;
+    const email =
+      stored && responseCtx
+        ? await renderForSend(admin, {
+            workspaceId,
+            stored,
+            merge: mergeContextFromResponse(responseCtx),
+            theme: schema.theme,
+            footerReason: `You're getting this because you filled in “${schema.meta.title}”.`,
+          })
+        : {
+            ...buildConfirmationEmail({
+              brand,
+              settings,
+              schema,
+              answers,
+              variables: walk.variables,
+              hidden,
+              to,
+            }),
+            fromName,
+          };
+    const ok = await send({ to, ...email });
     await admin
       .from("confirmation_email_log")
       .update({ status: ok ? "sent" : "failed", error: ok ? null : "send failed" })

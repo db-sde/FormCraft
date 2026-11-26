@@ -1,8 +1,22 @@
 # Project Status
 
-Last updated: 2026-11-26
+Last updated: 2026-11-27
 
 ## Current milestone
+
+**Six gap features and checkout** (2026-11-27, migrations 79–86):
+archiving to spec, link preview and SEO (share cards, re-encoded images,
+noindex by default, sitemap), the API on Free with a per-workspace token
+bucket, the font library catalogue with heading fonts and 66 themes,
+custom email templates, the SOC 2 wording check, checkout (Stripe in
+USD, Razorpay in INR) and feature switches. See DECISIONS.md
+(2026-11-27).
+
+- **To deploy:** `npx supabase db push --linked` (79–86), deploy, then
+  set the billing variables in `.env.example` (Stripe and/or Razorpay)
+  and add their webhooks. Until they're set, Settings → Plan keeps the
+  upgrade request.
+- **Next:** tax collection for checkout; moving files to R2.
 
 **Pricing plans and quotas** (2026-11-26, migrations 77–78, branch
 `claude/hardening`): Free / Starter / Pro / Business from the pricing
