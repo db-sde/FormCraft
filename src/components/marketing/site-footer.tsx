@@ -30,6 +30,12 @@ export function SiteFooter() {
           <Link href="/legal/subprocessors" className="hover:underline">
             Subprocessors
           </Link>
+          <Link href="/legal/privacy" className="hover:underline">
+            Privacy
+          </Link>
+          <Link href="/legal/terms" className="hover:underline">
+            Terms
+          </Link>
         </nav>
       </div>
       <p>{SOC2_SHORT}</p>

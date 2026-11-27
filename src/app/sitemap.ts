@@ -11,6 +11,8 @@ const PAGES = [
   "/developers",
   "/security",
   "/legal/subprocessors",
+  "/legal/privacy",
+  "/legal/terms",
   "/signup",
   "/login",
 ];

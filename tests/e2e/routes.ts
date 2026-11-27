@@ -34,6 +34,8 @@ export const PAGE_ROUTES = [
   "/developers",
   "/security",
   "/legal/subprocessors",
+  "/legal/privacy",
+  "/legal/terms",
   "/login",
   "/login/sso",
   "/signup",

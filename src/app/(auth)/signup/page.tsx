@@ -2,6 +2,7 @@
 
 import { Suspense, useActionState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { signUpAction, type ActionResult } from "../actions";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 import {
@@ -75,6 +76,17 @@ export default function SignupPage() {
             {pending && <ButtonSpinner />}
             {pending ? "Creating account…" : "Create account"}
           </Button>
+          <p className="text-muted-foreground text-center text-[12.5px]">
+            By creating an account you agree to the{" "}
+            <Link href="/legal/terms" className="underline underline-offset-2">
+              terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/legal/privacy" className="underline underline-offset-2">
+              privacy policy
+            </Link>
+            .
+          </p>
           <AuthFooter
             text="Already have an account?"
             link={{ href: "/login", label: "Log in" }}

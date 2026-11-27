@@ -6,3 +6,6 @@ supabase/templates/
 
 # Saved third-party pages, kept byte-for-byte.
 tests/fixtures/import/
+
+# Local Claude Code sessions (their worktrees are copies of this repo).
+.claude/
