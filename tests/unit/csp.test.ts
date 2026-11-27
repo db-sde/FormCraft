@@ -60,6 +60,24 @@ describe("Content-Security-Policy", () => {
     );
   });
 
+  it("lets browser error reports reach only the DSN's Sentry host", () => {
+    const dsn = "https://abc123@o4507.ingest.us.sentry.io/4508";
+    expect(
+      parse(buildCsp({ ...base, publicForm: false, sentryDsn: dsn }))["connect-src"],
+    ).toContain("https://o4507.ingest.us.sentry.io");
+    // Not a Sentry host, or the staff portal: nothing added.
+    expect(
+      parse(
+        buildCsp({ ...base, publicForm: false, sentryDsn: "https://x@evil.example/1" }),
+      )["connect-src"],
+    ).toEqual(["'self'", "https://proj.supabase.co", "wss://proj.supabase.co"]);
+    expect(
+      parse(buildCsp({ ...base, publicForm: false, admin: true, sentryDsn: dsn }))[
+        "connect-src"
+      ],
+    ).toEqual(["'self'"]);
+  });
+
   it("makes a different nonce each time", () => {
     expect(newNonce()).not.toBe(newNonce());
     expect(newNonce()).toMatch(/^[A-Za-z0-9+/]{22}==$/);

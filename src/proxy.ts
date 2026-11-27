@@ -34,6 +34,7 @@ function pageCsp(
     admin,
     dev: process.env.NODE_ENV === "development",
     https: request.nextUrl.protocol === "https:",
+    sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? null,
   });
   return { nonce, policy };
 }

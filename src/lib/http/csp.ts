@@ -64,10 +64,25 @@ export type CspOptions = {
   admin?: boolean;
   /** Development needs eval for React's tooling and plain-http reloads. */
   dev?: boolean;
+  /** The browser error-tracking DSN (Sentry): only its ingest host is
+   * allowed to receive reports. */
+  sentryDsn?: string | null;
   /** Served over HTTPS: any stray http:// subresource is upgraded.
    * (Never over plain http, where the upgrade would break every asset.) */
   https?: boolean;
 };
+
+/** The https origin a Sentry DSN reports to, if it's a Sentry host. */
+function sentryIngest(dsn: string): string | null {
+  try {
+    const url = new URL(dsn);
+    return url.protocol === "https:" && /(^|\.)sentry\.io$/.test(url.hostname)
+      ? `https://${url.hostname}`
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 function origin(url: string): string | null {
   try {
@@ -85,8 +100,11 @@ export function buildCsp({
   admin = false,
   dev = false,
   https = true,
+  sentryDsn = null,
 }: CspOptions) {
   const supabase = admin ? null : origin(supabaseUrl);
+  // Browser error reports go to the DSN's own host, nothing broader.
+  const sentry = !admin && sentryDsn ? sentryIngest(sentryDsn) : null;
   const supabaseHosts = supabase
     ? [supabase, supabase.replace(/^http/, "ws")] // realtime/auth sockets
     : [];
@@ -115,6 +133,7 @@ export function buildCsp({
     "connect-src": [
       "'self'",
       ...supabaseHosts,
+      ...(sentry ? [sentry] : []),
       ...(pixels ? PIXEL_CONNECT_HOSTS : []),
       ...(publicForm ? RAZORPAY_CONNECT : []),
       ...(dev ? ["ws:"] : []),
