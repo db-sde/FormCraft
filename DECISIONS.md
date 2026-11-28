@@ -39,6 +39,12 @@ implementation detail open. Newest first.
       account (one session per site). Use a separate browser profile.
   - Move to the dedicated deployment before more staff join (admin
     security checklist).
+- **Sentry test error** (migration 87): Operations has a "Send test
+  error" button for staff with `ops.record`. `admin_log_sentry_test`
+  checks the permission and writes the audit entry with the event id
+  first; then the server sends a `SentryTestError` (tag
+  `source: staff_portal`) and waits for Sentry to accept it. The page
+  shows the id to search for in Sentry.
 - **First staff owner**: the database refuses an account that belongs
   to a customer workspace (Phase 0 rule, kept). The owner's own account
   owns a workspace, so the first staff owner must be a separate,

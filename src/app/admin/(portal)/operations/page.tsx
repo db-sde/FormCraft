@@ -5,6 +5,7 @@ import { getBackupStatus } from "@/domains/observability/backups";
 import { LocalTime } from "@/components/local-time";
 import { RestoreTestForm } from "./restore-test-form";
 import { DrillForm } from "./drill-form";
+import { SentryTest } from "./sentry-test";
 import { FeatureFlags, type FlagRow, type OverrideRow } from "./feature-flags";
 import { DRILL_LABEL } from "./labels";
 
@@ -265,6 +266,9 @@ export default async function OperationsPage() {
         )}
       </section>
       {staff.permissions.includes("ops.record") && <DrillForm />}
+      {staff.permissions.includes("ops.record") && (
+        <SentryTest configured={Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN)} />
+      )}
       {flagData.ok && (
         <FeatureFlags
           flags={flagData.flags}

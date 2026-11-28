@@ -1,5 +1,6 @@
 "use server";
 
+import * as Sentry from "@sentry/nextjs";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -335,6 +336,44 @@ export async function recordRestoreTestAction(input: unknown): Promise<ActionRes
   });
   revalidatePath("/admin/operations");
   return explain(result, "Couldn't record it.");
+}
+
+/**
+ * Sends a test error to Sentry, to check that reporting works end to end.
+ * The database decides who may and logs it first (admin_log_sentry_test),
+ * with the event id, so the trail and Sentry can be matched. Returns that
+ * id for searching in Sentry.
+ */
+export async function sendSentryTestAction(): Promise<
+  { ok: true; eventId: string } | { ok: false; error: string }
+> {
+  if (!process.env.NEXT_PUBLIC_SENTRY_DSN) {
+    return {
+      ok: false,
+      error: "Sentry isn't set up here (NEXT_PUBLIC_SENTRY_DSN is empty).",
+    };
+  }
+  const eventId = crypto.randomUUID().replace(/-/g, "");
+  const logged = await adminCall("admin_log_sentry_test", { p_event_id: eventId });
+  if (!logged.ok) {
+    const result = explain(logged, "Couldn't send the test error.");
+    return {
+      ok: false,
+      error: result.ok ? "Couldn't send the test error." : result.error,
+    };
+  }
+  const error = new Error("FormCraft Sentry test error (sent from the staff portal)");
+  error.name = "SentryTestError";
+  Sentry.withScope((scope) => {
+    scope.setLevel("warning");
+    scope.setTags({ operation: "sentry_test", source: "staff_portal" });
+    Sentry.captureException(error, { event_id: eventId });
+  });
+  // Serverless functions can stop once the response is sent: wait for it.
+  if (!(await Sentry.flush(5000))) {
+    return { ok: false, error: "Sentry didn't accept the event in time. Try again." };
+  }
+  return { ok: true, eventId };
 }
 
 /** Asks for a change to a plan's entitlements (every workspace on it). */

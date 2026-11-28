@@ -3611,6 +3611,7 @@ export type Database = {
       admin_list_plans: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_staff: { Args: Record<PropertyKey, never>; Returns: Json };
       admin_list_upgrade_requests: { Args: Record<PropertyKey, never>; Returns: Json };
+      admin_log_sentry_test: { Args: { p_event_id: string }; Returns: Json };
       admin_message_cancel: { Args: { p_id: string }; Returns: Json };
       admin_message_draft: {
         Args: { p_audience: Json; p_body: string; p_kind: string; p_subject: string };

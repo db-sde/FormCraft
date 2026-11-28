@@ -19,6 +19,8 @@ import { ADMIN_PAGE_ROUTES } from "./routes";
 const ADMIN = process.env.ADMIN_BASE_URL;
 /** Set when ADMIN_BASE_URL is the customer app with ADMIN_SURFACE=shared. */
 const SHARED = process.env.ADMIN_SHARED === "1";
+/** A stand-in Sentry the app's DSN points at (tests/e2e/fake-sentry-server.mjs). */
+const SENTRY_INGEST = process.env.E2E_SENTRY_INGEST;
 const DB_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const sql = (q: string) =>
   execFileSync("psql", [DB_URL, "-tAq", "-v", "ON_ERROR_STOP=1", "-c", q], {
@@ -271,6 +273,30 @@ test.describe("Super Admin portal", () => {
     await page.getByRole("button", { name: "Record drill" }).click();
     await expect(page.getByText("Restore drill recorded.")).toBeVisible();
     await expect(page.getByText(/worked · Spare project for the drill/)).toBeVisible();
+
+    // The Sentry test error: with a DSN (E2E_SENTRY_INGEST, a stand-in
+    // Sentry) the event is sent and arrives; without one, it says so.
+    await expect(page.getByRole("heading", { name: "Error reporting" })).toBeVisible();
+    if (!SENTRY_INGEST) {
+      await expect(page.getByText(/Sentry isn't set up/)).toBeVisible();
+      return;
+    }
+    await page.getByRole("button", { name: "Send test error" }).click();
+    const status = page.getByRole("status").filter({ hasText: "event id" });
+    await expect(status).toBeVisible();
+    const eventId = (await status.locator("code").textContent())!.trim();
+    expect(eventId).toMatch(/^[0-9a-f]{32}$/);
+    const received = (await (
+      await page.request.get(`${SENTRY_INGEST}/events`)
+    ).json()) as {
+      ids: string[];
+    };
+    expect(received.ids).toContain(eventId);
+    expect(
+      sql(
+        `select action from private.platform_audit_log where target_id = '${eventId}';`,
+      ),
+    ).toBe("ops.sentry_test_sent");
   });
 
   test("AI: spend and settings; a change goes through an approval", async ({ page }) => {
