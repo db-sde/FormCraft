@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { permissionLabel } from "@/lib/admin/permission-labels";
 import { adminCall, requireStaff } from "@/lib/admin/staff";
 
 export default async function StaffHome() {
@@ -24,15 +25,16 @@ export default async function StaffHome() {
         <h2 className="mb-2 font-semibold">What your role can do</h2>
         <ul className="text-muted-foreground grid gap-1 text-sm sm:grid-cols-2">
           {staff.permissions.map((p) => (
-            <li key={p}>
-              <code>{p}</code>
+            <li key={p} title={p}>
+              {permissionLabel(p)}
             </li>
           ))}
         </ul>
       </section>
       <p className="text-muted-foreground text-sm">
         Everything you do here is recorded in the audit trail, including what you look at.
-        Customers, billing, usage, AI and privacy screens arrive in the next phases.
+        Suspensions, plan, AI and staff changes, notices and privacy erasures wait in
+        Approvals for a second person.
       </p>
     </main>
   );

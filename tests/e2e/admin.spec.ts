@@ -153,6 +153,9 @@ test.describe("Super Admin portal", () => {
   }) => {
     await signIn(page, owner);
     await expect(page.getByRole("heading", { name: "Hello, Olive Owner" })).toBeVisible();
+    // Permissions in plain words; no promise of screens that already exist.
+    await expect(page.getByText("Look up customers and workspaces")).toBeVisible();
+    await expect(page.getByText(/next phases/)).toHaveCount(0);
     const headers = (await page.request.get(`${ADMIN}/admin`)).headers();
     expect(headers["cache-control"]).toContain("no-store");
     expect(headers["x-robots-tag"]).toContain("noindex");
