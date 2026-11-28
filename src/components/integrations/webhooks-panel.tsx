@@ -10,6 +10,8 @@ import {
   deleteWebhookEndpointAction,
   sendTestDeliveryAction,
   rotateWebhookSecretAction,
+  retryDeliveryAction,
+  setWebhookNameAction,
 } from "@/app/(form)/forms/[id]/(sections)/integrations/actions";
 import { Button, ButtonSpinner } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +59,21 @@ export function WebhooksPanel({
   // A plain webhook, or an n8n workflow's Webhook node (F-49).
   const [kind, setKind] = useState<"webhook" | "n8n">("webhook");
   const [endpoints, setEndpoints] = useState(initialEndpoints);
-  const [deliveries] = useState(initialDeliveries);
+  const [deliveries, setDeliveries] = useState(initialDeliveries);
+  const [retrying, startRetry] = useTransition();
+  function retry(endpointId: string, deliveryId: string) {
+    startRetry(async () => {
+      const result = await retryDeliveryAction(formId, deliveryId);
+      if (!result.ok) return void toast.error(result.message);
+      toast.success("Sent again.");
+      setDeliveries((all) => ({
+        ...all,
+        [endpointId]: (all[endpointId] ?? []).map((d) =>
+          d.id === deliveryId ? { ...d, status: "pending" } : d,
+        ),
+      }));
+    });
+  }
   const [url, setUrl] = useState("");
   const [revealedSecret, setRevealedSecret] = useState<{
     endpointId: string;
@@ -86,6 +102,7 @@ export function WebhooksPanel({
             questionIds: [],
             events: ["response.completed"],
             abandonAfterMinutes: 30,
+            name: null,
           },
         ]);
         setSecretCopied(false);
@@ -304,11 +321,15 @@ export function WebhooksPanel({
                     n8n
                   </span>
                 )}
-                <span
-                  className="min-w-0 flex-1 truncate font-mono text-[13.5px]"
-                  title={endpoint.url}
-                >
-                  {endpoint.url}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <EndpointName
+                    formId={formId}
+                    endpointId={endpoint.id}
+                    initial={endpoint.name}
+                  />
+                  <span className="truncate font-mono text-[13.5px]" title={endpoint.url}>
+                    {endpoint.url}
+                  </span>
                 </span>
                 <label className="text-muted-foreground flex items-center gap-2 text-[13px] font-semibold">
                   {endpoint.enabled ? "Enabled" : "Paused"}
@@ -383,14 +404,34 @@ export function WebhooksPanel({
                         // Every delivery names its event, completed too
                         // (QA FC11-04).
                         delivery.eventType.replace("response.", ""),
+                        delivery.statusCode ? `HTTP ${delivery.statusCode}` : "",
                         delivery.attemptCount > 1
                           ? `attempt ${delivery.attemptCount}`
                           : "",
                       ]
                         .filter(Boolean)
                         .join(" · ")}
-                      error={delivery.status !== "succeeded" ? delivery.lastError : null}
+                      error={
+                        delivery.status !== "succeeded" &&
+                        delivery.lastError !== `HTTP ${delivery.statusCode}`
+                          ? delivery.lastError
+                          : null
+                      }
                       status={delivery.status}
+                      action={
+                        delivery.status === "failed" ||
+                        delivery.status === "exhausted" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2.5 text-[12.5px]"
+                            disabled={retrying}
+                            onClick={() => retry(endpoint.id, delivery.id)}
+                          >
+                            Retry
+                          </Button>
+                        ) : null
+                      }
                     />
                   ))
                 )}
@@ -455,5 +496,36 @@ export function WebhooksPanel({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** The endpoint's own name (QA FC15-70), saved when the field is left. */
+function EndpointName({
+  formId,
+  endpointId,
+  initial,
+}: {
+  formId: string;
+  endpointId: string;
+  initial: string | null;
+}) {
+  const [name, setName] = useState(initial ?? "");
+  const [saved, setSaved] = useState(initial ?? "");
+  return (
+    <input
+      aria-label="Webhook name"
+      value={name}
+      maxLength={60}
+      placeholder="Name this webhook"
+      onChange={(e) => setName(e.target.value)}
+      onBlur={() => {
+        if (name.trim() === saved.trim()) return;
+        void setWebhookNameAction(formId, endpointId, name).then((r) => {
+          if (r.ok) setSaved(name);
+          else toast.error(r.message);
+        });
+      }}
+      className="placeholder:text-muted-foreground w-full min-w-0 bg-transparent text-[13.5px] font-semibold outline-none focus-visible:underline"
+    />
   );
 }

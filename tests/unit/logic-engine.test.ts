@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unreachableQuestionIds } from "@/domains/forms/schema/compile";
 import { compileFormSchema, parseFormSchema } from "@/domains/forms/schema";
 import type { Condition, Expr, Value } from "@/domains/forms/schema/logic-model";
 import type { z } from "zod";
@@ -623,6 +624,21 @@ describe("visibility", () => {
       ],
     });
     expect(walkForm(compiled, { q1: "x" }).visitedQuestionIds).toEqual(["q1", "q4"]);
+  });
+
+  it("calls questions an unconditional jump skips unreachable (QA FC15-43)", () => {
+    // Compiles (a live form keeps loading), but can't be published.
+    const compiled = form({
+      questions: [text("q1", 0), text("q2", 1), text("q3", 2)],
+      rules: [
+        {
+          id: "always",
+          on: { event: "question_answered", questionId: "q1" },
+          then: [{ type: "jump_to_question", questionId: "q3" }],
+        },
+      ],
+    });
+    expect(unreachableQuestionIds(compiled.schema)).toEqual(["q2"]);
   });
 
   it("skips a hidden first question", () => {

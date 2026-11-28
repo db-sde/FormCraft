@@ -128,8 +128,9 @@ export function BookingSettingsPanel({
       </PanelField>
       <PanelNote>
         The time is held when the form is submitted, so two people can&apos;t book the
-        same slot. With an email, the attendee gets a confirmation, a reminder and a link
-        to move or cancel.
+        same slot. With an email question chosen above, the attendee is emailed a
+        confirmation with a link to move or cancel, on every plan. Reminders count against
+        your plan&apos;s monthly emails and stop when they run out.
       </PanelNote>
     </>
   );

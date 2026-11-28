@@ -5,6 +5,8 @@ import { listTemplates, listWorkspaceTemplates } from "@/domains/templates";
 import { canAdmin, canEdit } from "@/domains/workspaces";
 import { WorkspaceTemplates } from "@/components/dashboard/workspace-template-card";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { getWorkspacePlan } from "@/domains/billing";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 import {
   createBlankFormAction,
   createFormAction,
@@ -21,9 +23,10 @@ export const metadata: Metadata = { title: "Templates" };
 
 export default async function TemplatesPage() {
   const { supabase, user, workspace } = await getCurrentWorkspace();
-  const [templates, own] = await Promise.all([
+  const [templates, own, plan] = await Promise.all([
     listTemplates(supabase),
     listWorkspaceTemplates(supabase, workspace.id, user.id),
+    getWorkspacePlan(supabase, workspace.id),
   ]);
   const categories = [...new Set(templates.map((tpl) => tpl.category))];
 
@@ -106,7 +109,12 @@ export default async function TemplatesPage() {
         </section>
       )}
 
-      <GenerateFormCard enabled={aiConfigured()} />
+      <GenerateFormCard
+        enabled={aiConfigured()}
+        lockedReason={
+          plan.entitlements.ai_form_tools ? null : notOnPlanMessage("ai_form_tools")
+        }
+      />
       <ImportFormCard />
 
       {templates.length === 0 && (

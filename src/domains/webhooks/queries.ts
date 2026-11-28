@@ -34,6 +34,8 @@ export type WebhookEndpoint = {
   events: WebhookEvent[];
   /** Minutes without activity before "abandoned" (F-53). */
   abandonAfterMinutes: number;
+  /** The creator's own name for it, to tell several apart (QA FC15-70). */
+  name: string | null;
 };
 
 export const DEFAULT_ABANDON_MINUTES = 30;
@@ -74,6 +76,10 @@ export async function listWebhookEndpoints(
       : [],
     events: endpointEvents(row.config),
     abandonAfterMinutes: abandonMinutes(row.config),
+    name:
+      typeof (row.config as { name?: unknown } | null)?.name === "string"
+        ? ((row.config as { name: string }).name as string)
+        : null,
   }));
 }
 
@@ -145,6 +151,8 @@ export type DeliveryLogEntry = {
   status: "pending" | "succeeded" | "failed" | "exhausted";
   attemptCount: number;
   lastError: string | null;
+  /** The endpoint's HTTP status on the last attempt. */
+  statusCode: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -155,7 +163,9 @@ export async function listDeliveries(
 ): Promise<DeliveryLogEntry[]> {
   const { data, error } = await supabase
     .from("webhook_deliveries")
-    .select("id, event_type, status, attempt_count, last_error, created_at, updated_at")
+    .select(
+      "id, event_type, status, attempt_count, last_error, last_status_code, created_at, updated_at",
+    )
     .eq("endpoint_id", endpointId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -167,6 +177,7 @@ export async function listDeliveries(
     status: row.status,
     attemptCount: row.attempt_count,
     lastError: row.last_error,
+    statusCode: row.last_status_code,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -326,6 +337,8 @@ export async function recoverMissingWebhookDeliveries(
 export type DeliveryAttemptResult = {
   status: "succeeded" | "failed" | "exhausted";
   error?: string;
+  /** The HTTP status the endpoint answered with (QA FC15-70). */
+  statusCode?: number;
 };
 
 async function attemptDelivery(
@@ -365,14 +378,15 @@ async function attemptDelivery(
     clearTimeout(timeout);
     void res.body?.cancel();
 
-    if (res.ok) return { status: "succeeded" };
+    if (res.ok) return { status: "succeeded", statusCode: res.status };
     if (res.status >= 300 && res.status < 400) {
       return {
         status: "failed",
+        statusCode: res.status,
         error: `HTTP ${res.status} redirect — webhooks don't follow redirects; use the final URL`,
       };
     }
-    return { status: "failed", error: `HTTP ${res.status}` };
+    return { status: "failed", statusCode: res.status, error: `HTTP ${res.status}` };
   } catch (error) {
     return {
       status: "failed",
@@ -435,6 +449,7 @@ async function recordFailure(
   deliveryId: string,
   attemptCount: number,
   message: string,
+  statusCode: number | null = null,
 ) {
   const delayMs = nextBackoffDelayMs(attemptCount);
   await admin
@@ -443,6 +458,7 @@ async function recordFailure(
       status: isExhausted(attemptCount) ? "exhausted" : "failed",
       attempt_count: attemptCount,
       last_error: message.slice(0, 500),
+      last_status_code: statusCode,
       next_attempt_at: new Date(Date.now() + (delayMs ?? 0)).toISOString(),
     })
     .eq("id", deliveryId);
@@ -496,11 +512,22 @@ async function processDelivery(
   if (result.status === "succeeded") {
     await admin
       .from("webhook_deliveries")
-      .update({ status: "succeeded", attempt_count: attemptCount, last_error: null })
+      .update({
+        status: "succeeded",
+        attempt_count: attemptCount,
+        last_error: null,
+        last_status_code: result.statusCode ?? null,
+      })
       .eq("id", delivery.id);
     return;
   }
-  await recordFailure(admin, delivery.id, attemptCount, result.error ?? "unknown error");
+  await recordFailure(
+    admin,
+    delivery.id,
+    attemptCount,
+    result.error ?? "unknown error",
+    result.statusCode ?? null,
+  );
 }
 
 /** The signed JSON body every webhook / Zapier / Make delivery gets. */

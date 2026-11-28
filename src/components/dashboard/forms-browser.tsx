@@ -28,7 +28,12 @@ import {
 import { StatusChip, type ChipTone } from "@/components/ui/status-chip";
 import { LocalTime } from "@/components/local-time";
 import { FormPreviewArt } from "@/components/forms/form-preview-art";
-import { CanEditContext, FoldersContext, FormActionsMenu } from "./form-actions-menu";
+import {
+  CanEditContext,
+  FoldersContext,
+  FormActionsMenu,
+  ListEditsContext,
+} from "./form-actions-menu";
 import { FolderBar, type FolderFilter } from "./folder-bar";
 
 type Filter = "all" | "live" | "draft";
@@ -227,13 +232,16 @@ function PhoneCard({ form }: { form: FormListItem }) {
  * sort, and a grid of themed form cards or a compact list.
  */
 export function FormsBrowser({
-  forms,
+  forms: listed,
   workspaceName,
   canEdit = true,
   folders = [],
   currentUserId,
   archivedView = false,
+  folderLock = null,
 }: {
+  /** Folders aren't on the plan: why, shown instead of "New folder". */
+  folderLock?: string | null;
   /** The Archived view: bulk actions restore instead of archive. */
   archivedView?: boolean;
   forms: FormListItem[];
@@ -244,6 +252,25 @@ export function FormsBrowser({
   /** Viewers see the forms without the editing actions. */
   canEdit?: boolean;
 }) {
+  // Archived, deleted and renamed forms change here at once; the
+  // refreshed list then agrees (QA FC15-28).
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const [titles, setTitles] = useState<ReadonlyMap<string, string>>(new Map());
+  const listEdits = useMemo(
+    () => ({
+      hide: (id: string) => setGone((prev) => new Set(prev).add(id)),
+      rename: (id: string, title: string) =>
+        setTitles((prev) => new Map(prev).set(id, title)),
+    }),
+    [],
+  );
+  const forms = useMemo(
+    () =>
+      listed
+        .filter((f) => !gone.has(f.id))
+        .map((f) => (titles.has(f.id) ? { ...f, title: titles.get(f.id)! } : f)),
+    [listed, gone, titles],
+  );
   const params = useSearchParams();
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -288,6 +315,9 @@ export function FormsBrowser({
           ? `${result.withBookings.length} with upcoming bookings ${result.withBookings.length === 1 ? "was" : "were"} left as ${result.withBookings.length === 1 ? "it was" : "they were"}: archive ${result.withBookings.length === 1 ? "it" : "each"} from its menu to decide about the bookings.`
           : undefined,
       });
+      // Forms left alone (upcoming bookings) stay in the list.
+      for (const id of selected)
+        if (!result.withBookings.includes(id)) listEdits.hide(id);
       stopSelecting();
       router.refresh();
     });
@@ -365,273 +395,282 @@ export function FormsBrowser({
       : undefined;
 
   return (
-    <CanEditContext.Provider value={canEdit}>
-      <SelectionContext.Provider value={{ selecting, selected, toggle }}>
-        <FoldersContext.Provider value={folders}>
-          <div className="mb-[22px] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
-            <div>
-              <div className="text-muted-foreground text-[13px] sm:text-[15px]">
-                <span className="sm:hidden">
-                  {forms.length} form{forms.length === 1 ? "" : "s"}
-                </span>
-                <span className="hidden sm:inline">
-                  {forms.length} form{forms.length === 1 ? "" : "s"} in {workspaceName}
-                </span>
-              </div>
-              <h1 className="font-heading mt-1 text-[38px] leading-none font-bold tracking-[-0.03em] sm:mt-2 sm:text-[56px] sm:tracking-[-0.035em]">
-                Forms
-              </h1>
-            </div>
-            <div className="hidden items-center gap-3 sm:flex">
-              <label className="group border-border bg-card text-muted-foreground focus-within:border-ink focus-within:bg-field focus-within:text-foreground flex h-11 w-[260px] items-center gap-2 rounded-sm border-[1.5px] px-3 text-sm focus-within:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)]">
-                <Search className="size-4 shrink-0" />
-                <input
-                  ref={searchRef}
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") setQuery("");
-                  }}
-                  placeholder="Search forms"
-                  aria-label="Search forms"
-                  className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent outline-none [&::-webkit-search-cancel-button]:hidden"
-                />
-                {query ? (
-                  <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => setQuery("")}
-                    className="text-muted-foreground hover:text-foreground rounded-xs"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                ) : (
-                  <kbd className="border-border rounded-[5px] border px-1.5 py-[3px] font-sans text-[11px] leading-none font-semibold">
-                    ⌘K
-                  </kbd>
-                )}
-              </label>
-              <Button asChild variant="outline" className="h-11 px-[18px] font-semibold">
-                <Link href="/templates">Browse templates</Link>
-              </Button>
-            </div>
-          </div>
-
-          <FolderBar
-            folders={folders}
-            counts={folderCounts}
-            value={folder}
-            onChange={setFolder}
-            canEdit={canEdit}
-          />
-          <div className="mb-[22px] flex flex-wrap items-center gap-3">
-            <div
-              role="tablist"
-              aria-label="Filter forms"
-              className="border-border bg-card flex gap-0.5 rounded-full border-[1.5px] p-[3px] text-[13.5px] font-semibold"
-            >
-              {(["all", "live", "draft"] as Filter[]).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === key}
-                  onClick={() => setFilter(key)}
-                  className={cn(
-                    "fc-focus rounded-full px-3.5 py-2 sm:py-1.5",
-                    filter === key
-                      ? "bg-secondary text-secondary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {key === "all" ? "All" : key === "live" ? "Live" : "Draft"}{" "}
-                  {counts[key]}
-                </button>
-              ))}
-            </div>
-            {currentUserId && (
-              <label className="text-muted-foreground flex items-center gap-1.5 text-[13.5px] font-semibold">
-                <input
-                  type="checkbox"
-                  checked={mine}
-                  onChange={(e) => setMine(e.target.checked)}
-                  className="size-3.5 accent-[var(--ink)]"
-                />
-                Created by me
-              </label>
-            )}
-            {q && (
-              <span className="text-muted-foreground text-[13.5px]">
-                {visible.length} result{visible.length === 1 ? "" : "s"} for “
-                {query.trim()}”
-              </span>
-            )}
-            <div className="flex-1" />
-            {canEdit &&
-              (selecting ? (
-                <div
-                  role="toolbar"
-                  aria-label="Selected forms"
-                  className="flex items-center gap-2 text-[13.5px]"
-                >
-                  <span className="font-semibold">{selected.size} selected</span>
-                  <button
-                    type="button"
-                    className="fc-focus text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-                    onClick={() => setSelected(new Set(visible.map((f) => f.id)))}
-                  >
-                    Select all
-                  </button>
-                  <Button
-                    size="sm"
-                    disabled={selected.size === 0 || bulkPending}
-                    onClick={bulkArchive}
-                  >
-                    {archivedView ? "Restore" : "Archive"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={stopSelecting}>
-                    Done
-                  </Button>
+    <ListEditsContext.Provider value={listEdits}>
+      <CanEditContext.Provider value={canEdit}>
+        <SelectionContext.Provider value={{ selecting, selected, toggle }}>
+          <FoldersContext.Provider value={folders}>
+            <div className="mb-[22px] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
+              <div>
+                <div className="text-muted-foreground text-[13px] sm:text-[15px]">
+                  <span className="sm:hidden">
+                    {forms.length} form{forms.length === 1 ? "" : "s"}
+                  </span>
+                  <span className="hidden sm:inline">
+                    {forms.length} form{forms.length === 1 ? "" : "s"} in {workspaceName}
+                  </span>
                 </div>
-              ) : (
-                <Button size="sm" variant="outline" onClick={() => setSelecting(true)}>
-                  Select
-                </Button>
-              ))}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="fc-focus text-muted-foreground aria-expanded:border-ink aria-expanded:bg-card hidden h-8 items-center gap-1.5 rounded-sm border-[1.5px] border-transparent px-2.5 text-[13.5px] sm:flex"
-                >
-                  Sort by{" "}
-                  <b className="text-foreground">
-                    {SORTS.find(([k]) => k === sort)?.[1]}
-                  </b>
-                  <ChevronDown className="size-3.5 in-aria-expanded:rotate-180" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[200px]">
-                {SORTS.map(([key, label]) => (
-                  <DropdownMenuItem
-                    key={key}
-                    onSelect={() => setSort(key)}
-                    className={cn("justify-between", sort === key && "bg-accent")}
-                  >
-                    {label}
-                    {sort === key && <Check className="size-3.5" />}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <div className="border-border hidden overflow-hidden rounded-sm border-[1.5px] sm:flex">
-              {(
-                [
-                  ["grid", LayoutGrid, "Grid view"],
-                  ["list", List, "List view"],
-                ] as const
-              ).map(([key, Icon, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-label={label}
-                  aria-pressed={view === key}
-                  onClick={() => changeView(key)}
-                  className={cn(
-                    "fc-focus grid h-8 w-9 place-items-center",
-                    view === key
-                      ? "bg-secondary text-secondary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                <h1 className="font-heading mt-1 text-[38px] leading-none font-bold tracking-[-0.03em] sm:mt-2 sm:text-[56px] sm:tracking-[-0.035em]">
+                  Forms
+                </h1>
+              </div>
+              <div className="hidden items-center gap-3 sm:flex">
+                <label className="group border-border bg-card text-muted-foreground focus-within:border-ink focus-within:bg-field focus-within:text-foreground flex h-11 w-[260px] items-center gap-2 rounded-sm border-[1.5px] px-3 text-sm focus-within:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)]">
+                  <Search className="size-4 shrink-0" />
+                  <input
+                    ref={searchRef}
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setQuery("");
+                    }}
+                    placeholder="Search forms"
+                    aria-label="Search forms"
+                    className="text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent outline-none [&::-webkit-search-cancel-button]:hidden"
+                  />
+                  {query ? (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      onClick={() => setQuery("")}
+                      className="text-muted-foreground hover:text-foreground rounded-xs"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  ) : (
+                    <kbd className="border-border rounded-[5px] border px-1.5 py-[3px] font-sans text-[11px] leading-none font-semibold">
+                      ⌘K
+                    </kbd>
                   )}
+                </label>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-11 px-[18px] font-semibold"
                 >
-                  <Icon className="size-4" />
-                </button>
-              ))}
+                  <Link href="/templates">Browse templates</Link>
+                </Button>
+              </div>
             </div>
-          </div>
 
-          {visible.length === 0 ? (
-            <div className="border-input text-muted-foreground flex flex-col items-start gap-1.5 rounded-lg border-[1.5px] border-dashed p-4 text-sm">
-              {q ? (
-                <>
-                  <span>No forms match ‘{query.trim()}’.</span>
+            <FolderBar
+              folders={folders}
+              counts={folderCounts}
+              value={folder}
+              onChange={setFolder}
+              canEdit={canEdit}
+              lockedReason={folderLock}
+            />
+            <div className="mb-[22px] flex flex-wrap items-center gap-3">
+              <div
+                role="tablist"
+                aria-label="Filter forms"
+                className="border-border bg-card flex gap-0.5 rounded-full border-[1.5px] p-[3px] text-[13.5px] font-semibold"
+              >
+                {(["all", "live", "draft"] as Filter[]).map((key) => (
                   <button
+                    key={key}
                     type="button"
-                    onClick={() => setQuery("")}
-                    className="text-foreground decoration-primary font-bold underline decoration-2 underline-offset-4"
+                    role="tab"
+                    aria-selected={filter === key}
+                    onClick={() => setFilter(key)}
+                    className={cn(
+                      "fc-focus rounded-full px-3.5 py-2 sm:py-1.5",
+                      filter === key
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
                   >
-                    Clear search
+                    {key === "all" ? "All" : key === "live" ? "Live" : "Draft"}{" "}
+                    {counts[key]}
                   </button>
-                </>
-              ) : (
-                <span>No {filter === "live" ? "live" : "draft"} forms yet.</span>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Phones: compact cards. */}
-              <div className="flex flex-col gap-3.5 sm:hidden">
-                {visible.map((form) => (
-                  <PhoneCard key={form.id} form={form} />
                 ))}
               </div>
-              <div className="hidden sm:block">
-                {view === "grid" ? (
-                  <div className="wide:grid-cols-4 grid grid-cols-2 gap-[22px] lg:grid-cols-3">
-                    {visible.map((form) => (
-                      <FormCard
-                        key={form.id}
-                        form={form}
-                        onDuplicating={(pending, copyId) => {
-                          if (pending) setDuplicating({ sourceId: form.id });
-                          else if (!copyId) setDuplicating(null);
-                          else {
-                            setDuplicating({ sourceId: form.id, copyId });
-                            // In case the refresh never comes back.
-                            setTimeout(() => setDuplicating(null), 15_000);
-                          }
-                        }}
-                      />
-                    ))}
-                    {duplicatingForm && <DuplicatingCard title={duplicatingForm.title} />}
+              {currentUserId && (
+                <label className="text-muted-foreground flex items-center gap-1.5 text-[13.5px] font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={mine}
+                    onChange={(e) => setMine(e.target.checked)}
+                    className="size-3.5 accent-[var(--ink)]"
+                  />
+                  Created by me
+                </label>
+              )}
+              {q && (
+                <span className="text-muted-foreground text-[13.5px]">
+                  {visible.length} result{visible.length === 1 ? "" : "s"} for “
+                  {query.trim()}”
+                </span>
+              )}
+              <div className="flex-1" />
+              {canEdit &&
+                (selecting ? (
+                  <div
+                    role="toolbar"
+                    aria-label="Selected forms"
+                    className="flex items-center gap-2 text-[13.5px]"
+                  >
+                    <span className="font-semibold">{selected.size} selected</span>
+                    <button
+                      type="button"
+                      className="fc-focus text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                      onClick={() => setSelected(new Set(visible.map((f) => f.id)))}
+                    >
+                      Select all
+                    </button>
+                    <Button
+                      size="sm"
+                      disabled={selected.size === 0 || bulkPending}
+                      onClick={bulkArchive}
+                    >
+                      {archivedView ? "Restore" : "Archive"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={stopSelecting}>
+                      Done
+                    </Button>
                   </div>
                 ) : (
-                  <div className="border-ink bg-card overflow-hidden rounded-lg border-[1.5px]">
-                    <div className="border-ink bg-background text-muted-foreground grid grid-cols-[56px_minmax(0,1fr)_110px_130px_130px_44px] gap-[18px] border-b-[1.5px] px-4 py-2.5 text-[11.5px] font-bold tracking-[0.08em] uppercase">
-                      <span />
-                      <span>Form</span>
-                      <span>Status</span>
-                      <span>Responses</span>
-                      <span>Edited</span>
-                      <span />
-                    </div>
-                    {visible.map((form) => (
-                      <FormListRow key={form.id} form={form} />
-                    ))}
-                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setSelecting(true)}>
+                    Select
+                  </Button>
+                ))}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="fc-focus text-muted-foreground aria-expanded:border-ink aria-expanded:bg-card hidden h-8 items-center gap-1.5 rounded-sm border-[1.5px] border-transparent px-2.5 text-[13.5px] sm:flex"
+                  >
+                    Sort by{" "}
+                    <b className="text-foreground">
+                      {SORTS.find(([k]) => k === sort)?.[1]}
+                    </b>
+                    <ChevronDown className="size-3.5 in-aria-expanded:rotate-180" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[200px]">
+                  {SORTS.map(([key, label]) => (
+                    <DropdownMenuItem
+                      key={key}
+                      onSelect={() => setSort(key)}
+                      className={cn("justify-between", sort === key && "bg-accent")}
+                    >
+                      {label}
+                      {sort === key && <Check className="size-3.5" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="border-border hidden overflow-hidden rounded-sm border-[1.5px] sm:flex">
+                {(
+                  [
+                    ["grid", LayoutGrid, "Grid view"],
+                    ["list", List, "List view"],
+                  ] as const
+                ).map(([key, Icon, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-label={label}
+                    aria-pressed={view === key}
+                    onClick={() => changeView(key)}
+                    className={cn(
+                      "fc-focus grid h-8 w-9 place-items-center",
+                      view === key
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {visible.length === 0 ? (
+              <div className="border-input text-muted-foreground flex flex-col items-start gap-1.5 rounded-lg border-[1.5px] border-dashed p-4 text-sm">
+                {q ? (
+                  <>
+                    <span>No forms match ‘{query.trim()}’.</span>
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      className="text-foreground decoration-primary font-bold underline decoration-2 underline-offset-4"
+                    >
+                      Clear search
+                    </button>
+                  </>
+                ) : (
+                  <span>No {filter === "live" ? "live" : "draft"} forms yet.</span>
                 )}
               </div>
-            </>
-          )}
+            ) : (
+              <>
+                {/* Phones: compact cards. */}
+                <div className="flex flex-col gap-3.5 sm:hidden">
+                  {visible.map((form) => (
+                    <PhoneCard key={form.id} form={form} />
+                  ))}
+                </div>
+                <div className="hidden sm:block">
+                  {view === "grid" ? (
+                    <div className="wide:grid-cols-4 grid grid-cols-2 gap-[22px] lg:grid-cols-3">
+                      {visible.map((form) => (
+                        <FormCard
+                          key={form.id}
+                          form={form}
+                          onDuplicating={(pending, copyId) => {
+                            if (pending) setDuplicating({ sourceId: form.id });
+                            else if (!copyId) setDuplicating(null);
+                            else {
+                              setDuplicating({ sourceId: form.id, copyId });
+                              // In case the refresh never comes back.
+                              setTimeout(() => setDuplicating(null), 15_000);
+                            }
+                          }}
+                        />
+                      ))}
+                      {duplicatingForm && (
+                        <DuplicatingCard title={duplicatingForm.title} />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="border-ink bg-card overflow-hidden rounded-lg border-[1.5px]">
+                      <div className="border-ink bg-background text-muted-foreground grid grid-cols-[56px_minmax(0,1fr)_110px_130px_130px_44px] gap-[18px] border-b-[1.5px] px-4 py-2.5 text-[11.5px] font-bold tracking-[0.08em] uppercase">
+                        <span />
+                        <span>Form</span>
+                        <span>Status</span>
+                        <span>Responses</span>
+                        <span>Edited</span>
+                        <span />
+                      </div>
+                      {visible.map((form) => (
+                        <FormListRow key={form.id} form={form} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
-          {/* Phones: the New form button floats bottom right. */}
-          {canEdit && (
-            <form
-              action={createBlankFormAction}
-              className="fixed right-4 bottom-6 z-20 sm:hidden"
-            >
-              <SubmitButton
-                className="shadow-card h-[52px] rounded-full px-5 text-[15px]"
-                icon={<Plus className="size-[18px]" />}
-                pendingLabel="Creating…"
+            {/* Phones: the New form button floats bottom right. */}
+            {canEdit && (
+              <form
+                action={createBlankFormAction}
+                className="fixed right-4 bottom-6 z-20 sm:hidden"
               >
-                New form
-              </SubmitButton>
-            </form>
-          )}
-        </FoldersContext.Provider>
-      </SelectionContext.Provider>
-    </CanEditContext.Provider>
+                <SubmitButton
+                  className="shadow-card h-[52px] rounded-full px-5 text-[15px]"
+                  icon={<Plus className="size-[18px]" />}
+                  pendingLabel="Creating…"
+                >
+                  New form
+                </SubmitButton>
+              </form>
+            )}
+          </FoldersContext.Provider>
+        </SelectionContext.Provider>
+      </CanEditContext.Provider>
+    </ListEditsContext.Provider>
   );
 }

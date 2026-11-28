@@ -3,6 +3,7 @@
 import type { RuleProposal } from "@/domains/ai/rule-draft";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { recallChoices, unknownRecallTokens } from "@/domains/logic/recall";
 import { BuilderCapabilitiesContext } from "./builder-capabilities";
 import { SaveTemplateDialog } from "@/components/dashboard/save-template-dialog";
 import {
@@ -324,9 +325,18 @@ export function FormBuilder({
   const travellingRef = useRef(false);
   useEffect(() => {
     if (schema === recordedSchemaRef.current) return;
-    if (travellingRef.current) travellingRef.current = false;
-    else history.record(recordedSchemaRef.current);
+    const previous = recordedSchemaRef.current;
     recordedSchemaRef.current = schema;
+    if (travellingRef.current) {
+      travellingRef.current = false;
+      return;
+    }
+    // A change that leaves the form as it was isn't a step: Undo would
+    // seem to do nothing (QA FC15-23).
+    if (sameFormSchema(previous, schema)) return;
+    // Adding, removing or moving a question or ending is always its own
+    // step, so Undo takes it back on its own.
+    history.record(previous, Date.now(), structureOf(previous) !== structureOf(schema));
   }, [schema, history]);
   function travel(direction: "undo" | "redo") {
     const target = direction === "undo" ? history.undo(schema) : history.redo(schema);
@@ -1702,6 +1712,10 @@ export function FormBuilder({
                 }
                 onChangeQuestion={updateQuestionChecked}
                 onChangeEnding={updateEnding}
+                recall={recallChoices(schema, selectedQuestion?.id)}
+                recallWarning={
+                  selectedQuestion ? recallWarningFor(schema, selectedQuestion) : null
+                }
                 focusLabelId={focusLabelId}
                 onLabelFocused={clearFocusLabel}
               />
@@ -2039,4 +2053,27 @@ export function FormBuilder({
       </div>
     </BuilderCapabilitiesContext.Provider>
   );
+}
+
+/** Which questions and endings a form has, in order: what Undo treats as
+ * structure (QA FC15-23). */
+function structureOf(schema: FormSchemaV1): string {
+  const questions = [...schema.questions]
+    .sort((a, b) => a.order - b.order)
+    .map((q) => q.id)
+    .join(",");
+  return `${questions}|${schema.endings.map((e) => e.id).join(",")}`;
+}
+
+/** What to say under a question whose text has placeholders that show
+ * as blank (QA FC15-41), or null. */
+function recallWarningFor(schema: FormSchemaV1, question: QuestionV1): string | null {
+  const unknown = [
+    ...new Set([
+      ...unknownRecallTokens(question.label, schema, question.id),
+      ...unknownRecallTokens(question.description, schema, question.id),
+    ]),
+  ];
+  if (unknown.length === 0) return null;
+  return `${unknown.join(", ")} ${unknown.length === 1 ? "doesn't" : "don't"} match an earlier answer, a score or a URL field, so ${unknown.length === 1 ? "it shows" : "they show"} as blank. Type @ to pick one.`;
 }

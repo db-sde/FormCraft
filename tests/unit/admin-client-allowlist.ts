@@ -86,6 +86,8 @@ export const ADMIN_CLIENT_ALLOWED: Record<string, string> = {
     "anonymous respondent: authorised by the response id or token, not a session",
   "src/app/api/responses/[id]/lookup/route.ts":
     "anonymous respondent: authorised by the response id or token, not a session",
+  "src/app/api/responses/[id]/scores/route.ts":
+    "anonymous respondent: authorised by the response id or token, not a session",
   "src/app/api/responses/[id]/resume-link/route.ts":
     "anonymous respondent: authorised by the response id or token, not a session",
   "src/app/api/responses/[id]/uploads/[questionId]/route.ts":

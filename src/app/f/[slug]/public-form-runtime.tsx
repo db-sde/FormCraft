@@ -1,5 +1,7 @@
 "use client";
 
+import { Direction } from "radix-ui";
+
 import { AddressLookupContext } from "@/components/runtime/address-lookup";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompiledFormV1 } from "@/domains/forms/schema/compile";
@@ -229,6 +231,7 @@ export function PublicFormRuntime({
   resumeLinks = false,
   resume = null,
   brandingRemovable = true,
+  serverScores = false,
   schedulingAllowed = false,
   languages = [],
   initialLanguage = "en",
@@ -266,6 +269,9 @@ export function PublicFormRuntime({
   initialLanguage?: string;
   /** From the workspace's plan, decided on the server (P2.1). */
   brandingRemovable?: boolean;
+  /** The page isn't sent option points, but shows a score part-way:
+   * ask the server for it (QA FC15-45). */
+  serverScores?: boolean;
   /** From the plan: booking pages on endings (P2.16). */
   schedulingAllowed?: boolean;
   /** Creator setting: respondents can get a link to finish later (P2.8). */
@@ -394,6 +400,20 @@ export function PublicFormRuntime({
     () => ({ ...(resumed?.hidden ?? urlHidden), ...lookupValues }),
     [resumed, urlHidden, lookupValues],
   );
+  const scores = useMemo(() => {
+    if (!serverScores) return undefined;
+    return async (answers: AnswerMap, path: string[]) => {
+      const session = await ensureSessionRef.current();
+      const res = await fetch(`/api/responses/${session.responseId}/scores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers, path }),
+      });
+      if (!res.ok) return null;
+      const { variables } = (await res.json()) as { variables: Record<string, Value> };
+      return variables ?? null;
+    };
+  }, [serverScores]);
   const lookups = useMemo(() => {
     if (!lookup?.triggers.length || !savesProgress) return undefined;
     return {
@@ -1013,76 +1033,85 @@ export function PublicFormRuntime({
 
   return (
     <OrdersChargedProvider value={ordersCharged}>
-      <div
-        ref={frameRef}
-        dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
-        className="fc-custom-scope relative"
+      {/* Radix controls (radio groups, menus) follow the language's
+          direction too; on their own they say ltr (QA FC15-50). */}
+      <Direction.Provider
+        dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : "ltr"}
       >
-        <FormCustomCss css={compiled.schema.theme.customCss} />
-        {languages.length > 1 && (
-          <label className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-[12.5px] shadow-sm">
-            <span className="sr-only">{uiStrings(language).language}</span>
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="bg-transparent font-semibold outline-none"
-              aria-label={uiStrings(language).language}
-            >
-              {languages.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
-        {paying && (
-          <PaymentStep
-            theme={theme}
-            embedded={embedded}
-            responseId={paying.responseId}
-            initialQuote={paying.quote}
-            payLaterUrl={kiosk ? null : paying.payLater}
-            onPaid={() => paying.resolve("paid")}
-            onLater={() => paying.resolve("later")}
-            onRedirect={(url) => paying.resolve({ redirect: url })}
-          />
-        )}
-        <AddressLookupContext.Provider value={{ formId, language }}>
-          <FormRenderer
-            compiled={shown}
-            language={language}
-            initialAnswers={
-              resumed?.answers ?? (Object.keys(prefilled).length ? prefilled : undefined)
-            }
-            initialQuestionId={resumed?.lastQuestionId}
-            initialHistory={resumed?.history}
-            welcomeBack={!!resumed && !!resumed.lastQuestionId}
-            hidden={shownHidden}
-            seed={resumed?.seed ?? freshSeed}
-            brandingRemovable={brandingRemovable}
-            schedulingAllowed={schedulingAllowed}
-            redirectOnEnding
-            onAnswerChange={handleAnswerChange}
-            onComplete={handleComplete}
-            getResponseId={() => ensureSession().then((s) => s.responseId)}
-            savesProgress={savesProgress}
-            onStepEvent={sendStepEvent}
-            followUps={followUps}
-            known={resumed ? known : knownForRuntime}
-            lookups={lookups}
-            onFinishLater={
-              resumeLinks && savesProgress && !kiosk ? finishLater : undefined
-            }
-            notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
-            // Embedded: natural height, reported to the host page so its
-            // iframe grows/shrinks to fit (full-viewport height would pin the
-            // iframe at whatever size it started with).
-            className={embedded ? "min-h-[480px]" : "min-h-dvh"}
-          />
-        </AddressLookupContext.Provider>
-      </div>
+        <div
+          ref={frameRef}
+          dir={RTL_LANGUAGES.has(language as LanguageCode) ? "rtl" : undefined}
+          // No sideways scrolling in a right-to-left form.
+          className="fc-custom-scope relative overflow-x-clip"
+        >
+          <FormCustomCss css={compiled.schema.theme.customCss} />
+          {languages.length > 1 && (
+            <label className="absolute end-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-[12.5px] shadow-sm">
+              <span className="sr-only">{uiStrings(language).language}</span>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="bg-transparent font-semibold outline-none"
+                aria-label={uiStrings(language).language}
+              >
+                {languages.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {captchaSiteKey && <Turnstile siteKey={captchaSiteKey} ref={turnstileRef} />}
+          {paying && (
+            <PaymentStep
+              theme={theme}
+              embedded={embedded}
+              responseId={paying.responseId}
+              initialQuote={paying.quote}
+              payLaterUrl={kiosk ? null : paying.payLater}
+              onPaid={() => paying.resolve("paid")}
+              onLater={() => paying.resolve("later")}
+              onRedirect={(url) => paying.resolve({ redirect: url })}
+            />
+          )}
+          <AddressLookupContext.Provider value={{ formId, language }}>
+            <FormRenderer
+              compiled={shown}
+              language={language}
+              initialAnswers={
+                resumed?.answers ??
+                (Object.keys(prefilled).length ? prefilled : undefined)
+              }
+              initialQuestionId={resumed?.lastQuestionId}
+              initialHistory={resumed?.history}
+              welcomeBack={!!resumed && !!resumed.lastQuestionId}
+              hidden={shownHidden}
+              seed={resumed?.seed ?? freshSeed}
+              brandingRemovable={brandingRemovable}
+              schedulingAllowed={schedulingAllowed}
+              redirectOnEnding
+              onAnswerChange={handleAnswerChange}
+              onComplete={handleComplete}
+              getResponseId={() => ensureSession().then((s) => s.responseId)}
+              savesProgress={savesProgress}
+              onStepEvent={sendStepEvent}
+              followUps={followUps}
+              known={resumed ? known : knownForRuntime}
+              lookups={lookups}
+              scores={scores}
+              onFinishLater={
+                resumeLinks && savesProgress && !kiosk ? finishLater : undefined
+              }
+              notice={resume && !resume.ok ? RESUME_NOTICE[resume.reason] : undefined}
+              // Embedded: natural height, reported to the host page so its
+              // iframe grows/shrinks to fit (full-viewport height would pin the
+              // iframe at whatever size it started with).
+              className={embedded ? "min-h-[480px]" : "min-h-dvh"}
+            />
+          </AddressLookupContext.Provider>
+        </div>
+      </Direction.Provider>
     </OrdersChargedProvider>
   );
 }

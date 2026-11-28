@@ -72,6 +72,8 @@ const ShortTextSettings = z.object({
 
 const LongTextSettings = z.object({
   placeholder: optionalSafeText(200),
+  /** At least this many characters (QA FC15-31). */
+  minLength: z.number().int().min(0).max(50000).optional(),
   maxLength: z.number().int().min(1).max(50000).optional(),
   /** Ask one AI-written follow-up question about the answer (P3.7). */
   aiFollowUp: z.boolean().optional(),
@@ -148,6 +150,8 @@ const MultiSelectSettings = z
   );
 
 const DropdownSettings = z.object({
+  /** Shown before anything is chosen (QA FC15-34). */
+  placeholder: optionalSafeText(200),
   options: z.array(OptionV1).min(1).max(200),
   randomizeOptions: z.boolean().optional(),
   optionsFrom: OptionsFrom.optional(),
@@ -478,6 +482,9 @@ const baseQuestionFields = {
   order: z.number().int().min(0),
   label: safeText(1000),
   description: optionalSafeText(2000),
+  /** A picture shown above the question (QA FC15-34). Welcome and
+   * statement screens keep theirs in their settings. */
+  image: z.object({ url: webUrl, alt: optionalSafeText(300) }).optional(),
   required: z.boolean().default(false),
   /** Shown only when this holds; otherwise skipped (never required). */
   visibleIf: Condition.optional(),

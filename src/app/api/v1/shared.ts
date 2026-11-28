@@ -2,10 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authenticateApiKey, type ApiCaller, type ApiScope } from "@/domains/api";
 import { notifyDailyCap, takeApiRequest, type ApiTake } from "@/domains/api/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hitRateLimit } from "@/domains/abuse";
+import { resolveClientIp } from "@/lib/http/ip";
 
 export function apiError(code: string, message: string, status: number) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
+
+/** Failed key attempts allowed per address each minute. */
+const BAD_KEY_LIMIT = 30;
 
 /** A paid-only setting asked for through the API on a plan without it
  * (developer spec item 5): 403, naming the plan needed. */
@@ -16,10 +21,21 @@ export function planRequired(message: string, plan: string) {
   );
 }
 
-/** The rate-limit headers every /api/v1 response carries. */
-function withLimitHeaders(response: Response, take: ApiTake): Response {
+/** The rate-limit headers every authenticated /api/v1 response carries.
+ * `Limit` is the bucket `Remaining` counts down (the burst), so
+ * Remaining never exceeds it (QA FC15-20); the bucket refills at the
+ * per-minute rate, given as `X-RateLimit-Rate`. */
+function withLimitHeaders(
+  response: Response,
+  take: ApiTake,
+  caller?: Pick<ApiCaller, "burst">,
+): Response {
   if (take.limit !== null) {
-    response.headers.set("X-RateLimit-Limit", String(take.limit));
+    response.headers.set(
+      "X-RateLimit-Limit",
+      String(Math.max(caller?.burst ?? take.limit, take.remaining)),
+    );
+    response.headers.set("X-RateLimit-Rate", `${take.limit}/minute`);
     response.headers.set("X-RateLimit-Remaining", String(take.remaining));
     response.headers.set("X-RateLimit-Reset", String(take.reset));
   }
@@ -39,7 +55,8 @@ function withLimitHeaders(response: Response, take: ApiTake): Response {
  */
 export async function withApiKey(
   request: NextRequest,
-  scope: ApiScope,
+  /** The permission the call needs; null for any key (connection test). */
+  scope: ApiScope | null,
   handler: (
     caller: ApiCaller,
     admin: ReturnType<typeof createAdminClient>,
@@ -47,7 +64,36 @@ export async function withApiKey(
 ): Promise<Response> {
   const admin = createAdminClient();
   const caller = await authenticateApiKey(admin, request.headers.get("authorization"));
-  if (!caller) return apiError("unauthorized", "A valid API key is required.", 401);
+  if (!caller) {
+    // Wrong keys are counted per address (QA FC15-03): guessing is
+    // hopeless with keys this long, but it shouldn't cost nothing.
+    const failures = await hitRateLimit(
+      admin,
+      `api-bad-key:${resolveClientIp((name) => request.headers.get(name))}`,
+      BAD_KEY_LIMIT,
+      60_000,
+    );
+    if (!failures.allowed) {
+      return NextResponse.json(
+        {
+          error: "rate_limited",
+          scope: "minute",
+          retry_after: 60,
+          message: "Too many requests with an invalid API key. Wait a minute.",
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": "60",
+            "X-RateLimit-Limit": String(BAD_KEY_LIMIT),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": "60",
+          },
+        },
+      );
+    }
+    return apiError("unauthorized", "A valid API key is required.", 401);
+  }
   // Suspended by FormCraft (Super Admin): the API is closed to it too.
   const { data: ws } = await admin
     .from("workspaces")
@@ -73,17 +119,22 @@ export async function withApiKey(
       },
       { status: 429, headers: { "Retry-After": String(take.retry_after) } },
     );
-    return withLimitHeaders(response, take);
+    return withLimitHeaders(response, take, caller);
   }
-  if (!caller.scopes.includes(scope)) {
+  if (scope && !caller.scopes.includes(scope)) {
     return withLimitHeaders(
       apiError("forbidden", `This key doesn't have the ${scope} permission.`, 403),
       take,
+      caller,
     );
   }
   try {
-    return withLimitHeaders(await handler(caller, admin), take);
+    return withLimitHeaders(await handler(caller, admin), take, caller);
   } catch {
-    return withLimitHeaders(apiError("unknown", "Something went wrong.", 500), take);
+    return withLimitHeaders(
+      apiError("unknown", "Something went wrong.", 500),
+      take,
+      caller,
+    );
   }
 }

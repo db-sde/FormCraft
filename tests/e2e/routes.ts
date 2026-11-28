@@ -58,6 +58,7 @@ export const PAGE_ROUTES = [
   "/forms/[id]/responses/[responseId]",
   "/forms/[id]/integrations",
   "/forms/[id]/settings",
+  "/forms/[id]/settings/versions/[versionId]",
   "/f/[slug]",
   "/invite/[token]",
   "/f/[slug]/payment",
@@ -85,6 +86,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/api/responses/[id]/follow-up": "ai.spec.ts, api-contract.spec.ts",
   "/api/responses/[id]/email-code": "roadmap-v3.spec.ts",
   "/api/responses/[id]/lookup": "data-lookups.spec.ts, api-contract.spec.ts",
+  "/api/responses/[id]/scores": "quiz-scores.spec.ts",
   "/api/responses/[id]/complete":
     "api-contract.spec.ts, duplicate-submit.spec.ts, submission-integrity.spec.ts",
   "/api/responses/[id]/uploads/[questionId]": "api-contract.spec.ts",
@@ -100,6 +102,7 @@ export const HANDLER_ROUTES: Record<string, string> = {
   "/fonts/file/[...path]": "smoke.spec.ts",
   "/api/cron/payments": "api-contract.spec.ts",
   "/api/cron/ops": "api-contract.spec.ts",
+  "/favicon.ico": "smoke.spec.ts",
   "/api/[...unknown]": "qa-run4.spec.ts",
   "/api/uploads/[uploadId]": "qa-run4.spec.ts",
   "/api/responses/[id]/claim": "qa-run5.spec.ts",

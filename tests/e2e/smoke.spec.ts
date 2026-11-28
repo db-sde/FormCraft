@@ -100,6 +100,16 @@ test.describe("smoke: every page renders cleanly", () => {
     }
   });
 
+  test("/favicon.ico leads to the icon; /blocks returns after sign-in", async ({
+    request,
+  }) => {
+    const icon = await request.get("/favicon.ico");
+    expect(icon.status()).toBe(200);
+    expect(icon.headers()["content-type"]).toContain("image/png");
+    const blocks = await request.get("/blocks", { maxRedirects: 0 });
+    expect(blocks.headers()["location"]).toContain("/login?next=%2Fblocks");
+  });
+
   test("signed-in pages and the public form", async ({ page, request, browser }) => {
     const user = await createConfirmedUser("e2e-smoke");
     try {
@@ -177,6 +187,14 @@ test.describe("smoke: every page renders cleanly", () => {
             },
           ],
         });
+      const { data: published } = await adminClient()
+        .from("form_versions")
+        .select("id")
+        .eq("form_id", formId)
+        .eq("status", "published")
+        .single();
+      signedIn["/forms/[id]/settings/versions/[versionId]"] =
+        `/forms/${formId}/settings/versions/${published!.id}`;
       signedIn["/bookings"] = "/bookings";
       signedIn["/blocks"] = "/blocks";
       signedIn["/blocks/[id]"] = `/blocks/${block!.id}`;

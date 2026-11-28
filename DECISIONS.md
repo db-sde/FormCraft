@@ -3,6 +3,98 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-28 — QA run 15, the rest (migrations 88–89)
+
+- **Views and starts (FC15-59)**: every start counts as a view. A start
+  uses the view that brought the visitor; when there's none to use, it
+  records one itself. Reloads still count once. Older data is shown
+  capped at 100%.
+- **Undo (FC15-23)**: a change that leaves the form as it was isn't a
+  step. Adding, removing or moving a question or ending is always its
+  own step; only quick runs of typing merge.
+- **Answer recall (FC15-41)**: typing "@" in a question's title or
+  description offers earlier answers, scores and URL fields. A
+  placeholder that matches nothing is called out under the field and in
+  the Logic check.
+- **Quiz secrecy (FC15-45)**: option points reach the page only when a
+  score decides something mid-form. A score that's only shown part-way
+  comes from `POST /api/responses/[id]/scores` (same browser only).
+  Probing that endpoint reveals no more than the running score the form
+  shows anyway.
+- **API (FC15-03, 04, 20, 21, 22)**: wrong keys are throttled at 30 a
+  minute per address. `X-RateLimit-Limit` is the burst `Remaining`
+  counts down, and `X-RateLimit-Rate` gives the refill. `/me` works with
+  any key and returns its permissions and limits. The hooks error and
+  docs name the real body.
+- **Logic check (FC15-43)**: a rule jumping back is flagged and refused
+  at publish (drafts still save). A question every path skips, because a
+  rule with no condition always jumps past it, is refused at publish
+  only. Live forms are compiled the forgiving way, so none stops loading.
+- **Ops notice (FC15-09, migration 88)**: the "owners are now told" notice
+  was raised again every 5 minutes while the staff audit log was empty.
+  It's now known by the start alert itself. Info-only alerts are logged
+  at info level.
+- **Webhook log (FC15-70, migration 89)**: deliveries keep the endpoint's
+  HTTP status. The log shows it, with Retry on failed deliveries (the
+  timeline's replay) and a name per endpoint (stored in its config).
+- **Sheets (FC15-52, 53)**: a header row is written when the sheet is
+  empty (a failed check skips it, never doubles it). The time is UTC in
+  a form Sheets reads as a date, with "(UTC)" in the header.
+- **Locked up front**: retention, folders, AI writing (prompt kept on
+  error), embed allowlist, rules and digests, response status, comments
+  and corrections, PDFs, and app Connect buttons now say their plan
+  before a click (FC15-14, 16, 26, 57, 62, 66, 68, 71). The Free audit tab
+  is titled "Support access" (FC15-15). The AI credits meter shows on
+  Free (FC15-17).
+- **Smaller fixes**:
+  - Long-text minimum length (FC15-31).
+  - Phone examples by country (FC15-32).
+  - Entry labels keep their capitals (FC15-33).
+  - Question images and a dropdown placeholder (FC15-34).
+  - Refused uploads clear their name (FC15-35).
+  - Seconds typed freely (FC15-36).
+  - Show conditions start from the nearest choice, as "is answered"
+    (FC15-39).
+  - A labelled swap button (FC15-40).
+  - Two more Logic starters, five in all (FC15-44).
+  - Font style words and counts (FC15-47).
+  - "Questions left" counts the one on screen (FC15-48).
+  - Right-to-left forms tell Radix their direction, clip sideways
+    overflow and translate "(required)" (FC15-50).
+  - The overlay embed renamed (FC15-55).
+  - Toasts that arrive together expand (FC15-73).
+  - Versions numbered in publish order, with a read-only view (FC15-24).
+  - Template welcome text renamed (FC15-25).
+  - The forms list updates at once (FC15-28).
+  - No Publish on archived cards (FC15-29).
+  - Timeline sorted by real time, then form order (FC15-61).
+  - Search shows "Searching…" and the newest query wins (FC15-60).
+  - Copy and SEO from the real question count (FC15-01, 02).
+  - Full forms say nothing in previews (FC15-06).
+  - /blocks returns after sign-in (FC15-10).
+  - /favicon.ico (FC15-11).
+  - Subprocessors lists Turnstile and what creators choose (FC15-12).
+- **Working as built, not changed**:
+  - Page break is there in the classic layout, now listed with a note
+    elsewhere (FC15-30).
+  - Email template test send, workspace save and reset exist on Starter
+    (FC15-67).
+  - Drop-off, sources and score analytics are Starter; endings reached
+    and NPS trend show when a form has them (FC15-64, now noted on Free).
+  - Attendee booking emails go on every plan once an email question is
+    chosen (FC15-72, help text clarified).
+  - Deliveries run every minute; only operations checks run every 5
+    minutes (FC15-08, docs corrected).
+  - The staff route names are public since the portal is served on the
+    app (FC15-07).
+- **Needs the owner**:
+  - `GOOGLE_PLACES_API_KEY` (FC15-13).
+  - Google's verification of the OAuth app (FC15-54's warning).
+  - A Vercel plan for commercial use (FC15-08).
+  - The slow password check, submit and connect (FC15-54, 58) need a
+    live measurement: the code paths are short, and cold starts on the
+    Hobby plan are the likely cause.
+
 ## 2026-11-28 — QA run 15: plan check on save and publish, CSV, API lists
 
 - **One plan check** (`planIssues` in `billing/schema-features.ts`):

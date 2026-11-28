@@ -25,6 +25,7 @@ import {
   type RecallSource,
 } from "@/domains/logic";
 import { cn } from "cn";
+import { useRuntimeStrings } from "./runtime-strings";
 import { usePendingSaves } from "./pending-saves";
 import { RuntimeStringsContext } from "./runtime-strings";
 import { UploadNamesContext } from "./upload-names";
@@ -91,6 +92,7 @@ export function ClassicFormRuntime({
   language,
   known,
   lookups,
+  scores,
 }: FormRuntimeProps) {
   const engineOptions = useMemo(() => ({ hidden, seed }), [hidden, seed]);
   const t = useMemo(() => uiStrings(language), [language]);
@@ -165,6 +167,41 @@ export function ClassicFormRuntime({
     () => engineInputs(compiled, engineOptions).hidden,
     [compiled, engineOptions],
   );
+  // Scores shown on this page, when the server keeps the points (QA
+  // FC15-45): asked once as the page opens, for the answers before it.
+  const [serverScores, setServerScores] = useState<{
+    page: number;
+    variables: Record<string, Value>;
+  } | null>(null);
+  const pageShowsScore = useMemo(() => {
+    if (!scores || !page) return false;
+    const names = (compiled.schema.variables ?? []).map((v) => `{{${v.name}}}`);
+    const text = page.ids
+      .map((id) => compiled.schema.questions.find((q) => q.id === id))
+      .map((q) => `${q?.label ?? ""} ${q?.description ?? ""}`)
+      .join(" ");
+    return names.some((n) => text.includes(n));
+  }, [scores, page, compiled]);
+  useEffect(() => {
+    if (!scores || !pageShowsScore || !page) return;
+    let cancelled = false;
+    const first = page.ids[0];
+    const at = first ? walk.visitedQuestionIds.indexOf(first) : -1;
+    const path =
+      at === -1 ? walk.visitedQuestionIds : walk.visitedQuestionIds.slice(0, at + 1);
+    void scores(answers, path).then(
+      (variables) => {
+        if (!cancelled && variables) setServerScores({ page: pageIndex, variables });
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+    // Asked once per page shown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scores, pageShowsScore, pageIndex]);
+
   /** Recall for an item reads the variables as they stand before it. */
   function recall(text: string | undefined, questionId: string) {
     if (!text || !hasRecall(text)) return text;
@@ -175,7 +212,10 @@ export function ClassicFormRuntime({
     return renderRecall(text, {
       schema: compiled.schema,
       answers,
-      variables: stateAt(compiled, answers, path, engineOptions).variables,
+      variables:
+        serverScores && serverScores.page === pageIndex
+          ? serverScores.variables
+          : stateAt(compiled, answers, path, engineOptions).variables,
       hidden: resolvedHidden,
     });
   }
@@ -651,16 +691,21 @@ function ClassicItem({
   error?: string;
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
 }) {
+  const t = useRuntimeStrings();
   const screen = question.type === "welcome_screen" || question.type === "statement";
-  const image =
-    screen && question.settings.imageUrl ? (
-      // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
-      <img
-        src={question.settings.imageUrl}
-        alt={question.settings.imageAlt ?? ""}
-        className="max-h-64 w-full rounded-(--st-tile-br) object-contain"
-      />
-    ) : null;
+  const picture = screen
+    ? question.settings.imageUrl
+      ? { url: question.settings.imageUrl, alt: question.settings.imageAlt }
+      : null
+    : (question.image ?? null);
+  const image = picture ? (
+    // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+    <img
+      src={picture.url}
+      alt={picture.alt ?? ""}
+      className="max-h-64 w-full rounded-(--st-tile-br) object-contain"
+    />
+  ) : null;
 
   if (question.type === "welcome_screen") {
     return (
@@ -697,7 +742,7 @@ function ClassicItem({
               {" "}
               *
             </span>
-            <span className="sr-only"> (required)</span>
+            <span className="sr-only"> {t.required}</span>
           </>
         )}
       </h2>
@@ -719,14 +764,15 @@ function pageProgressText(
   label: "none" | "percent" | "count" | "remaining",
 ): string | null {
   if (pageCount <= 1) return null;
-  const left = pageCount - position - 1;
+  // The page on screen is one of those left (QA FC15-48).
+  const left = pageCount - position;
   switch (label) {
     case "percent":
       return `${Math.round((position / pageCount) * 100)}% complete`;
     case "count":
       return `Page ${position + 1} of ${pageCount}`;
     case "remaining":
-      return left === 0 ? "Last page" : `${left} page${left === 1 ? "" : "s"} left`;
+      return left <= 1 ? "Last page" : `${left} pages left`;
     default:
       return null;
   }

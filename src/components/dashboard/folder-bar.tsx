@@ -27,7 +27,11 @@ export function FolderBar({
   value,
   onChange,
   canEdit,
+  lockedReason = null,
 }: {
+  /** Folders aren't on the plan (QA FC15-16): "New folder" is shown
+   * locked, with why, instead of failing after a name is typed. */
+  lockedReason?: string | null;
   folders: { id: string; name: string }[];
   /** Forms per folder id, plus "none" and "all". */
   counts: Record<string, number>;
@@ -161,10 +165,13 @@ export function FolderBar({
         ) : (
           <button
             type="button"
+            disabled={!!lockedReason}
+            title={lockedReason ?? undefined}
             onClick={() => setCreating(true)}
-            className="fc-focus text-muted-foreground hover:text-foreground flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-semibold"
+            className="fc-focus text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FolderPlus className="size-3.5" /> New folder
+            {lockedReason && <span className="font-normal">· Starter and up</span>}
           </button>
         ))}
     </nav>

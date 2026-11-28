@@ -102,3 +102,11 @@ export function groupHasAnswer(value: unknown): boolean {
 export function isBlankEntry(entry: GroupEntry): boolean {
   return !Object.values(entry.values).some(filled);
 }
+
+/** The entry label inside a sentence ("Add another guest"): a plain
+ * capitalised word loses its capital, but anything else stays as the
+ * creator wrote it, so "QA guest" or "iPhone" aren't mangled (QA FC15-33). */
+export function entryWord(label: string | undefined): string {
+  const word = label?.trim() || "entry";
+  return /^[A-Z][a-z]/.test(word) ? word[0].toLowerCase() + word.slice(1) : word;
+}

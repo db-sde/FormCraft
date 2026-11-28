@@ -485,7 +485,12 @@ export default async function ResponsesPage({
     })),
   }));
 
-  const totalCount = responses?.totalCount ?? summary?.total ?? 0;
+  // The cross-tab tab loads neither the table nor the summary: fall back
+  // to the form's counts, not 0 (QA FC15-62).
+  const totalCount =
+    responses?.totalCount ??
+    summary?.total ??
+    (sp.view === "incomplete" ? counts.partial : counts.completed);
   const hasAnyResponses = counts.completed + counts.partial > 0;
 
   return (
@@ -597,7 +602,8 @@ export default async function ResponsesPage({
                 value={funnel.starts.toLocaleString()}
                 hint={
                   funnel.views > 0
-                    ? `${Math.round((funnel.starts / funnel.views) * 100)}% of views`
+                    ? // Older data can hold more starts than views (QA FC15-59).
+                      `${Math.min(100, Math.round((funnel.starts / funnel.views) * 100))}% of views`
                     : "Began answering"
                 }
               />
@@ -825,6 +831,12 @@ export default async function ResponsesPage({
             />
           )}
 
+          {summary && !entitlements.advanced_analytics && (
+            // Said up front, so it isn't taken for missing (QA FC15-64).
+            <p className="text-muted-foreground text-sm">
+              {notOnPlanMessage("advanced_analytics")}
+            </p>
+          )}
           {summary && (
             <SummaryView
               summary={summary}

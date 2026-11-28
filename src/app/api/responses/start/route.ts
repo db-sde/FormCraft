@@ -9,6 +9,7 @@ import {
 } from "@/domains/responses";
 import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import { recordAnalyticsEvent } from "@/domains/analytics";
+import { recordView, startNeedsView, viewerKey } from "@/domains/analytics/view-count";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -144,7 +145,20 @@ export async function POST(request: NextRequest) {
     // A response row only gets created here — never on a resumed
     // session (see PublicFormRuntime) — so this is exactly the "valid
     // start" count computeCompletionRate/computeFunnelSummary expect.
+    const who = viewerKey(
+      request.cookies.get(VISITOR_COOKIE)?.value,
+      getClientIp(request),
+      request.headers.get("user-agent"),
+    );
     after(async () => {
+      // Every start was a view (QA FC15-59): see startNeedsView.
+      try {
+        if (await startNeedsView(admin, who, parsed.data.formId)) {
+          await recordView(admin, parsed.data.formId, !!parsed.data.embedded);
+        }
+      } catch {
+        // Analytics must never affect the respondent-facing result.
+      }
       try {
         await recordAnalyticsEvent(admin, {
           formId: parsed.data.formId,

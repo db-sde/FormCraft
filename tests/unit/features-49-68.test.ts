@@ -77,7 +77,8 @@ describe("progress along the way the logic goes (F-51)", () => {
     });
     expect(p).toMatchObject({ current: 1, total: 6, remaining: 5, share: 0 });
     expect(progressText(p, "count")).toBe("Question 1 of 6");
-    expect(progressText(p, "remaining")).toBe("5 questions left");
+    // Question 1 of 6 is unanswered too: six left (QA FC15-48).
+    expect(progressText(p, "remaining")).toBe("6 questions left");
   });
 
   it("drops the questions a branch skips", () => {

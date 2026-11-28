@@ -3201,6 +3201,7 @@ export type Database = {
           event_type: string;
           id: string;
           last_error: string | null;
+          last_status_code: number | null;
           next_attempt_at: string;
           payload: Json;
           response_id: string | null;
@@ -3217,6 +3218,7 @@ export type Database = {
           event_type: string;
           id?: string;
           last_error?: string | null;
+          last_status_code?: number | null;
           next_attempt_at?: string;
           payload: Json;
           response_id?: string | null;
@@ -3232,6 +3234,7 @@ export type Database = {
           event_type?: string;
           id?: string;
           last_error?: string | null;
+          last_status_code?: number | null;
           next_attempt_at?: string;
           payload?: Json;
           response_id?: string | null;
@@ -3859,6 +3862,7 @@ export type Database = {
           event_type: string;
           id: string;
           last_error: string | null;
+          last_status_code: number | null;
           next_attempt_at: string;
           payload: Json;
           response_id: string | null;
@@ -3903,6 +3907,7 @@ export type Database = {
           event_type: string;
           id: string;
           last_error: string | null;
+          last_status_code: number | null;
           next_attempt_at: string;
           payload: Json;
           response_id: string | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import { generateFormAction } from "@/app/(dashboard)/actions";
 import { SubmitButton } from "@/components/submit-button";
@@ -9,8 +9,17 @@ import { NotSetUpYet } from "@/components/not-set-up-yet";
 
 /** "Describe your form" on the new-form page. The result opens in the
  * builder as an ordinary draft, to review and edit before publishing. */
-export function GenerateFormCard({ enabled }: { enabled: boolean }) {
+export function GenerateFormCard({
+  enabled,
+  lockedReason = null,
+}: {
+  enabled: boolean;
+  /** Not on the plan: said before anything's typed (QA FC15-26). */
+  lockedReason?: string | null;
+}) {
   const [state, action] = useActionState(generateFormAction, null);
+  // Kept when generating fails, so it can be edited and tried again.
+  const [prompt, setPrompt] = useState("");
 
   // Until the server has an AI key, a friendly note stands in for it.
   if (!enabled)
@@ -38,11 +47,15 @@ export function GenerateFormCard({ enabled }: { enabled: boolean }) {
           </span>
         </span>
       </label>
+      {lockedReason && <p className="text-muted-foreground text-sm">{lockedReason}</p>}
       <Textarea
         id="generate-prompt"
         name="prompt"
         rows={3}
         maxLength={2000}
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        disabled={!!lockedReason}
         placeholder="A 10-question JavaScript quiz that shows a different ending for beginners, intermediates and experts"
       />
       {state?.message && (
@@ -51,6 +64,7 @@ export function GenerateFormCard({ enabled }: { enabled: boolean }) {
         </p>
       )}
       <SubmitButton
+        disabled={!!lockedReason}
         className="self-start"
         icon={<Sparkles />}
         pendingLabel="Drafting your form…"

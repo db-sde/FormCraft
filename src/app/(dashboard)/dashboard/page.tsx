@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 import { Plus } from "lucide-react";
 import { listFolders, listFormsForWorkspace } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
@@ -140,6 +141,7 @@ export default async function DashboardPage({
         canEdit={canEdit(workspace.role)}
         folders={folders}
         currentUserId={user.id}
+        folderLock={plan.entitlements.folders ? null : notOnPlanMessage("folders")}
       />
       <p className="mt-6 text-sm">
         <Link href="/dashboard?archived=1" className="text-muted-foreground underline">

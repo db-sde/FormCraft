@@ -107,9 +107,14 @@ export function PlanUsage({
             used={usage.emails}
             limit={e.emails_per_month}
           />
-          {aiAvailable && e.ai_credits_per_month !== 0 && (
+          {/* Shown on every plan, Free's 0 included (QA FC15-17). */}
+          {aiAvailable && (
             <Meter
-              label="AI credits"
+              label={
+                e.ai_credits_per_month === 0
+                  ? "AI credits (Starter and up)"
+                  : "AI credits"
+              }
               used={usage.aiCredits}
               limit={e.ai_credits_per_month}
             />

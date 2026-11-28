@@ -87,6 +87,12 @@ describe("sheets integration (real Postgres + a fake local Google server)", () =
             res.end(JSON.stringify({ access_token: "fake-at", expires_in: 3600 }));
             return;
           }
+          if (req.method === "GET" && req.url?.includes("/values/A1:Z1")) {
+            // The sheet is empty until something's been appended.
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(appendedRows.length ? { values: [["x"]] } : {}));
+            return;
+          }
           if (req.url?.includes("/values/A1:append")) {
             appendedRows.push(JSON.parse(body).values[0]);
             res.writeHead(200, { "Content-Type": "application/json" });
@@ -266,6 +272,9 @@ describe("sheets integration (real Postgres + a fake local Google server)", () =
 
     const lastRow = appendedRows[appendedRows.length - 1] as string[];
     expect(lastRow).toContain("Ada Lovelace");
+    // The first row into an empty sheet is the header (QA FC15-52).
+    expect(appendedRows[0]).toEqual(expect.arrayContaining(["Submitted at (UTC)"]));
+    expect(lastRow[0]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
 
     // The refreshed access token was persisted back, not just used
     // in-memory for this one call — a later dispatch shouldn't need

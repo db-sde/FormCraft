@@ -43,6 +43,8 @@ export type AppLinkState = {
 
 export type AppState = {
   provider: AppInfo["provider"];
+  /** The plan doesn't include this app: why, shown instead of Connect. */
+  lockedReason?: string | null;
   connection: { label: string | null; status: "ok" | "invalid" } | null;
   link: AppLinkState | null;
 };
@@ -589,7 +591,12 @@ function AppCard({
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
-            {!connected && (
+            {!connected && state.lockedReason && (
+              <Button size="sm" disabled title={state.lockedReason}>
+                {state.lockedReason.includes("Pro") ? "Pro and up" : "Starter and up"}
+              </Button>
+            )}
+            {!connected && !state.lockedReason && (
               <Button asChild size="sm">
                 <a href={connectHref}>
                   {state.connection ? "Reconnect" : `Connect ${app.label}`}

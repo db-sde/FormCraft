@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 
@@ -27,6 +27,10 @@ export function SearchBox({
 }) {
   const router = useRouter();
   const [value, setValue] = useState(initial);
+  // A search that takes a while says so, and the newest one always wins
+  // (QA FC15-60: results seemed a keystroke behind while one loaded).
+  const [searching, startSearch] = useTransition();
+  const go = (text: string) => startSearch(() => router.replace(hrefFor(text)));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [path, query = ""] = baseHref.split("?");
@@ -55,7 +59,7 @@ export function SearchBox({
       onSubmit={(e) => {
         e.preventDefault();
         if (timer.current) clearTimeout(timer.current);
-        router.replace(hrefFor(value));
+        go(value);
       }}
     >
       {kept.map(([k, v]) => (
@@ -69,12 +73,18 @@ export function SearchBox({
           const next = e.target.value;
           setValue(next);
           if (timer.current) clearTimeout(timer.current);
-          timer.current = setTimeout(() => router.replace(hrefFor(next)), 250);
+          timer.current = setTimeout(() => go(next), 250);
         }}
         placeholder={placeholder}
         aria-label={label}
         maxLength={100}
+        aria-busy={searching || undefined}
       />
+      {searching && (
+        <span role="status" className="text-muted-foreground mt-1 block text-xs">
+          Searching…
+        </span>
+      )}
     </form>
   );
 }

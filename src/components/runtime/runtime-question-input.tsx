@@ -322,7 +322,7 @@ export function RuntimeQuestionInput({
             aria-invalid={invalid || undefined}
             aria-label={question.label}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="+1 555 000 0000"
+            placeholder={phonePlaceholder(question.settings.defaultCountry)}
             className={UNDERLINE}
           />
         );
@@ -404,6 +404,7 @@ export function RuntimeQuestionInput({
         return (
           <Dropdown
             options={question.settings.options}
+            placeholder={question.settings.placeholder}
             value={text}
             onChange={onChange}
             label={question.label}
@@ -705,12 +706,14 @@ function MultiSelect({
  * portal) so it keeps the form's colours. */
 function Dropdown({
   options,
+  placeholder,
   value,
   onChange,
   label,
   autoFocus,
 }: {
   options: { id: string; label: string }[];
+  placeholder?: string;
   value: string;
   onChange: (value: unknown) => void;
   label: string;
@@ -764,7 +767,9 @@ function Dropdown({
           chosen ? "text-(--st-text)" : "text-(--st-muted)",
         )}
       >
-        <span className="flex-1 truncate">{chosen?.label ?? "Choose an option"}</span>
+        <span className="flex-1 truncate">
+          {chosen?.label ?? (placeholder?.trim() || "Choose an option")}
+        </span>
         <ChevronDown aria-hidden className="size-[18px] text-(--st-text)" />
       </button>
       {open && (
@@ -1064,7 +1069,9 @@ function FileUploadInput({
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
-    setFileName(file.name);
+    // A refused file's name isn't shown as if it were chosen (QA FC15-35):
+    // the field goes back to what it held before.
+    const before = fileName;
 
     // Too big or the wrong kind: say so now, without uploading it.
     const refused = precheckUpload(file, question.settings);
@@ -1074,6 +1081,7 @@ function FileUploadInput({
       if (!hasStoredFile) onChange(undefined);
       return;
     }
+    setFileName(file.name);
 
     if (!getResponseId) {
       // Preview mode: no network calls at all (see FormRuntime's
@@ -1103,6 +1111,7 @@ function FileUploadInput({
         } | null;
         setErrorMessage(uploadRefusalMessage(body?.error?.code, question.settings));
         setStatus("error");
+        setFileName(hasStoredFile ? before : null);
         if (!hasStoredFile) onChange(undefined);
         return;
       }
@@ -1115,6 +1124,7 @@ function FileUploadInput({
     } catch {
       setErrorMessage(uploadRefusalMessage(undefined, question.settings));
       setStatus("error");
+      setFileName(hasStoredFile ? before : null);
       if (!hasStoredFile) onChange(undefined);
     } finally {
       endPending();
@@ -1226,6 +1236,41 @@ function FileUploadInput({
       {error && <StageError>{errorMessage}</StageError>}
     </div>
   );
+}
+
+/** An example number in the question's default country (QA FC15-32).
+ * A short list, so the respondent's page needn't carry every country's
+ * numbering rules; elsewhere it just asks for the number. */
+const PHONE_EXAMPLES: Record<string, string> = {
+  IN: "+91 98765 43210",
+  US: "+1 555 000 0000",
+  CA: "+1 555 000 0000",
+  GB: "+44 7700 900123",
+  AU: "+61 412 345 678",
+  NZ: "+64 21 123 4567",
+  IE: "+353 85 123 4567",
+  DE: "+49 1512 3456789",
+  FR: "+33 6 12 34 56 78",
+  ES: "+34 612 34 56 78",
+  IT: "+39 312 345 6789",
+  NL: "+31 6 12345678",
+  AE: "+971 50 123 4567",
+  SA: "+966 50 123 4567",
+  SG: "+65 8123 4567",
+  MY: "+60 12 345 6789",
+  PK: "+92 300 1234567",
+  BD: "+880 1712 345678",
+  NG: "+234 802 123 4567",
+  ZA: "+27 71 123 4567",
+  BR: "+55 11 91234 5678",
+  MX: "+52 55 1234 5678",
+  JP: "+81 90 1234 5678",
+  PH: "+63 917 123 4567",
+};
+
+function phonePlaceholder(country: string | undefined): string {
+  if (!country) return PHONE_EXAMPLES.US;
+  return PHONE_EXAMPLES[country.toUpperCase()] ?? "Phone number";
 }
 
 const CONTACT_INPUT: Record<

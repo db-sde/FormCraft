@@ -64,6 +64,27 @@ const SUBPROCESSORS: { name: string; purpose: string; data: string; where: strin
     data: "Technical details of errors",
     where: "United States",
   },
+  {
+    name: "Cloudflare (Turnstile)",
+    purpose: "Spam checks on forms that turn them on",
+    data: "The respondent's browser signals and IP address, for the check only",
+    where: "Global network",
+  },
+];
+
+/** Loaded on a form only when its creator adds them (QA FC15-12): they
+ * receive what that creator's settings send, under the creator's own
+ * agreement with them. */
+const CREATOR_CHOSEN: { name: string; when: string }[] = [
+  { name: "Calendly and Cal.com", when: "a booking embed on an ending" },
+  {
+    name: "Google Analytics and Tag Manager, Meta, LinkedIn and TikTok pixels",
+    when: "the creator's tracking IDs, after consent where the form asks for it",
+  },
+  {
+    name: "Google Sheets, Drive and Calendar, HubSpot, Slack, Airtable, Notion, Mailchimp, Salesforce, Zoho CRM, Pipedrive, webhooks",
+    when: "an integration the creator connects",
+  },
 ];
 
 /** The subprocessor list (developer spec item 6). Integrations a creator
@@ -108,6 +129,22 @@ export default function SubprocessorsPage() {
             </tbody>
           </table>
         </div>
+        <section className="flex flex-col gap-2">
+          <h2 className="font-heading text-xl font-bold">
+            Chosen by a form&apos;s creator
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            These load on a form, or receive its responses, only when its creator turns
+            them on. They get what the creator&apos;s settings send them.
+          </p>
+          <ul className="list-disc pl-5 text-sm">
+            {CREATOR_CHOSEN.map((c) => (
+              <li key={c.name}>
+                <b>{c.name}</b>: {c.when}.
+              </li>
+            ))}
+          </ul>
+        </section>
         <p className="text-muted-foreground text-sm">
           Integrations a creator turns on for a form (such as Google Sheets, HubSpot,
           Slack or a webhook) receive what the creator chooses to send them.

@@ -17,6 +17,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={(resolvedTheme ?? "light") as ToasterProps["theme"]}
       position="bottom-right"
       visibleToasts={3}
+      // Toasts that arrive together (Publish says "Published" and warns
+      // about starter wording) are shown in full, not stacked behind each
+      // other with only a clipped line showing (QA FC15-73).
+      expand
       duration={4000}
       className="toaster group"
       icons={{

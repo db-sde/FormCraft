@@ -10,6 +10,8 @@ const PROTECTED_PREFIXES = [
   "/templates",
   "/settings",
   "/bookings",
+  // Shared blocks: back here after signing in (QA FC15-10).
+  "/blocks",
 ];
 // Exact paths, not prefixes: `/signup` and `/forgot-password` each have
 // a "check your email" sub-page (`/signup/check-email`,

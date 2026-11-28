@@ -16,6 +16,7 @@ import {
   stageTitleClass,
 } from "@/components/runtime/stage";
 import { TypeTile, questionTypeLabel } from "./question-meta";
+import { useRecallMenu, type RecallChoice } from "./recall-menu";
 import { cn } from "cn";
 
 /** Text edited in place on the stage: auto-sizing, no chrome until
@@ -62,7 +63,13 @@ export function BuilderCanvas({
   brandingRemovable = true,
   focusLabelId = null,
   onLabelFocused,
+  recall = [],
+  recallWarning = null,
 }: {
+  /** What "@" offers in the question's text (QA FC15-41). */
+  recall?: RecallChoice[];
+  /** Placeholders in the question's text that show as blank. */
+  recallWarning?: string | null;
   /** A question whose text should take focus, selected, as soon as it's
    * on the stage (one just added) — so typing replaces the placeholder
    * wording without a click. */
@@ -85,7 +92,8 @@ export function BuilderCanvas({
     const q = item.question;
     chip = <TypeTile type={q.type} size={20} bordered={false} />;
     typeLabel = questionTypeLabel(q);
-    hint = "Click the text to edit it. Enter ↵ moves on.";
+    hint =
+      "Click the text to edit it. Enter ↵ moves on. Type @ to show an earlier answer.";
     if (
       q.type !== "welcome_screen" &&
       q.type !== "statement" &&
@@ -150,6 +158,8 @@ export function BuilderCanvas({
             onChange={onChangeQuestion}
             focusLabel={focusLabelId === item.question.id}
             onLabelFocused={onLabelFocused}
+            recall={recall}
+            recallWarning={recallWarning}
           />
         )}
         {item.kind === "ending" && (
@@ -206,7 +216,11 @@ function QuestionStage({
   onChange,
   focusLabel = false,
   onLabelFocused,
+  recall,
+  recallWarning,
 }: {
+  recall: RecallChoice[];
+  recallWarning: string | null;
   theme: ThemeV1;
   question: QuestionV1;
   number: number;
@@ -218,6 +232,19 @@ function QuestionStage({
 }) {
   const entry = question.type === "welcome_screen" || question.type === "statement";
   const labelRef = useRef<HTMLTextAreaElement | null>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const labelRecall = useRecallMenu({
+    ref: labelRef,
+    value: question.label,
+    choices: recall,
+    onPick: (label) => onChange({ ...question, label }),
+  });
+  const descriptionRecall = useRecallMenu({
+    ref: descriptionRef,
+    value: question.description ?? "",
+    choices: recall,
+    onPick: (description) => onChange({ ...question, description }),
+  });
   // Lead capture is asked one detail per screen; the card shows one of
   // them at a time, and the creator can flip between them.
   const [screenPick, setScreenPick] = useState({ id: question.id, index: 0 });
@@ -242,39 +269,69 @@ function QuestionStage({
   }, [focusLabel, question.id, onLabelFocused]);
 
   const label = (
-    <textarea
-      key={`l-${question.id}`}
-      ref={labelRef}
-      rows={1}
-      value={question.label}
-      placeholder="Question text"
-      aria-label="Question text"
-      onChange={(e) => onChange({ ...question, label: e.target.value })}
-      onKeyDown={(e) => {
-        // Enter moves on (Shift+Enter is a new line): to the first option
-        // of a choice question, otherwise to "Add question".
-        if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
-        e.preventDefault();
-        const next =
-          document.querySelector<HTMLElement>("[data-option-input]") ??
-          document.querySelector<HTMLElement>("[data-add-question]");
-        if (!next) return;
-        next.focus();
-        if (next instanceof HTMLInputElement) next.select();
-      }}
-      className={cn(EDITABLE, entry ? stageTitleClass : stageLabelClass)}
-    />
+    <div className="relative">
+      {question.image && (
+        // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+        <img
+          src={question.image.url}
+          alt={question.image.alt ?? ""}
+          className="mb-3 max-h-48 w-full rounded-(--st-tile-br) object-contain"
+        />
+      )}
+      <textarea
+        key={`l-${question.id}`}
+        ref={labelRef}
+        rows={1}
+        value={question.label}
+        placeholder="Question text"
+        aria-label="Question text"
+        onChange={(e) => {
+          onChange({ ...question, label: e.target.value });
+          labelRecall.onInput(e.target.value, e.target.selectionStart);
+        }}
+        onKeyDown={(e) => {
+          if (labelRecall.onKeyDown(e)) return;
+          // Enter moves on (Shift+Enter is a new line): to the first option
+          // of a choice question, otherwise to "Add question".
+          if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          const next =
+            document.querySelector<HTMLElement>("[data-option-input]") ??
+            document.querySelector<HTMLElement>("[data-add-question]");
+          if (!next) return;
+          next.focus();
+          if (next instanceof HTMLInputElement) next.select();
+        }}
+        className={cn(EDITABLE, entry ? stageTitleClass : stageLabelClass)}
+      />
+      {labelRecall.menu}
+      {recallWarning && (
+        <p role="status" className="mt-1 text-[12.5px] text-(--st-muted)">
+          {recallWarning}
+        </p>
+      )}
+    </div>
   );
   const description = (
-    <textarea
-      key={`d-${question.id}`}
-      rows={1}
-      value={question.description ?? ""}
-      placeholder="Description (optional)"
-      aria-label="Description"
-      onChange={(e) => onChange({ ...question, description: e.target.value })}
-      className={cn(EDITABLE, stageDescClass, "max-w-[520px]")}
-    />
+    <div className="relative">
+      <textarea
+        key={`d-${question.id}`}
+        ref={descriptionRef}
+        rows={1}
+        value={question.description ?? ""}
+        placeholder="Description (optional)"
+        aria-label="Description"
+        onChange={(e) => {
+          onChange({ ...question, description: e.target.value });
+          descriptionRecall.onInput(e.target.value, e.target.selectionStart);
+        }}
+        onKeyDown={(e) => {
+          descriptionRecall.onKeyDown(e);
+        }}
+        className={cn(EDITABLE, stageDescClass, "max-w-[520px]")}
+      />
+      {descriptionRecall.menu}
+    </div>
   );
 
   if (question.type === "page_break") {

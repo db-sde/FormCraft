@@ -102,3 +102,53 @@ export function recallTokens(schema: FormSchemaV1): { token: string; label: stri
       })),
   ];
 }
+
+/**
+ * Placeholders in `text` that would show as blank (QA FC15-41): a name
+ * that's no score or URL field, an answer id that's no question, or an
+ * answer to a question that comes later (or is this one). Each is
+ * returned as written, braces included.
+ */
+export function unknownRecallTokens(
+  text: string | undefined,
+  schema: FormSchemaV1,
+  /** Where the text is: answers from here on aren't given yet. */
+  atQuestionId?: string,
+): string[] {
+  if (!text || !hasRecall(text)) return [];
+  const ordered = [...schema.questions].sort((a, b) => a.order - b.order);
+  const at = atQuestionId ? ordered.findIndex((q) => q.id === atQuestionId) : -1;
+  const names = new Set([
+    ...(schema.variables ?? []).map((v) => v.name),
+    ...(schema.hiddenFields ?? []).map((h) => h.name),
+  ]);
+  const unknown: string[] = [];
+  for (const match of text.matchAll(RECALL_PATTERN)) {
+    const token = match[1];
+    if (token.startsWith("answer:")) {
+      const index = ordered.findIndex((q) => q.id === token.slice("answer:".length));
+      if (index === -1 || (at !== -1 && index >= at)) unknown.push(match[0]);
+    } else if (!names.has(token)) unknown.push(match[0]);
+  }
+  // Something that looks meant as recall but isn't the pattern ({{ Your name }}).
+  for (const loose of text.match(/\{\{[^}]*\}\}/g) ?? []) {
+    if (!new RegExp(RECALL_PATTERN.source).test(loose)) unknown.push(loose);
+  }
+  return [...new Set(unknown)];
+}
+
+/** What the builder's recall menu offers at a question: answers to the
+ * questions before it, scores and URL fields. */
+export function recallChoices(
+  schema: FormSchemaV1,
+  atQuestionId?: string,
+): { token: string; label: string }[] {
+  const ordered = [...schema.questions].sort((a, b) => a.order - b.order);
+  const at = atQuestionId ? ordered.findIndex((q) => q.id === atQuestionId) : -1;
+  const earlier = new Set(
+    (at === -1 ? ordered : ordered.slice(0, at)).map((q) => `{{answer:${q.id}}}`),
+  );
+  return recallTokens(schema).filter(
+    (t) => !t.token.startsWith("{{answer:") || earlier.has(t.token),
+  );
+}

@@ -63,6 +63,19 @@ test("Zapier/Make: authenticate, list forms, sample, subscribe and unsubscribe",
     const auth = { Authorization: `Bearer ${key}` };
 
     expect((await request.get("/api/v1/me")).status()).toBe(401);
+    // Wrong keys from one address are throttled after 30 a minute (FC15-03).
+    let throttled = null;
+    for (let i = 0; i < 40 && !throttled; i += 1) {
+      const res = await request.get("/api/v1/me", {
+        headers: {
+          Authorization: `Bearer fc_live_${"x".repeat(40)}${i}`,
+          "x-forwarded-for": "203.0.113.77",
+        },
+      });
+      if (res.status() === 429) throttled = res;
+      else expect(res.status()).toBe(401);
+    }
+    expect(throttled?.headers()["retry-after"]).toBe("60");
     const me = await request.get("/api/v1/me", { headers: auth });
     expect(me.status()).toBe(200);
     expect((await me.json()).workspace.id).toBe(ws!.workspace_id);

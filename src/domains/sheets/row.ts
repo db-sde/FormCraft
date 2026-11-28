@@ -62,16 +62,24 @@ export async function buildResponseRowForSheet(
 
   return {
     header: [
-      "Submitted at",
-      "Ending",
+      // The time in UTC, as Sheets reads a date (QA FC15-53).
+      "Submitted at (UTC)",
+      "Ending shown",
       ...referenceQuestions.flatMap(questionColumnLabels),
     ],
     values: [
-      response?.completed_at ?? new Date().toISOString(),
+      sheetDateTime(response?.completed_at ?? new Date().toISOString()),
       endingTitle,
       ...referenceQuestions.flatMap((q) =>
         answerCells(q, q, answers[q.id], { uploadNames }),
       ),
     ],
   };
+}
+
+/** "2026-11-28 07:22:28": a UTC time Google Sheets reads as a date and
+ * time, unlike the database's ISO form with its offset. */
+export function sheetDateTime(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toISOString().slice(0, 19).replace("T", " ");
 }

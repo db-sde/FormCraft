@@ -24,7 +24,11 @@ export async function POST(request: NextRequest) {
   return withApiKey(request, "hooks:write", async (caller, admin) => {
     const parsed = Body.safeParse(await request.json().catch(() => null));
     if (!parsed.success)
-      return apiError("invalid_body", "Send formId, url and source.", 400);
+      return apiError(
+        "invalid_body",
+        'Send formId (a form id) and url (https). source is optional: "zapier" (the default) or "make".',
+        400,
+      );
     const target = new URL(parsed.data.url);
     if (
       target.protocol !== "https:" ||

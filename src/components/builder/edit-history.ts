@@ -6,7 +6,9 @@
 export type EditHistory<T> = {
   /** Called after each change of the form; `undoing` when the change is
    * itself an undo or redo, which mustn't be recorded. */
-  record: (previous: T, now?: number) => void;
+  /** `boundary`: this change always starts a step of its own (adding,
+   * removing or moving a question), never merged into a run of typing. */
+  record: (previous: T, now?: number, boundary?: boolean) => void;
   undo: (current: T) => T | null;
   redo: (current: T) => T | null;
   subscribe: (listener: () => void) => () => void;
@@ -26,13 +28,14 @@ export function createEditHistory<T>(): EditHistory<T> {
   const emit = () => listeners.forEach((listener) => listener());
 
   return {
-    record(previous, now = Date.now()) {
+    record(previous, now = Date.now(), boundary = false) {
       // The first change of a burst keeps the form as it was before it.
-      if (now - lastChangeAt >= STEP_GAP_MS) {
+      if (boundary || now - lastChangeAt >= STEP_GAP_MS) {
         past.push(previous);
         if (past.length > MAX_STEPS) past.shift();
       }
-      lastChangeAt = now;
+      // After a structural change the next edit starts a fresh step too.
+      lastChangeAt = boundary ? -Infinity : now;
       future = [];
       emit();
     },

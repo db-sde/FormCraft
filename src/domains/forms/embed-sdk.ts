@@ -34,7 +34,8 @@ export const EMBED_MODE_LABEL: Record<EmbedSdkMode, string> = {
   popup: "Popup",
   "slide-in": "Slide-in",
   "side-tab": "Side tab",
-  "full-page": "Full page",
+  // Not "Full page": that's the plain iframe tab beside it (QA FC15-55).
+  "full-page": "Full-screen overlay",
   button: "Button",
 };
 

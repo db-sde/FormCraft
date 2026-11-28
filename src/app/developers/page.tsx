@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 const ENDPOINTS: [string, string, string][] = [
-  ["GET", "/api/v1/me", "The key's workspace and permissions"],
+  ["GET", "/api/v1/me", "The key's workspace, permissions and limits (any key)"],
   [
     "GET",
     "/api/v1/forms?archived=false|true|all",
@@ -22,7 +22,11 @@ const ENDPOINTS: [string, string, string][] = [
   ["POST", "/api/v1/forms/{id}/restore", "Restore an archived form (forms:write)"],
   ["GET", "/api/v1/forms/{id}/responses", "A form's completed responses"],
   ["GET", "/api/v1/responses/{id}", "One response"],
-  ["POST", "/api/v1/hooks", "Subscribe a URL to new responses"],
+  [
+    "POST",
+    "/api/v1/hooks",
+    'Subscribe a URL to new responses: {"formId", "url" (https), "source": "zapier" or "make", optional}',
+  ],
   ["DELETE", "/api/v1/hooks/{id}", "Remove a subscription"],
 ];
 
@@ -90,10 +94,13 @@ export default function DevelopersPage() {
           </p>
           <ApiLimitsTable />
           <p className="text-muted-foreground text-sm">
-            Every response carries <code>X-RateLimit-Limit</code>,{" "}
-            <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code> (seconds)
-            and <code>X-RateLimit-Daily-Remaining</code>. Over a limit you get HTTP 429
-            with a <code>Retry-After</code> header and{" "}
+            Every response to a valid key carries <code>X-RateLimit-Limit</code> (the
+            burst), <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code>{" "}
+            (seconds until the bucket is full), <code>X-RateLimit-Rate</code> (the
+            per-minute refill) and <code>X-RateLimit-Daily-Remaining</code>. Requests with
+            an invalid key get 401 without them, and more than 30 a minute from one
+            address get 429. Over a limit you get HTTP 429 with a <code>Retry-After</code>{" "}
+            header and{" "}
             <code>{'{"error":"rate_limited","scope":"minute|day","retry_after":N}'}</code>
             . Webhooks and integrations FormCraft sends, and form submissions, don&apos;t
             count. Plan features still apply: a setting your plan doesn&apos;t include

@@ -79,6 +79,12 @@ import { SaveTemplateDialog } from "./save-template-dialog";
 export const CanEditContext = createContext(true);
 /** The workspace's folders, for "Move to folder". */
 export const FoldersContext = createContext<{ id: string; name: string }[]>([]);
+/** Changes shown in the list straight away, before the refreshed list
+ * arrives (QA FC15-28): a form archived or deleted, or renamed. */
+export const ListEditsContext = createContext<{
+  hide: (id: string) => void;
+  rename: (id: string, title: string) => void;
+}>({ hide: () => undefined, rename: () => undefined });
 
 export function FormActionsMenu({
   form,
@@ -105,7 +111,11 @@ export function FormActionsMenu({
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [newTitle, setNewTitle] = useState(form.title);
   const [pending, startTransition] = useTransition();
-  const archive = useArchiveForm(() => router.refresh());
+  const edits = useContext(ListEditsContext);
+  const archive = useArchiveForm(() => {
+    edits.hide(form.id);
+    router.refresh();
+  });
 
   function copyLink() {
     const url = `${window.location.origin}/f/${form.slug}`;
@@ -124,6 +134,7 @@ export function FormActionsMenu({
       const result = await renameFormAction(form.id, newTitle, { syncWelcome: true });
       if (result.ok) {
         setRenaming(false);
+        edits.rename(form.id, result.title);
         toast.success("Renamed.");
         router.refresh();
       } else {
@@ -186,6 +197,7 @@ export function FormActionsMenu({
       const result = await deleteFormAction(form.id);
       if (result.ok) {
         setConfirmDelete(false);
+        edits.hide(form.id);
         toast.success("Form deleted.", { description: `“${form.title}” is gone.` });
         router.refresh();
       } else {
@@ -307,23 +319,27 @@ export function FormActionsMenu({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
-              <DropdownMenuItem
-                onSelect={() =>
-                  form.publishState === "live"
-                    ? setConfirmUnpublish(true)
-                    : togglePublished()
-                }
-              >
-                {form.publishState === "live" ? (
-                  <>
-                    <EyeOff /> Unpublish
-                  </>
-                ) : (
-                  <>
-                    <Rocket /> Publish
-                  </>
-                )}
-              </DropdownMenuItem>
+              {/* An archived form is restored first, then published (QA
+                  FC15-29): Restore is the action offered for it above. */}
+              {!form.archived && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    form.publishState === "live"
+                      ? setConfirmUnpublish(true)
+                      : togglePublished()
+                  }
+                >
+                  {form.publishState === "live" ? (
+                    <>
+                      <EyeOff /> Unpublish
+                    </>
+                  ) : (
+                    <>
+                      <Rocket /> Publish
+                    </>
+                  )}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem variant="destructive" onSelect={askToDelete}>
                 <Trash2 /> Delete
               </DropdownMenuItem>

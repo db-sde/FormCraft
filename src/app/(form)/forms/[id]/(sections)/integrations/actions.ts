@@ -15,6 +15,9 @@ import {
   WEBHOOK_EVENTS,
 } from "@/domains/webhooks";
 import { z } from "zod";
+import type { Json } from "@/lib/supabase/database.types";
+import { replayAttempt } from "@/domains/responses/records";
+import { dispatchDueDeliveries } from "@/domains/webhooks";
 import { EntitlementError, requireFeature, type Feature } from "@/domains/billing";
 import { canEdit } from "@/domains/workspaces";
 import { audit } from "@/domains/audit";
@@ -722,6 +725,80 @@ export async function deleteLookupAction(
     target: { type: "form", id: formId },
     metadata: { provider: "lookup", lookup: lookupId },
   });
+  revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
+}
+
+/** Sends a failed webhook delivery again from the delivery log (QA
+ * FC15-70): the same signed payload goes back in the queue now. Needs
+ * the right to manage this form's integrations. */
+export async function retryDeliveryAction(
+  formId: string,
+  deliveryId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { supabase, workspace, user } = await getCurrentWorkspace();
+  if (
+    !canEdit(workspace.role) ||
+    !(await hasPermission(supabase, workspace.id, "manage_integrations"))
+  ) {
+    return { ok: false, message: "You can't change this form's integrations." };
+  }
+  // Read as the caller: row-level security decides whether it's theirs.
+  const { data: delivery } = await supabase
+    .from("webhook_deliveries")
+    .select("id, response_id, status, webhook_endpoints!inner(form_id)")
+    .eq("id", deliveryId)
+    .eq("webhook_endpoints.form_id", formId)
+    .maybeSingle();
+  if (!delivery || !delivery.response_id)
+    return { ok: false, message: "Delivery not found." };
+  if (delivery.status !== "failed" && delivery.status !== "exhausted") {
+    return { ok: false, message: "Only a failed delivery can be sent again." };
+  }
+  const admin = createAdminClient();
+  const queued = await replayAttempt(admin, {
+    target: "webhook",
+    id: deliveryId,
+    responseId: delivery.response_id,
+    actorId: user.id,
+  });
+  if (!queued) return { ok: false, message: "That delivery can't be sent again." };
+  await dispatchDueDeliveries(admin, { responseId: delivery.response_id }).catch(
+    () => null,
+  );
+  revalidatePath(`/forms/${formId}/integrations`);
+  return { ok: true };
+}
+
+/** Names an endpoint, to tell several apart (QA FC15-70). */
+export async function setWebhookNameAction(
+  formId: string,
+  endpointId: string,
+  name: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const trimmed = name.trim().slice(0, 60);
+  const { supabase, workspace } = await getCurrentWorkspace();
+  if (
+    !canEdit(workspace.role) ||
+    !(await hasPermission(supabase, workspace.id, "manage_integrations"))
+  ) {
+    return { ok: false, message: "You can't change this form's integrations." };
+  }
+  const { data: endpoint } = await supabase
+    .from("webhook_endpoints")
+    .select("id, config")
+    .eq("id", endpointId)
+    .eq("form_id", formId)
+    .maybeSingle();
+  if (!endpoint) return { ok: false, message: "Webhook not found." };
+  const config = { ...((endpoint.config ?? {}) as Record<string, unknown>) };
+  if (trimmed) config.name = trimmed;
+  else delete config.name;
+  const { error } = await supabase
+    .from("webhook_endpoints")
+    .update({ config: config as Json })
+    .eq("id", endpointId);
+  if (error) return { ok: false, message: "Couldn't save. Please try again." };
   revalidatePath(`/forms/${formId}/integrations`);
   return { ok: true };
 }

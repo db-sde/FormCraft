@@ -1,4 +1,5 @@
 import { getWorkspacePlan } from "@/domains/billing";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AtSign, ExternalLink, Mail, MessageCircle, Rocket, Share2 } from "lucide-react";
@@ -192,6 +193,9 @@ export default async function SharePage({ params }: { params: Promise<{ id: stri
               <EmbedOriginsForm
                 formId={form.id}
                 initial={embedAllowed?.embed_origins ?? null}
+                lockedReason={
+                  entitlements.embed_controls ? null : notOnPlanMessage("embed_controls")
+                }
               />
             </div>
           </SettingsSection>

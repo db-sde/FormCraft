@@ -1,3 +1,4 @@
+import { unknownRecallTokens } from "@/domains/logic/recall";
 import { isKnownCurrency } from "@/domains/forms/products";
 import { variantProblems } from "@/domains/forms/variants";
 import { optionsFromOf } from "../options";
@@ -805,6 +806,49 @@ export function analyzeLogic(schema: FormSchemaV1): LogicIssue[] {
         }
       }
     }
+  }
+
+  // A rule that jumps back to this question or an earlier one could send
+  // respondents round forever; the builder says forward only (QA FC15-43).
+  // A draft keeps it; publishing refuses it.
+  for (const rule of schema.rules ?? []) {
+    if (rule.disabled || rule.on.event !== "question_answered") continue;
+    const from = ctx.position.get(rule.on.questionId);
+    for (const action of rule.then) {
+      if (action.type !== "jump_to_question") continue;
+      const to = ctx.position.get(action.questionId);
+      if (from !== undefined && to !== undefined && to <= from) {
+        push({
+          severity: "error",
+          code: "rule_jumps_back",
+          message: `${rule.name?.trim() || "A rule"} on question ${number(ctx, rule.on.questionId)} jumps back to question ${number(ctx, action.questionId)}. Jumps go forward only: pick a later question or an ending.`,
+          questionId: rule.on.questionId,
+          ruleId: rule.id,
+        });
+      }
+    }
+  }
+
+  // Placeholders that would show as blank (QA FC15-41).
+  const where = (text: string | undefined, label: string, questionId?: string) => {
+    for (const token of unknownRecallTokens(text, schema, questionId)) {
+      push({
+        severity: "warning",
+        code: "unknown_recall",
+        message: `${label}: ${token} doesn't match an earlier answer, a score or a URL field, so it shows as blank. Type @ in the text to pick one.`,
+        questionId,
+      });
+    }
+  };
+  for (const q of ordered) {
+    const label = `Question ${number(ctx, q.id)}`;
+    where(q.label, label, q.id);
+    where(q.description, label, q.id);
+  }
+  for (const ending of schema.endings) {
+    const label = `The ending “${ending.title || "Untitled"}”`;
+    where(ending.title, label);
+    where((ending as { description?: string }).description, label);
   }
 
   return ctx.issues;

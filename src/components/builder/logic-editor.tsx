@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   ArrowRight,
   Braces,
+  Calculator,
   CircleAlert,
   CircleCheck,
   Flag,
@@ -13,6 +14,7 @@ import {
   Split,
   Trash2,
   TriangleAlert,
+  Trophy,
   Workflow,
 } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -51,7 +53,7 @@ export { describeRule };
 
 type View = "rules" | "variables" | "pools" | "map" | "check";
 
-type StarterId = "skip" | "end" | "score";
+type StarterId = "skip" | "end" | "score" | "total" | "outcome";
 /** Common goals, in the creator's words. Each adds a filled-in rule. */
 const STARTERS: { id: StarterId; title: string; body: string; icon: typeof Split }[] = [
   {
@@ -71,6 +73,19 @@ const STARTERS: { id: StarterId; title: string; body: string; icon: typeof Split
     title: "Keep a score",
     body: "Add points for certain answers, for quizzes or ranking leads.",
     icon: Braces,
+  },
+  // QA FC15-44: the five logic templates.
+  {
+    id: "total",
+    title: "Add up a total",
+    body: "Add a number someone enters to a running total, for quotes and calculators.",
+    icon: Calculator,
+  },
+  {
+    id: "outcome",
+    title: "Pick the ending by score",
+    body: "Keep a score per outcome and show the ending that scores highest, for personality quizzes.",
+    icon: Trophy,
   },
 ];
 
@@ -141,6 +156,84 @@ export function LogicEditor({
         ...rules,
         { id, on, when, then: [{ type: "jump_to_ending", endingId: otherEnding.id }] },
       ]);
+      return;
+    }
+    if (kind === "total") {
+      // A number question's answer, added to "total" (made if needed).
+      const numberQuestion = answerable.find(
+        ({ question: q }) => q.type === "number",
+      )?.question;
+      const variables = schema.variables ?? [];
+      const total = variables.find((v) => v.name === "total" && v.type === "number") ?? {
+        id: `var_${nanoid(8)}`,
+        name: "total",
+        type: "number" as const,
+      };
+      const on2 = numberQuestion
+        ? ({ event: "question_answered", questionId: numberQuestion.id } as const)
+        : on;
+      onChange({
+        logic: [],
+        variables: variables.includes(total) ? variables : [...variables, total],
+        rules: [
+          ...rules,
+          {
+            id,
+            on: on2,
+            then: [
+              {
+                type: "set_variable",
+                variableId: total.id,
+                op: "add",
+                value: numberQuestion
+                  ? { type: "answer", questionId: numberQuestion.id }
+                  : { type: "literal", value: 10 },
+              },
+            ],
+          },
+        ],
+      });
+      return;
+    }
+    if (kind === "outcome") {
+      // One score per ending (made where missing), then the highest wins
+      // when the form is finished.
+      const variables = [...(schema.variables ?? [])];
+      const endings = schema.endings.slice(0, 4);
+      const candidates = endings.map((ending, i) => {
+        const name = `outcome_${i + 1}`;
+        let variable = variables.find((v) => v.name === name && v.type === "number");
+        if (!variable) {
+          variable = { id: `var_${nanoid(8)}`, name, type: "number" as const };
+          variables.push(variable);
+        }
+        return { variableId: variable.id, endingId: ending.id };
+      });
+      onChange({
+        logic: [],
+        variables,
+        rules: [
+          ...rules,
+          {
+            id,
+            on,
+            when,
+            then: [
+              {
+                type: "set_variable",
+                variableId: candidates[0].variableId,
+                op: "add",
+                value: { type: "literal", value: 1 },
+              },
+            ],
+          },
+          {
+            id: `rule_${nanoid(8)}`,
+            on: { event: "form_completed" },
+            then: [{ type: "go_to_highest", candidates }],
+          },
+        ],
+      });
       return;
     }
     // Score: use the form's number variable, or make one called "score".

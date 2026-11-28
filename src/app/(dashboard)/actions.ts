@@ -601,12 +601,24 @@ export async function createFormFromWorkspaceTemplateAction(
   if (!canEdit(workspace.role)) redirect("/dashboard");
   const template = await schemaFromWorkspaceTemplate(supabase, workspace.id, templateId);
   if (!template) redirect("/templates");
+  // A welcome screen still titled after the form the template was saved
+  // from takes the new form's name, as the form's own title does (QA FC15-25).
+  const sourceName = template.schema.meta.title?.trim();
+  const schema = {
+    ...template.schema,
+    meta: { ...template.schema.meta, title: template.title },
+    questions: template.schema.questions.map((q) =>
+      q.type === "welcome_screen" && sourceName && q.label.trim() === sourceName
+        ? { ...q, label: template.title }
+        : q,
+    ),
+  } as typeof template.schema;
   const { id } = await createFormWithDraft(
     supabase,
     workspace.id,
     user.id,
     template.title,
-    template.schema,
+    schema,
   );
   trackEvent({
     formId: id,

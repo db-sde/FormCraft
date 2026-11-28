@@ -98,12 +98,23 @@ function ConditionField({
   );
 }
 
-/** A first show condition: an earlier answer, else a variable or URL field. */
+/** A first show condition: an earlier answer, else a variable or URL field.
+ * A typed answer starts as "is answered", never "is ''" (QA FC15-39). */
 function showSeed(
   schema: FormSchemaV1,
   earlierId: string | undefined,
 ): Condition | undefined {
-  if (earlierId) return defaultCompare({ type: "answer", questionId: earlierId }, schema);
+  if (earlierId) {
+    const seed = defaultCompare({ type: "answer", questionId: earlierId }, schema);
+    if (
+      seed.type === "compare" &&
+      (seed.right === undefined ||
+        (seed.right.type === "literal" && (seed.right.value ?? "") === ""))
+    ) {
+      return { type: "compare", left: seed.left, op: "is_not_empty" };
+    }
+    return seed;
+  }
   const hidden = (schema.hiddenFields ?? [])[0];
   if (hidden) return defaultCompare({ type: "hidden", name: hidden.name }, schema);
   const variable = (schema.variables ?? [])[0];
@@ -112,17 +123,28 @@ function showSeed(
     : undefined;
 }
 
-/** First question before this one with an answer (for show conditions). */
+/** The question before this one a show condition most likely refers to:
+ * the nearest earlier choice (what conditions usually test), else the
+ * nearest earlier answer (QA FC15-39). */
 function earlierQuestion(schema: FormSchemaV1, question: QuestionV1) {
   const ordered = [...schema.questions].sort((a, b) => a.order - b.order);
-  return ordered
+  const before = ordered
     .slice(
       0,
       ordered.findIndex((q) => q.id === question.id),
     )
     .reverse()
-    .find((q) => !NON_ANSWERABLE_TYPES.has(q.type));
+    .filter((q) => !NON_ANSWERABLE_TYPES.has(q.type));
+  return before.find((q) => CHOICE_SEED_TYPES.has(q.type)) ?? before[0];
 }
+
+const CHOICE_SEED_TYPES = new Set([
+  "single_select",
+  "multi_select",
+  "dropdown",
+  "yes_no",
+  "picture_choice",
+]);
 
 /**
  * The logic that belongs to one question (Part 4 right panel): when it's

@@ -10,7 +10,12 @@ import {
   formatConsent,
   formatDateRange,
 } from "@/domains/forms/range-consent";
-import { entryName, fieldAsQuestion, groupEntries } from "@/domains/forms/repeat-group";
+import {
+  entryName,
+  entryWord,
+  fieldAsQuestion,
+  groupEntries,
+} from "@/domains/forms/repeat-group";
 import {
   describeOrder,
   formatMoney,
@@ -389,7 +394,7 @@ export function previewAnswerValue(
   if (question.type === "repeat_group") {
     const entries = groupEntries(value);
     if (entries.length === 0) return "";
-    const word = question.settings.entryLabel?.trim().toLowerCase() || "entry";
+    const word = entryWord(question.settings.entryLabel);
     const first = question.settings.fields[0];
     const names = entries
       .map((e) =>

@@ -218,7 +218,11 @@ export function NotificationRulesPanel({
   documents,
   initialRules,
   initialDigest,
+  lockedReason = null,
 }: {
+  /** Not on the plan: rules and digests are shown locked, with why, rather
+   * than refused on Save (QA FC15-68). */
+  lockedReason?: string | null;
   formId: string;
   schema: FormSchemaV1 | null;
   members: Option[];
@@ -330,15 +334,21 @@ export function NotificationRulesPanel({
             }}
           />
         ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            className="self-start"
-            onClick={() => setEditing("new")}
-          >
-            <Plus className="size-4" />
-            Add a rule
-          </Button>
+          <>
+            {lockedReason && (
+              <p className="text-muted-foreground text-[13px]">{lockedReason}</p>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="self-start"
+              disabled={!!lockedReason}
+              onClick={() => setEditing("new")}
+            >
+              <Plus className="size-4" />
+              Add a rule
+            </Button>
+          </>
         )}
       </div>
 
@@ -401,7 +411,12 @@ export function NotificationRulesPanel({
             </div>
           </>
         )}
-        <Button type="submit" size="sm" className="self-start" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          className="self-start"
+          disabled={pending || !!lockedReason}
+        >
           {pending && <ButtonSpinner />}
           Save digest
         </Button>

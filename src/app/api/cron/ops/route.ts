@@ -111,7 +111,12 @@ async function run(request: NextRequest) {
   }
   if (!sent) {
     // No email set up (or it failed): the logs and the portal still have it.
-    console.error(JSON.stringify({ event: "ops_alerts", alerts: lines }));
+    // Logged at the most severe alert's level, so notices don't fill the
+    // error logs (QA FC15-09).
+    const urgent = pending.some((a) => a.severity !== "info");
+    (urgent ? console.error : console.info)(
+      JSON.stringify({ event: "ops_alerts", alerts: lines }),
+    );
   }
   if (pending.length > 0) {
     await admin.rpc("ops_mark_notified", { p_ids: pending.map((a) => a.id) });

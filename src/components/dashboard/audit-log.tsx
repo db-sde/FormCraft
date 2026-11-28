@@ -69,19 +69,31 @@ function details(record: AuditRecord): string {
 export function AuditLog({
   records,
   olderHref,
+  supportOnly = false,
 }: {
   records: AuditRecord[];
   olderHref: string | null;
+  /** The plan lacks the full log: only FormCraft support's access is
+   * listed, and the panel says so (QA FC15-15). */
+  supportOnly?: boolean;
 }) {
   return (
     <SettingsSection
-      title="Audit log"
-      description="Security and admin activity in this workspace. Only owners and admins can see it; entries can't be edited."
+      title={supportOnly ? "Support access" : "Audit log"}
+      description={
+        supportOnly
+          ? "Anything FormCraft support does in this workspace, on every plan. Entries can't be edited."
+          : "Security and admin activity in this workspace. Only owners and admins can see it; entries can't be edited."
+      }
       wide
       last
     >
       {records.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nothing recorded yet.</p>
+        <p className="text-muted-foreground text-sm">
+          {supportOnly
+            ? "FormCraft support hasn't accessed this workspace."
+            : "Nothing recorded yet."}
+        </p>
       ) : (
         <ol className="border-ink bg-card overflow-hidden rounded-lg border-[1.5px] text-[13.5px]">
           {records.map((r) => (

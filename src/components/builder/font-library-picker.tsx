@@ -17,6 +17,25 @@ const CATEGORIES = [
   { value: "mono", label: "Mono" },
 ] as const;
 const SHOWN = 60;
+/** Words people search with that name a style rather than a font
+ * (QA FC15-47): "handwriting" finds the Script fonts. */
+const STYLE_WORDS: Record<string, string> = {
+  handwriting: "handwriting",
+  handwritten: "handwriting",
+  script: "handwriting",
+  cursive: "handwriting",
+  calligraphy: "handwriting",
+  sans: "sans",
+  "sans serif": "sans",
+  "sans-serif": "sans",
+  serif: "serif",
+  display: "display",
+  decorative: "display",
+  mono: "mono",
+  monospace: "mono",
+  monospaced: "mono",
+  code: "mono",
+};
 const RECENT_KEY = "fc-recent-fonts";
 
 function readRecent(): string[] {
@@ -101,7 +120,7 @@ export function FontLibraryPicker({
         (category === "all" || f.category === category) &&
         (script === "any" || f.scripts.includes(script)) &&
         needed.every((s) => f.scripts.includes(s)) &&
-        (!q || f.family.toLowerCase().includes(q)),
+        (!q || f.family.toLowerCase().includes(q) || STYLE_WORDS[q] === f.category),
     );
     if (q) return list;
     // Brand, then recently used, then by popularity.
@@ -221,6 +240,11 @@ export function FontLibraryPicker({
         ))}
         {fonts && matches.length === 0 && (
           <li className="text-muted-foreground px-3 py-2 text-[13px]">No fonts match.</li>
+        )}
+        {fonts && matches.length > 0 && query.trim() && (
+          <li role="status" className="text-muted-foreground px-3 py-1 text-[12.5px]">
+            {matches.length.toLocaleString()} font{matches.length === 1 ? "" : "s"}
+          </li>
         )}
         {matches.length > SHOWN && (
           <li className="text-muted-foreground px-3 py-2 text-[12.5px]">

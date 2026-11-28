@@ -1,3 +1,4 @@
+import { unreachableQuestionIds } from "./compile";
 import { analyzeLogic } from "./analyze";
 import {
   FormSchemaV1,
@@ -99,7 +100,7 @@ export function parseFormSchema(raw: unknown): FormSchemaV1Type {
  * still saves, so one unfinished question never freezes the rest of the
  * form (QA FC4-09: a Booking question without its type stopped autosave,
  * uploads and every other edit). */
-const PUBLISH_ONLY_CODES = new Set(["booking_without_type"]);
+const PUBLISH_ONLY_CODES = new Set(["booking_without_type", "rule_jumps_back"]);
 
 export function validateSemantics(schema: FormSchemaV1Type): void {
   const questionIds = new Set<string>();
@@ -283,6 +284,19 @@ export function validateSemantics(schema: FormSchemaV1Type): void {
  */
 export function validateForPublish(schema: FormSchemaV1Type): void {
   validateSemantics(schema);
+  // A question every path skips (QA FC15-43).
+  const skipped = unreachableQuestionIds(schema)[0];
+  if (skipped) {
+    const number = questionNumber(schema, skipped);
+    throw new FormSchemaError(
+      `unreachable question: ${skipped}`,
+      "unreachable_question",
+      {
+        message: `Question ${number} can never be reached: a rule with no condition always jumps past it. Add a condition to the rule, or remove the question.`,
+        questionId: skipped,
+      },
+    );
+  }
   const unfinished = analyzeLogic(schema).find(
     (issue) => issue.severity === "error" && PUBLISH_ONLY_CODES.has(issue.code),
   );

@@ -25,9 +25,12 @@ const OPTIONS: [string, string][] = [
 export function RetentionSettings({
   days,
   isAdmin,
+  lockedReason = null,
 }: {
   days: number | null;
   isAdmin: boolean;
+  /** Not on the plan: shown locked, with why (QA FC15-14). */
+  lockedReason?: string | null;
 }) {
   const [pending, start] = useTransition();
   return (
@@ -39,7 +42,7 @@ export function RetentionSettings({
     >
       <Select
         value={days === null ? "keep" : String(days)}
-        disabled={!isAdmin || pending}
+        disabled={!isAdmin || pending || !!lockedReason}
         onValueChange={(v) =>
           start(async () => {
             const result = await setResponseRetentionAction(
@@ -61,6 +64,9 @@ export function RetentionSettings({
           ))}
         </SelectContent>
       </Select>
+      {lockedReason && (
+        <p className="text-muted-foreground mt-2 text-[13px]">{lockedReason}</p>
+      )}
     </SettingsSection>
   );
 }

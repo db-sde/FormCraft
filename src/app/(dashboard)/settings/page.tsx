@@ -306,7 +306,15 @@ export default async function SettingsPage({
         />
       )}
       {tab === "workspace" && (
-        <RetentionSettings days={retentionDays} isAdmin={canAdmin(workspace.role)} />
+        <RetentionSettings
+          days={retentionDays}
+          isAdmin={canAdmin(workspace.role)}
+          lockedReason={
+            workspaceEntitlements && !workspaceEntitlements.auto_deletion
+              ? notOnPlanMessage("auto_deletion")
+              : null
+          }
+        />
       )}
       {tab === "security" &&
         (securityData ? (
@@ -341,6 +349,7 @@ export default async function SettingsPage({
         (auditRecords ? (
           <AuditLog
             records={auditRecords}
+            supportOnly={!fullAudit}
             olderHref={
               auditRecords.length === 50
                 ? `/settings?tab=audit&before=${auditRecords[auditRecords.length - 1].id}`

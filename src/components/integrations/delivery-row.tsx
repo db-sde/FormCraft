@@ -22,11 +22,14 @@ export function DeliveryRow({
   detail,
   error,
   status,
+  action,
 }: {
   when: React.ReactNode;
   detail?: string;
   error?: string | null;
   status: Status;
+  /** A control for this line, such as Retry. */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="border-muted flex min-h-8 flex-wrap items-center gap-x-3 border-t py-1 text-[13.5px]">
@@ -37,6 +40,7 @@ export function DeliveryRow({
       >
         {[detail, error].filter(Boolean).join(" · ")}
       </span>
+      {action}
       <span className="min-w-[90px]">
         <StatusChip tone={TONE[status]} size="sm">
           {LABEL[status]}

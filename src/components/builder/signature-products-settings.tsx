@@ -95,16 +95,9 @@ export function MediaSettingsPanel({
         />
       </div>
       <PanelField label="Longest recording (seconds)" hint="5 to 300 seconds.">
-        <Input
-          className={PANEL_INPUT}
-          type="number"
-          min={5}
-          max={300}
+        <SecondsInput
           value={s.maxSeconds}
-          onChange={(e) => {
-            const n = Math.round(Number(e.target.value));
-            if (Number.isFinite(n)) set({ maxSeconds: Math.min(300, Math.max(5, n)) });
-          }}
+          onChange={(maxSeconds) => set({ maxSeconds })}
         />
       </PanelField>
       <PanelField
@@ -362,5 +355,44 @@ export function ProductsSettingsPanel({
         total again from the published form, e.g. {formatMoney(1250, currency)}.
       </PanelNote>
     </>
+  );
+}
+
+/** Seconds, typed freely and kept in range once the field is left: kept
+ * in range on every keystroke, typing 120 went 1 → 5 → 52 → 300 (QA
+ * FC15-36). */
+function SecondsInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (seconds: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (text: string) => {
+    const n = Math.round(Number(text));
+    onChange(
+      Number.isFinite(n) && text.trim() !== "" ? Math.min(300, Math.max(5, n)) : value,
+    );
+    setDraft(null);
+  };
+  return (
+    <Input
+      className={PANEL_INPUT}
+      type="number"
+      min={5}
+      max={300}
+      value={draft ?? value}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const n = Math.round(Number(e.target.value));
+        // In range already: saved straight away, as before.
+        if (Number.isFinite(n) && n >= 5 && n <= 300) onChange(n);
+      }}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit(e.currentTarget.value);
+      }}
+    />
   );
 }

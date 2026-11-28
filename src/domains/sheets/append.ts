@@ -25,9 +25,37 @@ export async function appendRowToSheet(
   spreadsheetId: string,
   values: string[],
   apiBase = DEFAULT_SHEETS_API_BASE,
+  /** Column names, written first when the sheet is empty (QA FC15-52). */
+  header?: string[],
 ): Promise<void> {
   const url = `${apiBase}/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  if (header && (await sheetIsEmpty(accessToken, spreadsheetId, apiBase))) {
+    await appendValues(url, accessToken, header);
+  }
+  await appendValues(url, accessToken, values);
+}
 
+/** Whether the first row has nothing in it. Unknown (the read failed)
+ * counts as not empty: a missing header is better than a doubled one. */
+async function sheetIsEmpty(
+  accessToken: string,
+  spreadsheetId: string,
+  apiBase: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${apiBase}/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/A1:Z1`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) return false;
+    const body = (await res.json()) as { values?: unknown[][] };
+    return !body.values || body.values.length === 0 || body.values[0].length === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function appendValues(url: string, accessToken: string, values: string[]) {
   const res = await fetch(url, {
     method: "POST",
     headers: {

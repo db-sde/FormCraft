@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { CONNECTOR_PLAN_FEATURE } from "@/domains/connectors/plans";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 import { UPLOAD_ANSWER_TYPES } from "@/domains/forms/schema/question-types";
 import type { Metadata } from "next";
 import { Bell, CircleAlert, CircleCheck, Sheet, ShieldX, Webhook } from "lucide-react";
@@ -235,8 +237,11 @@ export default async function IntegrationsPage({
       (c) => c.provider === app.provider && c.user_id === null && c.status !== "revoked",
     );
     const link = links.find((l) => l.provider === app.provider);
+    const feature = CONNECTOR_PLAN_FEATURE[app.provider];
     return {
       provider: app.provider,
+      // Not on the plan: said on the card, not after a click (QA FC15-71).
+      lockedReason: feature && !entitlements[feature] ? notOnPlanMessage(feature) : null,
       connection: connection
         ? {
             label: connection.label,
@@ -642,6 +647,11 @@ export default async function IntegrationsPage({
               emailConfigured={emailAvailable}
             />
             <NotificationRulesPanel
+              lockedReason={
+                entitlements.team_notifications
+                  ? null
+                  : notOnPlanMessage("team_notifications")
+              }
               formId={formId}
               schema={schema}
               members={members.map((m) => ({ id: m.id, label: m.name }))}

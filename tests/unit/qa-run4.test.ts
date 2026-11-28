@@ -5,7 +5,11 @@ import {
   validateForPublish,
   validateSemantics,
 } from "@/domains/forms/schema";
-import { respondentSchema, scoresUsedMidForm } from "@/domains/forms/respondent-schema";
+import {
+  needsServerScores,
+  respondentSchema,
+  scoresUsedMidForm,
+} from "@/domains/forms/respondent-schema";
 import { normalizeAnswer } from "@/domains/responses/queries";
 import { walkForm } from "@/domains/logic";
 
@@ -106,7 +110,7 @@ describe("the form a respondent's browser gets (FC4-02)", () => {
     expect(optionsOf(sent)[0].correct).toBeUndefined();
   });
 
-  it("keeps points when a question's wording shows the score", () => {
+  it("drops points when the wording only shows the score; the server scores it (FC15-45)", () => {
     const schema = quiz({
       questions: [
         ...quiz().questions,
@@ -121,6 +125,8 @@ describe("the form a respondent's browser gets (FC4-02)", () => {
       ],
     });
     expect(scoresUsedMidForm(schema)).toBe(true);
+    expect(needsServerScores(schema)).toBe(true);
+    expect(optionsOf(respondentSchema(schema))[0].scores).toBeUndefined();
   });
 });
 

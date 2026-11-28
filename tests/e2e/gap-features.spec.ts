@@ -137,9 +137,16 @@ test.describe("developer spec gap features", () => {
       const auth = { Authorization: `Bearer ${key}` };
       const first = await request.get("/api/v1/me", { headers: auth });
       expect(first.status()).toBe(200);
-      expect(first.headers()["x-ratelimit-limit"]).toBe("60");
+      // Limit is the bucket Remaining counts down, never below it (FC15-20).
+      expect(first.headers()["x-ratelimit-limit"]).toBe("100");
+      expect(first.headers()["x-ratelimit-rate"]).toBe("60/minute");
       expect(Number(first.headers()["x-ratelimit-remaining"])).toBeLessThanOrEqual(99);
       expect(first.headers()["x-ratelimit-daily-remaining"]).toBe("4999");
+      // Any key may ask who it is, with its permissions (FC15-21).
+      expect(await first.json()).toMatchObject({
+        permissions: expect.arrayContaining(["forms:read"]),
+        limits: { per_minute: 60, burst: 100, per_day: 5000 },
+      });
 
       // A tiny bucket, to see the refusal.
       await adminClient()

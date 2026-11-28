@@ -32,4 +32,16 @@ describe("the builder's undo history (QA FC4-22)", () => {
     expect(history.snapshot()).toBe("1:0");
     expect(history.redo("x")).toBeNull();
   });
+
+  it("keeps a structural change as its own step, even in a quick run (QA FC15-23)", () => {
+    const history = createEditHistory<string>();
+    history.record("form", 0, true); // add a question
+    history.record("form+q", 100); // rename it, straight away
+    history.record("form+q'", 200); // keep typing
+    history.record("form+q''", 300, true); // move it
+    expect(history.snapshot()).toBe("3:0");
+    expect(history.undo("moved")).toBe("form+q''");
+    expect(history.undo("form+q''")).toBe("form+q");
+    expect(history.undo("form+q")).toBe("form");
+  });
 });

@@ -117,6 +117,43 @@ test("a visitor's page loads count as one view; bots don't, and starts never out
   }
 });
 
+test("a visitor who starts twice in half an hour counts two views (QA FC15-59)", async ({
+  browser,
+}) => {
+  const user = await createConfirmedUser("e2e-views-twice");
+  try {
+    const { formId, liveLink } = await createPublishedForm(user, schema);
+    const context = await browser.newContext({ userAgent: BROWSER_UA });
+    const starts = async () => {
+      const { count } = await adminClient()
+        .from("responses")
+        .select("id", { count: "exact", head: true })
+        .eq("form_id", formId);
+      return count ?? 0;
+    };
+    for (let i = 1; i <= 2; i += 1) {
+      const page = await context.newPage();
+      await page.goto(liveLink);
+      await page.getByRole("textbox").fill(`Ada ${i}`);
+      await expect.poll(starts).toBe(i);
+      // Finish it, so the next visit starts a new response.
+      await page.keyboard.press("Enter");
+      await page.getByRole("textbox").fill(`ada${i}@example.com`);
+      await page.keyboard.press("Enter");
+      await page.getByRole("button", { name: "Submit" }).click();
+      await expect(page.getByText("Thanks!")).toBeVisible();
+      await page.close();
+    }
+    await context.close();
+    // Two starts, so two views: Starts never outrun Views.
+    await expect.poll(() => viewCount(formId), { timeout: 10000 }).toBe(2);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await viewCount(formId)).toBe(2);
+  } finally {
+    await deleteUser(user.userId);
+  }
+});
+
 test("an answer typed just before leaving is still saved", async ({ browser }) => {
   const user = await createConfirmedUser("e2e-exit-save");
   try {

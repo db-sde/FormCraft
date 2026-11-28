@@ -288,8 +288,15 @@ key. Every call re-checks the plan; revoking a key removes its hooks.
 before scopes existed have all three. A call outside the key's scopes
 gets `403 forbidden`.
 
-- `GET /api/v1/me` → `{ workspace: { id, name } }` (connection test; any
-  scope).
+- `GET /api/v1/me` → `{ workspace: { id, name }, permissions: [scope…],
+limits: { per_minute, burst, per_day } }` (connection test; any scope).
+- Rate-limit headers on every response to a valid key: `X-RateLimit-Limit`
+  (the burst, which `Remaining` counts down), `X-RateLimit-Remaining`,
+  `X-RateLimit-Reset`, `X-RateLimit-Rate` (per-minute refill) and
+  `X-RateLimit-Daily-Remaining`. Invalid keys get 401; more than 30 a
+  minute from one address get 429 with `Retry-After: 60`.
+- `POST /api/v1/hooks` (`hooks:write`) body: `formId`, `url` (https),
+  optional `source` (`zapier`, the default, or `make`).
 - `GET /api/v1/forms` (`forms:read`) →
   `{ forms: [{ id, title, archived, published }] }`, newest first: the
   workspace's forms, live or not (`published` says which).

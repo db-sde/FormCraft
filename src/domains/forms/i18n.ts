@@ -58,6 +58,8 @@ export type UiStrings = {
   backToReview: string;
   fileUploaded: string;
   signed: string;
+  /** Read out after a required question's title (QA FC15-50). */
+  required: string;
 };
 
 const EN: UiStrings = {
@@ -89,10 +91,12 @@ const EN: UiStrings = {
   backToReview: "Back to review",
   fileUploaded: "File uploaded",
   signed: "Signed",
+  required: "(required)",
 };
 
 const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
   es: {
+    required: "(obligatoria)",
     reviewAnswers: "Revisar respuestas",
     reviewTitle: "Revisa tus respuestas",
     edit: "Editar",
@@ -115,6 +119,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Idioma",
   },
   fr: {
+    required: "(obligatoire)",
     reviewAnswers: "Vérifier mes réponses",
     reviewTitle: "Vérifiez vos réponses",
     edit: "Modifier",
@@ -138,6 +143,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Langue",
   },
   de: {
+    required: "(Pflichtfeld)",
     reviewAnswers: "Antworten prüfen",
     reviewTitle: "Prüfe deine Antworten",
     edit: "Bearbeiten",
@@ -161,6 +167,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Sprache",
   },
   pt: {
+    required: "(obrigatória)",
     next: "Seguinte",
     ok: "OK",
     submit: "Enviar",
@@ -178,6 +185,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Idioma",
   },
   it: {
+    required: "(obbligatoria)",
     next: "Avanti",
     ok: "OK",
     submit: "Invia",
@@ -192,6 +200,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Lingua",
   },
   nl: {
+    required: "(verplicht)",
     next: "Volgende",
     ok: "OK",
     submit: "Versturen",
@@ -206,6 +215,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "Taal",
   },
   hi: {
+    required: "(आवश्यक)",
     next: "आगे",
     ok: "ठीक है",
     submit: "जमा करें",
@@ -220,6 +230,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "भाषा",
   },
   ja: {
+    required: "(必須)",
     next: "次へ",
     ok: "OK",
     submit: "送信",
@@ -234,6 +245,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "言語",
   },
   zh: {
+    required: "（必填）",
     next: "下一页",
     ok: "确定",
     submit: "提交",
@@ -248,6 +260,7 @@ const UI: Partial<Record<LanguageCode, Partial<UiStrings>>> = {
     language: "语言",
   },
   ar: {
+    required: "(مطلوب)",
     next: "التالي",
     ok: "موافق",
     submit: "إرسال",

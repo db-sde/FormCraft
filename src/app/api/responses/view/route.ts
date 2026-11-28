@@ -1,10 +1,8 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { isUnlocked, unlockCookieName } from "@/domains/forms/access";
 import type { NextRequest } from "next/server";
 import { NextResponse, after } from "next/server";
-import { recordAnalyticsEvent } from "@/domains/analytics";
-import { captureServerEvent } from "@/lib/analytics/posthog-server";
+import { claimView, recordView, viewerKey } from "@/domains/analytics/view-count";
 import { hitRateLimit } from "@/domains/abuse";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isLikelyBot } from "@/lib/http/bots";
@@ -80,38 +78,15 @@ export async function POST(request: NextRequest) {
   // One view per visitor per form every 30 minutes (QA FC4-03): reloads
   // and repeated pings don't inflate the count. Without the visitor
   // cookie, the address and browser stand in for the visitor.
-  const visitor = request.cookies.get(VISITOR_COOKIE)?.value;
-  const who =
-    visitor && VISITOR_ID_PATTERN.test(visitor)
-      ? visitor
-      : createHash("sha256")
-          .update(`${ip}|${request.headers.get("user-agent") ?? ""}`)
-          .digest("base64url");
-  const firstView = await hitRateLimit(
-    admin,
-    `view-visitor:${who}:${formId}`,
-    1,
-    30 * 60 * 1000,
+  const who = viewerKey(
+    request.cookies.get(VISITOR_COOKIE)?.value,
+    ip,
+    request.headers.get("user-agent"),
   );
-  if (!firstView.allowed) return new NextResponse(null, { status: 204 });
-
+  if (!(await claimView(admin, who, formId))) {
+    return new NextResponse(null, { status: 204 });
+  }
   const { embedded = false } = parsed.data;
-  after(async () => {
-    try {
-      await recordAnalyticsEvent(admin, {
-        formId,
-        eventType: "form_viewed",
-        metadata: { embedded },
-      });
-    } catch {
-      // Analytics never affects respondents.
-      return;
-    }
-    await captureServerEvent({
-      distinctId: crypto.randomUUID(),
-      event: "form_viewed",
-      properties: { formId, embedded },
-    });
-  });
+  after(() => recordView(admin, formId, embedded));
   return new NextResponse(null, { status: 204 });
 }

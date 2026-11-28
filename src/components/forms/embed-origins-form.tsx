@@ -12,9 +12,12 @@ import { toast } from "@/lib/toast";
 export function EmbedOriginsForm({
   formId,
   initial,
+  lockedReason = null,
 }: {
   formId: string;
   initial: string[] | null;
+  /** Not on the plan: "Only these websites" is locked, with why (QA FC15-57). */
+  lockedReason?: string | null;
 }) {
   const [limited, setLimited] = useState(initial !== null);
   const [text, setText] = useState((initial ?? []).join("\n"));
@@ -40,11 +43,21 @@ export function EmbedOriginsForm({
           <input type="radio" checked={!limited} onChange={() => setLimited(false)} />
           Any website
         </label>
-        <label className="flex items-center gap-1.5">
-          <input type="radio" checked={limited} onChange={() => setLimited(true)} />
+        <label
+          className={`flex items-center gap-1.5 ${lockedReason ? "opacity-60" : ""}`}
+        >
+          <input
+            type="radio"
+            checked={limited}
+            disabled={!!lockedReason && !limited}
+            onChange={() => setLimited(true)}
+          />
           Only these websites
         </label>
       </div>
+      {lockedReason && (
+        <span className="text-muted-foreground text-xs">{lockedReason}</span>
+      )}
       {limited && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="embed-origins">Websites, one per line</Label>

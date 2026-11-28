@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { QUESTION_TYPES } from "@/domains/forms/schema/question-types";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import {
   ArrowRight,
@@ -113,6 +114,7 @@ const FEATURE_CARD =
 
 export const metadata: Metadata = {
   title: { absolute: "FormCraft — Forms people enjoy filling out" },
+  description: `Build conversational forms, quizzes and surveys with ${QUESTION_TYPES.length} question types, logic, payments and integrations. Unlimited responses on every plan, including Free.`,
 };
 
 export default async function Home({
@@ -206,7 +208,7 @@ export default async function Home({
               </Link>
             </div>
             <span className="text-muted-foreground text-[13.5px]">
-              Free while in beta. No card needed.
+              Free plan for good. No card needed.
             </span>
           </div>
           <HeroArt />
@@ -236,8 +238,8 @@ export default async function Home({
                     Build in minutes
                   </h3>
                   <p className="text-muted-foreground text-[15px] leading-[1.55]">
-                    16 question types, easy reordering, branching logic and a theme
-                    that&apos;s actually yours.
+                    {QUESTION_TYPES.length} question types, easy reordering, branching
+                    logic and a theme that&apos;s actually yours.
                   </p>
                 </div>
               </div>

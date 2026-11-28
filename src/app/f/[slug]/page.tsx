@@ -36,7 +36,7 @@ import { PasswordGate } from "./password-gate";
 import { KioskShell } from "./kiosk-shell";
 import { getKioskPinHash } from "@/domains/forms/kiosk";
 import { chargesOrders } from "@/domains/payments/config";
-import { respondentSchema } from "@/domains/forms/respondent-schema";
+import { needsServerScores, respondentSchema } from "@/domains/forms/respondent-schema";
 import { writeSecretFor } from "@/domains/responses/write-secret";
 
 /** One lookup per request, shared by the page and its metadata. */
@@ -266,6 +266,7 @@ export default async function PublicFormPage({
         }
       : resume,
     brandingRemovable: entitlements.remove_branding,
+    serverScores: needsServerScores(compiled.schema),
     languages: offered.map((code) => ({ code, name: LANGUAGES[code] })),
     initialLanguage: language,
     schedulingAllowed: entitlements.scheduling,
@@ -359,7 +360,9 @@ async function shareMetadata(
   const custom = entitlements.custom_seo && seoOn ? seo : {};
   const closed =
     publicForm.archived ||
-    (publicForm.closesAt !== null && Date.parse(publicForm.closesAt) <= Date.now());
+    (publicForm.closesAt !== null && Date.parse(publicForm.closesAt) <= Date.now()) ||
+    // Full (its response limit reached) is closed too (QA FC15-06).
+    !(await checkAvailability(createAdminClient(), publicForm.formId)).open;
   const restricted = Boolean(passwordHash) || closed;
 
   const shareTitle = custom.title || schema.meta.title;

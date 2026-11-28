@@ -167,7 +167,12 @@ export function FormRuntime({
   followUps,
   known,
   lookups,
+  scores,
 }: {
+  /** Public runtime only, for a form that shows a score part-way but
+   * isn't sent the option points (QA FC15-45): the server's scores for
+   * these answers along this path, by variable id. */
+  scores?: (answers: AnswerMap, path: string[]) => Promise<Record<string, Value> | null>;
   /** Public runtime only: external data (phase 24). Leaving one of the
    * `triggers` runs the form's lookups on the server; the values come
    * back through `hidden`. */
@@ -352,15 +357,43 @@ export function FormRuntime({
     () => engineInputs(compiled, engineOptions).hidden,
     [compiled, engineOptions],
   );
+  // A score shown on this question, when the server keeps the points.
+  const [serverScores, setServerScores] = useState<{
+    at: string;
+    variables: Record<string, Value>;
+  } | null>(null);
+  const showsScore = useMemo(() => {
+    if (!scores) return false;
+    const q = compiled.schema.questions.find((x) => x.id === currentId);
+    const text = `${q?.label ?? ""} ${q?.description ?? ""}`;
+    return (compiled.schema.variables ?? []).some((v) => text.includes(`{{${v.name}}}`));
+  }, [scores, compiled, currentId]);
+  useEffect(() => {
+    if (!scores || !showsScore) return;
+    let cancelled = false;
+    void scores(answers, [...history, currentId]).then(
+      (variables) => {
+        if (!cancelled && variables) setServerScores({ at: currentId, variables });
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+    // Asked once per question shown: answers given here don't change it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scores, showsScore, currentId]);
   const recallSource = useMemo<RecallSource>(
     () => ({
       schema: compiled.schema,
       answers,
-      variables: stateAt(compiled, answers, [...history, currentId], engineOptions)
-        .variables,
+      variables:
+        serverScores && serverScores.at === currentId
+          ? serverScores.variables
+          : stateAt(compiled, answers, [...history, currentId], engineOptions).variables,
       hidden: resolvedHidden,
     }),
-    [compiled, answers, history, currentId, engineOptions, resolvedHidden],
+    [compiled, answers, history, currentId, engineOptions, resolvedHidden, serverScores],
   );
   const recall = (text: string | undefined) => renderRecall(text, recallSource);
 
@@ -975,6 +1008,14 @@ export function FormRuntime({
                 </div>
               ) : (
                 <>
+                  {question.image && (
+                    // eslint-disable-next-line @next/next/no-img-element -- creator-uploaded Supabase Storage URL
+                    <img
+                      src={question.image.url}
+                      alt={question.image.alt ?? ""}
+                      className="max-h-56 w-full rounded-(--st-tile-br) object-contain"
+                    />
+                  )}
                   {number > 0 && <StageNumber n={number} />}
                   <div className="flex flex-col gap-2">
                     <h2
@@ -992,7 +1033,7 @@ export function FormRuntime({
                             {" "}
                             *
                           </span>
-                          <span className="sr-only"> (required)</span>
+                          <span className="sr-only"> {t.required}</span>
                         </>
                       )}
                     </h2>

@@ -82,10 +82,12 @@ export function progressText(
       return progress.current > 0
         ? `Question ${progress.current} of ${progress.total}`
         : null;
-    case "remaining":
-      return progress.remaining === 0
-        ? "Last question"
-        : `${progress.remaining} question${progress.remaining === 1 ? "" : "s"} left`;
+    case "remaining": {
+      // The question on screen isn't answered yet, so it's one of those
+      // left: at question 1 of 2, "2 questions left" (QA FC15-48).
+      const left = progress.remaining + (progress.current > 0 ? 1 : 0);
+      return left <= 1 ? "Last question" : `${left} questions left`;
+    }
     default:
       return null;
   }

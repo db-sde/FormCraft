@@ -321,6 +321,7 @@ async function attemptSync(
       connection.spreadsheet_id,
       row.values,
       options?.sheetsApiBase,
+      row.header,
     );
     return { status: "succeeded" };
   } catch (error) {

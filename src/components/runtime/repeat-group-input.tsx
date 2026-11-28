@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import type { GroupFieldV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import {
   entryName,
+  entryWord,
   fieldAsQuestion,
   fieldVisible,
   groupEntries,
@@ -89,7 +90,7 @@ export function RepeatGroupInput({
   const canRemove = entries.length > Math.max(1, minEntries);
   const add =
     question.settings.addLabel?.trim() ||
-    `Add another ${(question.settings.entryLabel?.trim() || "entry").toLowerCase()}`;
+    `Add another ${entryWord(question.settings.entryLabel)}`;
 
   return (
     <div className="flex flex-col gap-3" data-fc="repeat-group">

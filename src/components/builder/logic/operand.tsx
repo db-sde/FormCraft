@@ -229,11 +229,13 @@ export function ValueInput({
         isField ? set(kind === "number" ? 0 : "") : onChange(otherOperand(schema, left))
       }
       className={cn(
-        "fc-focus grid size-[34px] shrink-0 place-items-center rounded-sm border-[1.5px]",
+        "fc-focus flex h-[34px] shrink-0 items-center gap-1.5 rounded-sm border-[1.5px] px-2 text-[12px] font-semibold",
         isField ? "border-ink bg-accent" : "border-input hover:bg-hover-wash",
       )}
     >
-      <ArrowLeftRight className="size-3.5" />
+      <ArrowLeftRight className="size-3.5" aria-hidden />
+      {/* Said in words, not only as an icon (QA FC15-40). */}
+      {isField ? "Fixed value" : "Another answer"}
     </button>
   );
 

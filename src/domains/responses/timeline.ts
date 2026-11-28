@@ -274,7 +274,7 @@ function formatMoney(amount: number, currency: string) {
  */
 export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
   const { response } = sources;
-  const entries: (TimelineEntry & { rank: number })[] = [
+  const entries: (TimelineEntry & { rank: number; order?: number })[] = [
     {
       key: "started",
       at: response.startedAt,
@@ -301,17 +301,19 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
       rank: 1,
     });
   }
-  for (const a of sources.answersSaved ?? []) {
+  (sources.answersSaved ?? []).forEach((a, position) => {
     // Changed after submitting: that's a correction, listed as one.
-    if (response.completedAt && a.savedAt > response.completedAt) continue;
+    if (response.completedAt && a.savedAt > response.completedAt) return;
     entries.push({
       key: `answer-${a.questionId}`,
       at: a.savedAt,
       title: `Answer saved: ${a.label.trim() || "Untitled question"}`,
       outcome: "ok",
       rank: 0.5,
+      // Answers saved in one go share a time: then form order (QA FC15-61).
+      order: position,
     });
-  }
+  });
   for (const d of sources.deliveries) {
     entries.push({
       key: `webhook-${d.id}`,
@@ -442,13 +444,17 @@ export function buildTimeline(sources: TimelineSources): TimelineEntry[] {
     .map((entry, index) => ({ entry, index }))
     .sort(
       (a, b) =>
-        a.entry.at.localeCompare(b.entry.at) ||
+        // By the time itself, not its text: "…28.9Z" and "…28.85+00:00"
+        // don't compare as text (QA FC15-61).
+        Date.parse(a.entry.at) - Date.parse(b.entry.at) ||
         a.entry.rank - b.entry.rank ||
+        (a.entry.order ?? 0) - (b.entry.order ?? 0) ||
         a.index - b.index,
     )
     .map(({ entry }) => {
-      const { rank: _rank, ...rest } = entry;
+      const { rank: _rank, order: _order, ...rest } = entry;
       void _rank;
+      void _order;
       return rest;
     });
 }
@@ -523,6 +529,12 @@ export async function getResponseTimeline(
     response,
     answersSaved: (answerRows.data ?? [])
       .filter((a) => labels?.has(a.question_id))
+      // In form order (the labels come in it), for answers saved together.
+      .sort(
+        (a, b) =>
+          [...labels!.keys()].indexOf(a.question_id) -
+          [...labels!.keys()].indexOf(b.question_id),
+      )
       .map((a) => ({
         questionId: a.question_id,
         label: labels!.get(a.question_id)!,

@@ -407,6 +407,20 @@ export function SettingsPanel({
               }
             />
           </PanelField>
+          <PanelField label="Min length" hint="Characters. Leave empty for none.">
+            <Input
+              className={PANEL_INPUT}
+              type="number"
+              min={0}
+              value={question.settings.minLength ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  settings: { ...question.settings, minLength: num(e.target.value) },
+                })
+              }
+            />
+          </PanelField>
           <PanelField
             label="Max length"
             hint={`Characters. Leave empty for the default, ${DEFAULT_LONG_TEXT_MAX.toLocaleString("en")}.`}
@@ -707,9 +721,28 @@ export function SettingsPanel({
             </>
           )}
           {question.type === "dropdown" && (
-            <PanelNote>
-              Tip: paste a list with one option per line to add many at once.
-            </PanelNote>
+            <>
+              <PanelField label="Placeholder">
+                <Input
+                  className={PANEL_INPUT}
+                  value={question.settings.placeholder ?? ""}
+                  placeholder="Choose an option"
+                  maxLength={200}
+                  onChange={(e) =>
+                    onChange({
+                      ...question,
+                      settings: {
+                        ...question.settings,
+                        placeholder: e.target.value || undefined,
+                      },
+                    })
+                  }
+                />
+              </PanelField>
+              <PanelNote>
+                Tip: paste a list with one option per line to add many at once.
+              </PanelNote>
+            </>
           )}
         </>
       )}
@@ -926,6 +959,46 @@ export function SettingsPanel({
           </PanelField>
         </>
       )}
+      {question.type !== "welcome_screen" &&
+        question.type !== "statement" &&
+        question.type !== "page_break" && (
+          <>
+            <SectionHead>Image</SectionHead>
+            {/* A picture above the question (QA FC15-34). */}
+            <ImageUploadField
+              label="Image above the question (optional)"
+              noun="an image"
+              workspaceId={workspaceId}
+              formId={formId}
+              value={question.image?.url}
+              onChange={(url) =>
+                onChange({
+                  ...question,
+                  image: url ? { url, alt: question.image?.alt } : undefined,
+                })
+              }
+            />
+            {question.image && (
+              <PanelField label="Image description (alt text)">
+                <Input
+                  className={PANEL_INPUT}
+                  value={question.image.alt ?? ""}
+                  placeholder="What the image shows, for screen readers"
+                  maxLength={300}
+                  onChange={(e) =>
+                    onChange({
+                      ...question,
+                      image: {
+                        url: question.image!.url,
+                        alt: e.target.value || undefined,
+                      },
+                    })
+                  }
+                />
+              </PanelField>
+            )}
+          </>
+        )}
     </div>
   );
 }

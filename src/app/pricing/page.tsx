@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { QUESTION_TYPES } from "@/domains/forms/schema/question-types";
 import { Check, Minus } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Brand } from "@/components/app-shell/brand";
@@ -276,10 +277,11 @@ export default async function PricingPage({
             </table>
           </div>
           <p className="text-muted-foreground text-sm">
-            Every plan includes all 29 question types, logic and quizzes, themes, payments
-            through your own Stripe or Razorpay account, webhooks, Google Sheets,
-            two-factor sign-in, privacy requests and account deletion. Some features need
-            their provider set up first, such as Google sign-in for Sheets. See{" "}
+            Every plan includes all {QUESTION_TYPES.length} question types, logic and
+            quizzes, themes, payments through your own Stripe or Razorpay account,
+            webhooks, Google Sheets, two-factor sign-in, privacy requests and account
+            deletion. Some features need their provider set up first, such as Google
+            sign-in for Sheets. See{" "}
             <Link className="underline" href="/security">
               security
             </Link>{" "}

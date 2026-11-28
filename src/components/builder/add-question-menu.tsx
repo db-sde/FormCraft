@@ -62,9 +62,7 @@ export function AddQuestionMenu({
     name: group.name,
     types: group.types.filter(
       (type) =>
-        (type !== "welcome_screen" || canAddWelcome) &&
-        (type !== "page_break" || canAddPageBreak) &&
-        rank(type, group.name) !== null,
+        (type !== "welcome_screen" || canAddWelcome) && rank(type, group.name) !== null,
     ),
   })).filter((group) => group.types.length > 0);
   // What Enter adds: the best match (ties go to the one listed first).
@@ -78,6 +76,7 @@ export function AddQuestionMenu({
     // One add per opening: a double tap's second tap lands on the same
     // tile while the menu is still closing (QA FC11-05, run 12).
     if (pickedRef.current) return;
+    if (type === "page_break" && !canAddPageBreak) return;
     pickedRef.current = true;
     onAdd(type);
     setOpen(false);
@@ -178,19 +177,25 @@ export function AddQuestionMenu({
                 </span>
                 {group.types.map((type) => {
                   const meta = ADD_KIND_META[type];
+                  // Pages exist only in the classic layout: listed, so it
+                  // can be found (QA FC15-30), but explained, not added.
+                  const unavailable = type === "page_break" && !canAddPageBreak;
                   return (
                     <button
                       key={type}
                       type="button"
-                      data-type={type}
+                      data-type={unavailable ? undefined : type}
+                      disabled={unavailable}
                       onClick={() => pick(type)}
-                      className="fc-focus hover:bg-accent flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-left"
+                      className="fc-focus hover:bg-accent flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-left disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
                     >
                       <TypeTile type={type} size={30} />
                       <span className="flex flex-col leading-tight">
                         <b className="text-[13.5px]">{meta.label}</b>
                         <span className="text-muted-foreground text-xs">
-                          {meta.description}
+                          {unavailable
+                            ? "Classic layout only. Switch the layout in Design to add pages."
+                            : meta.description}
                         </span>
                       </span>
                     </button>

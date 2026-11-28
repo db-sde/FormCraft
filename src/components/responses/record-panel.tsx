@@ -44,6 +44,7 @@ export function RecordControls({
   assigneeId,
   members,
   canChange,
+  lockedReason = null,
 }: {
   formId: string;
   responseId: string;
@@ -51,6 +52,8 @@ export function RecordControls({
   assigneeId: string | null;
   members: { id: string; name: string }[];
   canChange: boolean;
+  /** Not on the plan: why the controls are locked. */
+  lockedReason?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -115,7 +118,7 @@ export function RecordControls({
       </div>
       {!canChange && (
         <p className="text-muted-foreground basis-full text-xs">
-          Editors and up can change the status and assignee.
+          {lockedReason ?? "Editors and up can change the status and assignee."}
         </p>
       )}
     </section>
@@ -129,11 +132,14 @@ export function ResponseComments({
   responseId,
   comments,
   canComment,
+  lockedReason = null,
 }: {
   formId: string;
   responseId: string;
   comments: ResponseComment[];
   canComment: boolean;
+  /** Not on the plan: said where the comment box would be. */
+  lockedReason?: string | null;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState("");
@@ -176,6 +182,9 @@ export function ResponseComments({
             </li>
           ))}
         </ol>
+      )}
+      {!canComment && lockedReason && (
+        <p className="text-muted-foreground text-xs">{lockedReason}</p>
       )}
       {canComment && (
         <form onSubmit={submit} className="flex flex-col gap-2">

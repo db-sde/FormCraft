@@ -322,8 +322,9 @@ second person.
 - Rate limits that hold across servers and changing addresses
 - Strong security headers (CSP, HSTS); no open redirects
 - Encrypted integration secrets with key rotation
-- Background jobs every minute (deliveries, retries, digests, reminders,
-  payment checks, cleanup), run by the database scheduler
+- Background jobs on a schedule: webhook, Sheets and app deliveries and
+  their retries every minute; digests hourly; payment checks every 15
+  minutes; operations checks every 5 minutes; clean-up daily
 - Every request has an id, carried into error logs, audit entries and
   analytics; a recovery runbook for payments, deliveries and usage
 - Error tracking (Sentry) and product analytics (PostHog) **(needs setup)**

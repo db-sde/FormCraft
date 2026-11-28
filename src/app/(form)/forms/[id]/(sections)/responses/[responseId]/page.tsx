@@ -36,6 +36,8 @@ import { loadResponseContext } from "@/domains/responses/context";
 import { assignableMembers, listComments } from "@/domains/responses/records";
 import { hasPermission } from "@/domains/workspaces/permissions";
 import { isCorrectable, listRevisions } from "@/domains/responses/corrections";
+import { getWorkspacePlan } from "@/domains/billing";
+import { notOnPlanMessage } from "@/domains/billing/entitlements";
 import { formatAnswerValue } from "@/domains/responses/format";
 import { CorrectAnswer } from "@/components/responses/correct-answer";
 import { verifiedEmails } from "@/domains/verification/email-code";
@@ -141,6 +143,7 @@ export default async function ResponseDetailPage({
     revisions,
     mayCorrect,
     verified,
+    { entitlements },
   ] = await Promise.all([
     supabase
       .from("responses")
@@ -169,7 +172,14 @@ export default async function ResponseDetailPage({
       ? Promise.resolve(false)
       : hasPermission(supabase, workspace.id, "edit_responses"),
     verifiedEmails(supabase, responseId),
+    getWorkspacePlan(supabase, workspace.id),
   ]);
+  // Paid controls are shown locked, with why, instead of refusing after a
+  // click (QA FC15-62, FC15-66).
+  const workflowLock = entitlements.response_workflow
+    ? null
+    : notOnPlanMessage("response_workflow");
+  const pdfLock = entitlements.pdf_documents ? null : notOnPlanMessage("pdf_documents");
   // Corrections to submitted answers (roadmap #55), by question.
   const revisionsByQuestion = new Map<string, typeof revisions>();
   for (const r of revisions) {
@@ -412,20 +422,22 @@ export default async function ResponseDetailPage({
           className="text-muted-foreground -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm"
         >
           <span className="font-semibold">PDF:</span>
-          {documents.map((d) => (
-            <a
-              key={d.kind}
-              href={`/api/forms/${formId}/responses/${responseId}/documents/${d.kind}`}
-              download
-              className="text-foreground inline-flex items-center gap-1.5 font-semibold underline-offset-2 hover:underline"
-            >
-              <Download className="size-3.5" />
-              {d.label}
-              {d.number && (
-                <span className="text-muted-foreground font-normal">{d.number}</span>
-              )}
-            </a>
-          ))}
+          {pdfLock && <span>{pdfLock}</span>}
+          {!pdfLock &&
+            documents.map((d) => (
+              <a
+                key={d.kind}
+                href={`/api/forms/${formId}/responses/${responseId}/documents/${d.kind}`}
+                download
+                className="text-foreground inline-flex items-center gap-1.5 font-semibold underline-offset-2 hover:underline"
+              >
+                <Download className="size-3.5" />
+                {d.label}
+                {d.number && (
+                  <span className="text-muted-foreground font-normal">{d.number}</span>
+                )}
+              </a>
+            ))}
         </nav>
       )}
 
@@ -435,7 +447,8 @@ export default async function ResponseDetailPage({
         status={record?.review_status ?? "new"}
         assigneeId={record?.assignee_id ?? null}
         members={members}
-        canChange={!viewOnly}
+        canChange={!viewOnly && !workflowLock}
+        lockedReason={viewOnly ? null : workflowLock}
       />
 
       {payment && (
@@ -585,15 +598,17 @@ export default async function ResponseDetailPage({
                       Confirmed by code
                     </span>
                   )}
-                {mayCorrect && isCorrectable(answer.question) && (
-                  <CorrectAnswer
-                    formId={formId}
-                    responseId={responseId}
-                    question={answer.question}
-                    label={answer.label}
-                    value={answer.value}
-                  />
-                )}
+                {mayCorrect &&
+                  entitlements.submission_editing &&
+                  isCorrectable(answer.question) && (
+                    <CorrectAnswer
+                      formId={formId}
+                      responseId={responseId}
+                      question={answer.question}
+                      label={answer.label}
+                      value={answer.value}
+                    />
+                  )}
               </h2>
               {recording ? (
                 <figure className="flex flex-col gap-1.5">
@@ -763,7 +778,8 @@ export default async function ResponseDetailPage({
           formId={formId}
           responseId={responseId}
           comments={comments}
-          canComment={!viewOnly}
+          canComment={!viewOnly && !workflowLock}
+          lockedReason={viewOnly ? null : workflowLock}
         />
         <ResponseTimeline
           formId={formId}

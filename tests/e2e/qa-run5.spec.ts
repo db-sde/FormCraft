@@ -2,6 +2,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import type { FormSchemaV1 } from "@/domains/forms/schema/v1";
 import { setFormPassword } from "@/domains/forms/access";
 import {
+  addQuestion,
   adminClient,
   createConfirmedUser,
   createPublishedForm,
@@ -264,6 +265,36 @@ test.describe("QA run 5", () => {
     await page.keyboard.press("ControlOrMeta+Shift+z");
     await waitForSaved(page);
     await expect.poll(order).toEqual(["q_notes", "q_name"]);
+  });
+
+  test("FC15-23: Undo takes back an added question, even right after other edits", async ({
+    page,
+  }) => {
+    const { formId } = await createPublishedForm(user, form);
+    const ids = async () => {
+      const { data } = await adminClient()
+        .from("form_versions")
+        .select("schema")
+        .eq("form_id", formId)
+        .eq("status", "draft")
+        .single();
+      return (data!.schema as unknown as FormSchemaV1).questions.map((q) => q.id).sort();
+    };
+    await loginViaUI(page, user.email, user.password);
+    await page.goto(`/forms/${formId}`);
+    const before = await ids();
+    await addQuestion(page, "Long text");
+    // The new question is its own step, whatever came just before it.
+    const list = page.getByRole("list", { name: "Questions" });
+    await expect(list.getByRole("button", { name: /^\d+ / })).toHaveCount(3);
+    await waitForSaved(page);
+    expect((await ids()).length).toBe(before.length + 1);
+
+    const undo = page.getByRole("button", { name: "Undo last change" });
+    await undo.click();
+    await waitForSaved(page);
+    await expect.poll(ids).toEqual(before);
+    await expect(list.getByRole("button", { name: /^\d+ / })).toHaveCount(2);
   });
 });
 

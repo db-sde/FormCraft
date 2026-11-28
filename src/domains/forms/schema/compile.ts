@@ -14,7 +14,13 @@ export type CompiledFormV1 = {
 
 type GraphEdge = { to: string | null; ruleId?: string };
 
-function buildGraph(schema: FormSchemaV1): Map<string, GraphEdge[]> {
+function buildGraph(
+  schema: FormSchemaV1,
+  /** Drop the "next question" edge where a rule with no condition always
+   * sends people elsewhere. Only for publishing: forms already live are
+   * compiled the forgiving way, so none stops loading. */
+  strict = false,
+): Map<string, GraphEdge[]> {
   const ordered = [...schema.questions].sort((a, b) => a.order - b.order);
   const defaultEnding = schema.endings.find((e) => e.isDefault)!;
 
@@ -23,8 +29,22 @@ function buildGraph(schema: FormSchemaV1): Map<string, GraphEdge[]> {
   ordered.forEach((q, idx) => {
     const edges: GraphEdge[] = [];
     const nextQuestion = ordered[idx + 1];
-    // Conservative default edge: what happens if no logic rule matches.
-    edges.push({ to: nextQuestion ? nextQuestion.id : null });
+    // What happens if no logic rule matches; unless a rule with no
+    // condition always sends people elsewhere from here, in which case the
+    // next question is never reached this way (QA FC15-43).
+    const alwaysLeaves =
+      strict &&
+      (schema.rules ?? []).some(
+        (rule) =>
+          !rule.disabled &&
+          !rule.when &&
+          rule.on.event === "question_answered" &&
+          rule.on.questionId === q.id &&
+          rule.then.some(
+            (a) => a.type === "jump_to_question" || a.type === "jump_to_ending",
+          ),
+      );
+    if (!alwaysLeaves) edges.push({ to: nextQuestion ? nextQuestion.id : null });
 
     for (const rule of schema.logic) {
       if (rule.questionId !== q.id) continue;
@@ -118,6 +138,23 @@ function findInescapableCycles(graph: Map<string, GraphEdge[]>): string[][] {
   }
 
   return inescapable;
+}
+
+/** Questions no path reaches, counting a rule with no condition as
+ * always taken (QA FC15-43). Checked when publishing. */
+export function unreachableQuestionIds(schema: FormSchemaV1): string[] {
+  const ordered = [...schema.questions].sort((a, b) => a.order - b.order);
+  const graph = buildGraph(schema, true);
+  const reachable = new Set<string>();
+  const queue = ordered.length > 0 ? [ordered[0].id] : [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (reachable.has(current)) continue;
+    reachable.add(current);
+    for (const edge of graph.get(current) ?? [])
+      if (edge.to !== null) queue.push(edge.to);
+  }
+  return ordered.filter((q) => !reachable.has(q.id)).map((q) => q.id);
 }
 
 /** Stage 4: publication validation/compilation. */

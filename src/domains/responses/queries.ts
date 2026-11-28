@@ -20,6 +20,7 @@ import type { FormSchemaV1, QuestionV1 } from "@/domains/forms/schema/v1";
 import { SEED_PATTERN } from "@/domains/logic/random";
 import { answerUsesAvailableOptions } from "@/domains/forms/options";
 import {
+  stateAt,
   walkForm,
   validateAnswer,
   hasAnswer,
@@ -660,4 +661,44 @@ export async function completeResponse(
     alreadyCompleted: result.outcome === "already",
     variables: result.outcome === "already" ? undefined : walk.variables,
   };
+}
+
+/**
+ * A response's scores so far (QA FC15-45), for a form that shows a score
+ * mid-way ("So far: {{score}}") without branching on it. The browser
+ * isn't sent the option points then, so it asks here with the answers
+ * and the path taken; the server scores them from the stored form, the
+ * same way it does at the end. Null when the response is unknown or
+ * already completed.
+ */
+export async function runningScores(
+  admin: Client,
+  responseId: string,
+  answers: AnswerMap,
+  path: string[],
+): Promise<Record<string, unknown> | null> {
+  const { data: response } = await admin
+    .from("responses")
+    .select("form_version_id, status, hidden_fields, random_seed")
+    .eq("id", responseId)
+    .maybeSingle();
+  if (!response || response.status === "completed") return null;
+  const { data: versionRow } = await admin
+    .from("form_versions")
+    .select("schema")
+    .eq("id", response.form_version_id)
+    .maybeSingle();
+  if (!versionRow) return null;
+  const compiled = compileFormSchema(parseFormSchema(versionRow.schema));
+  const known = new Set(compiled.schema.questions.map((q) => q.id));
+  return stateAt(
+    compiled,
+    filterAnswersToKnownQuestions(compiled.schema, answers),
+    path.filter((id) => known.has(id)),
+    {
+      hidden: storedHidden(response.hidden_fields),
+      now: new Date(),
+      seed: response.random_seed ?? undefined,
+    },
+  ).variables;
 }

@@ -393,8 +393,7 @@ export function validateAnswer(question: QuestionV1, value: unknown): AnswerVali
       if (typeof value !== "string") return fail("Enter a text answer.");
       const length = visibleText(value).length;
       const maxLength = effectiveMaxLength(question);
-      const minLength =
-        question.type === "short_text" ? question.settings.minLength : undefined;
+      const minLength = question.settings.minLength;
       if (minLength !== undefined && length < minLength) {
         return fail(`Enter at least ${minLength} characters.`);
       }
