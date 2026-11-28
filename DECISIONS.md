@@ -3,6 +3,47 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-28 — Google Sheets connect fix; Super Admin served at /admin on the app for now
+
+- **Sheets connect failed for everyone** (`?sheets_error=exchange_failed`
+  in production):
+  - Cause: the callback saved the connection with an upsert, as the
+    signed-in creator. Postgres refuses INSERT ... ON CONFLICT DO UPDATE
+    to a role without SELECT on the whole table, and members can't read
+    `encrypted_tokens` (migration 44): "permission denied for table
+    sheets_connections". Tests saved with the service role, so they
+    never hit it.
+  - Fix: `saveConnection` updates the form's row, else inserts one. A
+    unique-key race falls back to the update. Row-level security still
+    decides both. No grant was widened: members still can't read tokens.
+  - The callback now logs `sheets_exchange_failed` with the step
+    (`google` or `save`) and the error, never the code, tokens or
+    secret. It redirects with `&reason=google|save`. Google's status and
+    error code are in the exchange error.
+  - New test: `tests/integration/sheets-owner-save.test.ts` saves as a
+    real signed-in owner.
+- **Super Admin at /admin on the customer app, for now**, at the owner's
+  request until the admin deployment exists:
+  - `ADMIN_SURFACE=shared` serves the portal at `/admin` on the app's
+    own host, never on custom domains. `1` (the dedicated admin
+    deployment) and unset (a 404) are unchanged.
+  - Authorization is unchanged: every page and action asks the database
+    (`check_staff`, authenticator required).
+  - What this gives up versus the dedicated deployment, accepted for
+    now:
+    - Staff session cookies stay readable by page scripts, because the
+      app's browser client shares them.
+    - The portal sits behind the app's public host, so no network
+      allowlist can be applied to it alone.
+    - A browser signed in as staff is signed out of any customer
+      account (one session per site). Use a separate browser profile.
+  - Move to the dedicated deployment before more staff join (admin
+    security checklist).
+- **First staff owner**: the database refuses an account that belongs
+  to a customer workspace (Phase 0 rule, kept). The owner's own account
+  owns a workspace, so the first staff owner must be a separate,
+  staff-only account.
+
 ## 2026-11-27 — Six competitive gap features and checkout (migrations 79–86)
 
 Built from "FormCraft Developer Spec: Six Competitive Gap Features" and

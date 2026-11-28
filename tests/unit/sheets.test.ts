@@ -189,6 +189,10 @@ describe("exchangeCodeForTokens / refreshAccessToken (against a fake token endpo
     await expect(
       exchangeCodeForTokens("bad-code", "https://fake.test/token"),
     ).rejects.toThrow("Bad code");
+    // The status and Google's error code are in the message, for the logs.
+    await expect(
+      exchangeCodeForTokens("bad-code", "https://fake.test/token"),
+    ).rejects.toThrow("Google token exchange failed (400): invalid_grant - Bad code");
   });
 
   it("throws if Google omits a refresh token", async () => {

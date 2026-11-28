@@ -47,7 +47,9 @@ async function main() {
     console.error(`Not done: ${error.message}`);
     process.exit(1);
   }
-  console.log(`${email} is the first owner. Sign in at /admin on the admin deployment.`);
+  console.log(
+    `${email} is the first owner. Sign in at /admin (the admin deployment, or the app with ADMIN_SURFACE=shared).`,
+  );
 }
 
 main().catch((error) => {

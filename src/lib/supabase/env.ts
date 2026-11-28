@@ -38,7 +38,8 @@ export const sessionCookieOptions = {
   secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") ?? false,
   // The staff portal never reads the session in the browser (no browser
   // client there), so its cookies are out of reach of page scripts. The
-  // customer app's browser client needs them readable. ADMIN_SURFACE isn't
-  // public, so browser code always sees false here.
+  // customer app's browser client needs them readable, so a portal shared
+  // with the app (ADMIN_SURFACE=shared) keeps them readable too. ADMIN_SURFACE
+  // isn't public, so browser code always sees false here.
   httpOnly: process.env.ADMIN_SURFACE === "1",
 };

@@ -44,23 +44,41 @@ export async function getConnectionForForm(
 /** Called from the OAuth callback right after a successful token
  * exchange. `form_id` is unique on this table, so reconnecting the
  * same form replaces its stored tokens rather than creating a second
- * row. */
+ * row.
+ *
+ * Not an upsert: members can't read `encrypted_tokens` (migration 44),
+ * and Postgres refuses INSERT ... ON CONFLICT DO UPDATE to a role
+ * without SELECT on the whole table ("permission denied for table
+ * sheets_connections"). So it updates the form's row, and inserts one
+ * when there was none; row-level security decides both, as the caller. */
 export async function saveConnection(
   supabase: Client,
   workspaceId: string,
   formId: string,
   tokens: OAuthTokens,
 ): Promise<void> {
-  const { error } = await supabase.from("sheets_connections").upsert(
-    {
-      workspace_id: workspaceId,
-      form_id: formId,
-      encrypted_tokens: encryptJson(tokens, sheetsContext(formId)) as unknown as Json,
-      enabled: true,
-    },
-    { onConflict: "form_id" },
-  );
-  if (error) throw error;
+  const fields = {
+    encrypted_tokens: encryptJson(tokens, sheetsContext(formId)) as unknown as Json,
+    enabled: true,
+  };
+  const update = async () => {
+    const { data, error } = await supabase
+      .from("sheets_connections")
+      .update(fields)
+      .eq("form_id", formId)
+      .select("id");
+    if (error) throw error;
+    return data.length > 0;
+  };
+
+  if (await update()) return;
+  const { error } = await supabase
+    .from("sheets_connections")
+    .insert({ workspace_id: workspaceId, form_id: formId, ...fields });
+  if (!error) return;
+  // Another connect for the same form inserted first: replace its tokens.
+  if (error.code === "23505" && (await update())) return;
+  throw error;
 }
 
 export async function setSpreadsheetId(

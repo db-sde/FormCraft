@@ -9,8 +9,11 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Other Claude sessions' worktrees (each lints itself).
+    ".claude/**",
     ".next-admin/**",
     ".next-newkeys/**",
+    ".next-shared/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-/** The Super Admin portal: only on the admin deployment (ADMIN_SURFACE=1). */
+/** The Super Admin portal: a 404 unless ADMIN_SURFACE serves it (surface.ts). */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   if (!adminSurfaceEnabled()) notFound();
   return <div className="bg-background min-h-dvh">{children}</div>;

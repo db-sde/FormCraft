@@ -17,6 +17,7 @@
 /.next/
 /.next-admin/
 /.next-newkeys/
+/.next-shared/
 /out/
 
 # production

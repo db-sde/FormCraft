@@ -76,22 +76,38 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Two steps, each reported on its own: Google's token exchange, then
+  // storing the connection. The log names the step and the error, never
+  // the code, the tokens or the client secret.
+  const failed = (step: "google" | "save", err: unknown) => {
+    const e = err as { name?: string; message?: string; code?: string };
+    console.error("sheets_exchange_failed", {
+      step,
+      formId,
+      name: e?.name,
+      message: e?.message,
+      code: e?.code,
+    });
+    return done(`?sheets_error=exchange_failed&reason=${step}`);
+  };
+
+  let tokens: Awaited<ReturnType<typeof exchangeCodeForTokens>>;
   try {
     // verifyOAuthState accepted the flow, so its cookie nonce is present.
     const nonce = request.cookies.get(OAUTH_STATE_COOKIE)?.value ?? "";
-    const tokens = await exchangeCodeForTokens(
-      code,
-      undefined,
-      pkceForFlow(nonce).verifier,
-    );
-    await saveConnection(supabase, workspace.id, formId, tokens);
-    trackEvent({
-      formId,
-      eventType: "integration_connected",
-      metadata: { provider: "google_sheets" },
-    });
-    return done("?sheets_connected=1");
-  } catch {
-    return done("?sheets_error=exchange_failed");
+    tokens = await exchangeCodeForTokens(code, undefined, pkceForFlow(nonce).verifier);
+  } catch (err) {
+    return failed("google", err);
   }
+  try {
+    await saveConnection(supabase, workspace.id, formId, tokens);
+  } catch (err) {
+    return failed("save", err);
+  }
+  trackEvent({
+    formId,
+    eventType: "integration_connected",
+    metadata: { provider: "google_sheets" },
+  });
+  return done("?sheets_connected=1");
 }

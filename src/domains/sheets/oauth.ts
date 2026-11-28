@@ -137,11 +137,16 @@ export async function exchangeCodeForTokens(
     }),
   });
 
-  const body = (await res.json()) as GoogleTokenResponse;
-  if (!res.ok || !body.refresh_token) {
+  const body = (await res.json().catch(() => ({}))) as Partial<GoogleTokenResponse>;
+  if (!res.ok) {
+    // Google's error code and description only; never echo the request.
     throw new Error(
-      body.error_description || body.error || "Google did not return a refresh token",
+      `Google token exchange failed (${res.status}): ${body.error ?? "unknown_error"}` +
+        (body.error_description ? ` - ${body.error_description}` : ""),
     );
+  }
+  if (!body.access_token || !body.refresh_token || !body.expires_in) {
+    throw new Error("Google did not return a refresh token");
   }
 
   return {

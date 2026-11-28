@@ -1,4 +1,4 @@
-import { adminSurfaceEnabled, isAdminPath } from "@/lib/admin/surface";
+import { adminOnlySurface, adminSurfaceEnabled, isAdminPath } from "@/lib/admin/surface";
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
 import {
   isSignedVisitor,
@@ -303,15 +303,19 @@ export async function proxy(incoming: NextRequest) {
 
 async function route(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  // The Super Admin portal (docs/super-admin-design.md §3.1): only on the
-  // admin deployment, which serves nothing else.
-  if (adminSurfaceEnabled()) return adminRoute(request, path);
-  if (isAdminPath(path)) return new NextResponse("Not found", { status: 404 });
+  // The Super Admin portal (docs/super-admin-design.md §3.1): the admin
+  // deployment serves it and nothing else; with ADMIN_SURFACE=shared the
+  // app serves it too, at /admin on its own host only (surface.ts).
+  if (adminOnlySurface()) return adminRoute(request, path);
+  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (isAdminPath(path)) {
+    if (adminSurfaceEnabled() && isAppHost(host)) return adminRoute(request, path);
+    return new NextResponse("Not found", { status: 404 });
+  }
 
   // Font library stylesheets and files (public, cached, no session): on
   // the app and on custom domains, where forms load them too.
   if (path.startsWith("/fonts/")) return NextResponse.next();
-  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
   if (!isAppHost(host)) return customDomain(request, host);
 
   if (path.startsWith("/api/")) {
@@ -344,7 +348,8 @@ async function route(request: NextRequest) {
   return withCsp(response, policy);
 }
 
-/** The admin deployment: the portal, its static files and nothing else.
+/** The portal's pages. On the admin deployment, also everything else:
+ * there it serves the portal, its static files and nothing more.
  * Pages are never cached or indexed. Authorization is not decided here:
  * every page and action asks the database (private.check_staff). */
 async function adminRoute(request: NextRequest, path: string) {

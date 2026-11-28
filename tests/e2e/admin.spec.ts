@@ -17,6 +17,8 @@ import { ADMIN_PAGE_ROUTES } from "./routes";
  * run it; the customer build's 404 for /admin is checked either way.
  */
 const ADMIN = process.env.ADMIN_BASE_URL;
+/** Set when ADMIN_BASE_URL is the customer app with ADMIN_SURFACE=shared. */
+const SHARED = process.env.ADMIN_SHARED === "1";
 const DB_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const sql = (q: string) =>
   execFileSync("psql", [DB_URL, "-tAq", "-v", "ON_ERROR_STOP=1", "-c", q], {
@@ -24,10 +26,41 @@ const sql = (q: string) =>
   }).trim();
 
 test("the customer app has no admin portal", async ({ request }) => {
+  test.skip(SHARED, "this run's app serves the portal on purpose");
   for (const path of ADMIN_PAGE_ROUTES) {
     const res = await request.get(path, { maxRedirects: 0 });
     expect(res.status(), path).toBe(404);
   }
+});
+
+test.describe("portal shared with the app (ADMIN_SURFACE=shared)", () => {
+  test.skip(!SHARED, "set ADMIN_SHARED=1 and ADMIN_BASE_URL to such an app");
+
+  test("serves /admin on the app's host, and the app as before", async ({ request }) => {
+    const login = await request.get(`${ADMIN}/admin`);
+    expect(login.status()).toBe(200);
+    expect(login.url()).toMatch(/\/admin\/login$/);
+    expect(login.headers()["cache-control"]).toContain("no-store");
+    expect(login.headers()["x-robots-tag"]).toContain("noindex");
+    expect(login.headers()["content-security-policy"]).toContain(
+      "frame-ancestors 'none'",
+    );
+    // The rest of the site isn't the portal: no redirect to /admin.
+    const home = await request.get(`${ADMIN}/`, { maxRedirects: 0 });
+    expect(home.status()).toBe(200);
+    expect(await home.text()).not.toContain("FormCraft staff");
+    expect((await request.get(`${ADMIN}/pricing`, { maxRedirects: 0 })).status()).toBe(
+      200,
+    );
+  });
+
+  test("never serves the portal on a custom domain", async ({ request }) => {
+    const res = await request.get(`${ADMIN}/admin/login`, {
+      headers: { host: "forms.customer-example.test" },
+      maxRedirects: 0,
+    });
+    expect(res.status()).toBe(404);
+  });
 });
 
 test.describe("Super Admin portal", () => {
@@ -128,12 +161,16 @@ test.describe("Super Admin portal", () => {
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("frame-src 'none'");
     expect(csp).toMatch(/connect-src 'self'(;|$)/);
-    // Session cookies are out of reach of page scripts here.
+    // Session cookies are out of reach of page scripts on the admin
+    // deployment. A portal shared with the app keeps them readable, as
+    // the app's browser client needs them (surface.ts).
     const session = (await page.context().cookies()).filter((c) =>
       c.name.startsWith("sb-"),
     );
     expect(session.length).toBeGreaterThan(0);
-    expect(session.every((c) => c.httpOnly && c.sameSite === "Lax")).toBe(true);
+    expect(session.every((c) => (SHARED || c.httpOnly) && c.sameSite === "Lax")).toBe(
+      true,
+    );
 
     await page.getByRole("link", { name: "Staff" }).click();
     await page.getByLabel("Their staff email").fill(newcomer.email);
