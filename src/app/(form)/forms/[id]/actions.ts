@@ -20,6 +20,7 @@ import {
 } from "@/domains/forms";
 import type { FormSchemaV1 } from "@/domains/forms";
 import { getCurrentWorkspace } from "@/lib/auth/current-workspace";
+import { draftPlanWarning } from "@/domains/billing/schema-features";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackEvent } from "@/lib/analytics/track";
 import { parseFormSchema } from "@/domains/forms/schema";
@@ -77,7 +78,9 @@ export async function renameFormAction(
 }
 
 export type SaveDraftResult =
-  | { ok: true; revision: number }
+  /** `planWarning`: paid features in the draft its plan lacks (saved
+   * anyway; publishing is what refuses them). */
+  | { ok: true; revision: number; planWarning?: string | null }
   | { ok: false; code: "stale" | "invalid" | "unknown"; message: string };
 
 /**
@@ -94,7 +97,7 @@ export async function saveDraftAction(
   expectedRevision: number,
   schema: FormSchemaV1,
 ): Promise<SaveDraftResult> {
-  const { supabase } = await getCurrentWorkspace();
+  const { supabase, workspace } = await getCurrentWorkspace();
 
   try {
     const { revision } = await saveDraftSchema(
@@ -103,7 +106,15 @@ export async function saveDraftAction(
       expectedRevision,
       schema,
     );
-    return { ok: true, revision };
+    // The plan check runs on save too, as a warning (QA run 15).
+    let planWarning: string | null = null;
+    try {
+      const { entitlements } = await getWorkspacePlan(supabase, workspace.id);
+      planWarning = draftPlanWarning(parseFormSchema(schema), entitlements);
+    } catch {
+      // The save landed; the warning is a courtesy.
+    }
+    return { ok: true, revision, planWarning };
   } catch (error) {
     if (error instanceof StaleDraftError) {
       return { ok: false, code: "stale", message: error.message };

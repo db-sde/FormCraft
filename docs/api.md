@@ -290,8 +290,11 @@ gets `403 forbidden`.
 
 - `GET /api/v1/me` → `{ workspace: { id, name } }` (connection test; any
   scope).
-- `GET /api/v1/forms` (`forms:read`) → `{ forms: [{ id, title }] }` —
-  live forms only.
+- `GET /api/v1/forms` (`forms:read`) →
+  `{ forms: [{ id, title, archived, published }] }`, newest first: the
+  workspace's forms, live or not (`published` says which).
+  `?archived=true` lists archived forms instead, `all` both; the
+  default is `false`.
 - `GET /api/v1/forms/:id` (`forms:read`) → the form with its live
   version's schema (`published.schema`), or `published: null`.
 - `GET /api/v1/forms/:id/responses` (`responses:read`) →

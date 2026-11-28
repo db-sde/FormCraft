@@ -229,7 +229,7 @@ describeLocal("pricing plans and quotas", () => {
       variants: [{ id: "a", name: "A", weight: 50 }],
     } as unknown as FormSchemaV1;
     const free = (await getWorkspacePlan(admin, workspaceId)).entitlements;
-    expect(publishBlockedBy(withTest, free)).toMatch(/A\/B testing|isn't included/);
+    expect(publishBlockedBy(withTest, free)).toMatch(/A\/B tests, which aren't included/);
     expect(publishBlockedBy(withTest, { ...free, ab_testing: true })).toBeNull();
   });
 });

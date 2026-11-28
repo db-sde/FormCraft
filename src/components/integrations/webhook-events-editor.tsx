@@ -38,6 +38,7 @@ export function WebhookEventsEditor({
   events,
   abandonAfterMinutes,
   keepsUnfinished,
+  unfinishedOnPlan = true,
   onSaved,
 }: {
   formId: string;
@@ -45,6 +46,8 @@ export function WebhookEventsEditor({
   events: WebhookEvent[];
   abandonAfterMinutes: number;
   keepsUnfinished: boolean;
+  /** Unfinished-response events need Starter and up (QA FC15-69). */
+  unfinishedOnPlan?: boolean;
   onSaved: (events: WebhookEvent[], abandonAfterMinutes: number) => void;
 }) {
   const [chosen, setChosen] = useState<Set<WebhookEvent>>(new Set(events));
@@ -76,11 +79,22 @@ export function WebhookEventsEditor({
       <legend className="text-muted-foreground float-left pb-1 text-[11px] font-bold tracking-[0.08em] uppercase">
         Events
       </legend>
+      {!unfinishedOnPlan && (
+        <p className="text-muted-foreground text-[12.5px]">
+          Events about unfinished responses are available on Starter and up.
+        </p>
+      )}
       {EVENTS.map(({ event, label, hint }) => (
-        <label key={event} className="flex items-start gap-2.5 text-[13.5px]">
+        <label
+          key={event}
+          className={`flex items-start gap-2.5 text-[13.5px] ${
+            !unfinishedOnPlan && event !== "response.completed" ? "opacity-60" : ""
+          }`}
+        >
           <input
             type="checkbox"
             className="mt-0.5 size-4"
+            disabled={!unfinishedOnPlan && event !== "response.completed"}
             checked={chosen.has(event)}
             onChange={(e) => {
               const next = new Set(chosen);

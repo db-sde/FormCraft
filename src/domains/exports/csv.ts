@@ -12,12 +12,16 @@ export class ExportTooLargeError extends Error {
 }
 
 const FORMULA_TRIGGER_CHARS = new Set(["=", "+", "-", "@", "\t", "\r"]);
-/** Numbers and phone numbers ("-5", "+1 (415) 555-0123") hold nothing a
- * spreadsheet could run: only digits, spaces, brackets, dots and dashes
- * after an optional sign. They're left as they are, so phone columns
- * aren't apostrophe-prefixed (QA FC5-12); anything with a letter, "=",
- * "@" or a second "+" still is. */
-const PLAIN_NUMBER = /^[+-]?[\d\s().-]*\d[\d\s().-]*$/;
+/** A plain number ("5", "-5.25"): a spreadsheet reads it as that number
+ * and nothing else, so it's left alone and stays numeric. */
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+/** A phone number ("+14155550123", "+1 (415) 555-0123"): digits, spaces,
+ * brackets, dots and dashes after an optional "+", with at least 7
+ * digits. Left as it is so phone columns aren't apostrophe-prefixed (QA
+ * FC5-12). A short signed value such as "+1" isn't one (QA FC15-65). */
+const PHONE = /^\+?[\d\s().-]+$/;
+const looksLikePhone = (value: string) =>
+  PHONE.test(value) && (value.match(/\d/g)?.length ?? 0) >= 7;
 
 /**
  * Guards against CSV/spreadsheet formula injection: a cell whose content
@@ -28,8 +32,9 @@ const PLAIN_NUMBER = /^[+-]?[\d\s().-]*\d[\d\s().-]*$/;
  */
 export function neutralizeFormulaInjection(value: string): string {
   if (value.length === 0) return value;
-  if (PLAIN_NUMBER.test(value)) return value;
-  return FORMULA_TRIGGER_CHARS.has(value[0]) ? `'${value}` : value;
+  if (!FORMULA_TRIGGER_CHARS.has(value[0])) return value;
+  if (PLAIN_NUMBER.test(value) || looksLikePhone(value)) return value;
+  return `'${value}`;
 }
 
 function escapeCsvCell(rawValue: unknown): string {
@@ -40,7 +45,9 @@ function escapeCsvCell(rawValue: unknown): string {
         ? rawValue
         : JSON.stringify(rawValue);
 
-  const neutralized = neutralizeFormulaInjection(stringValue);
+  // A real number can't be a formula; only text is checked.
+  const neutralized =
+    typeof rawValue === "number" ? stringValue : neutralizeFormulaInjection(stringValue);
   const needsQuoting = /[",\n\r]/.test(neutralized);
   if (!needsQuoting) return neutralized;
   return `"${neutralized.replace(/"/g, '""')}"`;

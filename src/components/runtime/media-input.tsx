@@ -320,7 +320,7 @@ export function MediaInput({
             agreed ? (
               `Up to ${clock(maxSeconds)}.`
             ) : (
-              "Tick the box to start."
+              `Tick the box to start. Up to ${clock(maxSeconds)}.`
             )
           ) : null}
         </span>

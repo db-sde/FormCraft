@@ -310,6 +310,7 @@ export default async function IntegrationsPage({
           initialEndpoints={endpoints}
           initialDeliveries={deliveriesByEndpoint}
           keepsUnfinished={!!tracking?.save_partial_responses}
+          unfinishedOnPlan={entitlements.partial_responses}
         />
       </Section>
 

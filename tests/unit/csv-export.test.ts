@@ -40,6 +40,10 @@ describe("neutralizeFormulaInjection", () => {
   it("prefixes anything a spreadsheet would run as a formula", () => {
     for (const value of [
       "=1+1",
+      "+1",
+      "+5",
+      "+1-1",
+      "-1+1",
       "+cmd",
       "+1+cmd",
       "-cmd",
@@ -59,7 +63,6 @@ describe("neutralizeFormulaInjection", () => {
       "5",
       "-5",
       "-5.25",
-      "+5",
       "+14155550123",
       "+1 (415) 555-0123",
       "415 555 2671",

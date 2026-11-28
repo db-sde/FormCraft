@@ -12,7 +12,11 @@ export const metadata: Metadata = {
 
 const ENDPOINTS: [string, string, string][] = [
   ["GET", "/api/v1/me", "The key's workspace and permissions"],
-  ["GET", "/api/v1/forms?archived=false|true|all", "Live forms (or archived ones)"],
+  [
+    "GET",
+    "/api/v1/forms?archived=false|true|all",
+    "Forms, each marked published or not (or archived ones)",
+  ],
   ["GET", "/api/v1/forms/{id}", "A form and its live questions"],
   ["POST", "/api/v1/forms/{id}/archive", "Archive a form (forms:write)"],
   ["POST", "/api/v1/forms/{id}/restore", "Restore an archived form (forms:write)"],

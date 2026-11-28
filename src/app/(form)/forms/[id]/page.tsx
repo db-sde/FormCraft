@@ -20,6 +20,7 @@ import {
 import { ImportReport } from "@/domains/forms/import/report";
 import { aiConfigured } from "@/domains/ai/config";
 import { getWorkspacePlan } from "@/domains/billing";
+import { draftPlanWarning } from "@/domains/billing/schema-features";
 import { OrdersChargedProvider } from "@/components/order-payment";
 import { chargesOrders } from "@/domains/payments/config";
 
@@ -82,6 +83,7 @@ export default async function FormBuilderPage({
         draftVersionId={draft.draftVersionId}
         initialRevision={draft.revision}
         initialSchema={draft.schema}
+        initialPlanWarning={draftPlanWarning(draft.schema, entitlements)}
         initialPublishInfo={{
           isPublished: publishInfo?.isPublished ?? false,
           publishedAt: publishInfo?.publishedAt ?? null,

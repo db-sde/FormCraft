@@ -44,12 +44,15 @@ export function WebhooksPanel({
   initialEndpoints,
   initialDeliveries,
   keepsUnfinished = false,
+  unfinishedOnPlan = true,
 }: {
   formId: string;
   initialEndpoints: WebhookEndpoint[];
   initialDeliveries: Record<string, DeliveryLogEntry[]>;
   /** Whether the form keeps unfinished responses (F-53's privacy switch). */
   keepsUnfinished?: boolean;
+  /** Whether the plan includes unfinished responses (Starter and up). */
+  unfinishedOnPlan?: boolean;
 }) {
   // A plain webhook, or an n8n workflow's Webhook node (F-49).
   const [kind, setKind] = useState<"webhook" | "n8n">("webhook");
@@ -354,6 +357,7 @@ export function WebhooksPanel({
                 events={endpoint.events}
                 abandonAfterMinutes={endpoint.abandonAfterMinutes}
                 keepsUnfinished={keepsUnfinished}
+                unfinishedOnPlan={unfinishedOnPlan}
                 onSaved={(events, abandonAfterMinutes) =>
                   setEndpoints((eps) =>
                     eps.map((e) =>

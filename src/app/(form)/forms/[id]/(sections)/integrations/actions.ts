@@ -132,6 +132,12 @@ export async function setWebhookEventsAction(
   ) {
     return { ok: false, message: "You can't change this form's integrations." };
   }
+  // Events about unfinished responses need the plan's unfinished
+  // responses (Starter and up; QA FC15-69).
+  if (parsed.data.events.some((e) => e !== "response.completed")) {
+    const blocked = await planBlocks(supabase, workspace.id, "partial_responses");
+    if (blocked) return { ok: false, message: blocked };
+  }
   const { data: endpoint } = await supabase
     .from("webhook_endpoints")
     .select("id, kind, config")

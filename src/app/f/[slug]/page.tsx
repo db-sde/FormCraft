@@ -245,9 +245,12 @@ export default async function PublicFormPage({
       ...compiled,
       // No codes without an email service: the form asks for none (#8).
       schema: respondentSchema(
-        emailCodesAvailable()
-          ? compiled.schema
-          : withoutEmailVerification(compiled.schema),
+        capRecordings(
+          emailCodesAvailable()
+            ? compiled.schema
+            : withoutEmailVerification(compiled.schema),
+          entitlements.recording_seconds,
+        ),
       ),
     },
     savesProgress: publicForm.savePartialResponses,
@@ -398,5 +401,23 @@ async function shareMetadata(
     },
     ...(icon ? { icons: { icon } } : {}),
     robots: index ? { index: true, follow: true } : { index: false, follow: false },
+  };
+}
+
+/** Recordings no longer than the plan allows (1 / 3 / 10 minutes), so
+ * the recorder stops and says so in time; the upload is capped to the
+ * same length on the server (QA FC15-38). */
+function capRecordings<T extends { questions: { type: string; settings: unknown }[] }>(
+  schema: T,
+  planSeconds: number | null,
+): T {
+  if (planSeconds == null) return schema;
+  return {
+    ...schema,
+    questions: schema.questions.map((q) => {
+      const settings = q.settings as { maxSeconds?: number };
+      if (q.type !== "media" || (settings.maxSeconds ?? 60) <= planSeconds) return q;
+      return { ...q, settings: { ...settings, maxSeconds: planSeconds } };
+    }),
   };
 }

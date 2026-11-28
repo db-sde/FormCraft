@@ -86,6 +86,19 @@ test.describe("developer spec gap features", () => {
         .eq("id", formId)
         .single();
       expect(form!.archived_at).toBeNull();
+      // Back in the lists, unpublished until published again (QA FC15-19).
+      for (const filter of ["false", "all"]) {
+        const back = await request.get(`/api/v1/forms?archived=${filter}`, {
+          headers: auth,
+        });
+        expect((await back.json()).forms).toContainEqual(
+          expect.objectContaining({ id: formId, archived: false, published: false }),
+        );
+      }
+      const archivedNow = await request.get("/api/v1/forms?archived=true", {
+        headers: auth,
+      });
+      expect((await archivedNow.json()).forms).toEqual([]);
     } finally {
       await deleteUser(user.userId);
     }

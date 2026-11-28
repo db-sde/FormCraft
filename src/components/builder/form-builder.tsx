@@ -199,6 +199,7 @@ export function FormBuilder({
   draftVersionId,
   initialRevision,
   initialSchema,
+  initialPlanWarning = null,
   initialPublishInfo,
   publishedSchema,
   onSave,
@@ -268,6 +269,8 @@ export function FormBuilder({
   draftVersionId: string;
   initialRevision: number;
   initialSchema: FormSchemaV1;
+  /** Paid features in the draft its plan lacks (see draftPlanWarning). */
+  initialPlanWarning?: string | null;
   initialPublishInfo: PublishInfo;
   /** What respondents see now (null before the first publish). */
   publishedSchema?: unknown;
@@ -492,6 +495,7 @@ export function FormBuilder({
   const staleRef = useRef(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [saveProblem, setSaveProblem] = useState<SchemaProblem | null>(null);
+  const [planWarning, setPlanWarning] = useState<string | null>(initialPlanWarning);
 
   useEffect(() => () => clearTimeout(retryTimerRef.current), []);
   // Back online (a phone leaving a tunnel, F-52): save what's waiting now
@@ -576,6 +580,7 @@ export function FormBuilder({
       revisionRef.current = result.revision;
       savedSchemaRef.current = schemaToSave;
       setSaveState("saved");
+      if (result.planWarning !== undefined) setPlanWarning(result.planWarning);
       setPublishInfo((p) =>
         p.isPublished
           ? {
@@ -1377,6 +1382,18 @@ export function FormBuilder({
             </DropdownMenu>
           </div>
         </header>
+
+        {planWarning && (
+          <div
+            role="status"
+            className="border-ink bg-accent text-foreground shrink-0 border-b-[1.5px] px-4 py-2 text-[13px]"
+          >
+            {planWarning}{" "}
+            <Link href="/settings?tab=plan" className="font-semibold underline">
+              See plans
+            </Link>
+          </div>
+        )}
 
         {aiEnabled && onProposeEdit && (
           <AiEditDialog

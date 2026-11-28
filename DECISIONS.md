@@ -3,6 +3,41 @@
 Record of choices made where the Phase 1 spec was ambiguous or left an
 implementation detail open. Newest first.
 
+## 2026-11-28 — QA run 15: plan check on save and publish, CSV, API lists
+
+- **One plan check** (`planIssues` in `billing/schema-features.ts`):
+  - Lists everything in a form its plan lacks.
+  - Publishing refuses on it, as before.
+  - Saving a draft returns the same list as a warning; the builder shows
+    it under the header. Drafts are never refused, so no work is lost.
+  - It now also covers AI follow-up questions (Starter and up: Free has
+    no AI credits) and recordings longer than the plan's length (1 / 3 /
+    10 min). The public page also caps each recording at the plan's
+    length, which covers forms published before.
+  - It names only what's used: "Custom CSS" alone when no font was
+    uploaded.
+- **Unfinished-response webhook events** need Starter and up: refused on
+  save, and locked in the editor.
+- **Gate messages**: "isn't" or "aren't" comes from an explicit list of
+  singular names, no longer guessed from the last letter.
+- **CSV**: a value starting with `+` or `-` keeps its apostrophe unless
+  it's a plain number (`-5.25`) or phone-like (7 or more digits). Real
+  numbers are never prefixed. "+1" is now neutralised.
+- **`GET /api/v1/forms`** lists unpublished forms too, each with
+  `published`, so a restored form (unpublished) stays listed. Before,
+  only live forms were listed, so a restored form was in no list.
+- **Working as our pricing table says**, not changed:
+  - Popup and button embeds: on every plan (FC15-56).
+  - Themes, logos and brand themes: on every plan. Only removing the
+    badge is paid (FC15-46).
+  - Per-question summary charts: free. Drop-off, sources and score
+    analytics are Starter (FC15-63).
+  - The FormCraft badge is on the thank-you screen of Free forms (PRD
+    P2.1), not on every page (FC15-51).
+- **Still open**: quiz points are sent to the browser when a form shows
+  a running score or branches on it before the end (FC15-45, kept since
+  FC4-02). Fully hiding them needs the server to compute running scores.
+
 ## 2026-11-28 — Google Sheets connect fix; Super Admin served at /admin on the app for now
 
 - **Sheets connect failed for everyone** (`?sheets_error=exchange_failed`

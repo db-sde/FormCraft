@@ -221,9 +221,32 @@ export async function planBlocks(
   return entitlements[feature] ? null : notOnPlanMessage(feature);
 }
 
+/** Feature names that take "isn't" ("Editing submitted answers isn't…");
+ * every other name is plural ("A/B tests aren't…"). Listed rather than
+ * guessed from the last letter (QA FC15-14, FC15-57, FC15-62). */
+const SINGULAR_FEATURES = new Set<Feature>([
+  "slack",
+  "api_access",
+  "remove_branding",
+  "calendar_sync",
+  "ai_form_tools",
+  "submission_editing",
+  "block_library",
+  "multiple_workspaces",
+  "audit_log",
+  "auto_deletion",
+  "sso",
+  "scim",
+]);
+
+/** "isn't" or "aren't", for a feature's name. */
+export function featureVerb(feature: Feature): "isn't" | "aren't" {
+  return SINGULAR_FEATURES.has(feature) ? "isn't" : "aren't";
+}
+
 /** "A/B tests aren't included in your plan. Available on Pro and up." */
 export function notOnPlanMessage(feature: Feature): string {
-  return `${FEATURE_NAMES[feature]} ${FEATURE_NAMES[feature].endsWith("s") && !FEATURE_NAMES[feature].startsWith("The ") ? "aren't" : "isn't"} included in your plan. ${MINIMUM_PLAN_HINT[feature]}`;
+  return `${FEATURE_NAMES[feature]} ${featureVerb(feature)} included in your plan. ${MINIMUM_PLAN_HINT[feature]}`;
 }
 
 /** Which plan a feature starts on, for the messages above (catalog.ts

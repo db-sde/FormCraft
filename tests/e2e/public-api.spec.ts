@@ -68,7 +68,9 @@ test("Zapier/Make: authenticate, list forms, sample, subscribe and unsubscribe",
     expect((await me.json()).workspace.id).toBe(ws!.workspace_id);
 
     const forms = await (await request.get("/api/v1/forms", { headers: auth })).json();
-    expect(forms.forms).toEqual([{ id: formId, title: "API form", archived: false }]);
+    expect(forms.forms).toEqual([
+      { id: formId, title: "API form", archived: false, published: true },
+    ]);
 
     // One completed response, then the sample has it in the delivery shape.
     const start = await request.post("/api/responses/start", { data: { formId } });
